@@ -1,0 +1,167 @@
+---
+title: "README"
+author: "Olga Viedma"
+date: "2025-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+---
+
+title: "OtsuFire: Fire Mapping and Regeneration Detection Toolkit"
+output: rmarkdown::github\_document
+-----------------------------------
+
+```r
+# Load the OtsuFire package and dependencies
+library(OtsuFire)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(terra)
+library(glue)
+library(purrr)
+library(tools)
+library(data.table)
+library(histogram)
+library(otsuSeg)
+library(stats)
+```
+
+## 1. Mosaic and Resample Raster Data
+
+Prepare your composite raster using custom burnable mask and resampling steps. This step is typically run outside the package using GDAL tools and burnable mask rasters.
+
+
+file.path(system.file("extdata", package = "OtsuFire"))
+---
+
+## 2. Apply Otsu Thresholding to RBR Raster
+
+```r
+process_otsu_rasters(
+  raster_path = "path/to/raster.tif",
+  output_dir = "path/to/output",
+  otsu_thresholds = c(0, 50),
+  use_original = FALSE,
+  python_exe = "path/to/python.exe",
+  gdal_polygonize_script = "path/to/gdal_polygonize.py",
+  tile = TRUE,
+  index_type = NULL,
+  corine_raster_path = NULL,
+  ecoregion_shapefile_path = "path/to/ecoregions.shp",
+  min_otsu_threshold_value = 100
+)
+```
+
+---
+
+## 3. Calculate Polygon Metrics and Apply Geometric Filters
+
+```r
+burned_files <- list.files("path/to/output", pattern = "*.shp$", full.names = TRUE)
+calculate_polygon_metrics(
+  shapefile_paths = burned_files,
+  output_dir = "path/to/output",
+  area_min_ha = 10,
+  bbox_h_min = 630,
+  mnbbx_wd_min = 820,
+  p_w_ratio_min = 4.49,
+  h_w_ratio_min = 0.25
+)
+```
+
+---
+
+## 4. Detect Regeneration Areas using Otsu Thresholding on Negative RBR
+
+```r
+process_otsu_regenera(
+  rbr_post = list(
+    P1 = "path/to/postfire_P1.tif",
+    P2 = "path/to/postfire_P2.tif"
+  ),
+  output_dir = "path/to/output",
+  fire_year = 2012,
+  rbr_date = "path/to/rbr_fireyear.tif",
+  regen_year = c(1, 2),
+  use_fixed_threshold = TRUE,
+  fixed_threshold_value = -100,
+  trim_percentiles = data.frame(min = 0.05, max = 0.95),
+  python_exe = "path/to/python.exe",
+  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+)
+```
+
+---
+
+## 5. Flag Burned Polygons as Regenerating or Not
+
+```r
+flag_otsu_regenera(
+  burned_files = list.files("path/to/burned", pattern = "*_filt_area.shp$", full.names = TRUE),
+  regenera_files = list.files("path/to/burned", pattern = "*_thresh100.shp$", full.names = TRUE),
+  min_regen_ratio = 0.10,
+  remove_no_regenera = TRUE,
+  remove_condition = "all_years",
+  all_years_vector = c("P1", "P2"),
+  output_dir = "path/to/burned"
+)
+```
+
+---
+
+## 6. Extract DOY Statistics from Raster for Each Polygon
+
+```r
+calculate_doy_flags(
+  raster = terra::rast("path/to/raster.tif"),
+  doy_band = 2,
+  polygons_sf = list.files("path/to/burned", pattern = "*_rat*_filter.shp$", full.names = TRUE),
+  output_dir = "path/to/burned",
+  year = 2012,
+  doy_thresholds = c(10),
+  polygonize = TRUE,
+  stats = "mode",
+  keep_all_polygons = TRUE,
+  calc_percentiles = TRUE,
+  percentiles = c(0.05, 0.25, 0.95),
+  python_exe = "path/to/python.exe",
+  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+)
+```
+
+---
+
+## 7. Validate Detected Burned Areas with Reference Data
+
+```r
+validate_fire_maps(
+  input_shapefile = list.files("path/to/burned", pattern = "*_rat*.shp$", full.names = TRUE),
+  ref_shapefile = "path/to/reference_fires.shp",
+  mask_shapefile = "path/to/region_mask.shp",
+  burnable_raster = "path/to/burnable_mask.tif",
+  year_target = 2012,
+  validation_dir = "path/to/validation_output",
+  binary_burnable = TRUE,
+  burnable_classes = NULL,
+  min_area_reference_ha = 2,
+  buffer = 0,
+  threshold_completely_detected = 90,
+  force_reprocess_ref = TRUE,
+  use_gdal = TRUE,
+  python_exe = "path/to/python.exe",
+  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+)
+```
+
+---
+
+## 🔍 Notes
+
+#Ensure GDAL and Python paths are properly set in the environment.
+#All input rasters must be projected and masked consistently.
+#Functions support large-area mosaics, tiling, and region-specific thresholding.
+

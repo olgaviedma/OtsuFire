@@ -1,0 +1,9 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+
+^rutas_externas\.Renviron$
+^archivos\.gitignore$
+^README\.Rmd$
+^data-raw$
+
+

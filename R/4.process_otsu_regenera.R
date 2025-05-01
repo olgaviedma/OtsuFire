@@ -41,23 +41,24 @@
 #' @examples
 #' \dontrun{
 #' # Regeneration detection using precomputed RBR and masking out prior burns
+#'
 #' process_otsu_regenera(
 #'   rbr_post = "data/RBR_1986.tif",
 #'   rbr_date = "data/RBR_1985.tif",
 #'   output_dir = "output/regenera",
-#'   fire_year = 1984,
-#'   regen_year = 2,
-#'   tile = TRUE,
-#'   n_rows = 2,
-#'   n_cols = 3,
-#'   tile_overlap = 1000,
-#'   bind_all = TRUE,
-#'   python_exe = "C:/Python/python.exe",
-#'   gdal_polygonize_script = "C:/Python/Scripts/gdal_polygonize.py",
-#'   trim_percentiles = data.frame(
-#'     min = c(0.01, 0.005),
-#'     max = c(0.99, 0.995)
-#'   )
+#' python_exe,
+#' gdal_polygonize_script,
+#' n_rows = 2,
+#' n_cols = 3,
+#' tile_overlap = 1000,
+#' tile = TRUE,
+#' index_type = "RBR",
+#' trim_percentiles = NULL, #data.frame(min = c(0.01, 0.005), max = c(0.99, 0.995)),
+#' bind_all = FALSE,
+#' regen_year = c(2),
+#' fire_year = NULL,
+#' use_fixed_threshold = FALSE,
+#' fixed_threshold_value = -100
 #' )
 #' }
 #'

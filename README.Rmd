@@ -1,20 +1,34 @@
----
-title: "README"
-author: "Olga Viedma"
-date: "2025-05-01"
-output: html_document
----
+**OtsuFire: Fire Mapping and Regeneration Assessment Toolkit**
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+Authors: Natalia Quintero, Olga Viedma, Hammadi Achour and Jose Manuel Moreno
+
+Automated tools to map fire scars using Landsat-based RBR/dNBR composites using Otsu thresholding. It supports large-area mosaics, polygonization, filtering, regeneration assessment, and validation workflows.
+
+## Notes
+
+- Ensure GDAL and Python paths are properly set in the environment.
+- All input rasters must be projected and masked consistently.
+- Functions support large-area mosaics, tiling, and region-specific thresholding.
+
+
+# Getting Started
+
+## Installation
+```{r , echo=TRUE, message=FALSE, warning=FALSE}
+#The CRAN version:
+install.packages("OtsuFire")
+
+# The development version:
+#install.packages("remotes")
+library(remotes)
+install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
+
+
 ```
----
 
-title: "OtsuFire: Fire Mapping and Regeneration Detection Toolkit"
-output: rmarkdown::github\_document
------------------------------------
+## Libraries
+```{r , echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
 # Load the OtsuFire package and dependencies
 library(OtsuFire)
 library(dplyr)
@@ -28,99 +42,182 @@ library(data.table)
 library(histogram)
 library(otsuSeg)
 library(stats)
+
 ```
 
+## 0. Import data from ZENODO
+```{r Import data from ZENODO, echo=TRUE, message=FALSE, warning=FALSE}
+
+# Load necessary library
+library(httr)
+
+# Step 1: Define URLs and Local Paths to download ZENODO database
+
+zenodo_url <- "https://zenodo.org/record/14786024/files/DATA.zip?download=1"  # Zenodo download link
+zip_file <- "DATA.zip"       # Name of the downloaded ZIP file
+output_dir <- "C:/OtsuFire/inst/exdata"         # Final directory for extracted files
+temp_dir <- "temp_extracted" # Temporary folder for intermediate extraction
+
+# Step 2: Download the ZIP File (if not already downloaded)
+
+if (!file.exists(zip_file)) {
+  message("Downloading DATA.zip from Zenodo...")
+  GET(zenodo_url, write_disk(zip_file, overwrite = TRUE))
+} else {
+  message("DATA.zip already exists. Skipping download.")
+}
+
+# Step 3: Validate the Downloaded ZIP File
+
+file_size <- file.info(zip_file)$size
+if (is.na(file_size) || file_size < 1e6) {  # Ensure the file is >1 MB
+  stop("Download failed: ZIP file is too small or empty!")
+} else {
+  message(paste("ZIP file size:", round(file_size / (1024 * 1024), 2), "MB"))
+}
+
+# Step 4: Extract the ZIP File to a Temporary Folder
+
+message("Extracting the ZIP file to a temporary folder...")
+unzip(zip_file, exdir = temp_dir, overwrite = TRUE)
+
+# Step 5: Move Contents to Final Output Directory
+
+if (file.exists(file.path(temp_dir, "DATA"))) {
+  # If ZIP contains an extra "DATA" folder, move its contents
+  message("Moving extracted contents to the DATA directory...")
+  file.rename(from = file.path(temp_dir, "DATA"), to = output_dir)
+} else {
+  # Otherwise, directly move the extracted files
+  message("Moving extracted files to the DATA directory...")
+  file.rename(from = temp_dir, to = output_dir)
+}
+
+# Step 6: Clean Up Temporary Files
+
+unlink(temp_dir, recursive = TRUE)  # Delete the temporary folder
+
+# Step 7: Verify the Final Extracted Files
+
+message("Veifying the final structure of extracted files...")
+extracted_files <- list.files(output_dir, recursive = TRUE)
+if (length(extracted_files) == 0) {
+  stop("Unzipping failed: No files were extracted.")
+} else {
+  message("Extraction successful! Files extracted:")
+  print(extracted_files)
+}
+
+# Step 8 (Optional): Print a Preview of Extracted Files
+
+message("First few extracted files:")
+print(head(extracted_files))
+
+```
 ## 1. Mosaic and Resample Raster Data
+```{r mask and resample your composite raster, echo=TRUE, message=FALSE, warning=FALSE}
 
-Prepare your composite raster using custom burnable mask and resampling steps. This step is typically run outside the package using GDAL tools and burnable mask rasters.
+mask_mosaic_raster (
+folder_path = file.path(system.file("extdata", package = "OtsuFire")),
+mask_shapefile = file.path(folder_path,"burneable_classes_def1_corine06_ETRS89.shp"),
+gdalwarp_path = "C:/ProgramData/anaconda3/Library/bin/gdalwarp.exe")
 
-
-file.path(system.file("extdata", package = "OtsuFire"))
----
-
+```
 ## 2. Apply Otsu Thresholding to RBR Raster
+```{r fire scars mapping by using Otsu thresholding, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+raster_path = file.path(folder_path,"IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m")
+corine_raster_path = file.path(folder_path,"burneable_classes_def1_corine06_ETRS89.tif")
+
+python_exe = "C:/ProgramData/anaconda3/python.exe"
+gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+
 process_otsu_rasters(
-  raster_path = "path/to/raster.tif",
-  output_dir = "path/to/output",
+  raster_path = raster_path,
+  output_dir = folder_path,
   otsu_thresholds = c(0, 50),
   use_original = FALSE,
-  python_exe = "path/to/python.exe",
-  gdal_polygonize_script = "path/to/gdal_polygonize.py",
+  python_exe = python_exe,
+  gdal_polygonize_script = gdal_polygonize_script,
   tile = TRUE,
   index_type = NULL,
-  corine_raster_path = NULL,
-  ecoregion_shapefile_path = "path/to/ecoregions.shp",
+  corine_raster_path = corine_raster_path,
+  ecoregion_shapefile_path = NULL,
   min_otsu_threshold_value = 100
 )
 ```
-
----
-
 ## 3. Calculate Polygon Metrics and Apply Geometric Filters
+```{r Fire polygons metrics (area and shape) and filtering based on several thresholds, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
-burned_files <- list.files("path/to/output", pattern = "*.shp$", full.names = TRUE)
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_*.shp$", full.names = TRUE)
+
 calculate_polygon_metrics(
   shapefile_paths = burned_files,
-  output_dir = "path/to/output",
+  output_dir = folder_path,
   area_min_ha = 10,
-  bbox_h_min = 630,
-  mnbbx_wd_min = 820,
-  p_w_ratio_min = 4.49,
-  h_w_ratio_min = 0.25
+  bbox_h_min = NULL, #630
+  mnbbx_wd_min = NULL, #820
+  p_w_ratio_min = NULL, #4.49
+  h_w_ratio_min = NULL, #0.25
 )
 ```
 
----
-
 ## 4. Detect Regeneration Areas using Otsu Thresholding on Negative RBR
+```{r Fire polygons metrics (area and shape) and filtering based on several thresholds, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
+python_exe = "C:/ProgramData/anaconda3/python.exe"
+gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+
 process_otsu_regenera(
   rbr_post = list(
-    P1 = "path/to/postfire_P1.tif",
-    P2 = "path/to/postfire_P2.tif"
+    P1 = file.path(folder_path,"IBERIAN_MinMin_2013_all_year_mosaic_masked_res90m.tif"),
+    P2 = file.path(folder_path,"IBERIAN_MinMin_2014_all_year_mosaic_masked_res90m")
   ),
-  output_dir = "path/to/output",
+  output_dir = folder_path,
   fire_year = 2012,
-  rbr_date = "path/to/rbr_fireyear.tif",
+  rbr_date = file.path(folder_path,"IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m.tif"),
   regen_year = c(1, 2),
   use_fixed_threshold = TRUE,
   fixed_threshold_value = -100,
-  trim_percentiles = data.frame(min = 0.05, max = 0.95),
+  trim_percentiles = NULL,
   python_exe = "path/to/python.exe",
   gdal_polygonize_script = "path/to/gdal_polygonize.py"
 )
 ```
-
----
-
 ## 5. Flag Burned Polygons as Regenerating or Not
+```{r Assigns regeneration flags to burned area polygons based on their spatial overlap with post-fire regeneration polygons, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+
 flag_otsu_regenera(
-  burned_files = list.files("path/to/burned", pattern = "*_filt_area.shp$", full.names = TRUE),
-  regenera_files = list.files("path/to/burned", pattern = "*_thresh100.shp$", full.names = TRUE),
+  burned_files = list.files(folder_path, pattern = "*_filt_area.shp$", full.names = TRUE),
+  regenera_files = list.files(folder_path, pattern = "*_thresh100.shp$", full.names = TRUE),
   min_regen_ratio = 0.10,
   remove_no_regenera = TRUE,
-  remove_condition = "all_years",
-  all_years_vector = c("P1", "P2"),
-  output_dir = "path/to/burned"
+  remove_condition = "year1_and_year2",
+  all_years_vector = NULL, #c("P1", "P2")
+  output_dir = folder_path
 )
 ```
 
----
-
 ## 6. Extract DOY Statistics from Raster for Each Polygon
+```{r Extracts Day-of-Year (DOY) values from from a Landsat composite), masked by burned area polygons, and computes per-polygon statistics, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
+python_exe = "C:/ProgramData/anaconda3/python.exe"
+gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+raster_path = file.path(folder_path,"IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m.tif")
+
 calculate_doy_flags(
-  raster = terra::rast("path/to/raster.tif"),
+  raster = terra::rast(raster_path),
   doy_band = 2,
-  polygons_sf = list.files("path/to/burned", pattern = "*_rat*_filter.shp$", full.names = TRUE),
-  output_dir = "path/to/burned",
+  polygons_sf = list.files(folder_path, pattern = "*_rat*_filter.shp$", full.names = TRUE),
+  output_dir = folder_path,
   year = 2012,
   doy_thresholds = c(10),
   polygonize = TRUE,
@@ -128,23 +225,35 @@ calculate_doy_flags(
   keep_all_polygons = TRUE,
   calc_percentiles = TRUE,
   percentiles = c(0.05, 0.25, 0.95),
-  python_exe = "path/to/python.exe",
-  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+  python_exe = python_exe,
+  gdal_polygonize_script = gdal_polygonize_script
 )
 ```
-
----
-
 ## 7. Validate Detected Burned Areas with Reference Data
+```{r Extracts Day-of-Year (DOY) values from from a Landsat composite), masked by burned area polygons, and computes per-polygon statistics, echo=TRUE, message=FALSE, warning=FALSE}
 
-```r
+python_exe = "C:/ProgramData/anaconda3/python.exe"
+gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+
+folder_path = file.path(system.file("extdata", package = "OtsuFire"))
+
+polygons_sf <- list.files(
+  burned_dir,
+  pattern = glob2rx("burned_areas_2012_otsu_*_thr100_P1P2_rat*.shp"),
+  full.names = TRUE
+)
+
+ref_shapefile = file.path(folder_path,"fires_2012.shp")
+mask_shapefile = file.path(folder_path,"PORTUGAL_SHAPE.shp")
+burnable_raster = file.path(folder_path,"burneable_mask_binary_corine06_ETRS89.tif")
+
 validate_fire_maps(
-  input_shapefile = list.files("path/to/burned", pattern = "*_rat*.shp$", full.names = TRUE),
-  ref_shapefile = "path/to/reference_fires.shp",
-  mask_shapefile = "path/to/region_mask.shp",
-  burnable_raster = "path/to/burnable_mask.tif",
+  input_shapefile = polygons_sf,
+  ref_shapefile = ref_shapefile,
+  mask_shapefile = mask_shapefile,
+  burnable_raster = burnable_raster,
   year_target = 2012,
-  validation_dir = "path/to/validation_output",
+  validation_dir = folder_path,
   binary_burnable = TRUE,
   burnable_classes = NULL,
   min_area_reference_ha = 2,
@@ -152,16 +261,12 @@ validate_fire_maps(
   threshold_completely_detected = 90,
   force_reprocess_ref = TRUE,
   use_gdal = TRUE,
-  python_exe = "path/to/python.exe",
-  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+  python_exe = python_exe,
+  gdal_polygonize_script = gdal_polygonize_script
 )
+
+
 ```
 
----
 
-## 🔍 Notes
-
-#Ensure GDAL and Python paths are properly set in the environment.
-#All input rasters must be projected and masked consistently.
-#Functions support large-area mosaics, tiling, and region-specific thresholding.
 

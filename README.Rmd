@@ -70,7 +70,6 @@ install.packages("OtsuFire")
 library(remotes)
 install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
 
-
 ```
 
 ## Libraries
@@ -92,21 +91,37 @@ library(stats)
 
 ```
 
+## 📥 Download and Prepare Example Data from Zenodo
+
+This package includes examples that require raster and vector data stored externally on Zenodo. These files are not included in the CRAN version of the package to avoid exceeding size limits.
+
+The following code downloads and extracts a ZIP archive into a local folder called `ZENODO/exdata`, located in the root of your working directory. This folder is ignored by R during package build and check processes (via `.Rbuildignore`).
+
+Once downloaded and extracted, the data can be used in examples throughout this README or in your local scripts.
+
+The following script:
+
+- Downloads the dataset from Zenodo (only if not already downloaded)
+- Validates the download
+- Extracts the content
+- Places the extracted files in a consistent folder structure
+
 ## 0. Import data from ZENODO
 ```{r, echo=TRUE, message=FALSE, warning=FALSE}
 
-# Load necessary library
 library(httr)
 
 # Step 1: Define URLs and Local Paths to download ZENODO database
+zenodo_url <- "https://zenodo.org/records/15322380/files/DATA.zip?download=1"
+output_dir <- "ZENODO/exdata"
+zip_file <- file.path(output_dir, "DATA.zip")
+temp_dir <- file.path(output_dir, "temp_extracted")
 
-zenodo_url <- "https://doi.org/10.5281/zenodo.15319509" # Zenodo download link
-zip_file <- "DATA.zip"       # Name of the downloaded ZIP file
-output_dir <- "C:/OtsuFire/inst/exdata"         # Final directory for extracted files
-temp_dir <- "temp_extracted" # Temporary folder for intermediate extraction
 
-# Step 2: Download the ZIP File (if not already downloaded)
+# Step 2: Create the output directory if it doesn't exist
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
+# Step 3: Download the ZIP file if it doesn't already exist
 if (!file.exists(zip_file)) {
   message("Downloading DATA.zip from Zenodo...")
   GET(zenodo_url, write_disk(zip_file, overwrite = TRUE))
@@ -114,55 +129,51 @@ if (!file.exists(zip_file)) {
   message("DATA.zip already exists. Skipping download.")
 }
 
-# Step 3: Validate the Downloaded ZIP File
-
+# Step 4: Validate the downloaded ZIP file
 file_size <- file.info(zip_file)$size
-if (is.na(file_size) || file_size < 1e6) {  # Ensure the file is >1 MB
+if (is.na(file_size) || file_size < 1e6) {
   stop("Download failed: ZIP file is too small or empty!")
 } else {
   message(paste("ZIP file size:", round(file_size / (1024 * 1024), 2), "MB"))
 }
 
-# Step 4: Extract the ZIP File to a Temporary Folder
-
+# Step 5: Extract the ZIP file to a temporary folder
 message("Extracting the ZIP file to a temporary folder...")
 unzip(zip_file, exdir = temp_dir, overwrite = TRUE)
 
-# Step 5: Move Contents to Final Output Directory
-
+# Step 6: Move contents to final output directory
 if (file.exists(file.path(temp_dir, "DATA"))) {
-  # If ZIP contains an extra "DATA" folder, move its contents
+  # If ZIP contains a "DATA" subfolder, move its contents
   message("Moving extracted contents to the DATA directory...")
   file.rename(from = file.path(temp_dir, "DATA"), to = output_dir)
 } else {
-  # Otherwise, directly move the extracted files
+  # Otherwise, move all extracted files directly
   message("Moving extracted files to the DATA directory...")
   file.rename(from = temp_dir, to = output_dir)
 }
 
-# Step 6: Clean Up Temporary Files
+# Step 7: Clean up temporary folder
+unlink(temp_dir, recursive = TRUE)
 
-unlink(temp_dir, recursive = TRUE)  # Delete the temporary folder
-
-# Step 7: Verify the Final Extracted Files
-
-message("Veifying the final structure of extracted files...")
+# Step 8: Verify the extracted files
+message("Verifying the final structure of extracted files...")
 extracted_files <- list.files(output_dir, recursive = TRUE)
 if (length(extracted_files) == 0) {
   stop("Unzipping failed: No files were extracted.")
 } else {
-  message("Extraction successful! Files extracted:")
+  message("Extraction successful. Files extracted:")
   print(extracted_files)
 }
 
-# Step 8 (Optional): Print a Preview of Extracted Files
-
+# Step 9: Preview of extracted files (optional)
 message("First few extracted files:")
 print(head(extracted_files))
 
 ```
 ## 1. Mosaic and Resample Raster Data
 ```{r mask and resample your composite raster, echo=TRUE, message=FALSE, warning=FALSE}
+
+folder_path <- "C:/ZENODO/exdata"
 
 mask_mosaic_raster (
 folder_path = file.path(system.file("extdata", package = "OtsuFire")),

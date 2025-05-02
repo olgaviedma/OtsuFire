@@ -1,9 +1,10 @@
-^.*\.Rproj$
-^\.Rproj\.user$
+^.*\.Rproj$              # ignora el archivo del proyecto
+^\.Rproj\.user$          # ignora la carpeta oculta del proyecto
+^rutas_externas\.Renviron$ # ignora tu archivo local de entorno
+^archivos\.gitignore$    # ignora archivos auxiliares
+^README\.Rmd$            # correcto, R usa README.md no Rmd
+^data-raw$               # correcto, carpeta de scripts auxiliares
+^ZENODO$
 
-^rutas_externas\.Renviron$
-^archivos\.gitignore$
-^README\.Rmd$
-^data-raw$
 
 

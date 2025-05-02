@@ -1,8 +1,10 @@
 #' Generate Burnable Mask from CORINE Rasters
-#'
+#' @description
 #' Reclassifies CORINE land cover rasters into binary burnable masks based on predefined vegetation classes,
 #' masks them using an Iberian Peninsula shapefile, reprojects them to EPSG:3035 and/or EPSG:4326, and optionally vectorizes the result.
 #'
+#' @name create_burneable_mask_corine
+#' @rdname create_burneable_mask_corine
 #' @param corine_rasters Named list of CORINE raster paths.
 #' @param peninsula_shapefile Path to the Iberian Peninsula shapefile.
 #' @param output_raster_dir Output directory for raster files.
@@ -43,14 +45,14 @@ generate_burnable_mask <- function(
     31, 1, 32, 1, 33, 1, 34, 0, 35, 0, 36, 0, 37, 0, 38, 0, 39, 0, 40, 0,
     41, 0, 42, 0, 43, 0, 44, 0, 48, 0
   ), ncol = 2, byrow = TRUE)
-  
+
   selected_original_classes <- reclass_matrix[reclass_matrix[, 2] == 1, 1]
   peninsula <- sf::st_read(peninsula_shapefile, quiet = TRUE)
   for (name in names(corine_rasters)) {
     raster_path <- corine_rasters[[name]]
     corine_r <- raster::raster(raster_path)
     peninsula_proj <- sf::st_transform(peninsula, crs = sf::st_crs(corine_r)) |> sf::st_make_valid()
-    
+
     cropped <- raster::crop(corine_r, raster::extent(peninsula_proj))
     masked <- raster::mask(cropped, peninsula_proj)
     if (all(is.na(masked[]))) {
@@ -61,28 +63,28 @@ generate_burnable_mask <- function(
     vals[!vals %in% selected_original_classes] <- NA
     binary_vals <- ifelse(!is.na(vals), 1, NA)
     masked[] <- binary_vals
-    
+
     binary_r <- terra::rast(masked)
     if (reproject) {
       binary_r <- terra::project(binary_r, "EPSG:3035", method = "near", res = res)
     }
-    
+
     output_r <- file.path(output_raster_dir, paste0("burneable_mask_binary_", name, "_ETRS89.tif"))
     terra::writeRaster(binary_r, output_r, overwrite = TRUE,
                        datatype = "INT1U", NAflag = 0, gdal = c("COMPRESS=LZW"))
     message("Saved binary burnable mask: ", output_r)
-    
+
     if (to_wgs84) {
       output_wgs <- file.path(output_raster_dir, paste0("burneable_mask_binary_", name, "_wgs84.tif"))
       cmd <- glue::glue('"{gdalwarp_path}" -t_srs "EPSG:4326" -tr 0.0003 0.0003 -r near -dstnodata 0 -co "COMPRESS=LZW" "{output_r}" "{output_wgs}"')
       system(cmd)
       message("Reprojected to WGS84: ", output_wgs)
     }
-    
+
     final_r <- terra::project(terra::rast(masked), "EPSG:3035", method = "near", res = res)
     out_reproj <- file.path(output_raster_dir, paste0("burneable_classes_def1_", name, "_ETRS89.tif"))
     terra::writeRaster(final_r, out_reproj, overwrite = TRUE, datatype = "INT2U", NAflag = 0, gdal = c("COMPRESS=LZW"))
-    
+
     message("Saved reprojected raster: ", out_reproj)
     if (vectorize) {
       out_shp <- file.path(output_vector_dir, paste0("burneable_classes_def1_", name, "_ETRS89.shp"))

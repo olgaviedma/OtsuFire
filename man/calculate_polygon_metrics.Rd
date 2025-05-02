@@ -3,17 +3,6 @@
 \name{calculate_polygon_metrics}
 \alias{calculate_polygon_metrics}
 \title{Calculate Geometric Metrics and Filter Fire Polygons (Batch Mode)}
-\usage{
-calculate_polygon_metrics(
-  shapefile_paths,
-  output_dir = NULL,
-  area_min_ha = 10,
-  bbox_h_min = 630,
-  mnbbx_wd_min = 800,
-  p_w_ratio_min = 4,
-  h_w_ratio_min = 0.35
-)
-}
 \arguments{
 \item{shapefile_paths}{Character vector of paths to input polygon shapefiles.}
 
@@ -43,8 +32,7 @@ This function calculates geometric descriptors for fire-affected polygons from
 a list of input shapefiles. Metrics include area, perimeter, bounding box dimensions,
 and elongation. Optionally, spatial filters can be applied to retain only polygons
 that meet certain geometric criteria.
-}
-\details{
+
 For each input shapefile, the function saves:
 - A shapefile with all polygons and computed metrics.
 - A filtered shapefile with only polygons passing all active filters.
@@ -53,8 +41,8 @@ If the input polygons contain a `CORINE_CLA` column, geometries are dissolved be
 
 ## Metrics calculated per polygon:
 - `area_ha`: Area in hectares.
-- `bbox_wx`: Width of the axis-aligned bounding box (east–west).
-- `bbox_hy`: Height of the axis-aligned bounding box (north–south).
+- `bbox_wx`: Width of the axis-aligned bounding box (east-west).
+- `bbox_hy`: Height of the axis-aligned bounding box (north-south).
 - `perim_m`: Polygon perimeter in meters.
 - `p_w_ratio`: Perimeter-to-width ratio (`perim_m / bbox_wx`), proxy for complexity.
 - `h_w_ratio`: Height-to-width ratio (`bbox_hy / bbox_wx`), proxy for anisotropy.

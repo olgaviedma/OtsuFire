@@ -1,5 +1,5 @@
 #' Calculate Geometric Metrics and Filter Fire Polygons (Batch Mode)
-#'
+#' @description
 #' This function calculates geometric descriptors for fire-affected polygons from
 #' a list of input shapefiles. Metrics include area, perimeter, bounding box dimensions,
 #' and elongation. Optionally, spatial filters can be applied to retain only polygons
@@ -26,6 +26,8 @@
 #' All filter thresholds are optional. If a parameter is `NULL`, its corresponding filter is skipped.
 #' A polygon must satisfy **all active filters** to appear in the filtered output.
 #'
+#' @name calculate_polygon_metrics
+#' @rdname calculate_polygon_metrics
 #' @param shapefile_paths Character vector of paths to input polygon shapefiles.
 #' @param output_dir Directory to save the output shapefiles. If `NULL`, outputs are saved next to input files.
 #' @param area_min_ha Minimum area in hectares (`area_ha`). Set to `NULL` to disable. Default: 10.

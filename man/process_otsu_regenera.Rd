@@ -3,28 +3,6 @@
 \name{process_otsu_regenera}
 \alias{process_otsu_regenera}
 \title{Detect Post-Fire Regeneration Using Otsu and Percentile-Based Clipping}
-\usage{
-process_otsu_regenera(
-  rbr_post = NULL,
-  nbr_pre_path = NULL,
-  nbr_post_path = NULL,
-  rbr_date = NULL,
-  output_dir,
-  python_exe,
-  gdal_polygonize_script,
-  n_rows = 2,
-  n_cols = 3,
-  tile_overlap = 1000,
-  tile = TRUE,
-  index_type = "RBR",
-  trim_percentiles = data.frame(min = c(0.01, 0.005), max = c(0.99, 0.995)),
-  bind_all = FALSE,
-  regen_year = c(2),
-  fire_year = NULL,
-  use_fixed_threshold = FALSE,
-  fixed_threshold_value = -100
-)
-}
 \arguments{
 \item{rbr_post}{Path to post-fire RBR or dNBR raster. Alternatively, provide `nbr_pre_path` and `nbr_post_path`.
 If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.}
@@ -75,8 +53,7 @@ This function detects vegetation regeneration signals using negative RBR or dNBR
 It applies percentile-based clipping to the raster, rescales values, and uses a smoothed
 Otsu threshold to extract regeneration areas. Optionally, the raster can be tiled before
 polygonization using GDAL. All outputs are saved as binary rasters and shapefiles.
-}
-\details{
+
 You can also mask out previously burned areas by providing a historical RBR raster
 (`rbr_date`). If `bind_all = TRUE`, the function merges all resulting shapefiles
 across thresholds into one dissolved shapefile with unique polygon IDs.
@@ -86,23 +63,24 @@ If `use_fixed_threshold = TRUE`, a fixed threshold is applied instead of calcula
 \examples{
 \dontrun{
 # Regeneration detection using precomputed RBR and masking out prior burns
+
 process_otsu_regenera(
   rbr_post = "data/RBR_1986.tif",
   rbr_date = "data/RBR_1985.tif",
   output_dir = "output/regenera",
-  fire_year = 1984,
-  regen_year = 2,
-  tile = TRUE,
-  n_rows = 2,
-  n_cols = 3,
-  tile_overlap = 1000,
-  bind_all = TRUE,
-  python_exe = "C:/Python/python.exe",
-  gdal_polygonize_script = "C:/Python/Scripts/gdal_polygonize.py",
-  trim_percentiles = data.frame(
-    min = c(0.01, 0.005),
-    max = c(0.99, 0.995)
-  )
+python_exe,
+gdal_polygonize_script,
+n_rows = 2,
+n_cols = 3,
+tile_overlap = 1000,
+tile = TRUE,
+index_type = "RBR",
+trim_percentiles = NULL, #data.frame(min = c(0.01, 0.005), max = c(0.99, 0.995)),
+bind_all = FALSE,
+regen_year = c(2),
+fire_year = NULL,
+use_fixed_threshold = FALSE,
+fixed_threshold_value = -100
 )
 }
 

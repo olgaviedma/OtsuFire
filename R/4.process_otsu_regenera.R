@@ -1,5 +1,5 @@
 #' Detect Post-Fire Regeneration Using Otsu and Percentile-Based Clipping
-#'
+#' @description
 #' This function detects vegetation regeneration signals using negative RBR or dNBR values.
 #' It applies percentile-based clipping to the raster, rescales values, and uses a smoothed
 #' Otsu threshold to extract regeneration areas. Optionally, the raster can be tiled before
@@ -10,6 +10,9 @@
 #' across thresholds into one dissolved shapefile with unique polygon IDs.
 #'
 #' If `use_fixed_threshold = TRUE`, a fixed threshold is applied instead of calculating it from Otsu.
+#'
+#' @name process_otsu_regenera
+#' @rdname process_otsu_regenera
 #'
 #' @param rbr_post Path to post-fire RBR or dNBR raster. Alternatively, provide `nbr_pre_path` and `nbr_post_path`.
 #'                 If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.

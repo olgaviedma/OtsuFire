@@ -1,5 +1,5 @@
 #' Process Burned Area Rasters Using Otsu Thresholding or Percentile Clipping
-#'
+#' @description
 #' This function computes binary burned area masks from a severity index raster (RBR or dNBR)
 #' using either Otsu's thresholding or percentile-based clipping. The segmentation can be applied
 #' to the full raster or stratified by CORINE land cover classes (raster) or WWF ecoregions (shapefile).
@@ -16,6 +16,9 @@
 #' - A polygon shapefile of burned patches
 #' - A histogram + inter-class variance plot
 #' - A log file with actual thresholds used
+#'
+#' @name process_otsu_rasters
+#' @rdname process_otsu_rasters
 #'
 #' @param raster_path Path to a single-band RBR or dNBR raster (optional if using `nbr_pre_path` and `nbr_post_path`).
 #' @param nbr_pre_path Path to pre-fire NBR raster. Required if computing RBR/dNBR.

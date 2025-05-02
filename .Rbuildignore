@@ -1,10 +1,12 @@
-^.*\.Rproj$              # ignora el archivo del proyecto
-^\.Rproj\.user$          # ignora la carpeta oculta del proyecto
-^rutas_externas\.Renviron$ # ignora tu archivo local de entorno
-^archivos\.gitignore$    # ignora archivos auxiliares
-^README\.Rmd$            # correcto, R usa README.md no Rmd
-^data-raw$               # correcto, carpeta de scripts auxiliares
-^ZENODO$
+^.*\\.Rproj$                # Ignora el archivo del proyecto RStudio (.Rproj)
+^\\.Rproj\\.user$           # Ignora la carpeta oculta de RStudio
+^rutas_externas\\.Renviron$ # Ignora tu archivo local de entorno
+^archivos\\.gitignore$      # Ignora archivos auxiliares de configuración
+^README\\.Rmd$              # Ignora el README fuente en RMarkdown
+^data-raw$                  # Ignora la carpeta con scripts de datos de prueba
+^ZENODO$                    # Ignora la carpeta local con los datos descargados de Zenodo
+^LICENSE$                   # (opcional) Ignora el archivo LICENSE si no usas licencia estándar
 
 
 
+^\.Rproj\.user$

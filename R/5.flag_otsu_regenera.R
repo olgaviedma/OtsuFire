@@ -1,5 +1,5 @@
 #' Flag Burned Polygons Based on Regeneration Overlap
-#'
+#' @description
 #' This function assigns regeneration flags to burned area polygons based on their spatial
 #' overlap with post-fire regeneration polygons (e.g., from years 1, 2, or more after fire).
 #' A polygon is flagged as `"regenera"` if the total intersected area with regeneration polygons
@@ -21,6 +21,8 @@
 #'
 #' If `remove_condition = "all_years"` is selected, all years in `all_years_vector` must meet the threshold.
 #'
+#' @name flag_otsu_regenera
+#' @rdname flag_otsu_regenera
 #' @param burned_files Character vector with paths to burned area shapefiles (.shp).
 #' @param regenera_files Character vector with paths to regeneration shapefiles (.shp).
 #'                       Filenames must contain `"P1"`, `"P2"`, etc., to indicate regeneration year after fire.

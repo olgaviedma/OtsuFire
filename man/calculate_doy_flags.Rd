@@ -3,44 +3,6 @@
 \name{calculate_doy_flags}
 \alias{calculate_doy_flags}
 \title{Calculate DOY-Based Flags and Summary Statistics from Raster and Fire Polygons}
-\usage{
-calculate_doy_flags(
-  raster,
-  doy_band = 2,
-  polygons_sf,
-  output_dir,
-  year,
-  doy_thresholds = c(10, 15, 20, 30),
-  stats = c("both", "median", "mode"),
-  calc_percentiles = TRUE,
-  percentiles = c(0.05, 0.25, 0.95),
-  polygonize = TRUE,
-  keep_all_polygons = TRUE,
-  python_exe = NULL,
-  gdal_polygonize_script = NULL,
-  get_mode = function(x) {
-     if (length(x) == 0 || all(is.na(x))) 
-        
-    return(NA_real_)
-     ux <- unique(na.omit(x))
-     ux[which.max(tabulate(match(x,
-    ux)))]
- },
-  get_median = function(x) {
-     if (length(x) == 0 || all(is.na(x))) 
-        
-    return(NA_real_)
-     as.numeric(median(x, na.rm = TRUE))
- },
-  get_quantile = function(x, prob) {
-     if (length(x) == 0 || all(is.na(x))) 
-        
-    return(NA_real_)
-     as.numeric(quantile(x, probs = prob, na.rm = TRUE, names =
-    FALSE, type = 7))
- }
-)
-}
 \arguments{
 \item{raster}{A multi-band `SpatRaster` object. One of the bands must contain DOY values.}
 
@@ -63,9 +25,6 @@ Names are used to label outputs (e.g., `"ge50"`, `"ge100"`).}
 
 \item{polygonize}{Logical. If `TRUE`, vectorize the DOY binary masks using GDAL (`gdal_polygonize.py`). Default is `TRUE`.}
 
-\item{keep_all_polygons}{Logical. If `TRUE`, all polygons are kept and a flag column is added indicating which polygons meet the threshold condition.
-If `FALSE`, only polygons meeting the condition are saved. Default: `TRUE`.}
-
 \item{python_exe}{Path to the Python executable. Required if `polygonize = TRUE`.}
 
 \item{gdal_polygonize_script}{Path to `gdal_polygonize.py`. Required if `polygonize = TRUE`.}
@@ -75,6 +34,9 @@ If `FALSE`, only polygons meeting the condition are saved. Default: `TRUE`.}
 \item{get_median}{Optional custom function to calculate the median. Default function provided.}
 
 \item{get_quantile}{Optional custom function to calculate percentiles. Default function provided.}
+
+\item{keep_all_polygons}{Logical. If `TRUE`, all polygons are kept and a flag column is added indicating which polygons meet the threshold condition.
+If `FALSE`, only polygons meeting the condition are saved. Default: `TRUE`.}
 }
 \value{
 A named list with two elements:
@@ -88,8 +50,7 @@ This function extracts Day-of-Year (DOY) values from a raster (e.g., from a Land
 masked by burned area polygons, and computes per-polygon statistics: mode, median,
 and optionally percentiles (e.g., 5th, 25th, 95th). These DOY values are converted to calendar dates,
 and their components (day, month, year) are also included.
-}
-\details{
+
 Optionally, the function can threshold the DOY band around the median and/or mode of each polygon
 using user-defined DOY windows (e.g., ±10 days), create binary raster masks, and vectorize them using GDAL.
 

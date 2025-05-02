@@ -28,6 +28,7 @@ Imports:
     sf,
     stringr,
     terra,
+    magrittr,
     tidyr
 Suggests: 
     testthat (>= 3.0.0)

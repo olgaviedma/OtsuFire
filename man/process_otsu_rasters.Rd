@@ -3,27 +3,6 @@
 \name{process_otsu_rasters}
 \alias{process_otsu_rasters}
 \title{Process Burned Area Rasters Using Otsu Thresholding or Percentile Clipping}
-\usage{
-process_otsu_rasters(
-  raster_path = NULL,
-  nbr_pre_path = NULL,
-  nbr_post_path = NULL,
-  output_dir,
-  otsu_thresholds = c(0, 25, 50, 75, 100),
-  trim_percentiles = NULL,
-  use_original = FALSE,
-  corine_raster_path = NULL,
-  ecoregion_shapefile_path = NULL,
-  min_otsu_threshold_value = NULL,
-  python_exe,
-  gdal_polygonize_script,
-  n_rows = 2,
-  n_cols = 3,
-  tile_overlap = 1000,
-  tile = TRUE,
-  index_type = "RBR"
-)
-}
 \arguments{
 \item{raster_path}{Path to a single-band RBR or dNBR raster (optional if using `nbr_pre_path` and `nbr_post_path`).}
 
@@ -64,8 +43,7 @@ A named list of `sf` polygons for each segmentation. Additionally, a shapefile a
 This function computes binary burned area masks from a severity index raster (RBR or dNBR)
 using either Otsu's thresholding or percentile-based clipping. The segmentation can be applied
 to the full raster or stratified by CORINE land cover classes (raster) or WWF ecoregions (shapefile).
-}
-\details{
+
 ## Key features:
 - Supports Otsu thresholding after filtering by minimum index values (`otsu_thresholds`)
   or after percentile-based clipping (`trim_percentiles`)
@@ -78,12 +56,12 @@ For each segmentation, the function generates:
 - A polygon shapefile of burned patches
 - A histogram + inter-class variance plot
 - A log file with actual thresholds used
-
-
+}
+\details{
 When stratifying by CORINE or ecoregion classes, a single combined shapefile is created for each threshold,
 and intermediate shapefiles per class are removed. The function ensures geometry validity and avoids duplicate polygons.
 
-If both `trim_percentiles` and `otsu_thresholds` are provided, the function raises an error—only one method can be used.
+If both `trim_percentiles` and `otsu_thresholds` are provided, the function raises an error-only one method can be used.
 
 The function internally rescales raster values to [0, 255] before applying Otsu, and plots the histogram
 along with the inter-class variance curve and the selected threshold.

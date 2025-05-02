@@ -77,7 +77,7 @@ It calculates both **pixel-based metrics** and **area-based metrics**. Reference
 Derived indicators:
 - **Precision** = TP / (TP + FP)
 - **Recall** = TP / (TP + FN)
-- **F1 Score** = 2 × (Precision × Recall) / (Precision + Recall)
+- **F1 Score** = 2 ? (Precision ? Recall) / (Precision + Recall)
 - **Intersection over Union (IoU)** = TP / (TP + FP + FN)
 - **Error Rate** = (FP + FN) / (TP + FP + FN + TN)
 
@@ -92,8 +92,8 @@ Derived indicators:
 - **Area_Intersection_ha**: Total intersected area (ha) between detected and reference polygons.
 - **Area_Reference_NotDetected_ha**: Area (ha) of reference polygons not intersected.
 - **Perc_Reference_Area_NotDetected**: Percentage of total reference area not intersected.
-- **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) × 100
-- **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) × 100
+- **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) ? 100
+- **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) ? 100
 
 ## Additional outputs:
 - Shapefiles of undetected reference polygons and unmatched detection polygons are saved in the `VALIDATION` subdirectory.

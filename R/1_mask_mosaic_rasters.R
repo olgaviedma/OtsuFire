@@ -1,9 +1,11 @@
 #' Mosaic Rasters with Burnable Mask and Resample to 90m
-#'
+#' @description
 #' This fucntion applies a shapefile mask to all raster files (tiles) in a single folder, mosaics them by maximum value,
 #' and resamples the final mosaic to 90m resolution using GDAL. Output filenames preserve the core identifier
 #' from the original raster name, right before the year digits. Intermediate masked rasters are deleted after use.
 #'
+#' @name mask_mosaic_raster
+#' @rdname mask_mosaic_raster
 #' @param folder_path Path to the folder containing input rasters to process.
 #' @param mask_shapefile Path to the shapefile mask (burnable area).
 #' @param gdalwarp_path Path to the GDAL `gdalwarp` executable (for reprojection/resampling).

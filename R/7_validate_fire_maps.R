@@ -7,6 +7,9 @@
 #'
 #' **Important**: If `min_area_reference_ha` is changed, you must set `force_reprocess_ref = TRUE` to recalculate the masked reference polygons.
 #'
+#' @name validate_fire_maps
+#' @rdname validate_fire_maps
+#'
 #' @param input_shapefile Character vector. One or several paths to shapefiles containing the burned polygons to validate.
 #' @param ref_shapefile Character. Path to the shapefile with reference burned area polygons.
 #' @param mask_shapefile Character. Path to the shapefile defining the study area boundary.

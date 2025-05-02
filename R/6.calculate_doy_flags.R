@@ -1,5 +1,5 @@
 #' Calculate DOY-Based Flags and Summary Statistics from Raster and Fire Polygons
-#'
+#' @description
 #' This function extracts Day-of-Year (DOY) values from a raster (e.g., from a Landsat composite),
 #' masked by burned area polygons, and computes per-polygon statistics: mode, median,
 #' and optionally percentiles (e.g., 5th, 25th, 95th). These DOY values are converted to calendar dates,
@@ -10,6 +10,9 @@
 #'
 #' The function supports either a single shapefile (original burned areas) or a named list
 #' of shapefiles or `sf` objects generated with different Otsu thresholds.
+#'
+#' @name calculate_doy_flags
+#' @rdname calculate_doy_flags
 #'
 #' @param raster A multi-band `SpatRaster` object. One of the bands must contain DOY values.
 #' @param doy_band Integer. The index of the DOY band in the raster (default is 2).

@@ -1,15 +1,62 @@
-**OtsuFire: Fire Mapping and Regeneration Assessment Toolkit**
+# **OtsuFire: Fire Mapping and Regeneration Assessment Toolkit**
 
-Authors: Natalia Quintero, Olga Viedma, Hammadi Achour and Jose Manuel Moreno
+**Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, and Jose Manuel Moreno
 
-Automated tools to map fire scars using Landsat-based RBR/dNBR composites using Otsu thresholding. It supports large-area mosaics, polygonization, filtering, regeneration assessment, and validation workflows.
+Automated tools to map fire scars using Landsat-based RBR/dNBR composites and Otsu thresholding. Supports large-area mosaics, polygonization, filtering, regeneration assessment, and validation workflows.
 
-## Notes
+---
 
-- Ensure GDAL and Python paths are properly set in the environment.
+## 🔧 System Requirements
+
+### 🐍 Python & GDAL
+
+Several functions in `OtsuFire` call the GDAL Python script `gdal_polygonize.py`. To use these functions, ensure:
+
+- **Python** is installed (e.g., via Anaconda or Miniconda).
+- **GDAL** is installed in your Python environment:
+  - Via **Conda**: `conda install -c conda-forge gdal`
+  - Or via **pip**: `pip install gdal` (less recommended)
+- You know the full paths to:
+  - Your Python executable (`python.exe`)
+  - The `gdal_polygonize.py` script (typically in `Scripts/` on Windows)
+
+🔧 **Example configuration:**
+
+```r
+python_exe <- "C:/ProgramData/anaconda3/python.exe"
+gdal_polygonize_script <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+
+```
+
+### 🛠️ GDAL Installation Guide
+
+# Open Anaconda Prompt or CMD
+conda install -c conda-forge gdal
+
+# Check version
+gdalinfo --version
+
+# Confirm availability
+where gdalinfo
+
+### Optional: Create a Dedicated GDAL Environment
+
+conda create --name gdal_env -c conda-forge gdal
+conda activate gdal_env
+gdalinfo --version
+
+### Validate GDAL in Python
+
+python
+
+import osgeo.gdal
+print(osgeo.gdal.__version__)
+
+### ✅ Additional Notes
+
 - All input rasters must be projected and masked consistently.
 - Functions support large-area mosaics, tiling, and region-specific thresholding.
-
+- Always ensure gdal_polygonize.py is accessible and executable.
 
 # Getting Started
 
@@ -46,14 +93,14 @@ library(stats)
 ```
 
 ## 0. Import data from ZENODO
-```{r Import data from ZENODO, echo=TRUE, message=FALSE, warning=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 
 # Load necessary library
 library(httr)
 
 # Step 1: Define URLs and Local Paths to download ZENODO database
 
-zenodo_url <- "https://zenodo.org/record/14786024/files/DATA.zip?download=1"  # Zenodo download link
+zenodo_url <- "https://doi.org/10.5281/zenodo.15319509" # Zenodo download link
 zip_file <- "DATA.zip"       # Name of the downloaded ZIP file
 output_dir <- "C:/OtsuFire/inst/exdata"         # Final directory for extracted files
 temp_dir <- "temp_extracted" # Temporary folder for intermediate extraction

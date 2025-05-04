@@ -249,7 +249,8 @@ legend("bottomright",
        bty = "n", inset = c(-0.05, 0.04), xpd = TRUE)            
 ```
 
-![](https://github.com/olgaviedma/OtsuFire/blob/master/README/Fig1_CORINE_burneable_classes.png)
+
+![](https://github.com/olgaviedma/OtsuFire/README/Fig1_CORINE_burneable_classes.png)
 
 ## 1. Mosaic and Resample Landsat composites (raster data). Optionally, mask by CORINE map and study area
 

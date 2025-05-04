@@ -247,9 +247,9 @@ legend("bottomright",
        legend = corine_classes$label,fill = colors, cex = 0.7,
        bty = "n", inset = c(-0.05, 0.04), xpd = TRUE)            
 ```
-
-
-![](https://github.com/olgaviedma/OtsuFire/README/Fig1_CORINE_burneable_classes.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig1_CORINE_burneable_classes.png" width="200"/>
+</p>
 
 ## 1. Mosaic and Resample Landsat composites (raster data). Optionally, mask by CORINE map and study area
 

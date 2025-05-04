@@ -77,6 +77,7 @@
 #' @importFrom graphics abline axis legend mtext par
 #' @importFrom data.table :=
 #' @importFrom magrittr %>%
+#' @importFrom stringr str_detect str_replace
 #' @export
 #'
 utils::globalVariables(c(

@@ -95,7 +95,7 @@
 #' )
 #' }
 #' @importFrom sf st_read st_write st_crs st_transform st_make_valid st_intersection st_area st_buffer st_is_empty
-#' @importFrom terra rast crop mask project rasterize as.polygons vect writeRaster global
+#' @importFrom terra rast crop mask project rasterize as.polygons vect writeRaster global ncell
 #' @importFrom data.table data.table fwrite rbindlist
 #' @importFrom glue glue
 #' @importFrom tools file_path_sans_ext
@@ -107,6 +107,7 @@
 #' @importFrom dplyr filter first
 #' @importFrom data.table :=
 #' @importFrom magrittr %>%
+#' @importFrom stringr str_detect str_replace
 #' @export
 
 validate_fire_maps <- function(input_shapefile,

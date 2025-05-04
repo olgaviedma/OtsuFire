@@ -1,4 +1,52 @@
-.Rproj.user
+# === R y RStudio ===
+.Rproj.user/
 .Rhistory
 .RData
 .Ruserdata
+*.Rproj
+
+# === Archivos temporales / binarios ===
+*.log
+*.bak
+*.swp
+*.zip
+*.tar.gz
+*.pdf
+
+# === Datos intermedios o pesados ===
+*.RData
+*.rds
+*.rda
+*.csv
+*.tsv
+*.xlsx
+
+# === Archivos geoespaciales ===
+*.tif
+*.vrt
+*.img
+*.aux.xml
+*.shp
+*.dbf
+*.shx
+*.prj
+*.cpg
+
+# === Python / VSCode ===
+*.pyc
+__pycache__/
+.vscode/
+
+# === Datos y salidas del análisis ===
+/data/
+/output/
+/ZENODO/
+
+# === Otros archivos de sistema ===
+.DS_Store
+Thumbs.db
+
+# === Build de R Packages ===
+.Rbuildignore
+.Rcheck/
+*.tar.gz

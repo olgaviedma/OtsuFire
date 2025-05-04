@@ -20,10 +20,12 @@
 #' @name process_otsu_rasters
 #' @rdname process_otsu_rasters
 #'
-#' @param raster_path Path to a single-band RBR or dNBR raster (optional if using `nbr_pre_path` and `nbr_post_path`).
+#' @param folder_path Path to a directory or a single-band RBR or dNBR raster (required if `nbr_pre_path`/`nbr_post_path` are not used).
+#' @param raster_path Path to a single-band raster file (optional alternative to `folder_path`).
 #' @param nbr_pre_path Path to pre-fire NBR raster. Required if computing RBR/dNBR.
 #' @param nbr_post_path Path to post-fire NBR raster. Required if computing RBR/dNBR.
 #' @param output_dir Directory to save output rasters, shapefiles, plots, and logs.
+#' @param year Integer or character. Year label used for naming output files. If NULL, defaults to folder name.
 #' @param otsu_thresholds Numeric vector of lower bounds to pre-filter index values before applying Otsu (e.g., `c(0, 50, 100)`).
 #' @param trim_percentiles Optional `data.frame` with columns `min` and `max` (e.g., 0.01 to 0.99) to clip index values before applying Otsu.
 #' @param use_original Logical. If `TRUE`, uses all values from the raster without filtering (except NA). Ignored if `trim_percentiles` is set.
@@ -52,7 +54,7 @@
 #' \dontrun{
 #' # Example 1: Basic Otsu thresholds
 #' process_otsu_rasters(
-#'   raster_path = "data/rbr_1985.tif",
+#'   folder_path = "data/rbr_1985.tif",
 #'   output_dir = "output/1985",
 #'   otsu_thresholds = c(0, 50, 100),
 #'   python_exe = "C:/Python/python.exe",
@@ -61,7 +63,7 @@
 #'
 #' # Example 2: Percentile clipping (global)
 #' process_otsu_rasters(
-#'   raster_path = "data/rbr_1985.tif",
+#'   folder_path = "data/rbr_1985.tif",
 #'   output_dir = "output/1985",
 #'   trim_percentiles = data.frame(min = 0.01, max = 0.99),
 #'   python_exe = "C:/Python/python.exe",
@@ -70,7 +72,7 @@
 #'
 #' # Example 3: Stratified by CORINE with min threshold enforcement
 #' process_otsu_rasters(
-#'   raster_path = "data/rbr_1985.tif",
+#'   folder_path = "data/rbr_1985.tif",
 #'   output_dir = "output/1985",
 #'   corine_raster_path = "data/corine.tif",
 #'   otsu_thresholds = c(0, 50, 100),
@@ -81,7 +83,7 @@
 #'
 #' # Example 4: Stratified by WWF ecoregions
 #' process_otsu_rasters(
-#'   raster_path = "data/rbr_1985.tif",
+#'   folder_path = "data/rbr_1985.tif",
 #'   output_dir = "output/1985",
 #'   ecoregion_shapefile_path = "data/ecoregions_olson.shp",
 #'   otsu_thresholds = c(0, 50, 100),
@@ -91,17 +93,18 @@
 #' )
 #' }
 #'
-#' @importFrom terra rast crop mask ext resample ifel values freq writeRaster
+#' @importFrom terra rast crop mask ext resample ifel values freq writeRaster ncell
 #' @importFrom sf st_read st_write st_transform st_geometry_type st_as_binary st_make_valid
 #' @importFrom stats quantile
 #' @importFrom tools file_path_sans_ext
-#' @importFrom otsuSeg smooth_histogram otsu_threshold_smoothed
 #' @importFrom stats na.omit setNames
 #' @importFrom utils glob2rx
 #' @importFrom grDevices dev.off png
 #' @importFrom graphics abline axis legend mtext par
 #' @importFrom dplyr first
 #' @importFrom data.table :=
+#' @importFrom stringr str_detect str_replace
+#' @examplesIf requireNamespace("otsuSeg", quietly = TRUE)
 #' @export
 
 utils::globalVariables(c(
@@ -113,10 +116,12 @@ utils::globalVariables(c(
   "year", "%>%", ":="
 ))
 
-process_otsu_rasters <- function(raster_path = NULL,
+process_otsu_rasters <- function(folder_path = NULL,
+                                 raster_path = NULL,
                                  nbr_pre_path = NULL,
                                  nbr_post_path = NULL,
                                  output_dir,
+                                 year = NULL,
                                  otsu_thresholds = c(0, 25, 50, 75, 100),
                                  trim_percentiles = NULL,
                                  use_original = FALSE,
@@ -136,6 +141,16 @@ process_otsu_rasters <- function(raster_path = NULL,
     stop("Argument 'tile' must be a single logical value (TRUE or FALSE).")
   }
 
+  if (is.null(year)) {
+    if (!is.null(folder_path)) {
+      year <- basename(folder_path)
+    } else if (!is.null(raster_path)) {
+      year <- tools::file_path_sans_ext(basename(raster_path))
+    } else {
+      stop("You must provide either 'folder_path' or 'raster_path'")
+    }
+  }
+
   if (!is.null(trim_percentiles) && !is.null(otsu_thresholds)) {
     stop("No puedes usar 'trim_percentiles' y 'otsu_thresholds' al mismo tiempo. Usa solo uno de los dos.")
   }
@@ -143,7 +158,7 @@ process_otsu_rasters <- function(raster_path = NULL,
   if (!is.null(raster_path)) {
     raster <- terra::rast(raster_path)
     r <- raster[[1]]
-    year <- basename(dirname(raster_path))
+    year <- year
   } else if (!is.null(nbr_pre_path) && !is.null(nbr_post_path)) {
     nbr_pre <- terra::rast(nbr_pre_path)
     nbr_post <- terra::rast(nbr_post_path)
@@ -156,7 +171,7 @@ process_otsu_rasters <- function(raster_path = NULL,
       stop("`index_type` must be either 'RBR' or 'dNBR'")
     }
 
-    year <- basename(dirname(nbr_post_path))
+    year <- year
   } else {
     stop("You must provide 'raster_path' or both 'nbr_pre_path' and 'nbr_post_path'.")
   }
@@ -232,9 +247,15 @@ process_otsu_rasters <- function(raster_path = NULL,
     # Normalizacion para Otsu
     r_rescaled <- (r_filtered - min_val) / (max_val - min_val) * 255
     hist_values <- graphics::hist(terra::values(r_rescaled), breaks = 256, plot = FALSE)
-    smoothed_counts <- smooth_histogram(hist_values$counts)
+
+    # Verificar si el paquete otsuSeg está instalado
+    if (!requireNamespace("otsuSeg", quietly = TRUE)) {
+      stop("Package 'otsuSeg' is required for Otsu thresholding. Please install it from GitHub:\n  remotes::install_github('olgaviedma/otsuSeg')", call. = FALSE)
+    }
+
+    smoothed_counts <- otsuSeg::smooth_histogram(hist_values$counts)
     smoothed_counts[is.na(smoothed_counts)] <- 0
-    threshold_value_smoothed <- otsu_threshold_smoothed(smoothed_counts, hist_values$mids)
+    threshold_value_smoothed <- otsuSeg::otsu_threshold_smoothed(smoothed_counts, hist_values$mids)
     real_threshold <- (threshold_value_smoothed / 255) * (max_val - min_val) + min_val
 
     message(sprintf("Threshold (%s): real threshold value = %.4f", label, real_threshold))

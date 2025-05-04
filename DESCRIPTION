@@ -1,28 +1,26 @@
 Package: OtsuFire
 Type: Package
-Title: Fire Severity and Regeneration Mapping Using Otsu Thresholding
+Title: Fire Scars, Severity and Regeneration Mapping Using Otsu Thresholding
 Version: 0.1.0
 Authors@R: c(
-    person("Natalia", "Quintero", email = "jane@example.com", role = c("aut")),
-    person("Olga", "Viedma", email = "olga@example.com", role = c("aut", "cre")),
-    person("Hammadi", "Achour", email = "hammadi@example.com", role = "ctb"),
-    person("Jose Manuel", "Moreno", email = "jm.moreno@example.com", role = "ctb"))
+    person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
+    person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
+    person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
+    person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
 Description: 
-    Tools to segment fire severity and vegetation regeneration using 
-    Otsu thresholding applied to RBR/dNBR image composites, including mosaic 
-    handling, polygon metrics, post-fire regeneration, DOY flagging, 
+    Tools to segment fire scars using severity and vegetation regeneration data by applying 
+    Otsu thresholding on Relative Burn Ratio (RBR) and differenced Normalized Burn Ratio (dNBR) image composites, 
+    including mosaic handling, polygon metrics, post-fire regeneration, DOY flagging, 
     and validation against reference datasets. 
     Designed for Iberian Peninsula fire history analysis.
 License: GPL-3
 Encoding: UTF-8
-LazyData: true
 RoxygenNote: 7.3.2
 Imports:
     data.table,
     dplyr,
     gdalUtilities,
     glue,
-    otsuSeg,
     purrr,
     raster,
     sf,
@@ -31,5 +29,9 @@ Imports:
     magrittr,
     tidyr
 Suggests: 
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+     otsuSeg
+Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
+noRd: true
+

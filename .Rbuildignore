@@ -1,12 +1,19 @@
-^.*\\.Rproj$                # Ignora el archivo del proyecto RStudio (.Rproj)
-^\\.Rproj\\.user$           # Ignora la carpeta oculta de RStudio
-^rutas_externas\\.Renviron$ # Ignora tu archivo local de entorno
-^archivos\\.gitignore$      # Ignora archivos auxiliares de configuración
-^README\\.Rmd$              # Ignora el README fuente en RMarkdown
-^data-raw$                  # Ignora la carpeta con scripts de datos de prueba
-^ZENODO$                    # Ignora la carpeta local con los datos descargados de Zenodo
-^LICENSE$                   # (opcional) Ignora el archivo LICENSE si no usas licencia estándar
-
-
-
+^OtsuFire\\.Rproj$           # Archivo del proyecto RStudio
+^\\.Rproj\\.user$            # Carpeta oculta de RStudio
+^README\\.Rmd$               # README fuente
+^README\.Rmd$
+^README\.md$
+^README$                     # Carpeta con figuras del README
+^rutas_externas\\.Renviron$ # Configuración local
+^ZENODO$                     # Datos externos Zenodo
+^data-raw$                   # Scripts auxiliares
+^LICENSE$                    # Archivo LICENSE personalizado
+^\\.git$                     # Carpeta Git
 ^\.Rproj\.user$
+^OtsuFire\.Rproj$
+^README$
+^rutas_externas\.Renviron$
+^ZENODO$
+^data-raw$
+^LICENSE$
+^\.git$

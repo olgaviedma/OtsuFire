@@ -76,6 +76,7 @@
 #' @importFrom dplyr filter first
 #' @importFrom data.table :=
 #' @importFrom magrittr %>%
+#' @importFrom stringr str_detect str_replace
 #' @encoding UTF-8
 #' @export
 

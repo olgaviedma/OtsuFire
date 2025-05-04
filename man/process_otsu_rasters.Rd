@@ -4,13 +4,17 @@
 \alias{process_otsu_rasters}
 \title{Process Burned Area Rasters Using Otsu Thresholding or Percentile Clipping}
 \arguments{
-\item{raster_path}{Path to a single-band RBR or dNBR raster (optional if using `nbr_pre_path` and `nbr_post_path`).}
+\item{folder_path}{Path to a directory or a single-band RBR or dNBR raster (required if `nbr_pre_path`/`nbr_post_path` are not used).}
+
+\item{raster_path}{Path to a single-band raster file (optional alternative to `folder_path`).}
 
 \item{nbr_pre_path}{Path to pre-fire NBR raster. Required if computing RBR/dNBR.}
 
 \item{nbr_post_path}{Path to post-fire NBR raster. Required if computing RBR/dNBR.}
 
 \item{output_dir}{Directory to save output rasters, shapefiles, plots, and logs.}
+
+\item{year}{Integer or character. Year label used for naming output files. If NULL, defaults to folder name.}
 
 \item{otsu_thresholds}{Numeric vector of lower bounds to pre-filter index values before applying Otsu (e.g., `c(0, 50, 100)`).}
 
@@ -70,7 +74,7 @@ along with the inter-class variance curve and the selected threshold.
 \dontrun{
 # Example 1: Basic Otsu thresholds
 process_otsu_rasters(
-  raster_path = "data/rbr_1985.tif",
+  folder_path = "data/rbr_1985.tif",
   output_dir = "output/1985",
   otsu_thresholds = c(0, 50, 100),
   python_exe = "C:/Python/python.exe",
@@ -79,7 +83,7 @@ process_otsu_rasters(
 
 # Example 2: Percentile clipping (global)
 process_otsu_rasters(
-  raster_path = "data/rbr_1985.tif",
+  folder_path = "data/rbr_1985.tif",
   output_dir = "output/1985",
   trim_percentiles = data.frame(min = 0.01, max = 0.99),
   python_exe = "C:/Python/python.exe",
@@ -88,7 +92,7 @@ process_otsu_rasters(
 
 # Example 3: Stratified by CORINE with min threshold enforcement
 process_otsu_rasters(
-  raster_path = "data/rbr_1985.tif",
+  folder_path = "data/rbr_1985.tif",
   output_dir = "output/1985",
   corine_raster_path = "data/corine.tif",
   otsu_thresholds = c(0, 50, 100),
@@ -99,7 +103,7 @@ process_otsu_rasters(
 
 # Example 4: Stratified by WWF ecoregions
 process_otsu_rasters(
-  raster_path = "data/rbr_1985.tif",
+  folder_path = "data/rbr_1985.tif",
   output_dir = "output/1985",
   ecoregion_shapefile_path = "data/ecoregions_olson.shp",
   otsu_thresholds = c(0, 50, 100),
@@ -109,4 +113,6 @@ process_otsu_rasters(
 )
 }
 
+\dontshow{if (requireNamespace("otsuSeg", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+\dontshow{\}) # examplesIf}
 }

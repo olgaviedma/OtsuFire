@@ -2,3 +2,4 @@
 GDALWARP_PATH="C:/ProgramData/anaconda3/Library/bin/gdalwarp.exe"
 PYTHON_PATH="C:/ProgramData/anaconda3/python.exe"
 GDAL_POLYGONIZE="C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
+gdal_calc_path="C:/ProgramData/anaconda3/Scripts/gdal_calc.py"

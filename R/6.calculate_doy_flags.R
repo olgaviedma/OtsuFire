@@ -83,7 +83,7 @@
 #' *Optimising Regional Fire Severity Mapping Using Pixel-Based Image Compositing*. SSRN 4929831.
 #'
 #' @importFrom sf st_read st_write st_transform st_crs
-#' @importFrom terra crop mask extract classify writeRaster rasterize vect
+#' @importFrom terra crop mask extract classify writeRaster rasterize vect ncell
 #' @importFrom data.table as.data.table setnames
 #' @importFrom stats median quantile
 #' @importFrom stats na.omit setNames
@@ -93,6 +93,7 @@
 #' @importFrom dplyr filter first
 #' @importFrom data.table :=
 #' @importFrom magrittr %>%
+#' @importFrom stringr str_detect str_replace
 #' @export
 
 utils::globalVariables(c(

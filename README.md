@@ -1,24 +1,27 @@
----
-title: "OtsuFire: Fire Mapping and Regeneration Assessment Toolkit"
-output: github_document
----
+OtsuFire: Fire Mapping and Regeneration Assessment Toolkit
+================
 
-```{r load-otsufire, message=FALSE, warning=FALSE}
+``` r
 # Carga el paquete desde el código fuente del proyecto
 devtools::load_all(".")
 ```
 
-**Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, and Jose Manuel Moreno
+**Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, and Jose
+Manuel Moreno
 
-Automated tools to map fire scars using Landsat-based RBR/dNBR composites and Otsu thresholding. Supports large-area mosaics, polygonization, filtering, regeneration assessment, and validation workflows.
+Automated tools to map fire scars using Landsat-based RBR/dNBR
+composites and Otsu thresholding. Supports large-area mosaics,
+polygonization, filtering, regeneration assessment, and validation
+workflows.
 
----
+------------------------------------------------------------------------
 
 ## 🔧 System Requirements
 
 ### 🐍 Python & GDAL
 
-Several functions in `OtsuFire` call the GDAL Python script `gdal_polygonize.py`. To use these functions, ensure:
+Several functions in `OtsuFire` call the GDAL Python script
+`gdal_polygonize.py`. To use these functions, ensure:
 
 - **Python** is installed (e.g., via Anaconda or Miniconda).
 - **GDAL** is installed in your Python environment:
@@ -30,46 +33,48 @@ Several functions in `OtsuFire` call the GDAL Python script `gdal_polygonize.py`
 
 🔧 **Example configuration:**
 
-```r
+``` r
 python_exe <- "C:/ProgramData/anaconda3/python.exe"
 gdal_polygonize_script <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
-
 ```
 
 ### 🛠️ GDAL Installation Guide
 
 ### Open Anaconda Prompt or CMD
+
 conda install -c conda-forge gdal
 
 ### Check version
-gdalinfo --version
+
+gdalinfo –version
 
 ### Confirm availability
+
 where gdalinfo
 
 ### Optional: Create a Dedicated GDAL Environment
 
-conda create --name gdal_env -c conda-forge gdal
-conda activate gdal_env
-gdalinfo --version
+conda create –name gdal_env -c conda-forge gdal conda activate gdal_env
+gdalinfo –version
 
 ### Validate GDAL in Python
 
 python
 
-import osgeo.gdal
-print(osgeo.gdal.__version__)
+import osgeo.gdal print(osgeo.gdal.\_\_version\_\_)
 
 ### ✅ Additional Notes
 
 - All input rasters must be projected and masked consistently.
-- Functions support large-area mosaics, tiling, and region-specific thresholding.
+- Functions support large-area mosaics, tiling, and region-specific
+  thresholding.
 - Always ensure gdal_polygonize.py is accessible and executable.
 
 ## Getting Started
 
 ## Installation
-```{r , echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
+
+``` r
 #The CRAN version:
 install.packages("OtsuFire")
 
@@ -77,12 +82,11 @@ install.packages("OtsuFire")
 #install.packages("remotes")
 library(remotes)
 install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
-
 ```
 
 ## Libraries
-```{r , echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+``` r
 # Load the OtsuFire package and dependencies
 library(OtsuFire)
 library(dplyr)
@@ -96,16 +100,21 @@ library(data.table)
 library(histogram)
 library(otsuSeg)
 library(stats)
-
 ```
 
 ## 📥 Download and Prepare Example Data from Zenodo
 
-This package includes examples that require raster and vector data stored externally on Zenodo. These files are not included in the CRAN version of the package to avoid exceeding size limits.
+This package includes examples that require raster and vector data
+stored externally on Zenodo. These files are not included in the CRAN
+version of the package to avoid exceeding size limits.
 
-The following code downloads and extracts a ZIP archive into a local folder called `ZENODO/exdata`, located in the root of your working directory. This folder is ignored by R during package build and check processes (via `.Rbuildignore`).
+The following code downloads and extracts a ZIP archive into a local
+folder called `ZENODO/exdata`, located in the root of your working
+directory. This folder is ignored by R during package build and check
+processes (via `.Rbuildignore`).
 
-Once downloaded and extracted, the data can be used in examples throughout this README or in your local scripts.
+Once downloaded and extracted, the data can be used in examples
+throughout this README or in your local scripts.
 
 The following script:
 
@@ -115,8 +124,8 @@ The following script:
 - Places the extracted files in a consistent folder structure
 
 ## 0. Import data from ZENODO
-```{r, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+``` r
 library(curl)
 
 # Define Zenodo download URL and local paths
@@ -157,12 +166,11 @@ if (file.exists(zip_file)) {
 } else {
   message("DATA.zip does not exist.")
 }
-
-
 ```
-## 0. Create a burnable mask from CORINE maps
-```{r Generate Burnable Mask from CORINE Rasters, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 0. Create a burnable mask from CORINE maps
+
+``` r
 folder_path <- "ZENODO/exdata"
 # Define input CORINE rasters (year-labeled)
  corine_rasters <- list(
@@ -234,11 +242,11 @@ plot(r,
 legend("bottomright",
        legend = corine_classes$label,fill = colors, cex = 0.7,
        bty = "n", inset = c(-0.05, 0.04), xpd = TRUE)            
-
 ```
-## 1. Mosaic and Resample Landsat composites (raster data). Optionally, mask by CORINE map and study area
-```{r mask and resample your composite raster. Be patient. It take its time. It is lasting, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 1. Mosaic and Resample Landsat composites (raster data). Optionally, mask by CORINE map and study area
+
+``` r
 ## if masked with burneable CORINE classes from GEE
 folder_path     <- "ZENODO/exdata"
 gdalwarp_path   <- "C:/ProgramData/anaconda3/Library/bin/gdalwarp.exe"
@@ -299,13 +307,11 @@ cols <- c("darkgreen", "orange", "red", "brown")
 par(mfrow = c(1, 2), mar = c(4, 4, 4, 5))
 plot(rbr_classes, col = cols, main = "RBR Composite (90m)")
 plot(doy, main = "DOY Composite (90m)", col = hcl.colors(100, "Viridis"), maxcell = 500000)
-
-
-
 ```
-## 2. Fire mapping: Apply Otsu Thresholding to RBR Mosaic Raster
-```{r fire scars mapping by using Otsu thresholding, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 2. Fire mapping: Apply Otsu Thresholding to RBR Mosaic Raster
+
+``` r
 folder_path <- "ZENODO/exdata"
 raster_path = file.path(folder_path, "IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif")
 corine_raster_path = file.path(folder_path,"burneable_classes_def1_corine06_ETRS89.tif")
@@ -327,11 +333,11 @@ process_otsu_rasters(
   ecoregion_shapefile_path = NULL,
   min_otsu_threshold_value = 100
 )
-
 ```
-## 3. Calculate Polygon Metrics and Apply Geometric Filters
-```{r Fire polygons metrics (area and shape) and filtering based on several thresholds-2, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 3. Calculate Polygon Metrics and Apply Geometric Filters
+
+``` r
 folder_path <- "ZENODO/exdata"
 burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_*.shp$", full.names = TRUE)
 
@@ -347,8 +353,8 @@ calculate_polygon_metrics(
 ```
 
 ## 4. Detect Regeneration Areas using Otsu Thresholding on Negative RBR
-```{r Fire polygons metrics (area and shape) and filtering based on several thresholds, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+``` r
 folder_path <- "ZENODO/exdata"
 
 python_exe = "C:/ProgramData/anaconda3/python.exe"
@@ -370,9 +376,10 @@ process_otsu_regenera(
   gdal_polygonize_script = "path/to/gdal_polygonize.py"
 )
 ```
-## 5. Flag Burned Polygons as Regenerating or Not
-```{r Assigns regeneration flags to burned area polygons based on their spatial overlap with post-fire regeneration polygons, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 5. Flag Burned Polygons as Regenerating or Not
+
+``` r
 folder_path <- "ZENODO/exdata"
 
 flag_otsu_regenera(
@@ -387,8 +394,8 @@ flag_otsu_regenera(
 ```
 
 ## 6. Extract DOY Statistics from Raster for Each Polygon
-```{r Extracts Day-of-Year (DOY) values from from a Landsat composite)-2, masked by burned area polygons, and computes per-polygon statistics, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+``` r
 folder_path <- "ZENODO/exdata"
 
 python_exe = "C:/ProgramData/anaconda3/python.exe"
@@ -412,9 +419,10 @@ calculate_doy_flags(
   gdal_polygonize_script = gdal_polygonize_script
 )
 ```
-## 7. Validate Detected Burned Areas with Reference Data
-```{r Extracts Day-of-Year (DOY) values from from a Landsat composite), masked by burned area polygons, and computes per-polygon statistics, echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
 
+## 7. Validate Detected Burned Areas with Reference Data
+
+``` r
 folder_path <- "ZENODO/exdata"
 
 python_exe = "C:/ProgramData/anaconda3/python.exe"
@@ -447,9 +455,4 @@ validate_fire_maps(
   python_exe = python_exe,
   gdal_polygonize_script = gdal_polygonize_script
 )
-
-
 ```
-
-
-

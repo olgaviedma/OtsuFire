@@ -65,13 +65,14 @@
 #' )
 #' }
 #'
-#' @importFrom terra rast mask crop writeRaster ext ifel values
+#' @importFrom terra rast mask crop writeRaster ext ifel values ncell
 #' @importFrom sf st_read st_write st_geometry_type st_transform st_as_binary st_make_valid st_union st_cast st_as_sf
 #' @importFrom tools file_path_sans_ext
 #' @importFrom stats quantile
 #' @importFrom utils write.table
 #' @importFrom dplyr filter first
 #' @importFrom data.table :=
+#' @importFrom stringr str_detect str_replace
 #' @export
 
 utils::globalVariables(c(

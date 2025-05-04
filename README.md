@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="https://github.com/olgaviedma/OtsuFire/raw/master/README/OtsuFire_logo.png" width="300"/>
-</p>
-
-
+![] (https://github.com/olgaviedma/OtsuFire/blob/main/README/OtsuFire_logo.png)
 OtsuFire: Fire Mapping and Regeneration Assessment Toolkit
 ================
 

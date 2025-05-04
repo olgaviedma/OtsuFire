@@ -86,6 +86,11 @@ install.packages("OtsuFire")
 #install.packages("remotes")
 library(remotes)
 install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
+
+#This package depends on otsuSeg, which must be installed manually from GitHub
+# Install 'otsuSeg' from GitHub
+remotes::install_github("olgaviedma/otsuSeg")
+
 ```
 
 ## Libraries

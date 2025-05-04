@@ -321,7 +321,7 @@ plot(rbr_classes, col = cols, main = "RBR Composite (90m)")
 plot(doy, main = "DOY Composite (90m)", col = hcl.colors(100, "Viridis"), maxcell = 500000)
 ```
 <p align="center">
-  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig2_mosaicking_masking.png" width="700"/>
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig2_mosaicking_masking.png" width="900"/>
 </p>
 
 ## 2. Fire mapping: Apply Otsu Thresholding to RBR Mosaic Raster

@@ -1,6 +1,6 @@
 Package: OtsuFire
 Type: Package
-Title: Fire Scars, Severity and Regeneration Mapping Using "Otsu"" Thresholding
+Title: Fire Scars, Severity and Regeneration Mapping Using 'Otsu' Thresholding
 Version: 0.1.2
 Authors@R: c(
     person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
@@ -9,7 +9,7 @@ Authors@R: c(
     person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
 Description: 
     Tools to segment fire scars using severity and vegetation regeneration data by applying 
-    "Otsu"" thresholding on Relative Burn Ratio and differenced Normalized Burn Ratio image composites, 
+    'Otsu' thresholding on Relative Burn Ratio and differenced Normalized Burn Ratio image composites, 
     including mosaic handling, polygon metrics, post-fire regeneration, Day Of Year flagging, 
     and validation against reference datasets. 
     Designed for Iberian Peninsula fire history analysis.

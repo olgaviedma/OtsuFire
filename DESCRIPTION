@@ -1,7 +1,7 @@
 Package: OtsuFire
 Type: Package
 Title: Fire Scars, Severity and Regeneration Mapping Using Otsu Thresholding
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: c(
     person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
     person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),

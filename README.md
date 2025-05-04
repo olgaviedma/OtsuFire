@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="https://github.com/olgaviedma/OtsuFire/raw/master/README/OtsuFire_logo.png" width="300"/>
+</p>
+
+
 OtsuFire: Fire Mapping and Regeneration Assessment Toolkit
 ================
 
@@ -244,6 +249,8 @@ legend("bottomright",
        bty = "n", inset = c(-0.05, 0.04), xpd = TRUE)            
 ```
 
+![](https://github.com/olgaviedma/OtsuFire/blob/master/README/Fig1_CORINE_burneable_classes.png)
+
 ## 1. Mosaic and Resample Landsat composites (raster data). Optionally, mask by CORINE map and study area
 
 ``` r
@@ -308,6 +315,7 @@ par(mfrow = c(1, 2), mar = c(4, 4, 4, 5))
 plot(rbr_classes, col = cols, main = "RBR Composite (90m)")
 plot(doy, main = "DOY Composite (90m)", col = hcl.colors(100, "Viridis"), maxcell = 500000)
 ```
+![](https://github.com/olgaviedma/OtsuFire/blob/master/README/Fig2_mosaicking_masking.png)
 
 ## 2. Fire mapping: Apply Otsu Thresholding to RBR Mosaic Raster
 

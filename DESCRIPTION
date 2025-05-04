@@ -9,8 +9,8 @@ Authors@R: c(
     person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
 Description: 
     Tools to segment fire scars using severity and vegetation regeneration data by applying 
-    Otsu thresholding on Relative Burn Ratio (RBR) and differenced Normalized Burn Ratio (dNBR) image composites, 
-    including mosaic handling, polygon metrics, post-fire regeneration, DOY flagging, 
+    Otsu thresholding on Relative Burn Ratio and differenced Normalized Burn Ratio image composites, 
+    including mosaic handling, polygon metrics, post-fire regeneration, Day Of Year flagging, 
     and validation against reference datasets. 
     Designed for Iberian Peninsula fire history analysis.
 License: GPL-3
@@ -33,5 +33,6 @@ Suggests:
      otsuSeg
 Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
-noRd: true
+Remotes: olgaviedma/otsuSeg
+
 

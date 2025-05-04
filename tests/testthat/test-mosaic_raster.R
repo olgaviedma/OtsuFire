@@ -1,4 +1,7 @@
 test_that("mosaic_reproject_resample works with synthetic rasters", {
+
+  skip_on_cran()
+
   skip_if_not_installed("terra")
   skip_if_not_installed("sf")
   skip_if_not_installed("gdalUtilities")

@@ -357,42 +357,57 @@ process_otsu_rasters(
 
 ``` r
 folder_path <- "ZENODO/exdata"
-burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_*.shp$", full.names = TRUE)
+burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_corine_.*\\.shp$", full.names = TRUE)
 
 calculate_polygon_metrics(
   shapefile_paths = burned_files,
   output_dir = folder_path,
   area_min_ha = 10,
-  bbox_h_min = NULL, #630
-  mnbbx_wd_min = NULL, #820
-  p_w_ratio_min = NULL, #4.49
-  h_w_ratio_min = NULL, #0.25
+  bbox_h_min = 630, #NULL
+  mnbbx_wd_min = 820, #NULL
+  p_w_ratio_min = 4.99, #NULL
+  h_w_ratio_min = 0.35 #NULL
 )
+
 ```
 
 ## 4. Detect Regeneration Areas using Otsu Thresholding on Negative RBR
 
 ``` r
+## RENAME THE LANDSAT RBR-DOY MOSAIC FOR A CORRECT USE OF THE FUCNTION
+file.rename(
+  from = file.path(folder_path, "IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif"),
+  to   = file.path(folder_path, "IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m.tif")
+)
+
+
 folder_path <- "ZENODO/exdata"
 
 python_exe = "C:/ProgramData/anaconda3/python.exe"
 gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
 
 process_otsu_regenera(
-  rbr_post = list(
-    P1 = file.path(folder_path,"IBERIAN_MinMin_2013_all_year_mosaic_masked_res90m.tif"),
-    P2 = file.path(folder_path,"IBERIAN_MinMin_2014_all_year_mosaic_masked_res90m")
-  ),
-  output_dir = folder_path,
-  fire_year = 2012,
-  rbr_date = file.path(folder_path,"IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m.tif"),
-  regen_year = c(1, 2),
-  use_fixed_threshold = TRUE,
-  fixed_threshold_value = -100,
-  trim_percentiles = NULL,
-  python_exe = "path/to/python.exe",
-  gdal_polygonize_script = "path/to/gdal_polygonize.py"
+    rbr_post = list(
+        P1 = list.files(folder_path, pattern = "IBERIAN_MinMin_2013.*\\.tif$", full.names = TRUE),
+        P2 = list.files(folder_path, pattern = "IBERIAN_MinMin_2014.*\\.tif$", full.names = TRUE)
+    ),
+    output_dir = folder_path,
+    fire_year = 2012,
+    rbr_date = list.files(
+        folder_path,
+        pattern = "IBERIAN_MinMin_2012.*\\.tif$",
+        full.names = TRUE
+    ),
+    regen_year = c(1, 2),
+    use_fixed_threshold = TRUE,
+    fixed_threshold_value = -100,
+    trim_percentiles = NULL,
+    bind_all = FALSE,
+    python_exe = python_exe,
+    gdal_polygonize_script = gdal_polygonize_script
 )
+
+
 ```
 
 ## 5. Flag Burned Polygons as Regenerating or Not
@@ -400,15 +415,18 @@ process_otsu_regenera(
 ``` r
 folder_path <- "ZENODO/exdata"
 
-flag_otsu_regenera(
+flag_otsu_regenera1(
   burned_files = list.files(folder_path, pattern = "*_filt_area.shp$", full.names = TRUE),
-  regenera_files = list.files(folder_path, pattern = "*_thresh100.shp$", full.names = TRUE),
-  min_regen_ratio = 0.10,
+  regenera_files = list.files(folder_path, pattern = "burned_areas_2012_regenera.*\\.shp$", full.names = TRUE),
+  min_regen_ratio = c(0.10, 0.20, 0.30),
+  min_regen_ratio_P1 = 0.10,
   remove_no_regenera = TRUE,
   remove_condition = "year1_and_year2",
-  all_years_vector = NULL, #c("P1", "P2")
+  all_years_vector = NULL, # o c("P1", "P2") si no detecta automáticamente
   output_dir = folder_path
 )
+
+
 ```
 
 ## 6. Extract DOY Statistics from Raster for Each Polygon

@@ -93,6 +93,7 @@ utils::globalVariables(c(
 flag_otsu_regenera <- function(burned_files,
                                regenera_files,
                                min_regen_ratio = c(0.01, 0.05, 0.20),
+                               min_regen_ratio_P1 = NULL,
                                remove_no_regenera = FALSE,
                                remove_condition = c("any_year",
                                                     "year1_only",
@@ -173,12 +174,14 @@ flag_otsu_regenera <- function(burned_files,
         }
       }
 
-      # Anadir flag conjunto si aplica
+      # Añadir una versión flexible de umbral para P1 si se pasa como argumento
+      threshold_P1 <- if (!is.null(min_regen_ratio_P1)) min_regen_ratio_P1 else threshold
+
       if (remove_condition == "year1_and_year2" &&
           all(c("regen_ratio_P1", "regen_ratio_P2") %in% names(burned_copy))) {
         burned_copy$regenera_flag_joint <- ifelse(
           !is.na(burned_copy$regen_ratio_P1) &
-            burned_copy$regen_ratio_P1 > 0 &
+            burned_copy$regen_ratio_P1 >= threshold_P1 &
             !is.na(burned_copy$regen_ratio_P2) &
             burned_copy$regen_ratio_P2 >= threshold,
           "regenera",

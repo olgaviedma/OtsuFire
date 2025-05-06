@@ -6,7 +6,7 @@ test_that("process_otsu_rasters runs on synthetic raster and outputs valid shape
   gdal_polygonize <- get_env_tool("GDAL_POLYGONIZE")
   skip_if(is.null(python) || !file.exists(python), "Python no disponible")
   skip_if(is.null(gdal_polygonize) || !file.exists(gdal_polygonize), "gdal_polygonize.py no encontrado")
-  skip_if_not_installed("otsuSeg")
+  skip_if_not_installed("OtsuSeg")
 
 
   # Crear raster sintetico

@@ -37,7 +37,7 @@
 #' Derived indicators:
 #' - **Precision** = TP / (TP + FP)
 #' - **Recall** = TP / (TP + FN)
-#' - **F1 Score** = 2 × (Precision × Recall) / (Precision + Recall)
+#' - **F1 Score** = 2 ? (Precision ? Recall) / (Precision + Recall)
 #' - **Intersection over Union (IoU)** = TP / (TP + FP + FN)
 #' - **Error Rate** = (FP + FN) / (TP + FP + FN + TN)
 #'
@@ -52,8 +52,8 @@
 #' - **Area_Intersection_ha**: Total intersected area (ha) between detected and reference polygons.
 #' - **Area_Reference_NotDetected_ha**: Area (ha) of reference polygons not intersected.
 #' - **Perc_Reference_Area_NotDetected**: Percentage of total reference area not intersected.
-#' - **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) × 100
-#' - **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) × 100
+#' - **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) ? 100
+#' - **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) ? 100
 #'
 #' ## Additional outputs:
 #' - Shapefiles of undetected reference polygons and unmatched detection polygons are saved in the `VALIDATION` subdirectory.
@@ -156,11 +156,11 @@ validate_fire_maps <- function(input_shapefile,
       burnable <- terra::project(burnable, sf::st_crs(mask_geom)$wkt)
     }
 
-    # Validar y armonizar geometrías
+    # Validar y armonizar geometrias
     ref_polygons <- sf::st_make_valid(ref_polygons)
     mask_geom <- sf::st_make_valid(mask_geom)
 
-    # Prefiltrar por bbox antes de intersectar (rápido y seguro)
+    # Prefiltrar por bbox antes de intersectar (rapido y seguro)
     ref_polygons <- sf::st_filter(ref_polygons, mask_geom, .predicate = sf::st_intersects)
 
     # Solo intersectar si hay solapamiento real
@@ -234,7 +234,7 @@ validate_fire_maps <- function(input_shapefile,
   for (shp in input_shapefile) {
       input_name <- tools::file_path_sans_ext(basename(shp))
       raster_path <- sub("\\.shp$", ".tif", shp)
-      message("→ Processing input file: ", input_name)
+      message("? Processing input file: ", input_name)
 
     if (!file.exists(raster_path)) {
       detection_polygons <- sf::st_read(shp, quiet = TRUE) |> sf::st_make_valid()
@@ -242,10 +242,10 @@ validate_fire_maps <- function(input_shapefile,
         detection_polygons <- sf::st_transform(detection_polygons, sf::st_crs(ref_polygons))
       }
 
-      # Filtrar primero solo los que intersectan con la máscara
+      # Filtrar primero solo los que intersectan con la mascara
       detection_polygons <- sf::st_filter(detection_polygons, mask_geom, .predicate = sf::st_intersects)
 
-      # Solo intersectar si hay elementos dentro del área de máscara
+      # Solo intersectar si hay elementos dentro del area de mascara
       if (nrow(detection_polygons) > 0) {
         detection_polygons <- suppressWarnings(sf::st_intersection(detection_polygons, mask_geom))
       } else {
@@ -296,13 +296,13 @@ validate_fire_maps <- function(input_shapefile,
       ref_polygons <- sf::st_make_valid(ref_polygons)
       detection_polygons <- sf::st_make_valid(detection_polygons)
 
-      # Prefiltrar detecciones que potencialmente intersectan para acelerar la intersección
+      # Prefiltrar detecciones que potencialmente intersectan para acelerar la interseccion
       detection_polygons_filtered <- sf::st_filter(detection_polygons, ref_polygons, .predicate = sf::st_intersects)
 
       if (nrow(detection_polygons_filtered) > 0) {
         intersec <- suppressWarnings(sf::st_intersection(ref_polygons, detection_polygons_filtered))
       } else {
-        intersec <- detection_polygons[0, ]  # objeto vacío
+        intersec <- detection_polygons[0, ]  # objeto vacio
       }
 
 

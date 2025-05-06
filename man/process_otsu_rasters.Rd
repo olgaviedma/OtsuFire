@@ -113,6 +113,6 @@ process_otsu_rasters(
 )
 }
 
-\dontshow{if (requireNamespace("otsuSeg", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+\dontshow{if (requireNamespace("OtsuSeg", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 \dontshow{\}) # examplesIf}
 }

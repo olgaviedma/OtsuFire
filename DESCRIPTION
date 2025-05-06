@@ -30,7 +30,7 @@ Imports:
     tidyr
 Suggests: 
     testthat (>= 3.0.0),
-    otsuSeg
+    OtsuSeg
 Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
 

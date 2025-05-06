@@ -91,9 +91,9 @@ install.packages("OtsuFire")
 library(remotes)
 install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
 
-# Install 'otsuSeg' dependency (if not already installed)
-if (!requireNamespace("otsuSeg", quietly = TRUE)) {
-  remotes::install_github("olgaviedma/otsuSeg")
+# Install 'OtsuSeg' dependency (if not already installed)
+if (!requireNamespace("OtsuSeg", quietly = TRUE)) {
+  remotes::install_github("olgaviedma/OtsuSeg")
 }
 
 

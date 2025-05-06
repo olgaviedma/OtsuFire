@@ -19,7 +19,8 @@ validate_fire_maps(
   use_gdal = TRUE,
   python_exe = "C:/ProgramData/anaconda3/python.exe",
   gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py",
-  force_reprocess_ref = FALSE
+  force_reprocess_ref = FALSE,
+  metrics_type = c("all", "pixel", "area")
 )
 }
 \arguments{
@@ -52,23 +53,25 @@ validate_fire_maps(
 \item{gdal_polygonize_script}{Character. Path to `gdal_polygonize.py` script.}
 
 \item{force_reprocess_ref}{Logical. If TRUE, forces the recalculation of masked reference polygons even if they already exist. Default is FALSE.}
+
+\item{metrics_type}{Character. Type of metrics to compute. Must be one of `"all"` (default), `"pixel"`, or `"area"`. Use `"pixel"` to compute only pixel-based accuracy metrics, `"area"` for polygon/area-based metrics, or `"all"` to calculate both.}
 }
 \value{
 A list containing:
-- `metrics`: data.table with pixel-based metrics.
-- `polygon_summary`: data.table with area-based metrics.
+- `metrics`: data.table with pixel-based metrics (if `metrics_type` is `"pixel"` or `"all"`).
+- `polygon_summary`: data.table with area-based metrics (if `metrics_type` is `"area"` or `"all"`).
 
-Two CSV files are saved automatically inside the `VALIDATION` subdirectory of `validation_dir`.
+Two CSV files are saved automatically in the `VALIDATION` subdirectory of `validation_dir`, depending on the selected `metrics_type`.
 }
 \description{
 The `validate_fire_maps()` function evaluates the spatial accuracy of burned area detection shapefiles by comparing them against independent reference fire polygons (e.g., from Focclim or national databases).
 
-It calculates both **pixel-based metrics** and **area-based metrics**. Reference polygons are masked to retain only burnable areas based on a CORINE-derived raster and filtered by a minimum area threshold if specified.
+It calculates both **pixel-based metrics** and **area-based metrics**, unless a specific mode is selected. Reference polygons are masked to retain only burnable areas based on a CORINE-derived raster and filtered by a minimum area threshold if specified.
 
 **Important**: If `min_area_reference_ha` is changed, you must set `force_reprocess_ref = TRUE` to recalculate the masked reference polygons.
 }
 \details{
-## Pixel-based metrics:
+## Pixel-based metrics (when `metrics_type = \"pixel\"` or `"all"`):
 - **True Positives (TP)**: Pixels correctly detected as burned.
 - **False Positives (FP)**: Pixels wrongly detected as burned.
 - **False Negatives (FN)**: Pixels missed (burned in reference but not detected).
@@ -81,7 +84,7 @@ Derived indicators:
 - **Intersection over Union (IoU)** = TP / (TP + FP + FN)
 - **Error Rate** = (FP + FN) / (TP + FP + FN + TN)
 
-## Area-based metrics:
+## Area-based metrics (when `metrics_type = \"area\"` or `"all"`):
 - **N_Reference_Polygons**: Number of reference polygons considered after masking.
 - **N_Completely_Detected**: Number of reference polygons detected over `threshold_completely_detected` % of their area.
 - **N_Detected_Polygons**: Number of polygons partially or fully detected (>0% intersection).
@@ -104,28 +107,22 @@ Derived indicators:
 }
 \examples{
 \dontrun{
-burned_dir <- "C:/MY_PROJECT/FIRE_MAPPING/2012/OTSU"
-polygons_sf <- list.files(
-    burned_dir,
-    pattern = glob2rx("burned_areas_2012_otsu_corine*.shp"),
-    full.names = TRUE
-)
 validate_fire_maps(
-    input_shapefile = polygons_sf,
-    ref_shapefile = "C:/MY_PROJECT/REFERENCE/fires_2012.shp",
-    mask_shapefile = "C:/MY_PROJECT/STUDY_AREA/portugal_mask.shp",
-    burnable_raster = "C:/MY_PROJECT/BURNABLE_MASK/burnable_binary.tif",
-    year_target = 2012,
-    validation_dir = "C:/MY_PROJECT/FIRE_MAPPING/2012",
-    binary_burnable = TRUE,
-    burnable_classes = NULL,
-    min_area_reference_ha = 2,
-    buffer = 0,
-    threshold_completely_detected = 90,
-    use_gdal = TRUE,
-    python_exe = "C:/ProgramData/anaconda3/python.exe",
-    gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py",
-    force_reprocess_ref = TRUE
+  input_shapefile = list.files(\"shapefiles\", pattern = \"*.shp\", full.names = TRUE),
+  ref_shapefile = \"ref_polygons.shp\",
+  mask_shapefile = \"study_area_mask.shp\",
+  burnable_raster = \"burnable_mask.tif\",
+  year_target = 2019,
+  validation_dir = \"results/validation\",
+  binary_burnable = TRUE,
+  min_area_reference_ha = 1,
+  buffer = 30,
+  threshold_completely_detected = 90,
+  use_gdal = TRUE,
+  python_exe = \"C:/Python/python.exe\",
+  gdal_polygonize_script = \"C:/Python/Scripts/gdal_polygonize.py\",
+  force_reprocess_ref = TRUE,
+  metrics_type = \"all\"  # or \"pixel\", or \"area\"
 )
 }
 }

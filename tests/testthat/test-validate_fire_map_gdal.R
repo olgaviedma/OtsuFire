@@ -6,49 +6,39 @@ test_that("validate_fire_maps runs with GDAL polygonization if available", {
   skip_if_not_installed("sf")
   skip_if_not_installed("data.table")
 
-  # Rutas ajustables
-  python_path <- "C:/ProgramData/anaconda3/python.exe"  # AJUSTA segun tu sistema
+  python_path <- "C:/ProgramData/anaconda3/python.exe"  # AJUSTAR
   gdal_polygonize_path <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
 
   skip_if_not(file.exists(python_path), "Python no encontrado")
   skip_if_not(file.exists(gdal_polygonize_path), "gdal_polygonize.py no encontrado")
 
-  library(terra)
-  library(sf)
-  library(data.table)
-
   tmp_dir <- file.path(tempdir(), "validation_gdal_test")
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
 
-  # 1. Raster burnable
-  r <- rast(nrows = 20, ncols = 20, xmin = 0, xmax = 2000, ymin = 0, ymax = 2000, crs = "EPSG:32630")
-  values(r) <- 1
+  r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 2000, ymin = 0, ymax = 2000, crs = "EPSG:32630")
+  terra::values(r) <- 1
   burnable_path <- file.path(tmp_dir, "burnable.tif")
-  writeRaster(r, burnable_path, overwrite = TRUE)
+  terra::writeRaster(r, burnable_path, overwrite = TRUE)
 
-  # 2. Mascara
-  mask_poly <- st_as_sfc(st_bbox(r))
-  mask_sf <- st_sf(geometry = mask_poly, crs = 32630)
+  mask_poly <- sf::st_as_sfc(sf::st_bbox(r))
+  mask_sf <- sf::st_sf(geometry = mask_poly, crs = 32630)
   mask_path <- file.path(tmp_dir, "mask.shp")
-  st_write(mask_sf, mask_path, delete_layer = TRUE, quiet = TRUE)
+  sf::st_write(mask_sf, mask_path, delete_layer = TRUE, quiet = TRUE)
 
-  # 3. Referencia
-  ref_poly <- st_polygon(list(rbind(
+  ref_poly <- sf::st_polygon(list(rbind(
     c(300, 300), c(300, 1100), c(1100, 1100), c(1100, 300), c(300, 300)
   )))
-  ref_sf <- st_sf(year = 2022, geometry = st_sfc(ref_poly), crs = 32630)
+  ref_sf <- sf::st_sf(year = 2022, geometry = sf::st_sfc(ref_poly), crs = 32630)
   ref_path <- file.path(tmp_dir, "ref_polygons.shp")
-  st_write(ref_sf, ref_path, delete_layer = TRUE, quiet = TRUE)
+  sf::st_write(ref_sf, ref_path, delete_layer = TRUE, quiet = TRUE)
 
-  # 4. Input detectado
-  det_poly <- st_polygon(list(rbind(
+  det_poly <- sf::st_polygon(list(rbind(
     c(800, 800), c(800, 1500), c(1500, 1500), c(1500, 800), c(800, 800)
   )))
-  det_sf <- st_sf(geometry = st_sfc(det_poly), crs = 32630)
+  det_sf <- sf::st_sf(geometry = sf::st_sfc(det_poly), crs = 32630)
   det_path <- file.path(tmp_dir, "detected_fire.shp")
-  st_write(det_sf, det_path, delete_layer = TRUE, quiet = TRUE)
+  sf::st_write(det_sf, det_path, delete_layer = TRUE, quiet = TRUE)
 
-  # 5. Ejecutar con GDAL
   result <- validate_fire_maps(
     input_shapefile = det_path,
     ref_shapefile = ref_path,
@@ -58,10 +48,10 @@ test_that("validate_fire_maps runs with GDAL polygonization if available", {
     validation_dir = tmp_dir,
     use_gdal = TRUE,
     python_exe = python_path,
-    gdal_polygonize_script = gdal_polygonize_path
+    gdal_polygonize_script = gdal_polygonize_path,
+    metrics_type = "all"
   )
 
-  # 6. Verificar resultado
   expect_type(result, "list")
   expect_s3_class(result$metrics, "data.table")
   expect_s3_class(result$polygon_summary, "data.table")

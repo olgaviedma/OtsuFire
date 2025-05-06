@@ -104,7 +104,7 @@
 #' @importFrom dplyr first
 #' @importFrom data.table :=
 #' @importFrom stringr str_detect str_replace
-#' @examplesIf requireNamespace("otsuSeg", quietly = TRUE)
+#' @examplesIf requireNamespace("OtsuSeg", quietly = TRUE)
 #' @export
 
 utils::globalVariables(c(
@@ -249,13 +249,13 @@ process_otsu_rasters <- function(folder_path = NULL,
     hist_values <- graphics::hist(terra::values(r_rescaled), breaks = 256, plot = FALSE)
 
     # Verificar si el paquete otsuSeg está instalado
-    if (!requireNamespace("otsuSeg", quietly = TRUE)) {
-      stop("Package 'otsuSeg' is required for Otsu thresholding. Please install it from GitHub:\n  remotes::install_github('olgaviedma/otsuSeg')", call. = FALSE)
+    if (!requireNamespace("OtsuSeg", quietly = TRUE)) {
+      stop("Package 'OtsuSeg' is required for Otsu thresholding. Please install it from GitHub:\n  remotes::install_github('olgaviedma/otsuSeg')", call. = FALSE)
     }
 
-    smoothed_counts <- otsuSeg::smooth_histogram(hist_values$counts)
+    smoothed_counts <- OtsuSeg::smooth_histogram(hist_values$counts)
     smoothed_counts[is.na(smoothed_counts)] <- 0
-    threshold_value_smoothed <- otsuSeg::otsu_threshold_smoothed(smoothed_counts, hist_values$mids)
+    threshold_value_smoothed <- OtsuSeg::otsu_threshold_smoothed(smoothed_counts, hist_values$mids)
     real_threshold <- (threshold_value_smoothed / 255) * (max_val - min_val) + min_val
 
     message(sprintf("Threshold (%s): real threshold value = %.4f", label, real_threshold))

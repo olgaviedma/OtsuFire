@@ -19,7 +19,7 @@ polygonization, filtering, regeneration assessment, and validation
 workflows.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/flow_chart_OtsuFire.png" width="500"/>
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/flow_chart_OtsuFire.png" width="700"/>
 </p>
 
 ------------------------------------------------------------------------

@@ -450,7 +450,7 @@ flag_otsu_regenera(
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig7_rebuilding_burned_polygons_regeneraY1.png" width="900"/>
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig7_rebuilding_burned_polygons_regeneraY1.png" width="700"/>
 </p>
 
 
@@ -531,7 +531,7 @@ validate_fire_maps(
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig8_cleaning_Portugal_burned_polygons_regeneraY12.png" width="900"/>
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig9_accuray_area_polygons_metrics.png" width="900"/>
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig9_accuray_area_polygons_metrics.PNG" width="900"/>
 </p>
 
 ## 8. Plotting Burned polygons as Regenerating or Not based on RBR values and CORINE classes

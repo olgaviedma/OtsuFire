@@ -48,24 +48,24 @@ gdal_polygonize_script <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
 
 ### 🛠️ GDAL Installation Guide
 
-### Open Anaconda Prompt or CMD
+#### Open Anaconda Prompt or CMD
 
 conda install -c conda-forge gdal
 
-### Check version
+#### Check version
 
 gdalinfo –version
 
-### Confirm availability
+#### Confirm availability
 
 where gdalinfo
 
-### Optional: Create a Dedicated GDAL Environment
+#### Optional: Create a Dedicated GDAL Environment
 
 conda create –name gdal_env -c conda-forge gdal conda activate gdal_env
 gdalinfo –version
 
-### Validate GDAL in Python
+#### Validate GDAL in Python
 
 python
 

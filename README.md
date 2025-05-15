@@ -26,7 +26,7 @@ workflows.
 
 ## 🔧 System Requirements
 
-## 🐍 Python & GDAL
+### 🐍 Python & GDAL
 
 Several functions in `OtsuFire` call the GDAL Python script
 `gdal_polygonize.py`. To use these functions, ensure:
@@ -46,32 +46,32 @@ python_exe <- "C:/ProgramData/anaconda3/python.exe"
 gdal_polygonize_script <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
 ```
 
-## 🛠️ GDAL Installation Guide
+### 🛠️ GDAL Installation Guide
 
-# Open Anaconda Prompt or CMD
+### Open Anaconda Prompt or CMD
 
 conda install -c conda-forge gdal
 
-# Check version
+### Check version
 
 gdalinfo –version
 
-# Confirm availability
+### Confirm availability
 
 where gdalinfo
 
-# Optional: Create a Dedicated GDAL Environment
+### Optional: Create a Dedicated GDAL Environment
 
 conda create –name gdal_env -c conda-forge gdal conda activate gdal_env
 gdalinfo –version
 
-# Validate GDAL in Python
+### Validate GDAL in Python
 
 python
 
 import osgeo.gdal print(osgeo.gdal.\_\_version\_\_)
 
-## ✅ Additional Notes
+### ✅ Additional Notes
 
 - All input rasters must be projected and masked consistently.
 - Functions support large-area mosaics, tiling, and region-specific
@@ -276,7 +276,7 @@ gdalwarp_path   <- "C:/ProgramData/anaconda3/Library/bin/gdalwarp.exe"
 gdal_calc_path   <- "C:/ProgramData/anaconda3/Scripts/gdal_calc.py"
 gdal_merge_path <- "C:/ProgramData/anaconda3/Scripts/gdal_merge.py"
 
-mosaic_tiles_max_clean(
+mosaic_reproject_resample(
   folder_path = "ZENODO/exdata",
   year = 2012,
   raster_pattern = "IBERIAN_MinMin_all_year_2012_*.tif",

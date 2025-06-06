@@ -113,6 +113,32 @@ flag_otsu_regenera(
   validate_geometries = FALSE,
   output_format = c("geojson")
 )
+
+# Define class-specific regeneration thresholds
+class_thresholds <- data.frame(
+  class_field = "CORINE_CLA",
+  class_value = c(1, 2),
+  P1 = c(0.15, 0.15),
+  P2 = c(0.0, 0.05)
+)
+
+# Run flag_otsu_regenera1 using classwise thresholds and fallback values
+result <- flag_otsu_regenera(
+  burned_files = burned_list,
+  regenera_files = regenera_list,
+  min_regen_ratio = c(P1 = 0.05, P2 = 0.15),  # fallback for classes not in the table
+  classwise_regen_thresholds = class_thresholds,
+  group_field = "CORINE_CLA",
+  remove_no_regenera = TRUE,
+  remove_condition = c("P1", "P2"),
+  replace_by_P1 = TRUE,
+  max_area_ratio_p1 = 3,
+  save_no_regenera = TRUE,
+  min_area_no_regenera = 500,
+  validate_geometries = FALSE,
+  output_format = "shp",
+  output_dir = burned_dir
+)
 }
 
 }

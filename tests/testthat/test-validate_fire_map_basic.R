@@ -41,8 +41,10 @@ test_that("validate_fire_maps runs on synthetic data (no GDAL)", {
     year_target = 2022,
     validation_dir = tmp_dir,
     use_gdal = FALSE,
-    metrics_type = "all"
+    metrics_type = "all",
+    class_shape = NULL
   )
+
 
   expect_type(result, "list")
   expect_true(all(c("metrics", "polygon_summary") %in% names(result)))

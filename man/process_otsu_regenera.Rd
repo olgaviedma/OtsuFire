@@ -2,7 +2,7 @@
 % Please edit documentation in R/4.process_otsu_regenera.R
 \name{process_otsu_regenera}
 \alias{process_otsu_regenera}
-\title{Detect Post-Fire Regeneration Using Otsu and Percentile-Based Clipping}
+\title{Detect Post-Fire Regeneration Using Otsu or Fixed Thresholds}
 \arguments{
 \item{rbr_post}{Path to post-fire RBR or dNBR raster. Alternatively, provide `nbr_pre_path` and `nbr_post_path`.
 If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.}
@@ -11,7 +11,7 @@ If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.}
 
 \item{nbr_post_path}{Path to post-fire NBR raster (for index computation).}
 
-\item{rbr_date}{Optional path to an RBR raster used to mask previously burned areas (RBR < 0).}
+\item{rbr_date}{Optional path to an RBR raster used to mask previously burned areas (RBR ≥ 0).}
 
 \item{output_dir}{Directory where outputs (rasters, shapefiles, plots) will be saved.}
 
@@ -28,7 +28,8 @@ If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.}
 \item{index_type}{Index type to compute: either `"RBR"` or `"dNBR"`. Ignored if `rbr_post` is provided.}
 
 \item{trim_percentiles}{Data frame with columns `min` and `max`, defining percentile ranges
-to clip negative RBR values before thresholding (only used if `use_fixed_threshold = FALSE`).}
+to clip negative RBR values before thresholding.
+**Note:** This parameter is currently not used unless percentile-based thresholding is implemented.}
 
 \item{bind_all}{Logical. If `TRUE`, all shapefiles from each threshold are merged into one combined shapefile.}
 
@@ -36,51 +37,67 @@ to clip negative RBR values before thresholding (only used if `use_fixed_thresho
 
 \item{fire_year}{Integer indicating the fire year. Used for output naming and labeling.}
 
-\item{use_fixed_threshold}{Logical. If `TRUE`, applies a fixed threshold instead of Otsu.}
+\item{use_fixed_threshold}{Logical. If `TRUE`, applies `fixed_threshold_value` instead of using the default threshold (< 0).}
 
-\item{fixed_threshold_value}{Numeric threshold to use when `use_fixed_threshold = TRUE`. Default is `-150`.}
+\item{fixed_threshold_value}{Numeric threshold to use when `use_fixed_threshold = TRUE`. Default is `-100`.}
+
+\item{output_format}{Character. Output format for saved files: `"shp"` for ESRI Shapefile (default) or `"geojson"` for GeoJSON.}
 }
 \value{
-A named list with entries for each regeneration year (`"P1"`, `"P2"`, etc.), each containing:
+A named list of results per regeneration year (`P1`, `P2`, etc.) with:
 \describe{
-  \item{raster}{Path to binary raster with detected regeneration.}
-  \item{shapefile}{Path to polygonized shapefile of regeneration areas.}
-  \item{combined}{(if `bind_all = TRUE`) Path to the merged shapefile.}
+  \item{`raster`}{Path to the binary regeneration raster for that year.}
+  \item{`shapefile`}{Path to the shapefile with polygons derived from the raster tiles for that year.}
 }
+
+If `bind_all = TRUE`, an additional item named `combined` is returned, which contains the path to a single shapefile:
+\item{`combined`}{Path to the shapefile with all valid regeneration polygons combined across all years. The filename includes all `P` labels used (e.g., `_P1P2_`).}
 }
 \description{
 This function detects vegetation regeneration signals using negative RBR or dNBR values.
-It applies percentile-based clipping to the raster, rescales values, and uses a smoothed
-Otsu threshold to extract regeneration areas. Optionally, the raster can be tiled before
-polygonization using GDAL. All outputs are saved as binary rasters and shapefiles.
+By default (`use_fixed_threshold = FALSE`), the function identifies regeneration areas where
+RBR or dNBR values are below 0. If `use_fixed_threshold = TRUE`, a fixed threshold value
+(e.g., -100) is applied instead.
 
-You can also mask out previously burned areas by providing a historical RBR raster
-(`rbr_date`). If `bind_all = TRUE`, the function merges all resulting shapefiles
-across thresholds into one dissolved shapefile with unique polygon IDs.
+Optionally, percentile-based clipping can be applied before thresholding, and tiling
+can be used to handle large rasters. The function outputs binary rasters and shapefiles,
+optionally merged into a single shapefile if `bind_all = TRUE`.
 
-If `use_fixed_threshold = TRUE`, a fixed threshold is applied instead of calculating it from Otsu.
+If a historical burn raster (`rbr_date`) is provided, it will be used to mask out areas
+previously burned (i.e., where RBR ≥ 0), so that regeneration is only detected in those
+affected by the most recent fire.
 }
 \examples{
 \dontrun{
-# Regeneration detection using precomputed RBR and masking out prior burns
-
+# Regeneration detection using RBR raster and default threshold (< 0)
 process_otsu_regenera(
-  rbr_post = "data/RBR_1986.tif",
-  rbr_date = "data/RBR_1985.tif",
+  rbr_post = list(P2 = "data/RBR_1986.tif"),
   output_dir = "output/regenera",
-python_exe,
-gdal_polygonize_script,
-n_rows = 2,
-n_cols = 3,
-tile_overlap = 1000,
-tile = TRUE,
-index_type = "RBR",
-trim_percentiles = NULL, #data.frame(min = c(0.01, 0.005), max = c(0.99, 0.995)),
-bind_all = FALSE,
-regen_year = c(2),
-fire_year = NULL,
-use_fixed_threshold = FALSE,
-fixed_threshold_value = -100
+  python_exe = "/usr/bin/python3",
+  gdal_polygonize_script = "/usr/bin/gdal_polygonize.py",
+  fire_year = 1984,
+  regen_year = c(2),
+  use_fixed_threshold = FALSE,
+  output_format = c("geojson")
+)
+
+# Same detection but using a fixed threshold of -150
+and using tiling if the input raster is very large
+process_otsu_regenera(
+  rbr_post = list(P2 = "data/RBR_1986.tif"),
+  output_dir = "output/regenera",
+  python_exe = "/usr/bin/python3",
+  gdal_polygonize_script = "/usr/bin/gdal_polygonize.py",
+  fire_year = 1984,
+  regen_year = c(2),
+  use_fixed_threshold = TRUE,
+  fixed_threshold_value = -150
+  bind_all = FALSE,
+  n_rows = 2,
+  n_cols = 3,
+  tile_overlap = 1000,
+  tile = TRUE,
+  output_format = c("shp")
 )
 }
 

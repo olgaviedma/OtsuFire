@@ -14,12 +14,18 @@ mask_to_mosaic(
 )
 }
 \arguments{
-\item{mosaic_path}{Character. Path to the input 2-band raster mosaic (e.g. with RBR and DOY).}
+\item{mosaic_path}{Character. Path to the input 2-band raster mosaic (e.g., with RBR and DOY).}
 
-\item{mask_raster_path}{Character. Path to the binary mask raster (e.g. burnable areas).}
+\item{mask_raster_path}{Character. Path to the binary mask raster (e.g., burnable areas).}
 
-\item{output_path}{Character (optional). Full path to save the masked output. If NULL, the output
-is saved in the same folder as the input mosaic, with suffix `_mosaic_masked_res90m.tif`.}
+\item{output_path}{Character (optional). Output destination. There are three behaviors:
+\itemize{
+  \item If `NULL`, the output is saved in the same folder as the input mosaic, using the same
+        base name with suffix `_mosaic_masked_res90m.tif`.
+  \item If a directory path is provided, the output file will be saved inside that folder,
+        using the same base name as the input mosaic, with suffix `_mosaic_masked_res90m.tif`.
+  \item If a full file path ending in `.tif` is provided, that name is used directly as the output.
+}}
 
 \item{valid_mask_value}{Numeric. Value in the mask that defines valid pixels (default is 1).}
 
@@ -28,7 +34,7 @@ is saved in the same folder as the input mosaic, with suffix `_mosaic_masked_res
 \item{shapefile_clip}{Character (optional). Path to a shapefile to further crop and mask the mosaic.}
 }
 \value{
-Character. Path to the final masked (and optionally clipped) raster.
+Character. Full path to the final masked (and optionally clipped) raster.
 }
 \description{
 This function applies a binary raster mask to a 2-band burned area mosaic (RBR and DOY).
@@ -40,20 +46,36 @@ The function ensures that the mask raster is projected and aligned to the mosaic
 The output is saved with the same resolution as the input mosaic.
 }
 \details{
-This function is commonly used after mosaicking burned area products derived from satellite imagery.
+This function is typically used after mosaicking burned area products derived from satellite imagery.
 It filters areas outside a burnable mask (e.g., based on land cover) and optionally restricts output
-to a defined geographic region (e.g., Iberian Peninsula).
+to a defined geographic region (e.g., the Iberian Peninsula).
 
-It assumes input mosaics contain:
+Input mosaic must have:
 - Band 1: Relative Burn Ratio (RBR)
 - Band 2: Day of Year (DOY)
+
+Output raster is written in GeoTIFF format with LZW compression.
 }
 \examples{
 \dontrun{
+# Case 1: Let the function generate the output name in the same folder
+mask_to_mosaic(
+  mosaic_path = "data/IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif",
+  mask_raster_path = "data/burneable_mask_corine_ETRS89.tif"
+)
+
+# Case 2: Save the output to a specific folder, name generated automatically
 mask_to_mosaic(
   mosaic_path = "data/IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif",
   mask_raster_path = "data/burneable_mask_corine_ETRS89.tif",
-  shapefile_clip = "data/iberian_boundary.shp"
+  output_path = "outputs/"
+)
+
+# Case 3: Define the full output file name explicitly
+mask_to_mosaic(
+  mosaic_path = "data/IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif",
+  mask_raster_path = "data/burneable_mask_corine_ETRS89.tif",
+  output_path = "outputs/custom_masked_output_2012.tif"
 )
 }
 

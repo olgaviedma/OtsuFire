@@ -49,8 +49,10 @@ test_that("validate_fire_maps runs with GDAL polygonization if available", {
     use_gdal = TRUE,
     python_exe = python_path,
     gdal_polygonize_script = gdal_polygonize_path,
-    metrics_type = "all"
+    metrics_type = "all",
+    class_shape = NULL
   )
+
 
   expect_type(result, "list")
   expect_s3_class(result$metrics, "data.table")

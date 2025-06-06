@@ -3,28 +3,8 @@
 \name{validate_fire_maps}
 \alias{validate_fire_maps}
 \title{Validate burned area maps against reference polygons}
-\usage{
-validate_fire_maps(
-  input_shapefile,
-  ref_shapefile,
-  mask_shapefile,
-  burnable_raster,
-  year_target,
-  validation_dir,
-  binary_burnable = TRUE,
-  burnable_classes = NULL,
-  buffer = 0,
-  threshold_completely_detected = 90,
-  min_area_reference_ha = NULL,
-  use_gdal = TRUE,
-  python_exe = "C:/ProgramData/anaconda3/python.exe",
-  gdal_polygonize_script = "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py",
-  force_reprocess_ref = FALSE,
-  metrics_type = c("all", "pixel", "area")
-)
-}
 \arguments{
-\item{input_shapefile}{Character vector. One or several paths to shapefiles containing the burned polygons to validate.}
+\item{input_shapefile}{Character vector. One or more paths to shapefiles containing the burned polygons to validate.}
 
 \item{ref_shapefile}{Character. Path to the shapefile with reference burned area polygons.}
 
@@ -38,30 +18,34 @@ validate_fire_maps(
 
 \item{binary_burnable}{Logical. TRUE if the burnable raster is binary (1 = burnable, 0 = non-burnable). Default is TRUE.}
 
-\item{burnable_classes}{Optional vector of raster values considered burnable if `binary_burnable = FALSE`.}
+\item{burnable_classes}{Optional numeric vector of raster values considered burnable if `binary_burnable = FALSE`.}
 
-\item{buffer}{Numeric. Optional buffer distance (meters) around reference polygons when rasterizing for pixel validation. Default is 0.}
+\item{class_shape}{Optional character. Path to a shapefile containing class information (e.g., CORINE or ecoregions) used for class-wise error breakdown.}
 
-\item{threshold_completely_detected}{Numeric. Minimum percent (e.g., 90) of a reference polygon area that must be intersected to be considered completely detected. Default is 90.}
+\item{class_field}{Optional character. Name of the field in `class_shape` to group omission and commission errors by class (e.g., "CORINE", "eco_name", "cor_eco").}
+
+\item{buffer}{Numeric. Optional buffer distance (in meters) applied around reference polygons for pixel-based validation. Default is 0.}
+
+\item{threshold_completely_detected}{Numeric. Minimum percentage (e.g., 90) of a reference polygon area that must be intersected to be considered completely detected. Default is 90.}
 
 \item{min_area_reference_ha}{Numeric. Minimum area (in hectares) to retain reference polygons after masking. Default is NULL (no filtering).}
 
 \item{use_gdal}{Logical. Whether to use external GDAL (via Python) for polygonizing rasters (faster for large datasets). Default is TRUE.}
 
-\item{python_exe}{Character. Path to the Python executable.}
+\item{python_exe}{Character. Path to the Python executable used for GDAL polygonization.}
 
-\item{gdal_polygonize_script}{Character. Path to `gdal_polygonize.py` script.}
+\item{gdal_polygonize_script}{Character. Path to the `gdal_polygonize.py` script.}
 
-\item{force_reprocess_ref}{Logical. If TRUE, forces the recalculation of masked reference polygons even if they already exist. Default is FALSE.}
+\item{force_reprocess_ref}{Logical. If TRUE, forces recalculation of masked reference polygons even if cached versions exist. Default is FALSE.}
 
-\item{metrics_type}{Character. Type of metrics to compute. Must be one of `"all"` (default), `"pixel"`, or `"area"`. Use `"pixel"` to compute only pixel-based accuracy metrics, `"area"` for polygon/area-based metrics, or `"all"` to calculate both.}
+\item{metrics_type}{Character. Type of metrics to compute. One of `"all"` (default), `"pixel"`, or `"area"`.}
 }
 \value{
-A list containing:
-- `metrics`: data.table with pixel-based metrics (if `metrics_type` is `"pixel"` or `"all"`).
-- `polygon_summary`: data.table with area-based metrics (if `metrics_type` is `"area"` or `"all"`).
-
-Two CSV files are saved automatically in the `VALIDATION` subdirectory of `validation_dir`, depending on the selected `metrics_type`.
+A list with:
+\describe{
+  \item{metrics}{A data.table of pixel-based accuracy metrics, or NULL if `metrics_type` excludes them.}
+  \item{polygon_summary}{A data.table of area-based metrics, or NULL if `metrics_type` excludes them.}
+}
 }
 \description{
 The `validate_fire_maps()` function evaluates the spatial accuracy of burned area detection shapefiles by comparing them against independent reference fire polygons (e.g., from Focclim or national databases).
@@ -71,58 +55,66 @@ It calculates both **pixel-based metrics** and **area-based metrics**, unless a 
 **Important**: If `min_area_reference_ha` is changed, you must set `force_reprocess_ref = TRUE` to recalculate the masked reference polygons.
 }
 \details{
-## Pixel-based metrics (when `metrics_type = \"pixel\"` or `"all"`):
+## Pixel-based metrics (when `metrics_type = "pixel"` or `"all"`):
 - **True Positives (TP)**: Pixels correctly detected as burned.
 - **False Positives (FP)**: Pixels wrongly detected as burned.
-- **False Negatives (FN)**: Pixels missed (burned in reference but not detected).
+- **False Negatives (FN)**: Burned pixels missed by the detection.
 - **True Negatives (TN)**: Pixels correctly identified as unburned.
 
 Derived indicators:
 - **Precision** = TP / (TP + FP)
 - **Recall** = TP / (TP + FN)
-- **F1 Score** = 2 ? (Precision ? Recall) / (Precision + Recall)
+- **F1 Score** = 2 * (Precision * Recall) / (Precision + Recall)
 - **Intersection over Union (IoU)** = TP / (TP + FP + FN)
 - **Error Rate** = (FP + FN) / (TP + FP + FN + TN)
 
-## Area-based metrics (when `metrics_type = \"area\"` or `"all"`):
-- **N_Reference_Polygons**: Number of reference polygons considered after masking.
-- **N_Completely_Detected**: Number of reference polygons detected over `threshold_completely_detected` % of their area.
-- **N_Detected_Polygons**: Number of polygons partially or fully detected (>0% intersection).
-- **N_Not_Detected**: Number of reference polygons without any intersection.
-- **Perc_Detected_Polygons**: Percentage of reference polygons detected.
-- **Area_Reference_ha**: Total area (ha) of reference polygons.
-- **Area_Detected_ha**: Total area (ha) of burned polygons provided as input.
-- **Area_Intersection_ha**: Total intersected area (ha) between detected and reference polygons.
-- **Area_Reference_NotDetected_ha**: Area (ha) of reference polygons not intersected.
-- **Perc_Reference_Area_NotDetected**: Percentage of total reference area not intersected.
-- **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) ? 100
-- **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) ? 100
+## Area-based metrics (when `metrics_type = "area"` or `"all"`):
+- **N_Reference_Polygons**: Number of reference polygons after masking and filtering.
+- **N_Completely_Detected**: Count of reference polygons where detected area ? `threshold_completely_detected`.
+- **N_Detected_Polygons**: Reference polygons partially or fully detected (>0% overlap).
+- **N_Not_Detected**: Reference polygons without any detected overlap.
+- **Perc_Detected_Polygons**: Share of reference polygons detected.
+- **Area_Reference_ha**: Total area of reference polygons (ha).
+- **Area_Detected_ha**: Total area of detected burned polygons (ha).
+- **Area_Intersection_ha**: Area of intersection between detection and reference polygons (ha).
+- **Area_Reference_NotDetected_ha**: Area of reference polygons not intersected (ha).
+- **Perc_Reference_Area_NotDetected**: Share of reference area missed (%).
+- **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) * 100
+- **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) * 100
 
-## Additional outputs:
-- Shapefiles of undetected reference polygons and unmatched detection polygons are saved in the `VALIDATION` subdirectory.
+## Class-wise error breakdown:
+If `class_shape` and `class_field` are provided and valid:
+- `ref_not_detected` and `det_not_matched` polygons are joined to `class_shape`.
+- Output CSV files:
+  - `omission_by_<class_field>_<input>.csv`
+  - `commission_by_<class_field>_<input>.csv`
 
-## Notes:
-- Recall and Precision at area scale are **not penalized** if detected polygons cover more area than the reference.
-- Always set `force_reprocess_ref = TRUE` when changing `min_area_reference_ha`.
+## Output files:
+- `metrics_summary_<year>.csv` and/or `polygon_summary_<year>.csv`
+- Shapefiles of undetected and unmatched polygons
+- Class-wise omission/commission CSVs (if class information is provided)
 }
 \examples{
 \dontrun{
 validate_fire_maps(
-  input_shapefile = list.files(\"shapefiles\", pattern = \"*.shp\", full.names = TRUE),
-  ref_shapefile = \"ref_polygons.shp\",
-  mask_shapefile = \"study_area_mask.shp\",
-  burnable_raster = \"burnable_mask.tif\",
-  year_target = 2019,
-  validation_dir = \"results/validation\",
+  input_shapefile = list.files("shapefiles", pattern = "\\\\.shp$", full.names = TRUE),
+  ref_shapefile = "ref_polygons_2022.shp",
+  mask_shapefile = "mask_region.shp",
+  burnable_raster = "burnable.tif",
+  year_target = 2022,
+  validation_dir = "validation_results",
   binary_burnable = TRUE,
   min_area_reference_ha = 1,
   buffer = 30,
   threshold_completely_detected = 90,
   use_gdal = TRUE,
-  python_exe = \"C:/Python/python.exe\",
-  gdal_polygonize_script = \"C:/Python/Scripts/gdal_polygonize.py\",
+  python_exe = "C:/Python/python.exe",
+  gdal_polygonize_script = "C:/Python/Scripts/gdal_polygonize.py",
   force_reprocess_ref = TRUE,
-  metrics_type = \"all\"  # or \"pixel\", or \"area\"
+  metrics_type = "all",
+  class_shape = "corine_eco_regions.shp",
+  class_field = "cor_eco"
 )
 }
+
 }

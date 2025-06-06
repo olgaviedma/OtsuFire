@@ -5,14 +5,14 @@ test_that("calculate_polygon_metrics works on synthetic shapefile", {
   tmp_dir <- tempdir()
   shp_path <- file.path(tmp_dir, "fire_polygons_test.shp")
 
-  # Crear poligono sintetico simple con CRS
+  # Crear polígono sintético simple con CRS
   poly <- sf::st_polygon(list(rbind(
     c(0, 0), c(0, 100), c(100, 100), c(100, 0), c(0, 0)
   )))
   sf_poly <- sf::st_sf(id = 1, geometry = sf::st_sfc(poly), crs = 32630)
   sf::st_write(sf_poly, shp_path, delete_layer = TRUE, quiet = TRUE)
 
-  # Llamar a la funcion
+  # Llamar a la función
   result <- calculate_polygon_metrics(
     shapefile_paths = shp_path,
     output_dir = tmp_dir,
@@ -24,6 +24,10 @@ test_that("calculate_polygon_metrics works on synthetic shapefile", {
   )
 
   expect_type(result, "list")
-  expect_named(result[[1]], c("metrics", "filtered", "polygons_all", "polygons_filtered"))
+  expect_named(result[[1]], c(
+    "metrics", "filtered",
+    "joined_metrics", "joined_filtered",
+    "polygons_all", "polygons_filtered"
+  ))
   expect_s3_class(result[[1]]$polygons_all, "sf")
 })

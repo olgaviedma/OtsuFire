@@ -9,6 +9,9 @@
 #' - Band 1: RBR (Relative Burn Ratio)
 #' - Band 2: DOY (Day of Year of fire)
 #'
+#' @name mosaic_reproject_resample
+#' @rdname mosaic_reproject_resample
+#'
 #' @param folder_path Character. Path to the folder containing the raster tiles.
 #' @param mask_path Character. Path to a polygon shapefile used to mask the rasters (e.g., burnable area mask).
 #' @param year Integer or character. Year label used for naming output files. If NULL, uses folder name.
@@ -64,7 +67,8 @@ mosaic_reproject_resample <- function(
   raster_files <- raster_files[!grepl("_mosaic|_res\\d+m|_proj", raster_files)]
   if (length(raster_files) == 0) stop("No rasters found in ", folder_path)
 
-  # Project mask only once to match first raster
+
+  # Proyectar máscara solo si es necesario
   ref_rast <- terra::rast(raster_files[1])
   if (!terra::crs(mask_vect) == terra::crs(ref_rast)) {
     mask_vect <- terra::project(mask_vect, terra::crs(ref_rast))
@@ -73,17 +77,14 @@ mosaic_reproject_resample <- function(
   masked_output_folder <- file.path(folder_path, "masked_rasters")
   dir.create(masked_output_folder, showWarnings = FALSE)
 
-  # Optimized masking
   message("[Step 3] Masking rasters...")
   masked_files <- vapply(raster_files, function(r) {
     r_rast <- terra::rast(r)
 
-    # Verifica solapamiento espacial
     if (is.null(terra::intersect(terra::ext(r_rast), terra::ext(mask_vect)))) {
       return(NA_character_)
     }
 
-    # Optimizado: crop + mask por separado
     r_crop <- terra::crop(r_rast, mask_vect)
     r_mask <- terra::mask(r_crop, mask_vect)
 
@@ -96,7 +97,6 @@ mosaic_reproject_resample <- function(
     return(output_path)
   }, FUN.VALUE = character(1))
 
-
   masked_files <- masked_files[!is.na(masked_files)]
 
   message("[Step 4] Creating VRT...")
@@ -108,7 +108,14 @@ mosaic_reproject_resample <- function(
   )
 
   message("[Step 5] Warping mosaic to ", crs_target, " with resolution ", res_target, "m...")
-  mosaic_output <- file.path(folder_path, paste0("IBERIAN_MinMin_all_year_", year, "_mosaic_res", res_target, "m.tif"))
+  # Obtener nombre base sin extensión
+  base_full <- tools::file_path_sans_ext(basename(raster_files[1]))
+
+  # Extraer el prefijo antes del primer grupo de 4 dígitos + ese grupo
+  # Ej: de "IBERIAN_MinMin_all_year_all_1988_0-0000000000" -> "IBERIAN_MinMin_all_year_all_1988"
+  base_name <- sub("^(.*?\\d{4})_.*$", "\\1", base_full)
+    mosaic_output <- file.path(folder_path, paste0(base_name, "_mosaic_res", res_target, "m.tif"))
+
 
   gdalUtilities::gdalwarp(
     srcfile = vrt_path,
@@ -125,13 +132,10 @@ mosaic_reproject_resample <- function(
 
   message("[Step 6] Naming bands (if 2 layers)...")
   mosaic_raster <- terra::rast(mosaic_output)
-
-  # Reemplazar -Inf y Inf por NA
   mosaic_raster[is.infinite(mosaic_raster)] <- NA
 
-  # Detectar o asignar NAflag
   na_flag <- terra::NAflag(mosaic_raster)
-  if (is.na(na_flag)) na_flag <- -9999  # asignar si no existe
+  if (is.na(na_flag)) na_flag <- -9999
 
   if (terra::nlyr(mosaic_raster) == 2) {
     names(mosaic_raster) <- c("rbr", "doy")
@@ -144,8 +148,6 @@ mosaic_reproject_resample <- function(
     file.rename(tmp_named, mosaic_output)
   }
 
-
-
   message("[Step 7] Cleaning temporary files...")
   unlink(vrt_path, force = TRUE)
   unlink(masked_output_folder, recursive = TRUE)
@@ -153,3 +155,4 @@ mosaic_reproject_resample <- function(
   message("[Done] Final mosaic saved at: ", mosaic_output)
   return(mosaic_output)
 }
+

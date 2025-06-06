@@ -83,18 +83,18 @@ import osgeo.gdal print(osgeo.gdal.\_\_version\_\_)
 ## Installation
 
 ``` r
-#The CRAN version:
+# Install the stable CRAN version
 install.packages("OtsuFire")
 
-# The development version:
-#install.packages("remotes")
-library(remotes)
-install_github("https://github.com/olgaviedma/OtsuFire", dependencies = TRUE)
+# Alternatively, install the development version from GitHub:
+# install.packages("remotes")  # if not already installed
+remotes::install_github("olgaviedma/OtsuFire", dependencies = TRUE)
 
-# Install 'OtsuSeg' dependency (if not already installed)
-if (!requireNamespace("OtsuSeg", quietly = TRUE)) {
-  remotes::install_github("olgaviedma/OtsuSeg")
-}
+# 'OtsuSeg' is listed in Suggests and available on CRAN:
+install.packages("OtsuSeg")
+
+# (Optional) If you need the development version of otsuSeg:
+# remotes::install_github("olgaviedma/OtsuSeg")
 
 
 ```
@@ -105,6 +105,7 @@ if (!requireNamespace("OtsuSeg", quietly = TRUE)) {
 # Load the OtsuFire package and dependencies
 library(OtsuFire)
 library(dplyr)
+library(magrittr)
 library(ggplot2)
 library(sf)
 library(terra)
@@ -297,6 +298,7 @@ shapefile_clip <- file.path(folder_path, "iberian_peninsula_proj_final.shp")
 mask_to_mosaic(
   mosaic_path      = mosaic_path,
   mask_raster_path = mask_raster_path,
+  crs_target = 3035,
   shapefile_clip   = shapefile_clip
 )
 
@@ -309,7 +311,7 @@ doy <- r[[2]]
 # layout configuration
 par(mfrow = c(1, 2), mar = c(4, 4, 4, 5)) 
 
-# Reclasificación
+# Reclasification
 rbr_classes <- terra::classify(rbr, rbind(
   c(0,   100,   1),   # Low
   c(100, 300,   2),   # Medium
@@ -317,7 +319,7 @@ rbr_classes <- terra::classify(rbr, rbind(
   c(500, 9000,  4)    # Extreme
 ))
 
-# Convertir a factor
+# Factor converting
 rbr_classes <- terra::as.factor(rbr_classes)
 
 # Establecer tabla de niveles (data.frame con columnas 'value' y 'label')
@@ -325,7 +327,7 @@ lvls <- data.frame(value = 1:4, label = c("Low", "Medium", "High", "Extreme"))
 levels(rbr_classes) <- lvls
 
 
-# Colores y layout
+# Colors and layout
 cols <- c("darkgreen", "orange", "red", "brown")
 par(mfrow = c(1, 2), mar = c(4, 4, 4, 5))
 plot(rbr_classes, col = cols, main = "RBR Composite (90m)")
@@ -366,11 +368,12 @@ process_otsu_rasters(
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig3_RBR_2012_burned_corine_ge0.png" width="900"/>
 </p>
 
+
 ## 3. Calculate Polygon Metrics and Apply Geometric Filters
 
 ``` r
 folder_path <- "ZENODO/exdata"
-burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_corine_.*\\.shp$", full.names = TRUE)
+burned_files <- list.files(folder_path, pattern = "^burned_areas_2012_otsu_.*\\.shp$", full.names = TRUE)
 
 calculate_polygon_metrics(
   shapefile_paths = burned_files,
@@ -379,7 +382,9 @@ calculate_polygon_metrics(
   bbox_h_min = 630, #NULL
   mnbbx_wd_min = 820, #NULL
   p_w_ratio_min = 4.99, #NULL
-  h_w_ratio_min = 0.35 #NULL
+  h_w_ratio_min = 0.35, #NULL
+  filter_logic = c("AND"),
+  dissolve=TRUE
 )
 
 ```
@@ -387,10 +392,11 @@ calculate_polygon_metrics(
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig4_RBR_2012_burned_corine_ge0_metrics.png" width="900"/>
 </p>
 
-## 4. Detect Regeneration Areas using Otsu Thresholding on Negative RBR
+
+## 4. Detect Regeneration Areas using Negative RBR/dNBR
 
 ``` r
-## RENAME THE LANDSAT RBR-DOY MOSAIC FOR A CORRECT USE OF THE FUCNTION
+## RENAME THE LANDSAT RBR-DOY MOSAIC FOR A CORRECT USE OF THE FUNCTION
 file.rename(
   from = file.path(folder_path, "IBERIAN_MinMin_all_year_2012_mosaic_res90m.tif"),
   to   = file.path(folder_path, "IBERIAN_MinMin_2012_all_year_mosaic_masked_res90m.tif")
@@ -434,15 +440,16 @@ process_otsu_regenera(
 folder_path <- "ZENODO/exdata"
 
 flag_otsu_regenera(
-  burned_files = list.files(folder_path, pattern = "*_filt_all.shp$", full.names = TRUE),
+  burned_files = list.files(folder_path, pattern = "burned_areas_2012_otsu_*.shp$", full.names = TRUE),
   regenera_files = list.files(folder_path, pattern = "burned_areas_2012_regenera.*\\.shp$", full.names = TRUE),
-  min_regen_ratio = c(0.10, 0.20, 0.30),
-  min_regen_ratio_P1 = 0.10,
+  min_regen_ratio = c(P1 = 0.05, P2 = 0.05), ## 5% and 5%
   remove_no_regenera = TRUE,
-  remove_condition = "year1_and_year2",
-  all_years_vector = NULL, #  c("P1", "P2") 
+  remove_condition =  c("P1", "P2"), 
+  replace_by_P1 = TRUE,
+  validate_geometries = FALSE,
   output_dir = folder_path
 )
+
 
 ```
 <p align="center">
@@ -452,6 +459,28 @@ flag_otsu_regenera(
 <p align="center">
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig7_rebuilding_burned_polygons_regeneraY1.png" width="700"/>
 </p>
+
+## 6. Calculate Polygon Metrics and Apply Geometric Filters fater flagging by regeneration (Optional)
+
+``` r
+folder_path <- "ZENODO/exdata"
+burned_files <- list.files(folder_path, pattern = "burned_areas_2012_otsu_*_new_polys.*\\.shp$", full.names = TRUE)
+
+calculate_polygon_metrics(
+  shapefile_paths = burned_files,
+  output_dir = folder_path,
+  area_min_ha = NULL,
+  bbox_h_min = 630, 
+  mnbbx_wd_min = 820, 
+  p_w_ratio_min = 4.99, 
+  h_w_ratio_min = 0.35 
+)
+
+```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig4_RBR_2012_burned_corine_ge0_metrics.png" width="900"/>
+</p>
+
 
 
 ## 6. Extract DOY Statistics from Raster for Each Polygon
@@ -473,7 +502,7 @@ calculate_doy_flags(
   doy_band = 2,
   polygons_sf <- list.files(
   folder_path,
-  pattern = "burned_areas_2012_.*_rat30_P1P2_new_polys\\.shp$", #"burned_areas_2012_.*_rat[0-9]+_P1P2_new_polys\\.shp$"
+  pattern = "burned_areas_2012_.*_rat30_P1P2_new_polys\\.shp$", #"burned_areas_2012_.*_rat[0-9]+_P1P2_new_polys_filt_all\\.shp$"
   full.names = TRUE),
   output_dir = folder_path,
   year = 2012,

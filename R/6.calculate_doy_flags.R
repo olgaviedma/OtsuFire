@@ -8,6 +8,8 @@
 #' Optionally, the function can threshold the DOY band around the median and/or mode of each polygon
 #' using user-defined DOY windows (e.g., ±10 days), create binary raster masks, and vectorize them using GDAL.
 #'
+#' Use this function to assign a representative burning date (DOY) to each fire event and to discard events with unusually high internal variation in DOY among their pixels.
+#'
 #' The function supports either a single shapefile (original burned areas) or a named list
 #' of shapefiles or `sf` objects generated with different Otsu thresholds.
 #'

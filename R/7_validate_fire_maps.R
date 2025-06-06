@@ -10,96 +10,109 @@
 #' @name validate_fire_maps
 #' @rdname validate_fire_maps
 #'
-#' @param input_shapefile Character vector. One or several paths to shapefiles containing the burned polygons to validate.
+#' @param input_shapefile Character vector. One or more paths to shapefiles containing the burned polygons to validate.
 #' @param ref_shapefile Character. Path to the shapefile with reference burned area polygons.
 #' @param mask_shapefile Character. Path to the shapefile defining the study area boundary.
 #' @param burnable_raster Character. Path to the raster file indicating burnable areas (binary or categorical).
 #' @param year_target Numeric. Target year for filtering reference polygons.
 #' @param validation_dir Character. Output directory to save validation results.
 #' @param binary_burnable Logical. TRUE if the burnable raster is binary (1 = burnable, 0 = non-burnable). Default is TRUE.
-#' @param burnable_classes Optional vector of raster values considered burnable if `binary_burnable = FALSE`.
-#' @param buffer Numeric. Optional buffer distance (meters) around reference polygons when rasterizing for pixel validation. Default is 0.
-#' @param threshold_completely_detected Numeric. Minimum percent (e.g., 90) of a reference polygon area that must be intersected to be considered completely detected. Default is 90.
+#' @param burnable_classes Optional numeric vector of raster values considered burnable if `binary_burnable = FALSE`.
+#' @param class_shape Optional character. Path to a shapefile containing class information (e.g., CORINE or ecoregions) used for class-wise error breakdown.
+#' @param class_field Optional character. Name of the field in `class_shape` to group omission and commission errors by class (e.g., "CORINE", "eco_name", "cor_eco").
+#' @param buffer Numeric. Optional buffer distance (in meters) applied around reference polygons for pixel-based validation. Default is 0.
+#' @param threshold_completely_detected Numeric. Minimum percentage (e.g., 90) of a reference polygon area that must be intersected to be considered completely detected. Default is 90.
 #' @param min_area_reference_ha Numeric. Minimum area (in hectares) to retain reference polygons after masking. Default is NULL (no filtering).
 #' @param use_gdal Logical. Whether to use external GDAL (via Python) for polygonizing rasters (faster for large datasets). Default is TRUE.
-#' @param python_exe Character. Path to the Python executable.
-#' @param gdal_polygonize_script Character. Path to `gdal_polygonize.py` script.
-#' @param force_reprocess_ref Logical. If TRUE, forces the recalculation of masked reference polygons even if they already exist. Default is FALSE.
-#' @param metrics_type Character. Type of metrics to compute. Must be one of `"all"` (default), `"pixel"`, or `"area"`. Use `"pixel"` to compute only pixel-based accuracy metrics, `"area"` for polygon/area-based metrics, or `"all"` to calculate both.
+#' @param python_exe Character. Path to the Python executable used for GDAL polygonization.
+#' @param gdal_polygonize_script Character. Path to the `gdal_polygonize.py` script.
+#' @param force_reprocess_ref Logical. If TRUE, forces recalculation of masked reference polygons even if cached versions exist. Default is FALSE.
+#' @param metrics_type Character. Type of metrics to compute. One of `"all"` (default), `"pixel"`, or `"area"`.
 #'
 #' @details
-#' ## Pixel-based metrics (when `metrics_type = \"pixel\"` or `"all"`):
+#' ## Pixel-based metrics (when `metrics_type = "pixel"` or `"all"`):
 #' - **True Positives (TP)**: Pixels correctly detected as burned.
 #' - **False Positives (FP)**: Pixels wrongly detected as burned.
-#' - **False Negatives (FN)**: Pixels missed (burned in reference but not detected).
+#' - **False Negatives (FN)**: Burned pixels missed by the detection.
 #' - **True Negatives (TN)**: Pixels correctly identified as unburned.
 #'
 #' Derived indicators:
 #' - **Precision** = TP / (TP + FP)
 #' - **Recall** = TP / (TP + FN)
-#' - **F1 Score** = 2 ? (Precision ? Recall) / (Precision + Recall)
+#' - **F1 Score** = 2 * (Precision * Recall) / (Precision + Recall)
 #' - **Intersection over Union (IoU)** = TP / (TP + FP + FN)
 #' - **Error Rate** = (FP + FN) / (TP + FP + FN + TN)
 #'
-#' ## Area-based metrics (when `metrics_type = \"area\"` or `"all"`):
-#' - **N_Reference_Polygons**: Number of reference polygons considered after masking.
-#' - **N_Completely_Detected**: Number of reference polygons detected over `threshold_completely_detected` % of their area.
-#' - **N_Detected_Polygons**: Number of polygons partially or fully detected (>0% intersection).
-#' - **N_Not_Detected**: Number of reference polygons without any intersection.
-#' - **Perc_Detected_Polygons**: Percentage of reference polygons detected.
-#' - **Area_Reference_ha**: Total area (ha) of reference polygons.
-#' - **Area_Detected_ha**: Total area (ha) of burned polygons provided as input.
-#' - **Area_Intersection_ha**: Total intersected area (ha) between detected and reference polygons.
-#' - **Area_Reference_NotDetected_ha**: Area (ha) of reference polygons not intersected.
-#' - **Perc_Reference_Area_NotDetected**: Percentage of total reference area not intersected.
-#' - **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) ? 100
-#' - **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) ? 100
+#' ## Area-based metrics (when `metrics_type = "area"` or `"all"`):
+#' - **N_Reference_Polygons**: Number of reference polygons after masking and filtering.
+#' - **N_Completely_Detected**: Count of reference polygons where detected area ? `threshold_completely_detected`.
+#' - **N_Detected_Polygons**: Reference polygons partially or fully detected (>0% overlap).
+#' - **N_Not_Detected**: Reference polygons without any detected overlap.
+#' - **Perc_Detected_Polygons**: Share of reference polygons detected.
+#' - **Area_Reference_ha**: Total area of reference polygons (ha).
+#' - **Area_Detected_ha**: Total area of detected burned polygons (ha).
+#' - **Area_Intersection_ha**: Area of intersection between detection and reference polygons (ha).
+#' - **Area_Reference_NotDetected_ha**: Area of reference polygons not intersected (ha).
+#' - **Perc_Reference_Area_NotDetected**: Share of reference area missed (%).
+#' - **Recall_Area_percent** = (Area_Intersection_ha / Area_Reference_ha) * 100
+#' - **Precision_Area_percent** = (Area_Intersection_ha / Area_Detected_ha) * 100
 #'
-#' ## Additional outputs:
-#' - Shapefiles of undetected reference polygons and unmatched detection polygons are saved in the `VALIDATION` subdirectory.
+#' ## Class-wise error breakdown:
+#' If `class_shape` and `class_field` are provided and valid:
+#' - `ref_not_detected` and `det_not_matched` polygons are joined to `class_shape`.
+#' - Output CSV files:
+#'   - `omission_by_<class_field>_<input>.csv`
+#'   - `commission_by_<class_field>_<input>.csv`
 #'
-#' ## Notes:
-#' - Recall and Precision at area scale are **not penalized** if detected polygons cover more area than the reference.
-#' - Always set `force_reprocess_ref = TRUE` when changing `min_area_reference_ha`.
+#' ## Output files:
+#' - `metrics_summary_<year>.csv` and/or `polygon_summary_<year>.csv`
+#' - Shapefiles of undetected and unmatched polygons
+#' - Class-wise omission/commission CSVs (if class information is provided)
 #'
-#' @return
-#' A list containing:
-#' - `metrics`: data.table with pixel-based metrics (if `metrics_type` is `"pixel"` or `"all"`).
-#' - `polygon_summary`: data.table with area-based metrics (if `metrics_type` is `"area"` or `"all"`).
-#'
-#' Two CSV files are saved automatically in the `VALIDATION` subdirectory of `validation_dir`, depending on the selected `metrics_type`.
+#' @return A list with:
+#' \describe{
+#'   \item{metrics}{A data.table of pixel-based accuracy metrics, or NULL if `metrics_type` excludes them.}
+#'   \item{polygon_summary}{A data.table of area-based metrics, or NULL if `metrics_type` excludes them.}
+#' }
 #'
 #' @examples
 #' \dontrun{
 #' validate_fire_maps(
-#'   input_shapefile = list.files(\"shapefiles\", pattern = \"*.shp\", full.names = TRUE),
-#'   ref_shapefile = \"ref_polygons.shp\",
-#'   mask_shapefile = \"study_area_mask.shp\",
-#'   burnable_raster = \"burnable_mask.tif\",
-#'   year_target = 2019,
-#'   validation_dir = \"results/validation\",
+#'   input_shapefile = list.files("shapefiles", pattern = "\\.shp$", full.names = TRUE),
+#'   ref_shapefile = "ref_polygons_2022.shp",
+#'   mask_shapefile = "mask_region.shp",
+#'   burnable_raster = "burnable.tif",
+#'   year_target = 2022,
+#'   validation_dir = "validation_results",
 #'   binary_burnable = TRUE,
 #'   min_area_reference_ha = 1,
 #'   buffer = 30,
 #'   threshold_completely_detected = 90,
 #'   use_gdal = TRUE,
-#'   python_exe = \"C:/Python/python.exe\",
-#'   gdal_polygonize_script = \"C:/Python/Scripts/gdal_polygonize.py\",
+#'   python_exe = "C:/Python/python.exe",
+#'   gdal_polygonize_script = "C:/Python/Scripts/gdal_polygonize.py",
 #'   force_reprocess_ref = TRUE,
-#'   metrics_type = \"all\"  # or \"pixel\", or \"area\"
+#'   metrics_type = "all",
+#'   class_shape = "corine_eco_regions.shp",
+#'   class_field = "cor_eco"
 #' )
 #' }
+#'
 #' @importFrom sf st_read st_write st_crs st_transform st_make_valid st_intersection st_area st_buffer st_is_empty
 #' @importFrom terra rast crop mask project rasterize as.polygons vect writeRaster global ncell
 #' @importFrom data.table data.table fwrite rbindlist
 #' @importFrom glue glue
 #' @importFrom tools file_path_sans_ext
-#' @importFrom dplyr filter first
-#' @importFrom stats na.omit setNames
-#' @importFrom utils glob2rx
+#' @importFrom dplyr filter group_by summarise mutate ungroup n
+#' @importFrom rlang sym
 #' @importFrom magrittr %>%
-#' @importFrom stringr str_detect str_replace
 #' @export
+
+utils::globalVariables(c(
+  ".data", "CORINE_CLASS", "CORINE_YEAR", "ECO_CLASS",
+  "unit_id2", "geometry"
+))
+
 validate_fire_maps <- function(input_shapefile,
                                 ref_shapefile,
                                 mask_shapefile,
@@ -108,6 +121,8 @@ validate_fire_maps <- function(input_shapefile,
                                 validation_dir,
                                 binary_burnable = TRUE,
                                 burnable_classes = NULL,
+                                class_shape,
+                                class_field = NULL,
                                 buffer = 0,
                                 threshold_completely_detected = 90,
                                 min_area_reference_ha = NULL,
@@ -143,12 +158,15 @@ validate_fire_maps <- function(input_shapefile,
   } else {
     message("Processing reference polygons...")
     ref_polygons <- sf::st_read(ref_shapefile, quiet = TRUE) |> sf::st_make_valid()
+    cat("Original reference polygons", nrow(ref_polygons), "\n")
 
     if ("year" %in% names(ref_polygons)) {
       ref_polygons <- dplyr::filter(ref_polygons, year == year_target)
+      cat("reference polygons filtered by (", year_target, "):", nrow(ref_polygons), "\n")
     }
     if (nrow(ref_polygons) == 0) stop("No reference polygons found for the specified year.")
 
+    # Reproyectar ref_polygons y burnable si es necesario
     if (sf::st_crs(ref_polygons) != sf::st_crs(mask_geom)) {
       ref_polygons <- sf::st_transform(ref_polygons, sf::st_crs(mask_geom))
     }
@@ -160,17 +178,18 @@ validate_fire_maps <- function(input_shapefile,
     ref_polygons <- sf::st_make_valid(ref_polygons)
     mask_geom <- sf::st_make_valid(mask_geom)
 
-    # Prefiltrar por bbox antes de intersectar (rapido y seguro)
+    # Prefiltrar por BBOX e intersectar con mascara
     ref_polygons <- sf::st_filter(ref_polygons, mask_geom, .predicate = sf::st_intersects)
+    cat("reference polygons filtered by mask (st_filter):", nrow(ref_polygons), "\n")
 
-    # Solo intersectar si hay solapamiento real
     if (nrow(ref_polygons) > 0) {
       ref_polygons <- suppressWarnings(sf::st_intersection(ref_polygons, mask_geom))
     }
 
+    # Rasterizar referencia y multiplicar por mascara
     ref_raster <- terra::rasterize(terra::vect(ref_polygons), burnable, field = 1, background = NA)
     masked_ref_raster <- ref_raster * burnable
-    masked_ref_raster[masked_ref_raster != 1] <- NA
+    masked_ref_raster[masked_ref_raster < 0.99] <- NA
 
     raster_temp_path <- file.path(tempdir(), "masked_ref_raster.tif")
     terra::writeRaster(masked_ref_raster, raster_temp_path, overwrite = TRUE,
@@ -178,53 +197,46 @@ validate_fire_maps <- function(input_shapefile,
 
     if (use_gdal) {
       output_shapefile_path <- file.path(tempdir(), "masked_reference_polygons.shp")
-
-      # Lanzar GDAL
       system(glue::glue('"{python_exe}" "{gdal_polygonize_script}" "{raster_temp_path}" -f "ESRI Shapefile" "{output_shapefile_path}" DN'))
 
-      # Verificar que se haya creado el shapefile
       if (!file.exists(output_shapefile_path)) {
         stop("GDAL polygonization failed: masked_reference_polygons.shp was not created.")
       }
 
-      # Leer shapefile generado
       masked_ref_polygons <- sf::st_read(output_shapefile_path, quiet = TRUE)
-
-      # Borrar shapefiles temporales
       unlink(list.files(tempdir(), pattern = "masked_reference_polygons\\..*", full.names = TRUE))
 
-      # Verificar que tenga geometrias
       if (nrow(masked_ref_polygons) == 0) {
         stop("Polygonized reference is empty after GDAL. Check burnable mask and inputs.")
       }
 
-      # Eliminar geometrias vacias si las hubiera
       masked_ref_polygons <- masked_ref_polygons[!sf::st_is_empty(masked_ref_polygons), ]
-
 
     } else {
       masked_ref_polygons <- terra::as.polygons(masked_ref_raster, dissolve = FALSE) |> sf::st_as_sf()
       masked_ref_polygons <- masked_ref_polygons[!sf::st_is_empty(masked_ref_polygons), ]
     }
 
-
-    # Filtrado por area minima de referencia (nuevo)
+    # Filtrar por area minima si se especifica
     if (!is.null(min_area_reference_ha)) {
-      area_ref_polygons <- as.numeric(sf::st_area(ref_polygons)) / 10000  # Area en hectareas
-      n_before <- nrow(ref_polygons)
-      ref_polygons <- ref_polygons[area_ref_polygons >= min_area_reference_ha, ]
-      n_after <- nrow(ref_polygons)
+      area_ref_polygons <- as.numeric(sf::st_area(masked_ref_polygons)) / 10000
+      n_before <- nrow(masked_ref_polygons)
+      masked_ref_polygons <- masked_ref_polygons[area_ref_polygons >= min_area_reference_ha, ]
+      n_after <- nrow(masked_ref_polygons)
 
-      cat(sprintf("Filtered small reference polygons: %d ? %d polygons (Area ? %.2f ha)\n", n_before, n_after, min_area_reference_ha))
+      cat(sprintf("Filtered small reference polygons: %d ? %d polygons (Area ? %.2f ha)\n",
+                  n_before, n_after, min_area_reference_ha))
 
-      if (nrow(ref_polygons) == 0) {
+      if (nrow(masked_ref_polygons) == 0) {
         stop("No reference polygons remain after filtering by minimum area.")
       }
     }
 
-    sf::st_write(ref_polygons, ref_masked_path, delete_layer = TRUE, quiet = TRUE)
-
+    # Guardar y asignar a ref_polygons
+    sf::st_write(masked_ref_polygons, ref_masked_path, delete_layer = TRUE, quiet = TRUE)
+    ref_polygons <- masked_ref_polygons
   }
+
 
   if (!is.list(input_shapefile)) input_shapefile <- as.list(input_shapefile)
 
@@ -234,12 +246,16 @@ validate_fire_maps <- function(input_shapefile,
   for (shp in input_shapefile) {
       input_name <- tools::file_path_sans_ext(basename(shp))
       raster_path <- sub("\\.shp$", ".tif", shp)
-      message("? Processing input file: ", input_name)
+      message("Processing input file: ", input_name)
 
     if (!file.exists(raster_path)) {
       detection_polygons <- sf::st_read(shp, quiet = TRUE) |> sf::st_make_valid()
       if (sf::st_crs(detection_polygons) != sf::st_crs(ref_polygons)) {
         detection_polygons <- sf::st_transform(detection_polygons, sf::st_crs(ref_polygons))
+      }
+
+      if (sf::st_crs(detection_polygons) != terra::crs(burnable)) {
+        detection_polygons <- sf::st_transform(detection_polygons, terra::crs(burnable))
       }
 
       # Filtrar primero solo los que intersectan con la mascara
@@ -253,6 +269,18 @@ validate_fire_maps <- function(input_shapefile,
       }
 
 
+      # Verificar si detection_polygons tiene geometria valida
+      if (nrow(detection_polygons) == 0 || is.null(sf::st_geometry(detection_polygons))) {
+        warning(paste("Skipping", input_name, "- no valid polygons for cropping."))
+        next
+      }
+
+      # Verificar si los extents se solapan
+      if (is.null(terra::intersect(terra::ext(burnable), terra::ext(terra::vect(detection_polygons))))){
+        warning(paste("Skipping", input_name, "- burnable raster and detection polygons do not overlap."))
+        next
+      }
+
       base_raster <- terra::crop(burnable, terra::vect(detection_polygons))
       burned_raster <- terra::rasterize(terra::vect(detection_polygons), base_raster, field = 1, background = NA)
       terra::writeRaster(burned_raster, raster_path, overwrite = TRUE,
@@ -262,6 +290,8 @@ validate_fire_maps <- function(input_shapefile,
     pred_raster <- terra::rast(raster_path)
 
     detection_polygons <- sf::st_read(shp, quiet = TRUE)
+    message("Processing detection polygons - ", nrow(detection_polygons), " polygons")
+
     if (sf::st_crs(detection_polygons) != sf::st_crs(ref_polygons)) detection_polygons <- sf::st_transform(detection_polygons, sf::st_crs(ref_polygons))
     detection_polygons <- suppressWarnings(sf::st_intersection(detection_polygons, mask_geom))
 
@@ -292,6 +322,7 @@ validate_fire_maps <- function(input_shapefile,
       metrics_list[[input_name]] <- pixel_metrics_dt
     }
 
+    message("Computing metrics:")
     if (metrics_type %in% c("all", "area")) {
       ref_polygons <- sf::st_make_valid(ref_polygons)
       detection_polygons <- sf::st_make_valid(detection_polygons)
@@ -345,6 +376,7 @@ validate_fire_maps <- function(input_shapefile,
       ref_not_detected_path <- file.path(validation_output_dir, paste0("ref_polygons_not_detected_", input_name, ".shp"))
       det_not_matched_path <- file.path(validation_output_dir, paste0("input_polygons_not_matched_", input_name, ".shp"))
 
+      message("Saving not detected polygons:")
       if (nrow(ref_not_detected_polygons) > 0) {
         sf::st_write(ref_not_detected_polygons, ref_not_detected_path, delete_layer = TRUE, quiet = TRUE)
       }
@@ -373,8 +405,82 @@ validate_fire_maps <- function(input_shapefile,
       )
 
       polygon_summary_list[[input_name]] <- polygon_summary_dt
+
+      message("Analysing errors by classes:")
+
+
+      # === ANALIZAR ERRORES POR CLASE ===
+      # Load class map only if needed
+      class_map <- NULL
+      if (!is.null(class_shape) && file.exists(class_shape)) {
+        class_map <- sf::st_read(class_shape, quiet = TRUE)
+        class_map <- sf::st_make_valid(class_map)
+        class_map <- sf::st_transform(class_map, sf::st_crs(ref_polygons))
+      }
+
+      # Only proceed with class-based omission/commission if class_field is valid
+      if (!is.null(class_field) && !is.null(class_map) && class_field %in% names(class_map)) {
+        # Spatial join with class map
+        ref_not_detected_polygons <- sf::st_join(ref_not_detected_polygons, class_map[, class_field], left = TRUE)
+        det_not_matched_polygons <- sf::st_join(det_not_matched_polygons, class_map[, class_field], left = TRUE)
+
+        clean_class_field <- function(sf_obj, class_field) {
+          if (paste0(class_field, ".y") %in% names(sf_obj)) {
+            sf_obj[[class_field]] <- sf_obj[[paste0(class_field, ".y")]]
+            sf_obj[[paste0(class_field, ".y")]] <- NULL
+            if (paste0(class_field, ".x") %in% names(sf_obj)) {
+              sf_obj[[paste0(class_field, ".x")]] <- NULL
+            }
+          }
+          return(sf_obj)
+        }
+
+        ref_not_detected_polygons <- clean_class_field(ref_not_detected_polygons, class_field)
+        det_not_matched_polygons <- clean_class_field(det_not_matched_polygons, class_field)
+
+        if (class_field %in% names(ref_not_detected_polygons)) {
+          omission_by_class <- ref_not_detected_polygons |>
+            dplyr::mutate(area_ha = as.numeric(sf::st_area(geometry)) / 10000) |>
+            dplyr::group_by(!!rlang::sym(class_field)) |>
+            dplyr::summarise(
+              N_Omitted = dplyr::n(),
+              Area_Omitted_ha = sum(area_ha, na.rm = TRUE),
+              .groups = "drop"
+            ) |>
+            sf::st_drop_geometry()
+
+          omission_by_class[[class_field]] <- as.character(omission_by_class[[class_field]])
+
+          data.table::fwrite(
+            omission_by_class,
+            file.path(validation_output_dir, paste0("omission_by_", class_field, "_", input_name, ".csv"))
+          )
+        }
+
+        if (class_field %in% names(det_not_matched_polygons)) {
+          commission_by_class <- det_not_matched_polygons |>
+            dplyr::mutate(area_ha = as.numeric(sf::st_area(geometry)) / 10000) |>
+            dplyr::group_by(!!rlang::sym(class_field)) |>
+            dplyr::summarise(
+              N_Commission = dplyr::n(),
+              Area_Commission_ha = sum(area_ha, na.rm = TRUE),
+              .groups = "drop"
+            ) |>
+            sf::st_drop_geometry()
+
+          commission_by_class[[class_field]] <- as.character(commission_by_class[[class_field]])
+
+          data.table::fwrite(
+            commission_by_class,
+            file.path(validation_output_dir, paste0("commission_by_", class_field, "_", input_name, ".csv"))
+          )
+        }
+      } else if (!is.null(class_field)) {
+        warning(paste0("Field '", class_field, "' not found or class map not provided. Skipping class-wise validation."))
+      }
+
     }
-  }
+    }
 
   if (metrics_type %in% c("all", "pixel")) {
     all_metrics <- data.table::rbindlist(metrics_list)

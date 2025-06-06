@@ -17,3 +17,4 @@
 ^data-raw$
 ^LICENSE$
 ^\.git$
+^prueba_output\\.gpkg$

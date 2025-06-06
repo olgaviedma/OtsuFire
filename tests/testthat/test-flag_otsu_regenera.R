@@ -1,39 +1,42 @@
-test_that("flag_otsu_regenera completes and writes outputs", {
-  skip_on_cran()
+test_that("flag_otsu_regenera() runs correctly with group_field = NULL (uses burned_id)", {
+  skip_if_not_installed("sf")
 
-  out_dir <- file.path(tempdir(), "flag_test")
-  unlink(out_dir, recursive = TRUE)
-  dir.create(out_dir, showWarnings = FALSE)
-
-  # Crear geometria valida
-  p <- sf::st_polygon(list(rbind(c(0,0), c(1,0), c(1,1), c(0,1), c(0,0)))) |> sf::st_sfc(crs = 3035)
-  burned_poly <- sf::st_sf(ID = 1, geometry = p)
-  regenera_poly <- sf::st_sf(DN = 1, geometry = p)
-
-  # Escribir archivos asegurando que se puedan sobrescribir
-  burned_path <- file.path(out_dir, "burned.shp")
-  regen_path <- file.path(out_dir, "regenera_P2_thresh100.shp")
-
-  unlink(list.files(out_dir, pattern = "burned.*", full.names = TRUE))
-  unlink(list.files(out_dir, pattern = "regenera.*", full.names = TRUE))
-  sf::st_write(burned_poly, burned_path, delete_layer = TRUE, quiet = TRUE)
-  sf::st_write(regenera_poly, regen_path, delete_layer = TRUE, quiet = TRUE)
-
-  # Ejecutar funcion
-  flag_otsu_regenera(
-    burned_files = burned_path,
-    regenera_files = regen_path,
-    min_regen_ratio = 0.01,
-    remove_no_regenera = FALSE,
-    remove_condition = "any_year",
-    output_dir = out_dir
+  # Polígono quemado con columna burned_id
+  burned_poly <- sf::st_sf(
+    burned_id = 1L,
+    CORINE_CLA = "311",
+    geometry = sf::st_sfc(sf::st_polygon(list(rbind(
+      c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0)
+    )))),
+    crs = 4326
   )
 
-  # Verificar que al menos se haya generado un shapefile de salida
-  result_files <- list.files(out_dir, pattern = "_rat.*\\.shp$", full.names = TRUE)
-  expect_true(length(result_files) >= 1)
+  # Polígono de regeneración que se solapa parcialmente
+  regen_poly <- sf::st_sf(
+    geometry = sf::st_sfc(sf::st_polygon(list(rbind(
+      c(0.5, 0.5), c(1.5, 0.5), c(1.5, 1.5), c(0.5, 1.5), c(0.5, 0.5)
+    )))),
+    crs = 4326
+  )
 
-  # Verificar que el shapefile se puede leer correctamente
-  shp <- sf::st_read(result_files[1], quiet = TRUE)
-  expect_s3_class(shp, "sf")
+  # Guardar ambos en archivos temporales
+  tmp_burned <- tempfile(fileext = ".geojson")
+  tmp_regen <- tempfile(pattern = "regen_P1_thresh200_", fileext = ".geojson")
+  sf::st_write(burned_poly, tmp_burned, quiet = TRUE)
+  sf::st_write(regen_poly, tmp_regen, quiet = TRUE)
+
+  # Ejecutar función y verificar que no lanza error
+  expect_error({
+    result <- OtsuFire::flag_otsu_regenera(
+      burned_files = tmp_burned,
+      regenera_files = tmp_regen,
+      min_regen_ratio = c(P1 = 0.01),
+      output_dir = tempdir(),
+      replace_by_P1 = FALSE,
+      save_no_regenera = "none",
+      output_format = "geojson"
+      # group_field = NULL por defecto, usa burned_id
+    )
+  }, NA)
 })
+

@@ -17,12 +17,22 @@
 \item{p_w_ratio_min}{Minimum perimeter-to-width ratio (`p_w_ratio`). Default: 4.0.}
 
 \item{h_w_ratio_min}{Minimum height-to-width ratio (`h_w_ratio`). Default: 0.35.}
+
+\item{output_format}{Character. Output format for saved files: `"shp"` (default) or `"geojson"`.}
+
+\item{filter_logic}{Logical combination of filters: `"AND"` (default) requires all filters to be met, `"OR"` passes polygons meeting any filter.}
+
+\item{dissolve}{Logical. If TRUE, dissolve adjacent polygons into contiguous shapes before computing metrics. Default: TRUE.}
+
+\item{overlay_polygons}{Optional. `sf` object or path to shapefile to be joined by spatial intersection. If `NULL`, no spatial join is performed.}
 }
 \value{
 A named list with one entry per input shapefile. Each entry contains:
 \describe{
   \item{metrics}{Path to shapefile with all polygons and computed metrics.}
   \item{filtered}{Path to shapefile with only filtered polygons.}
+  \item{joined_metrics}{Path to joined shapefile: original polygons + metrics + event ID.}
+  \item{joined_filtered}{Path to joined filtered shapefile: original polygons + metrics + event ID.}
   \item{polygons_all}{`sf` object with all input polygons and metrics.}
   \item{polygons_filtered}{`sf` object with only polygons that passed filters.}
 }
@@ -36,8 +46,10 @@ that meet certain geometric criteria.
 For each input shapefile, the function saves:
 - A shapefile with all polygons and computed metrics.
 - A filtered shapefile with only polygons passing all active filters.
+- Optionally, joined versions of the above with attributes from the original input shapefile.
 
-If the input polygons contain a `CORINE_CLA` column, geometries are dissolved before metrics are calculated.
+If the input fire events are subdivided by CORINE or ECOREGION classes, adjacent geometries can be dissolved before metric calculation to reconstruct contiguous burned areas.
+In that case, a numeric `burned_id` is assigned to each disjoint polygon in the dissolved geometry. This ID is retained in the spatial joins to allow tracking the disaggregated components of each event.
 
 ## Metrics calculated per polygon:
 - `area_ha`: Area in hectares.
@@ -46,13 +58,17 @@ If the input polygons contain a `CORINE_CLA` column, geometries are dissolved be
 - `perim_m`: Polygon perimeter in meters.
 - `p_w_ratio`: Perimeter-to-width ratio (`perim_m / bbox_wx`), proxy for complexity.
 - `h_w_ratio`: Height-to-width ratio (`bbox_hy / bbox_wx`), proxy for anisotropy.
-- `mnbbx_wd`: Width of the minimum rotated bounding box.
-- `mnbbx_ln`: Length of the minimum rotated bounding box.
-- `mnbbx_el`: Elongation as length-to-width ratio (`mnbbx_ln / mnbbx_wd`).
+- `burned_id`: Integer identifier (1 to N) assigned to each polygon in the dissolved output.
 
 ## Filtering behavior:
 All filter thresholds are optional. If a parameter is `NULL`, its corresponding filter is skipped.
-A polygon must satisfy **all active filters** to appear in the filtered output.
+A polygon must satisfy **all active filters** to appear in the filtered output, unless `filter_logic = "OR"` is used.
+
+## Spatial Join (optional):
+If the input shapefiles contain attribute data (e.g., CORINE codes, ecoregion classes), these attributes
+are preserved in the output by performing a spatial join **from the original shapefile to the metrics output**.
+- `joined_metrics`: polygons from the original shapefile with appended metric fields and `event_id`.
+- `joined_filtered`: filtered version of the above.
 }
 \examples{
 \dontrun{
@@ -70,11 +86,15 @@ result_list <- calculate_polygon_metrics(
   bbox_h_min = 630,
   mnbbx_wd_min = 800,
   p_w_ratio_min = 4.0,
-  h_w_ratio_min = 0.35
+  h_w_ratio_min = 0.35,
+  output_format = "geojson",
+  filter_logic = "AND",
+  dissolve = TRUE
 )
 
-# Access paths and results
+# Access filtered and joined outputs
 print(result_list[[1]]$filtered)
+print(result_list[[1]]$joined_filtered)
 }
 
 }

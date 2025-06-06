@@ -68,7 +68,7 @@ mosaic_reproject_resample <- function(
   if (length(raster_files) == 0) stop("No rasters found in ", folder_path)
 
 
-  # Proyectar máscara solo si es necesario
+  # Proyectar mascara solo si es necesario
   ref_rast <- terra::rast(raster_files[1])
   if (!terra::crs(mask_vect) == terra::crs(ref_rast)) {
     mask_vect <- terra::project(mask_vect, terra::crs(ref_rast))
@@ -108,10 +108,10 @@ mosaic_reproject_resample <- function(
   )
 
   message("[Step 5] Warping mosaic to ", crs_target, " with resolution ", res_target, "m...")
-  # Obtener nombre base sin extensión
+  # Obtener nombre base sin extension
   base_full <- tools::file_path_sans_ext(basename(raster_files[1]))
 
-  # Extraer el prefijo antes del primer grupo de 4 dígitos + ese grupo
+  # Extraer el prefijo antes del primer grupo de 4 digitos + ese grupo
   # Ej: de "IBERIAN_MinMin_all_year_all_1988_0-0000000000" -> "IBERIAN_MinMin_all_year_all_1988"
   base_name <- sub("^(.*?\\d{4})_.*$", "\\1", base_full)
     mosaic_output <- file.path(folder_path, paste0(base_name, "_mosaic_res", res_target, "m.tif"))

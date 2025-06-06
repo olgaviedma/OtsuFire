@@ -8,7 +8,7 @@ test_that("process_otsu_rasters runs on synthetic raster and outputs valid shape
   skip_if(is.null(gdal_polygonize) || !file.exists(gdal_polygonize), "gdal_polygonize.py no encontrado")
   skip_if_not_installed("OtsuSeg")
 
-  # Crear raster sintético
+  # Crear raster sintetico
   r <- terra::rast(nrows = 10, ncols = 10, xmin = 0, xmax = 1000, ymin = 0, ymax = 1000, crs = "EPSG:3035")
   terra::values(r) <- matrix(runif(100, 0, 1000), nrow = 10)
   tmp_dir <- file.path(tempdir(), "otsu_test")
@@ -16,7 +16,7 @@ test_that("process_otsu_rasters runs on synthetic raster and outputs valid shape
   raster_path <- file.path(tmp_dir, "raster_synthetic.tif")
   terra::writeRaster(r, raster_path, overwrite = TRUE)
 
-  # Ejecutar función
+  # Ejecutar funcion
   process_otsu_rasters(
     raster_path = raster_path,
     output_dir = tmp_dir,
@@ -33,7 +33,7 @@ test_that("process_otsu_rasters runs on synthetic raster and outputs valid shape
 
   shp <- sf::st_read(shp_files[1], quiet = TRUE)
 
-  # Validar que es un sf válido
+  # Validar que es un sf valido
   expect_s3_class(shp, "sf")
   expect_true(nrow(shp) > 0)
   expect_true("geometry" %in% names(shp))

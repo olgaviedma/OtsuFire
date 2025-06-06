@@ -6,7 +6,7 @@
 #' and their components (day, month, year) are also included.
 #'
 #' Optionally, the function can threshold the DOY band around the median and/or mode of each polygon
-#' using user-defined DOY windows (e.g., ±10 days), create binary raster masks, and vectorize them using GDAL.
+#' using user-defined DOY windows (e.g., \\pm10 days), create binary raster masks, and vectorize them using GDAL.
 #'
 #' Use this function to assign a representative burning date (DOY) to each fire event and to discard events with unusually high internal variation in DOY among their pixels.
 #'

@@ -252,7 +252,7 @@ calculate_polygon_metrics <- function(
     message("Saved filtered metrics file: ", filtered_path)
 
 
-    # Unión espacial con shapefile original solo si join_attributes = TRUE
+    # Union espacial con shapefile original solo si join_attributes = TRUE
     if (isTRUE(join_attributes)) {
 
       message("Joining attributes from original shapefile: ", shapefile_path)
@@ -268,7 +268,7 @@ calculate_polygon_metrics <- function(
         overlay_polygons <- sf::st_make_valid(overlay_polygons)
         overlay_polygons <- sf::st_transform(overlay_polygons, sf::st_crs(polys))
 
-        # Unión espacial sobre todos los polígonos con métricas
+        # Union espacial sobre todos los poligonos con metricas
         joined <- tryCatch({
           sf::st_join(overlay_polygons, polys, join = sf::st_intersects, left = FALSE)
         }, error = function(e) {
@@ -282,7 +282,7 @@ calculate_polygon_metrics <- function(
           polys <- joined
         }
 
-        # Unión espacial sobre polígonos filtrados
+        # Union espacial sobre poligonos filtrados
         joined_filter <- tryCatch({
           sf::st_join(overlay_polygons, filtered, join = sf::st_intersects, left = FALSE)
         }, error = function(e) {
@@ -296,7 +296,7 @@ calculate_polygon_metrics <- function(
           filtered <- joined_filter
         }
 
-        # Guardar las versiones con unión espacial
+        # Guardar las versiones con union espacial
         joined_metrics_path <- file.path(out_dir, paste0(shp_name, "_metrics_joined", ext))
         joined_filtered_path <- file.path(out_dir, paste0(shp_name, "_metrics_filt_", suffix, "_joined", ext))
 
@@ -314,7 +314,7 @@ calculate_polygon_metrics <- function(
           }
         }
 
-        # Guardar los shapefiles con unión
+        # Guardar los shapefiles con union
         sf::st_write(polys, joined_metrics_path, append = FALSE, quiet = TRUE)
         sf::st_write(filtered, joined_filtered_path, append = FALSE, quiet = TRUE)
         message("Saved joined metrics file: ", joined_metrics_path)

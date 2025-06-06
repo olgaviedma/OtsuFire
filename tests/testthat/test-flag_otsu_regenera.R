@@ -1,7 +1,7 @@
 test_that("flag_otsu_regenera() runs correctly with group_field = NULL (uses burned_id)", {
   skip_if_not_installed("sf")
 
-  # Polígono quemado con columna burned_id
+  # Poligono quemado con columna burned_id
   burned_poly <- sf::st_sf(
     burned_id = 1L,
     CORINE_CLA = "311",
@@ -11,7 +11,7 @@ test_that("flag_otsu_regenera() runs correctly with group_field = NULL (uses bur
     crs = 4326
   )
 
-  # Polígono de regeneración que se solapa parcialmente
+  # Poligono de regeneracion que se solapa parcialmente
   regen_poly <- sf::st_sf(
     geometry = sf::st_sfc(sf::st_polygon(list(rbind(
       c(0.5, 0.5), c(1.5, 0.5), c(1.5, 1.5), c(0.5, 1.5), c(0.5, 0.5)
@@ -25,7 +25,7 @@ test_that("flag_otsu_regenera() runs correctly with group_field = NULL (uses bur
   sf::st_write(burned_poly, tmp_burned, quiet = TRUE)
   sf::st_write(regen_poly, tmp_regen, quiet = TRUE)
 
-  # Ejecutar función y verificar que no lanza error
+  # Ejecutar funcion y verificar que no lanza error
   expect_error({
     result <- OtsuFire::flag_otsu_regenera(
       burned_files = tmp_burned,

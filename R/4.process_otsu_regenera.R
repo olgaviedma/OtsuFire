@@ -11,7 +11,7 @@
 #' optionally merged into a single shapefile if `bind_all = TRUE`.
 #'
 #' If a historical burn raster (`rbr_date`) is provided, it will be used to mask out areas
-#' previously burned (i.e., where RBR ≥ 0), so that regeneration is only detected in those
+#' previously burned (i.e., where RBR \\ge 0), so that regeneration is only detected in those
 #' affected by the most recent fire.
 #'
 #' @name process_otsu_regenera
@@ -21,7 +21,7 @@
 #'                 If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.
 #' @param nbr_pre_path Path to pre-fire NBR raster (for index computation).
 #' @param nbr_post_path Path to post-fire NBR raster (for index computation).
-#' @param rbr_date Optional path to an RBR raster used to mask previously burned areas (RBR ≥ 0).
+#' @param rbr_date Optional path to an RBR raster used to mask previously burned areas (RBR \\ge 0).
 #' @param output_dir Directory where outputs (rasters, shapefiles, plots) will be saved.
 #' @param python_exe Path to the Python executable (used to call GDAL).
 #' @param gdal_polygonize_script Path to `gdal_polygonize.py` script.
@@ -252,7 +252,7 @@ process_otsu_regenera <- function(
         names(polys) <- abbreviate(names(polys), minlength = 10)
 
 
-        # Determinar extensión según formato
+        # Determinar extension segun formato
         ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
         # Construir ruta de salida
@@ -273,7 +273,7 @@ process_otsu_regenera <- function(
         # Guardar archivo
         sf::st_write(polys, final_file, append = FALSE, quiet = TRUE)
 
-        # Mensaje de confirmación
+        # Mensaje de confirmacion
         message("Saved regeneration layer: ", final_file)
 
 
@@ -313,7 +313,7 @@ process_otsu_regenera <- function(
     # Validar formato de salida
     output_format <- match.arg(output_format, choices = c("shp", "geojson"))
 
-    # Determinar extensión
+    # Determinar extension
     ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
     # Construir nombre de archivo
@@ -344,7 +344,7 @@ process_otsu_regenera <- function(
     # Guardar ruta en resultado
     results_all$combined <- combined_path
 
-    # Mensaje de confirmación
+    # Mensaje de confirmacion
     message("Saved combined regeneration layer: ", combined_path)
 
   }

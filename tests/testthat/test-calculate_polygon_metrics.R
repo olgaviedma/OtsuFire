@@ -5,14 +5,14 @@ test_that("calculate_polygon_metrics works on synthetic shapefile", {
   tmp_dir <- tempdir()
   shp_path <- file.path(tmp_dir, "fire_polygons_test.shp")
 
-  # Crear polígono sintético simple con CRS
+  # Crear poligono sintetico simple con CRS
   poly <- sf::st_polygon(list(rbind(
     c(0, 0), c(0, 100), c(100, 100), c(100, 0), c(0, 0)
   )))
   sf_poly <- sf::st_sf(id = 1, geometry = sf::st_sfc(poly), crs = 32630)
   sf::st_write(sf_poly, shp_path, delete_layer = TRUE, quiet = TRUE)
 
-  # Llamar a la función
+  # Llamar a la funcion
   result <- calculate_polygon_metrics(
     shapefile_paths = shp_path,
     output_dir = tmp_dir,

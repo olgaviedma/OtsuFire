@@ -10,7 +10,7 @@ test_that("mosaic_reproject_resample works with synthetic rasters", {
   tmp_dir <- file.path(tempdir(), "mosaic_test")
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
 
-  # Crear dos raster tiles sintéticos con CRS proyectado (EPSG:3035)
+  # Crear dos raster tiles sinteticos con CRS proyectado (EPSG:3035)
   make_raster_tile <- function(name, offset_x = 0) {
     r1 <- terra::rast(nrows = 10, ncols = 10,
                       xmin = offset_x, xmax = offset_x + 1000,
@@ -24,7 +24,7 @@ test_that("mosaic_reproject_resample works with synthetic rasters", {
     r_stack <- c(r1, r2)
     out_path <- file.path(tmp_dir, paste0(name, ".tif"))
 
-    # ✅ Cambiar esta línea para que admita -9999 como nodata
+    #  Cambiar esta linea para que admita -9999 como nodata
     terra::writeRaster(r_stack, out_path, overwrite = TRUE, datatype = "FLT4S")
 
     return(out_path)
@@ -34,7 +34,7 @@ test_that("mosaic_reproject_resample works with synthetic rasters", {
   raster1 <- make_raster_tile("tile1", offset_x = 0)
   raster2 <- make_raster_tile("tile2", offset_x = 1000)
 
-  # Crear shapefile de máscara que cubre ambos raster tiles
+  # Crear shapefile de mascara que cubre ambos raster tiles
   mask_poly <- sf::st_polygon(list(rbind(
     c(0, 0), c(0, 1000), c(2000, 1000), c(2000, 0), c(0, 0)
   )))
@@ -42,7 +42,7 @@ test_that("mosaic_reproject_resample works with synthetic rasters", {
   mask_path <- file.path(tmp_dir, "mask.shp")
   sf::st_write(mask_sf, mask_path, quiet = TRUE)
 
-  # Ejecutar la función con resolución adecuada (e.g., 100 m)
+  # Ejecutar la funcion con resolucion adecuada (e.g., 100 m)
   result <- mosaic_reproject_resample(
     folder_path = tmp_dir,
     mask_path = mask_path,

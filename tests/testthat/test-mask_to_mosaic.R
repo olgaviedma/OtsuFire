@@ -5,7 +5,7 @@ test_that("mask_to_mosaic applies binary mask and optional clip correctly", {
   tmp_dir <- file.path(tempdir(), "mask_test")
   dir.create(tmp_dir, showWarnings = FALSE)
 
-  # Crear un raster de mosaico sintético con 2 bandas (rbr, doy)
+  # Crear un raster de mosaico sintetico con 2 bandas (rbr, doy)
   r1 <- terra::rast(nrows = 10, ncols = 10, xmin = 0, xmax = 1000, ymin = 0, ymax = 1000, crs = "EPSG:3035")
   terra::values(r1) <- runif(100, 0, 100)
   r2 <- terra::rast(r1); terra::values(r2) <- sample(1:365, 100, replace = TRUE)
@@ -14,7 +14,7 @@ test_that("mask_to_mosaic applies binary mask and optional clip correctly", {
   mosaic_path <- file.path(tmp_dir, "synthetic_mosaic.tif")
   terra::writeRaster(mosaic, mosaic_path, overwrite = TRUE)
 
-  # Crear un raster máscara binaria (mitad válida, mitad no válida)
+  # Crear un raster mascara binaria (mitad valida, mitad no valida)
   mask <- terra::rast(r1)
   terra::values(mask) <- c(rep(1, 50), rep(0, 50))
   mask_path <- file.path(tmp_dir, "binary_mask.tif")
@@ -28,7 +28,7 @@ test_that("mask_to_mosaic applies binary mask and optional clip correctly", {
   clip_path <- file.path(tmp_dir, "clip.shp")
   sf::st_write(clip_sf, clip_path, delete_layer = TRUE, quiet = TRUE)
 
-  # Ejecutar la función
+  # Ejecutar la funcion
   result_path <- mask_to_mosaic(
     mosaic_path = mosaic_path,
     mask_raster_path = mask_path,

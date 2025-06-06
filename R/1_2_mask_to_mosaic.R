@@ -79,7 +79,7 @@ mask_to_mosaic <- function(
   rast <- terra::rast(mosaic_path)
   mask <- terra::rast(mask_raster_path)
 
-  # === Lógica robusta para output_path ===
+  # === Logica robusta para output_path ===
   if (is.null(output_path)) {
     base_name <- tools::file_path_sans_ext(basename(mosaic_path))
     out_dir <- dirname(mosaic_path)

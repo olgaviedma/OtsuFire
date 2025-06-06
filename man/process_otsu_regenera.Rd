@@ -11,7 +11,7 @@ If a named list is provided, names should match the format `"P1"`, `"P2"`, etc.}
 
 \item{nbr_post_path}{Path to post-fire NBR raster (for index computation).}
 
-\item{rbr_date}{Optional path to an RBR raster used to mask previously burned areas (RBR ≥ 0).}
+\item{rbr_date}{Optional path to an RBR raster used to mask previously burned areas (RBR \\ge 0).}
 
 \item{output_dir}{Directory where outputs (rasters, shapefiles, plots) will be saved.}
 
@@ -64,7 +64,7 @@ can be used to handle large rasters. The function outputs binary rasters and sha
 optionally merged into a single shapefile if `bind_all = TRUE`.
 
 If a historical burn raster (`rbr_date`) is provided, it will be used to mask out areas
-previously burned (i.e., where RBR ≥ 0), so that regeneration is only detected in those
+previously burned (i.e., where RBR \\ge 0), so that regeneration is only detected in those
 affected by the most recent fire.
 }
 \examples{

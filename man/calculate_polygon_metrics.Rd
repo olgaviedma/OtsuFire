@@ -4,97 +4,101 @@
 \alias{calculate_polygon_metrics}
 \title{Calculate Geometric Metrics and Filter Fire Polygons (Batch Mode)}
 \arguments{
-\item{shapefile_paths}{Character vector of paths to input polygon shapefiles.}
+\item{shapefile_paths}{Character vector. Paths to input shapefiles.}
 
-\item{output_dir}{Directory to save the output shapefiles. If `NULL`, outputs are saved next to input files.}
+\item{output_dir}{Optional. Directory to save outputs. Defaults to the input file's folder.}
 
-\item{area_min_ha}{Minimum area in hectares (`area_ha`). Set to `NULL` to disable. Default: 10.}
+\item{area_min_ha}{Minimum area in hectares (`area_ha`). Default: 10.}
 
 \item{bbox_h_min}{Minimum height of axis-aligned bounding box (`bbox_hy`). Default: 630.}
 
-\item{mnbbx_wd_min}{Minimum width of rotated bounding box (`mnbbx_wd`). Default: 800.}
+\item{mnbbx_wd_min}{Minimum width of rotated bounding box. Default: 800.}
 
-\item{p_w_ratio_min}{Minimum perimeter-to-width ratio (`p_w_ratio`). Default: 4.0.}
+\item{p_w_ratio_min}{Minimum perimeter-to-width ratio. Default: 4.0.}
 
-\item{h_w_ratio_min}{Minimum height-to-width ratio (`h_w_ratio`). Default: 0.35.}
+\item{h_w_ratio_min}{Minimum height-to-width ratio. Default: 0.35.}
 
-\item{output_format}{Character. Output format for saved files: `"shp"` (default) or `"geojson"`.}
+\item{output_format}{Output format for saved files: `"shp"` or `"geojson"`. Default: `"shp"`.}
 
-\item{filter_logic}{Logical combination of filters: `"AND"` (default) requires all filters to be met, `"OR"` passes polygons meeting any filter.}
+\item{filter_logic}{Logical combination of filters: `"AND"` (default) or `"OR"`.}
 
-\item{dissolve}{Logical. If TRUE, dissolve adjacent polygons into contiguous shapes before computing metrics. Default: TRUE.}
+\item{dissolve}{Logical. If `TRUE`, dissolve adjacent polygons before computing metrics. Default: TRUE.}
 
-\item{overlay_polygons}{Optional. `sf` object or path to shapefile to be joined by spatial intersection. If `NULL`, no spatial join is performed.}
+\item{join_attributes}{Logical. If `TRUE`, joins filtered/dissolved polygons back to the original shapefile. Default: TRUE.}
+
+\item{min_input_area_ha}{Minimum area (in hectares) for input polygons used in spatial joins. Default: 10.}
+
+\item{overlay_polygons_path}{Optional. `sf` object or path to shapefile to be used for join instead of the input shapefile. Default: `NULL`.}
+
+\item{columns_to_keep}{Optional. Character vector of variable names to retain from the original shapefile during spatial join. Default: `NULL` (keep all).}
 }
 \value{
-A named list with one entry per input shapefile. Each entry contains:
+A named list (one element per input file), each containing:
 \describe{
   \item{metrics}{Path to shapefile with all polygons and computed metrics.}
-  \item{filtered}{Path to shapefile with only filtered polygons.}
-  \item{joined_metrics}{Path to joined shapefile: original polygons + metrics + event ID.}
-  \item{joined_filtered}{Path to joined filtered shapefile: original polygons + metrics + event ID.}
-  \item{polygons_all}{`sf` object with all input polygons and metrics.}
-  \item{polygons_filtered}{`sf` object with only polygons that passed filters.}
+  \item{filtered}{Path to shapefile with only polygons passing the filters.}
+  \item{joined_metrics}{(If `join_attributes = TRUE`) Path to joined shapefile with original attributes + metrics.}
+  \item{joined_filtered}{(If `join_attributes = TRUE`) Path to joined filtered shapefile.}
+  \item{polygons_all}{`sf` object of all polygons with computed metrics.}
+  \item{polygons_filtered}{`sf` object of polygons that passed the filters.}
 }
 }
 \description{
-This function calculates geometric descriptors for fire-affected polygons from
-a list of input shapefiles. Metrics include area, perimeter, bounding box dimensions,
-and elongation. Optionally, spatial filters can be applied to retain only polygons
-that meet certain geometric criteria.
+Calculates geometric descriptors for fire-affected polygons from a list of input shapefiles.
+Metrics include area, perimeter, bounding box dimensions, rotated bounding box, and shape ratios.
+Optionally applies spatial filters and performs attribute joins to enrich outputs.
 
-For each input shapefile, the function saves:
-- A shapefile with all polygons and computed metrics.
-- A filtered shapefile with only polygons passing all active filters.
-- Optionally, joined versions of the above with attributes from the original input shapefile.
+For each input shapefile, the function:
+- Computes metrics per polygon and saves a new shapefile.
+- Applies spatial filters and saves a filtered version.
+- Optionally joins metrics back to the original input polygons (if `join_attributes = TRUE`).
 
-If the input fire events are subdivided by CORINE or ECOREGION classes, adjacent geometries can be dissolved before metric calculation to reconstruct contiguous burned areas.
-In that case, a numeric `burned_id` is assigned to each disjoint polygon in the dissolved geometry. This ID is retained in the spatial joins to allow tracking the disaggregated components of each event.
+If `dissolve = TRUE`, adjacent polygons are merged to reconstruct contiguous burned areas.
+A numeric `burned_id` is then assigned to each resulting polygon and used in subsequent joins.
 
-## Metrics calculated per polygon:
+## Metrics computed per polygon:
 - `area_ha`: Area in hectares.
-- `bbox_wx`: Width of the axis-aligned bounding box (east-west).
-- `bbox_hy`: Height of the axis-aligned bounding box (north-south).
-- `perim_m`: Polygon perimeter in meters.
-- `p_w_ratio`: Perimeter-to-width ratio (`perim_m / bbox_wx`), proxy for complexity.
-- `h_w_ratio`: Height-to-width ratio (`bbox_hy / bbox_wx`), proxy for anisotropy.
-- `burned_id`: Integer identifier (1 to N) assigned to each polygon in the dissolved output.
+- `bbox_wx`: Width of axis-aligned bounding box (x).
+- `bbox_hy`: Height of axis-aligned bounding box (y).
+- `perim_m`: Perimeter in meters.
+- `p_w_ratio`: Perimeter-to-width ratio.
+- `h_w_ratio`: Height-to-width ratio.
+- `burned_id`: Polygon ID if `dissolve = TRUE`.
 
-## Filtering behavior:
-All filter thresholds are optional. If a parameter is `NULL`, its corresponding filter is skipped.
-A polygon must satisfy **all active filters** to appear in the filtered output, unless `filter_logic = "OR"` is used.
+## Filter behavior:
+All thresholds are optional. If a threshold is `NULL`, the corresponding filter is skipped.
+If `filter_logic = "AND"`, all active filters must be satisfied. If `"OR"`, any filter match is sufficient.
 
-## Spatial Join (optional):
-If the input shapefiles contain attribute data (e.g., CORINE codes, ecoregion classes), these attributes
-are preserved in the output by performing a spatial join **from the original shapefile to the metrics output**.
-- `joined_metrics`: polygons from the original shapefile with appended metric fields and `event_id`.
-- `joined_filtered`: filtered version of the above.
+## Spatial join (`join_attributes = TRUE`):
+- Attributes from the original input shapefile are preserved via intersection-based joins.
+- Only input polygons with area ? `min_input_area_ha` are used.
+- The join selects, for each input polygon, the intersecting output polygon with the largest shared area.
+- Only polygons that intersect filtered outputs are retained in the joined outputs.
+- Optionally, you can restrict which variables from the original shapefile to retain using `columns_to_keep`.
+}
+\note{
+Examples require large external raster files (hosted on Zenodo).
+Therefore, they are wrapped#' in dontrun{} to avoid errors during R CMD check
+and to ensure portability.
 }
 \examples{
 \dontrun{
-# Load example fire polygons and apply geometric filtering
-burned_dir <- system.file("extdata", package = "OtsuFire")
-burned_files <- list.files(
-  burned_dir, pattern = glob2rx("burned_areas_*.shp$"), full.names = TRUE
-)
+burned_files <- list.files("path/to/shapefiles", pattern = "\\\\.shp$", full.names = TRUE)
 
-# Define filtering thresholds
-result_list <- calculate_polygon_metrics(
+results <- calculate_polygon_metrics(
   shapefile_paths = burned_files,
-  output_dir = burned_dir,
+  output_dir = "outputs/",
   area_min_ha = 10,
-  bbox_h_min = 630,
+  bbox_h_min = 600,
   mnbbx_wd_min = 800,
   p_w_ratio_min = 4.0,
-  h_w_ratio_min = 0.35,
+  h_w_ratio_min = 0.25,
   output_format = "geojson",
   filter_logic = "AND",
-  dissolve = TRUE
+  dissolve = TRUE,
+  join_attributes = TRUE,
+  min_input_area_ha = 5,
+  columns_to_keep = c("CLC_CODE", "ECOR_REGION")
 )
-
-# Access filtered and joined outputs
-print(result_list[[1]]$filtered)
-print(result_list[[1]]$joined_filtered)
 }
-
 }

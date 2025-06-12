@@ -42,6 +42,10 @@
 #' - Multiclass raster with selected CORINE codes (`burneable_classes_def1_<year>_ETRS89.tif`)
 #' - Polygon shapefile with selected CORINE classes (`burneable_classes_def1_<year>_ETRS89.shp`)
 #'
+#' @note Examples require large external raster files (hosted on Zenodo)
+#' and depend on external software (Python, GDAL). Therefore, they are wrapped
+#' in dontrun{} to avoid errors during R CMD check and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' corine_rasters <- list(
@@ -118,6 +122,11 @@ generate_burnable_mask <- function(
     if (reproject) {
       tmp_unproj <- tempfile(fileext = ".tif")
       terra::writeRaster(class_r, tmp_unproj, overwrite = TRUE)
+
+      if (file.exists(out_reproj)) {
+        tryCatch(file.remove(out_reproj), warning = function(w) message("Warning: ", w))
+      }
+
       cmd <- glue::glue('"{gdalwarp_path}" -t_srs "EPSG:3035" -tr {res} {res} -r near -co "COMPRESS=LZW" "{tmp_unproj}" "{out_reproj}"')
       system(cmd)
     } else {
@@ -127,6 +136,7 @@ generate_burnable_mask <- function(
 
     if (vectorize && file.exists(python_exe) && file.exists(gdal_polygonize_script)) {
       out_shp <- file.path(output_vector_dir, paste0("burneable_classes_def1_", name, "_ETRS89.shp"))
+
       cmd_vec <- glue::glue('"{python_exe}" "{gdal_polygonize_script}" "{out_reproj}" -f "ESRI Shapefile" "{out_shp}" DN')
       system(cmd_vec)
       message("Vectorized: ", out_shp)
@@ -136,6 +146,9 @@ generate_burnable_mask <- function(
     masked[] <- binary_vals
     binary_r <- terra::rast(masked)
     output_r <- file.path(output_raster_dir, paste0("burneable_mask_binary_", name, "_ETRS89.tif"))
+
+     if (file.exists(output_r)) tryCatch(file.remove(output_r), error = function(e) NULL)
+
     if (reproject) {
       tmp_bin <- tempfile(fileext = ".tif")
       terra::writeRaster(binary_r, tmp_bin, overwrite = TRUE)
@@ -155,17 +168,21 @@ generate_burnable_mask <- function(
 
     if (to_wgs84) {
       output_wgs <- file.path(output_raster_dir, paste0("burneable_mask_binary_", name, "_wgs84.tif"))
-      if (file.exists(output_wgs)) file.remove(output_wgs)
+
+      if (file.exists(output_wgs)) tryCatch(file.remove(output_wgs), error = function(e) NULL)
+
       cmd_wgs <- glue::glue('"{gdalwarp_path}" -t_srs "EPSG:4326" -tr 0.0003 0.0003 -r near -dstnodata 0 -co "COMPRESS=LZW" "{output_r}" "{output_wgs}"')
       system(cmd_wgs)
       message("Reprojected to WGS84: ", output_wgs)
 
       if (vectorize && file.exists(python_exe) && file.exists(gdal_polygonize_script)) {
         output_shp_wgs <- file.path(output_vector_dir, paste0("burneable_mask_binary_", name, "_wgs84.shp"))
+
         if (file.exists(output_shp_wgs)) {
           shp_base <- tools::file_path_sans_ext(output_shp_wgs)
           file.remove(paste0(shp_base, c(".shp", ".shx", ".dbf", ".prj", ".cpg")))
         }
+
         cmd_shp <- glue::glue('"{python_exe}" "{gdal_polygonize_script}" "{output_wgs}" -f "ESRI Shapefile" "{output_shp_wgs}" DN')
         system(cmd_shp)
         message("Vectorized binary mask in WGS84: ", output_shp_wgs)

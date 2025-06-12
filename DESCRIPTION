@@ -1,17 +1,17 @@
 Package: OtsuFire
 Type: Package
 Title: Fire Scars, Severity and Regeneration Mapping Using 'Otsu' Thresholding
-Version: 0.1.3
-Authors@R: c(
-    person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
-    person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
-    person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
-    person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
+Version: 0.1.4
+Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
+             person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
+             person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
+             person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
 Description: 
-    Tools to segment fire scars using severity and vegetation regeneration data by applying 
-    'Otsu' thresholding on Relative Burn Ratio and differenced Normalized Burn Ratio image composites, 
-    including mosaic handling, polygon metrics, post-fire regeneration, day of year flagging, 
-    and validation against reference datasets. Designed for Iberian Peninsula fire history analysis.
+    Tools to segment fire scars and assess severity and vegetation regeneration using 
+    'Otsu' thresholding on Relative Burn Ratio (RBR) and differenced Normalized Burn Ratio (dNBR) image composites. 
+    Includes support for mosaic handling, polygon metrics, post-fire regeneration detection, day-of-year flagging, 
+    and validation against reference datasets. Designed for analysis of fire history in the Iberian Peninsula. 
+    Input Landsat composites follow the methodology described in Quintero et al. (2025) <doi:10.2139/ssrn.4929831>.
 License: GPL-3
 Encoding: UTF-8
 URL: https://github.com/olgaviedma/OtsuFire

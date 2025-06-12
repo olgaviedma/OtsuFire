@@ -56,6 +56,11 @@ Input mosaic must have:
 
 Output raster is written in GeoTIFF format with LZW compression.
 }
+\note{
+Examples require large external raster files (hosted on Zenodo).
+Therefore, they are wrapped in dontrun{} to avoid errors during R CMD check
+and to ensure portability.
+}
 \examples{
 \dontrun{
 # Case 1: Let the function generate the output name in the same folder

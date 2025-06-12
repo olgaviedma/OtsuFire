@@ -92,6 +92,11 @@ to the full raster or stratified by:
 - Output shapefiles can be in ESRI Shapefile or GeoJSON format.
 - Intermediate tile shapefiles and rasters are cleaned after processing.
 }
+\note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+}
 \examples{
 \dontrun{
 # Example 1: Basic Otsu thresholds (global)

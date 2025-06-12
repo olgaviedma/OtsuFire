@@ -50,6 +50,11 @@ Steps:
 4. Clean NoData values and assign band names ('rbr', 'doy').
 5. Save compressed GeoTIFF output.
 }
+\note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+}
 \examples{
 \dontrun{
 mosaic_reproject_resample(

@@ -67,6 +67,11 @@ If a historical burn raster (`rbr_date`) is provided, it will be used to mask ou
 previously burned (i.e., where RBR \\ge 0), so that regeneration is only detected in those
 affected by the most recent fire.
 }
+\note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+}
 \examples{
 \dontrun{
 # Regeneration detection using RBR raster and default threshold (< 0)
@@ -82,7 +87,6 @@ process_otsu_regenera(
 )
 
 # Same detection but using a fixed threshold of -150
-and using tiling if the input raster is very large
 process_otsu_regenera(
   rbr_post = list(P2 = "data/RBR_1986.tif"),
   output_dir = "output/regenera",
@@ -91,7 +95,7 @@ process_otsu_regenera(
   fire_year = 1984,
   regen_year = c(2),
   use_fixed_threshold = TRUE,
-  fixed_threshold_value = -150
+  fixed_threshold_value = -150,
   bind_all = FALSE,
   n_rows = 2,
   n_cols = 3,

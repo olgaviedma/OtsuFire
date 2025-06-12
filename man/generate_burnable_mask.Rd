@@ -69,6 +69,11 @@ These classes are assigned a gridcode from 22 to 33 in the final output shapefil
 The .csv file with gridcode and CORINE classes correspondences is provided in the README folder (clc_legend_gridcode.csv)
 (if `vectorize = TRUE`).
 }
+\note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+}
 \examples{
 \dontrun{
 corine_rasters <- list(

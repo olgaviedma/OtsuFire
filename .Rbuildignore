@@ -18,3 +18,4 @@
 ^LICENSE$
 ^\.git$
 ^prueba_output\\.gpkg$
+^\\.r-universe$

@@ -94,6 +94,11 @@ If `class_shape` and `class_field` are provided and valid:
 - Shapefiles of undetected and unmatched polygons
 - Class-wise omission/commission CSVs (if class information is provided)
 }
+\note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+}
 \examples{
 \dontrun{
 validate_fire_maps(

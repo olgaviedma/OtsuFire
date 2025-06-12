@@ -93,6 +93,11 @@ These can be optionally filtered by a minimum area threshold (`min_area_no_regen
 If `validate_geometries = TRUE`, geometries are checked and corrected using `sf::st_make_valid()`,
 which is more robust but significantly slower. Set to `FALSE` by default for performance.
 }
+\note{
+Examples require large external raster files (hosted on Zenodo).
+Therefore, they are wrapped in dontrun{} to avoid errors during R CMD check
+and to ensure portability.
+}
 \examples{
 \dontrun{
 # Apply per-period regeneration thresholds and filter non-regenerating polygons

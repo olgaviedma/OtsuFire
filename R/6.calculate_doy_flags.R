@@ -41,6 +41,10 @@
 #'   \item{shp_paths}{Named list of output shapefile paths, including DOY summary shapefiles and any polygonized threshold layers.}
 #' }
 #'
+#' @note Examples require large external raster files (hosted on Zenodo)
+#' and depend on external software (Python, GDAL). Therefore, they are wrapped
+#' in dontrun{} to avoid errors during R CMD check and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' # Case 1: Multiple Otsu-based burned area shapefiles

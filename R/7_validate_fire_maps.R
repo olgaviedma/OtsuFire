@@ -75,6 +75,10 @@
 #'   \item{polygon_summary}{A data.table of area-based metrics, or NULL if `metrics_type` excludes them.}
 #' }
 #'
+#' @note Examples require large external raster files (hosted on Zenodo)
+#' and depend on external software (Python, GDAL). Therefore, they are wrapped
+#' in dontrun{} to avoid errors during R CMD check and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' validate_fire_maps(
@@ -158,11 +162,11 @@ validate_fire_maps <- function(input_shapefile,
   } else {
     message("Processing reference polygons...")
     ref_polygons <- sf::st_read(ref_shapefile, quiet = TRUE) |> sf::st_make_valid()
-    cat("Original reference polygons", nrow(ref_polygons), "\n")
+    message("Original reference polygons: ", nrow(ref_polygons))
 
     if ("year" %in% names(ref_polygons)) {
       ref_polygons <- dplyr::filter(ref_polygons, year == year_target)
-      cat("reference polygons filtered by (", year_target, "):", nrow(ref_polygons), "\n")
+      message("reference polygons filtered by (", year_target, "):", nrow(ref_polygons))
     }
     if (nrow(ref_polygons) == 0) stop("No reference polygons found for the specified year.")
 
@@ -180,7 +184,7 @@ validate_fire_maps <- function(input_shapefile,
 
     # Prefiltrar por BBOX e intersectar con mascara
     ref_polygons <- sf::st_filter(ref_polygons, mask_geom, .predicate = sf::st_intersects)
-    cat("reference polygons filtered by mask (st_filter):", nrow(ref_polygons), "\n")
+    message("reference polygons filtered by mask (st_filter):", nrow(ref_polygons))
 
     if (nrow(ref_polygons) > 0) {
       ref_polygons <- suppressWarnings(sf::st_intersection(ref_polygons, mask_geom))
@@ -224,8 +228,10 @@ validate_fire_maps <- function(input_shapefile,
       masked_ref_polygons <- masked_ref_polygons[area_ref_polygons >= min_area_reference_ha, ]
       n_after <- nrow(masked_ref_polygons)
 
-      cat(sprintf("Filtered small reference polygons: %d ? %d polygons (Area ? %.2f ha)\n",
-                  n_before, n_after, min_area_reference_ha))
+      message(sprintf(
+  "Filtered small reference polygons: %d ? %d polygons (Area ? %.2f ha)",
+  n_before, n_after, min_area_reference_ha))
+
 
       if (nrow(masked_ref_polygons) == 0) {
         stop("No reference polygons remain after filtering by minimum area.")

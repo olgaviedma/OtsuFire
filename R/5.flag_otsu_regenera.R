@@ -81,6 +81,10 @@
 #'   \item{Shapefile of no_regenera polygons}{(if `save_no_regenera != "none"`) Contains polygons not meeting regeneration thresholds. File ends in `_no_selected.shp`.}
 #' }
 #'
+#' @note Examples require large external raster files (hosted on Zenodo).
+#' Therefore, they are wrapped in dontrun{} to avoid errors during R CMD check
+#' and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' # Apply per-period regeneration thresholds and filter non-regenerating polygons
@@ -146,8 +150,7 @@ utils::globalVariables(c(
   "first", "glob2rx", "h_w_ratio", "int_area_ha", "legend", "mnbbx_wd",
   "mtext", "na.omit", "ornt_bbox", "p_w_ratio", "par", "png",
   "regen_area_ha", "regen_area_ha_sum", "setNames", "total_burned_area",
-  "year", "%>%", ":="
-))
+  "year", "%>%", ":=", "dissolve_id"))
 
 
 flag_otsu_regenera <- function(burned_files,
@@ -161,7 +164,7 @@ flag_otsu_regenera <- function(burned_files,
                                 save_no_regenera = "none",
                                 min_area_no_regenera = 0.1,
                                 classwise_regen_thresholds = NULL,
-                                 group_field = NULL,
+                                group_field = NULL,
                                 validate_geometries = FALSE,
                                 output_format = c("shp", "geojson")) {
 
@@ -210,19 +213,25 @@ flag_otsu_regenera <- function(burned_files,
       burned_sf <- sf::st_make_valid(burned_sf)
 
 
-    # Restaurar 'burned_id' si fue truncado o renombrado
+    # Asegurar que 'burned_id' exista en 'burned_sf'
     if (!"burned_id" %in% names(burned_sf)) {
-      burned_candidates <- grep("^uid$|burn.*id", names(burned_sf), ignore.case = TRUE, value = TRUE)
+      # Buscar nombres de columnas que parezcan 'burned_id' o similares
+      burned_candidates <- grep("^(uid|burn.*id|burned_d|2bunred_id)$", names(burned_sf),
+                                ignore.case = TRUE, value = TRUE)
+
       if (length(burned_candidates) == 1) {
+        # Renombrar la columna encontrada a 'burned_id'
         names(burned_sf)[names(burned_sf) == burned_candidates] <- "burned_id"
         message("Restored 'burned_id' column from field: ", burned_candidates)
       } else {
+        # Crear una columna secuencial 'burned_id'
         burned_sf <- dplyr::mutate(burned_sf, burned_id = dplyr::row_number())
-        message("Created new 'burned_id' column.")
+        message("Created new 'burned_id' column as it was not found or could not be restored.")
       }
     }
 
-       burned_sf$burn_area_ha <- as.numeric(sf::st_area(burned_sf)) / 10000
+
+    burned_sf$burn_area_ha <- as.numeric(sf::st_area(burned_sf)) / 10000
 
 
     # Si se define group_field pero no existe en burned_sf
@@ -244,10 +253,15 @@ flag_otsu_regenera <- function(burned_files,
 
     regen_labels <- c()
 
-    regen_thresh_match <- regmatches(regenera_files, regexpr("thresh[0-9]+", regenera_files))
-    regen_thresh <- unique(gsub("thresh", "", regen_thresh_match))
-    regen_thresh <- if (length(regen_thresh) == 1)
-      regen_thresh else "NA"
+    # Extraer valores "thresh###" de los nombres
+    regen_thresh <- stringr::str_extract(regenera_files, "thresh\\d+")
+    regen_thresh <- stringr::str_remove(regen_thresh, "thresh")
+    regen_thresh <- as.integer(regen_thresh)
+    message(unique(regen_thresh))
+
+    if (length(regen_thresh) == 0 || all(is.na(regen_thresh))) {
+      regen_thresh <- NA
+    }
 
     for (regen_file in regenera_files) {
       regenera_sf <- sf::st_read(regen_file, quiet = TRUE)
@@ -263,10 +277,10 @@ flag_otsu_regenera <- function(burned_files,
         regen_labels <- union(regen_labels, label)
         ratio_col <- paste0("regen_ratio_", label)
 
-        # Definir group_col primero
+        # Definir group_col
         group_col <- if (!is.null(group_field)) group_field else "burned_id"
 
-        # Asegurar que burned_id existe
+        # Si no existe burned_id, crearla
         if (!"burned_id" %in% names(burned_sf)) {
           burned_candidates <- grep("^uid$|burn.*id", names(burned_sf), ignore.case = TRUE, value = TRUE)
           if (length(burned_candidates) == 1) {
@@ -283,22 +297,17 @@ flag_otsu_regenera <- function(burned_files,
           stop("The column specified in 'group_field' does not exist in burned_sf: ", group_col)
         }
 
-        # Campos a mantener
-        fields_to_keep <- intersect(c(group_col, "burned_id", "CORINE_CLA"), names(burned_sf))
-        fields_to_keep <- setdiff(fields_to_keep, group_col)  # <- importante para evitar duplicados
-
-        if (length(fields_to_keep) == 0) {
-          stop("No valid fields found in 'fields_to_keep'.")
-        }
-
-        if (group_col == "burned_id") {
+        # Adaptar comportamiento segun uso o no de group_field
+        if (is.null(group_field)) {
           message("Dissolving burned polygons by 'burned_id'")
-          burned_sf <- burned_sf |>
-            dplyr::group_by(.data[[group_col]]) |>
-            dplyr::summarise(dplyr::across(all_of(fields_to_keep), dplyr::first), .groups = "drop")
+          group_col <- "burned_id"
         } else {
-          message("Using individual polygons (no dissolve). Using '", group_col, "'")
+          message("Using individual polygons. Generating unique ID 'poly_id'")
+          burned_sf <- burned_sf |>
+            dplyr::mutate(poly_id = seq_len(n()))
+          group_col <- "poly_id"
         }
+
 
         burned_sf$burn_area_ha <- as.numeric(sf::st_area(burned_sf)) / 10000
 
@@ -310,18 +319,21 @@ flag_otsu_regenera <- function(burned_files,
         if (nrow(intersec) > 0) {
           intersec$int_area_ha <- as.numeric(sf::st_area(intersec)) / 10000
 
+          # Paso 1: asegurar que el campo de union sea correcto
           area_summary <- intersec |>
             sf::st_set_geometry(NULL) |>
-            dplyr::group_by(burned_id) |>
-            dplyr::summarise(regen_area_ha_sum = sum(int_area_ha, na.rm = TRUE))
+            dplyr::group_by(.data[[group_col]]) |>
+            dplyr::summarise(regen_area_ha_sum = sum(int_area_ha, na.rm = TRUE), .groups = "drop")
 
+          # Paso 2: hacer join por el campo adecuado
           burned_sf <- burned_sf |>
-            dplyr::left_join(area_summary, by = "burned_id") |>
+            dplyr::left_join(area_summary, by = group_col) |>
             dplyr::mutate(
               regen_area_ha_sum = tidyr::replace_na(regen_area_ha_sum, 0),
               !!ratio_col := pmin(regen_area_ha_sum, burn_area_ha) / burn_area_ha
             ) |>
             dplyr::select(-regen_area_ha_sum)
+
 
           message("Added column '", ratio_col, "' with regeneration ratios for ", label)
         } else {
@@ -330,6 +342,7 @@ flag_otsu_regenera <- function(burned_files,
         }
       }
     }
+
 
     regen_labels_str <- paste(regen_labels, collapse = "")
 
@@ -340,118 +353,96 @@ flag_otsu_regenera <- function(burned_files,
     flag_names <- c()
     meets_all_thresholds <- rep(TRUE, nrow(burned_copy))  # inicializar vector conjunto
 
+    # Definir ID principal segun se haya usado group_field o no
+    id_field <- if (!is.null(group_field)) "poly_id" else "burned_id"
 
+    # Verificar campo de clase si se usan thresholds por clase
     if (!is.null(classwise_regen_thresholds)) {
-        class_field <- unique(classwise_regen_thresholds$class_field)
-        message("class_field '", class_field)
+      class_field <- unique(classwise_regen_thresholds$class_field)
+      message("class_field '", class_field)
 
-        if (length(class_field) != 1 || !(class_field %in% names(burned_sf))) {
-          # Detectar columnas que contengan "CORINE" como fallback
-          corine_candidates <- grep("CORINE", names(burned_sf), value = TRUE, ignore.case = TRUE)
+      if (length(class_field) != 1 || !(class_field %in% names(burned_copy))) {
+        corine_candidates <- grep("CORINE", names(burned_copy), value = TRUE, ignore.case = TRUE)
 
-          if (length(corine_candidates) == 1) {
-            message("class_field '", class_field, "' not found. Using detected CORINE-like field: ", corine_candidates)
-            class_field <- corine_candidates
-            # Tambien actualizar en classwise_regen_thresholds
-            classwise_regen_thresholds$class_field <- class_field
-          } else {
-            stop("Invalid or missing 'class_field' column in burned polygons and no CORINE-like field found.")
-          }
+        if (length(corine_candidates) == 1) {
+          message("class_field '", class_field, "' not found. Using detected CORINE-like field: ", corine_candidates)
+          class_field <- corine_candidates
+          classwise_regen_thresholds$class_field <- class_field
+        } else {
+          stop("Invalid or missing 'class_field' column in burned polygons and no CORINE-like field found.")
         }
-
-        message("class_field: ", class_field,
-                " | burned_copy class: ", class(burned_sf[[class_field]]),
-                " | thresholds class: ", class(classwise_regen_thresholds$class_value))
       }
 
+      message("class_field: ", class_field,
+              " | burned_copy class: ", class(burned_copy[[class_field]]),
+              " | thresholds class: ", class(classwise_regen_thresholds$class_value))
+    }
 
-    # Crear flags por periodo y acumular condiciones conjuntas
+    # Calcular flags por periodo
     for (label in names(min_regen_ratio)) {
       ratio_col <- paste0("regen_ratio_", label)
       flag_col  <- paste0("regenera_flag_", label)
 
-
       if (!is.null(classwise_regen_thresholds)) {
-        # Determine class field (e.g., CORINE_CLA)
         class_field <- unique(classwise_regen_thresholds$class_field)
         if (length(class_field) != 1 || !(class_field %in% names(burned_copy))) {
           stop("Invalid or missing 'class_field' column in burned polygons.")
         }
 
-        # Coerce both to character to avoid join type mismatch
-        # Asegurar tipos
         burned_copy[[class_field]] <- as.character(burned_copy[[class_field]])
         thresholds_df <- classwise_regen_thresholds
         thresholds_df$class_value <- as.character(thresholds_df$class_value)
 
-        # Si la columna del label (P1 o P2) ya existe, eliminala para forzar recreacion limpia
+
+        # Eliminar columna previa si existia (por seguridad)
         if (label %in% names(burned_copy)) {
           burned_copy[[label]] <- NULL
         }
 
-        # Crear vector con valor general para todas las filas
+        # Asignar valor por defecto
         burned_copy[[label]] <- min_regen_ratio[[label]]
 
-        # Extraer solo columnas necesarias del df de thresholds
+        # Join para sobrescribir con thresholds especificos por clase
         thresh_df <- thresholds_df[, c("class_value", label)]
         colnames(thresh_df)[2] <- "special_thresh"
 
-        # Join por clase
         burned_copy <- dplyr::left_join(
           burned_copy,
           thresh_df,
           by = setNames("class_value", class_field)
         )
 
-        # Sobrescribir donde hay valores especiales
+        # Sobrescribir los valores con thresholds especificos si existen
         burned_copy[[label]] <- ifelse(!is.na(burned_copy$special_thresh),
                                        burned_copy$special_thresh,
                                        burned_copy[[label]])
-
-        # Eliminar columna auxiliar
         burned_copy$special_thresh <- NULL
 
-
-        # Inicializa vector de thresholds con valores globales por defecto
+        # Inicializar threshold_vec
         threshold_vec <- rep(min_regen_ratio[[label]], nrow(burned_copy))
 
-        if (!is.null(classwise_regen_thresholds)) {
-          # Determina campo de clase
-          class_field <- unique(classwise_regen_thresholds$class_field)
-          if (length(class_field) != 1 || !(class_field %in% names(burned_copy))) {
-            stop("Invalid or missing 'class_field' column in burned polygons.")
-          }
+        # Join para sobrescribir threshold_vec (opcional: redundante si ya se hizo arriba)
+        join_df <- burned_copy[, c(id_field, class_field)]
+        join_df <- dplyr::left_join(
+          join_df,
+          thresholds_df[, c("class_value", label)],
+          by = setNames("class_value", class_field)
+        )
 
-          # Forzar tipos compatibles
-          burned_copy[[class_field]] <- as.character(burned_copy[[class_field]])
-          thresholds_df <- classwise_regen_thresholds
-          thresholds_df$class_value <- as.character(thresholds_df$class_value)
-
-          # Join temporal para solo clases definidas
-          join_df <- burned_copy[, c("burned_id", class_field)]
-          join_df <- dplyr::left_join(join_df, thresholds_df[, c("class_value", label)],
-                                      by = setNames("class_value", class_field))
-
-          # Sustituye solo si hay valores definidos para esa clase
-          defined_rows <- !is.na(join_df[[label]])
-          threshold_vec[defined_rows] <- join_df[[label]][defined_rows]
-        }
+        defined_rows <- !is.na(join_df[[label]])
+        threshold_vec[defined_rows] <- join_df[[label]][defined_rows]
 
       } else {
         threshold_vec <- rep(min_regen_ratio[[label]], nrow(burned_copy))
       }
 
-
       if (ratio_col %in% names(burned_copy)) {
-        # Calcular si cumple el umbral para este periodo
         current_check <- burned_copy[[ratio_col]] >= threshold_vec
-        current_check[is.na(current_check)] <- FALSE  # tratar NAs como "no_regenera"
+        current_check[is.na(current_check)] <- FALSE
 
-        # Crear flag individual
         burned_copy[[flag_col]] <- ifelse(current_check, "regenera", "no_regenera")
         flag_names <- c(flag_names, flag_col)
 
-        # Actualizar condicion conjunta
         meets_all_thresholds <- meets_all_thresholds & current_check
 
         message(sprintf("Created '%s' using threshold(s) from '%s' (column: %s)",
@@ -466,14 +457,11 @@ flag_otsu_regenera <- function(burned_files,
       }
     }
 
-    # Crear flag final conjunta
     burned_copy$regenera_flag_all <- ifelse(meets_all_thresholds, "regenera", "no_regenera")
-    message("Create'regenera_flag_all' combining all defined periods.")
-
+    message("Created 'regenera_flag_all' combining all defined periods.")
 
 
     # ---- 1. GUARDAR SHAPEFILE COMPLETO (con todas las banderas) ----
-
     # Base name of the burned file
     burned_base <- tools::file_path_sans_ext(basename(burned_file))
 
@@ -484,42 +472,34 @@ flag_otsu_regenera <- function(burned_files,
     # Detected regeneration periods (e.g., P1P2)
     regen_labels_str <- paste(regen_labels, collapse = "")
 
-    # Build threshold suffix
-    rat_suffix <- if (!is.null(classwise_regen_thresholds)) {
-      # Include class field and values (e.g., "_classCORINE_CLA_1-2")
-      class_field <- unique(classwise_regen_thresholds$class_field)
-      class_vals <- unique(classwise_regen_thresholds$class_value)
-      class_vals_str <- paste(sort(class_vals), collapse = "-")
-      paste0(class_field, "", class_vals_str)
-    } else {
-      paste(
-        paste0("rat", sprintf("%02d", round(100 * min_regen_ratio[names(min_regen_ratio)]))),
-        collapse = "_"
-      )
-    }
-
-    # Optional suffix for max P1 replacement constraint
-    area_ratio_suffix <- if (!is.null(max_area_ratio_p1)) {
-      paste0("_ratP1_", formatC(max_area_ratio_p1, format = "f", digits = 0))
-    } else {
-      ""
-    }
-
-    # Optional suffix for grouping
-    group_suffix <- if (!is.null(group_field)) group_field else ""
-
-    #### SAVING ALL POLYGONS WITH REGENERA DATA ##########
-
-    # Determine extension
+    # Extension
     ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
-    # Compose full filename
+    # Construir sufijo de clases si hay thresholds por clase
+    class_suffix <- NULL
+    if (!is.null(classwise_regen_thresholds)) {
+      class_field <- unique(na.omit(classwise_regen_thresholds$class_field))
+      class_vals <- unique(na.omit(classwise_regen_thresholds$class_value))
+      class_vals_str <- paste(sort(class_vals), collapse = "-")
+      class_suffix <- paste0("CORI_CLA_", class_vals_str)
+    }
+
+    # Construir sufijo con ratios, ejemplo: P1r0.05_P2r0.25
+    regen_rats <- purrr::imap_chr(min_regen_ratio, function(val, key) {
+      paste0(key, "r", formatC(val, format = "f", digits = 2))
+    })
+    rat_suffix <- paste(regen_rats, collapse = "_")
+
+
+
+    # Optional suffix for grouping
+    group_suffix <- if (!is.null(group_field)) paste0("_", group_field) else ""
+
     full_out_name <- paste0(
       burned_base,
       "_reg_thresh", regen_thresh_val,
-      "_", regen_labels_str,
       "_", rat_suffix,
-      area_ratio_suffix,
+      "_", class_suffix,
       ext
     )
 
@@ -536,10 +516,12 @@ flag_otsu_regenera <- function(burned_files,
     suppressWarnings(sf::st_write(burned_copy, full_output_file, delete_layer = TRUE, quiet = TRUE))
 
 
-
     # ---- 2. FILTER BY FLAG ----
 
-    # Determine which rows to keep
+    # Base name without extension (from full_out_name)
+    base_name <- tools::file_path_sans_ext(full_out_name)
+
+    # Determine which rows to keep for "regenera"
     keep_rows <- rep(TRUE, nrow(burned_copy))
     if (isTRUE(remove_no_regenera)) {
       if (!"regenera_flag_all" %in% names(burned_copy)) {
@@ -548,89 +530,60 @@ flag_otsu_regenera <- function(burned_files,
       keep_rows <- burned_copy$regenera_flag_all == "regenera"
     }
 
-    # Drop burned_id (internal) and filter rows
-    filtered_output <- burned_copy[keep_rows, ] |>
-      dplyr::select(-burned_id)
+    # Filter and optionally remove internal ID
+    filtered_output <- burned_copy[keep_rows, ]
 
-    # Build base name again (exclude extension)
-    base_name <- tools::file_path_sans_ext(full_out_name)
-
-    # Adjust filtered output filename
+    # Define filtered filename
     filtered_out_name <- paste0(base_name, "_filter", ext)
     filtered_output_file <- file.path(output_dir, filtered_out_name)
 
-    # Remove previous file if it exists
+    # Remove previous filtered file
     if (file.exists(filtered_output_file)) {
       file.remove(filtered_output_file)
     }
 
-    # Write filtered output
+    # Write filtered file
     message("Saving filtered shapefile: ", filtered_output_file)
     message("Number of polygons after filtering: ", nrow(filtered_output),
             " (removed: ", nrow(burned_copy) - nrow(filtered_output), ")")
-
     suppressWarnings(sf::st_write(filtered_output, filtered_output_file, delete_layer = TRUE, quiet = TRUE))
 
 
-    # ---- 2. APLICAR FILTRADO (NO REGENERA) ----
-
-    keep_rows1 <- rep(TRUE, nrow(burned_copy))
-    if (isTRUE(remove_no_regenera)) {
-      if (!"regenera_flag_all" %in% names(burned_copy)) {
-        stop("No se encontro 'regenera_flag_all'. Verifica que hayas generado los flags correctamente.")
-      }
-      keep_rows1 <- burned_copy$regenera_flag_all == "no_regenera"
-    }
-
-    filtered_output1 <- burned_copy[keep_rows1, ] |> dplyr::select(-burned_id)
-
-
-    # ---- 2. FILTRADO DE POLIGONOS "NO REGENERA" ----
+    # ---- 3. SAVE NON-REGENERATED POLYGONS (optional) ----
 
     if (save_no_regenera %in% c("all", "area_filter")) {
-
       if (!"regenera_flag_all" %in% names(burned_copy)) {
         stop("Missing 'regenera_flag_all'. Make sure regeneration flags were generated.")
       }
 
-      # Select only "no_regenera" polygons
+      # Filter "no_regenera"
       no_regenera <- burned_copy[burned_copy$regenera_flag_all == "no_regenera", ]
 
-      # Calculate area in ha if not already present
+      # Compute area if not already present
       if (!"burn_area_ha" %in% names(no_regenera)) {
         no_regenera$burn_area_ha <- as.numeric(sf::st_area(no_regenera)) / 10000
       }
 
-      # Apply optional area filter
+      # Apply area filter if requested
       if (save_no_regenera == "area_filter") {
         no_regenera <- no_regenera[no_regenera$burn_area_ha >= min_area_no_regenera, ]
       }
 
-     # ---- GUARDADO DE POLIGONOS "NO REGENERA" ----
-
-      # If any rows remain, save them
+      # Save if any polygons remain
       if (nrow(no_regenera) > 0) {
-        filtered_output1 <- dplyr::select(no_regenera, -burned_id)
+        filtered_output1 <- no_regenera
 
-        # Determine extension based on format
-        ext <- if (output_format == "geojson") ".geojson" else ".shp"
-
-
-        # Build filename for polygons that did NOT regenerate
-        base_name <- tools::file_path_sans_ext(full_out_name)
+        # Define output filename
         filtered_out_name1 <- paste0(base_name, "_noregen", ext)
         filtered_output_file1 <- file.path(output_dir, filtered_out_name1)
 
-        # Remove file if it already exists
         if (file.exists(filtered_output_file1)) {
           file.remove(filtered_output_file1)
         }
 
-        # Write shapefile with non-regenerated polygons
         message("Saving non-regenerated polygons: ", filtered_output_file1)
         message("Number of polygons without regeneration: ", nrow(filtered_output1),
                 " (removed: ", nrow(burned_copy) - nrow(filtered_output1), ")")
-
         suppressWarnings(sf::st_write(filtered_output1, filtered_output_file1, delete_layer = TRUE, quiet = TRUE))
       } else {
         message("No 'no_regenera' polygons met the filter criteria. No file saved.")
@@ -642,7 +595,14 @@ flag_otsu_regenera <- function(burned_files,
 
     message("Replacing original burned polygons by regenerated polygons in P1: ")
 
+    ##### Reemplazo de poligonos no regenerados por poligonos de P1 (a nivel de burned_id disuelto)
+
+    if (!"burned_id" %in% names(filtered_output)) {
+      stop("The column 'burned_id' is missing from filtered_output. This is required for replacement by P1 polygons.")
+    }
+
     if (isTRUE(replace_by_P1)) {
+      message("Replacing original burned polygons by regenerated polygons in P1: ")
 
       regen_P1_file <- regenera_files[grepl("P1", regenera_files)]
       if (length(regen_P1_file) == 1) {
@@ -659,24 +619,28 @@ flag_otsu_regenera <- function(burned_files,
           if (!all(sf::st_is_valid(filtered_output))) filtered_output <- sf::st_make_valid(filtered_output)
         }
 
-        if (!"burn_area_ha" %in% names(filtered_output)) {
+            if (!"burn_area_ha" %in% names(filtered_output)) {
           filtered_output$burn_area_ha <- as.numeric(sf::st_area(filtered_output)) / 10000
         }
-        filtered_output$fid_final <- seq_len(nrow(filtered_output))
 
-        message("Filtering regenerated polygons in P1: ")
-        # Filtrar P1 que realmente se solapan con algun poligono quemado
-        regenera_P1 <- sf::st_crop(regenera_P1, sf::st_bbox(filtered_output)) %>%
+        # Paso 1: Disolver por unidad (burned_id o group_field)
+        group_col <-  "burned_id"
+        filtered_dissolved <- filtered_output |>
+          dplyr::group_by(.data[[group_col]]) |>
+          dplyr::summarise(burn_area_ha = sum(burn_area_ha), .groups = "drop") |>
+          dplyr::mutate(dissolve_id = dplyr::row_number())
+
+        regenera_P1 <- sf::st_crop(regenera_P1, sf::st_bbox(filtered_dissolved)) %>%
           dplyr::mutate(
             P1_id = dplyr::row_number(),
             area_ha = as.numeric(sf::st_area(.)) / 10000
           )
 
-        message("Intersecting burned polygons with regenerated ones in P1: ")
+        message("Intersecting dissolved burned polygons with regenerated ones in P1: ")
 
         intersec <- suppressWarnings(
           sf::st_intersection(
-            filtered_output %>% dplyr::select(fid_final, burn_area_ha),
+            filtered_dissolved %>% dplyr::select(dissolve_id, burn_area_ha),
             regenera_P1 %>% dplyr::select(P1_id, area_ha)
           )
         )
@@ -684,139 +648,106 @@ flag_otsu_regenera <- function(burned_files,
         if (nrow(intersec) > 0) {
           intersec$int_area_ha <- as.numeric(sf::st_area(intersec)) / 10000
 
-          # Asegurar que P1_id y area_ha estan presentes
-          if (!all(c("P1_id", "area_ha") %in% names(intersec))) {
-            message("Forcing join to recover missing P1_id and area_ha in intersec")
-            intersec <- intersec %>%
-              dplyr::left_join(
-                regenera_P1 %>% sf::st_drop_geometry() %>% dplyr::select(P1_id, area_ha),
-                by = "P1_id"
-              )
-          }
-
-          message("Filtering original burned polygons... ")
-
+          message("Filtering replacement candidates...")
           if (!is.null(max_area_ratio_p1)) {
-            message("Applying area ratio constraint: only replacing burned polygons where P1 area is greater but not more than ", max_area_ratio_p1, " times the burned area.")
-          } else {
-            message("No area ratio constraint: replacing all P1 polygons larger than the burned ones.")
+            message("Applying area ratio constraint: replacing only when P1 area is larger but ? ", max_area_ratio_p1, " ? burn area.")
           }
 
-          # Extraer pares donde el poligono de regeneracion es mayor
-          to_replace <- intersec %>%
-            sf::st_set_geometry(NULL) %>%
+          to_replace <- intersec |>
+            sf::st_set_geometry(NULL) |>
             dplyr::filter(
               area_ha > burn_area_ha,
               if (!is.null(max_area_ratio_p1)) area_ha / burn_area_ha <= max_area_ratio_p1 else TRUE
-            ) %>%
-            dplyr::distinct(fid_final, P1_id)
-
+            ) |>
+            dplyr::distinct(dissolve_id, P1_id)
 
           if (nrow(to_replace) > 0) {
+            # Paso 2: Mapear dissolve_id de vuelta a group_col
+            id_map <- filtered_dissolved |>
+              sf::st_drop_geometry() |>
+              dplyr::select(any_of(group_col), dissolve_id)
 
-            message("Removing original burned polygons: ")
+            to_replace <- dplyr::left_join(to_replace, id_map, by = "dissolve_id")
+
             # Eliminar poligonos originales
-            filtered_output <- filtered_output[!filtered_output$fid_final %in% to_replace$fid_final, ]
+            filtered_output <- filtered_output |> dplyr::mutate(.poly_id = dplyr::row_number())
+            filtered_output <- filtered_output |> dplyr::filter(!.data[[group_col]] %in% to_replace[[group_col]])
 
             # Insertar nuevos poligonos de P1
             new_geoms <- regenera_P1[to_replace$P1_id, ]
-            geom_col <- attr(filtered_output, "sf_column")
-
             attr_data <- matrix(NA, nrow = nrow(new_geoms), ncol = ncol(filtered_output) - 1) |> as.data.frame()
-            names(attr_data) <- names(filtered_output)[names(filtered_output) != geom_col]
+            names(attr_data) <- names(filtered_output)[names(filtered_output) != attr(filtered_output, "sf_column")]
             new_rows <- sf::st_sf(attr_data, geometry = sf::st_geometry(new_geoms))
 
-            # Asignar flag de regeneracion si existe
-            if ("regenera_flag_P1" %in% names(new_rows)) {
-              new_rows$regenera_flag_P1 <- "regenera"
-            }
+            # Asignar flag de regeneracion si procede
+            new_rows$regenera_flag_P1 <- "regenera"
 
             # Combinar
             filtered_output <- rbind(filtered_output, new_rows)
 
-            # Verificar geometrias vacias o nulas
             check_geom <- sf::st_is_empty(filtered_output) | is.na(sf::st_geometry(filtered_output))
-
             if (any(check_geom)) {
               message("Se encontraron geometrias vacias o invalidas antes de guardar: ", sum(check_geom))
               filtered_output <- filtered_output[!check_geom, ]
             }
 
+            # LIMPIEZA FINAL DE GEOMETRIAS Y ATRIBUTOS
+
+            message("Cleaning attributes ")
+            # 1. Validar y limpiar geometrias vacias
+            filtered_output <- sf::st_make_valid(filtered_output)
+            filtered_output <- filtered_output[!sf::st_is_empty(filtered_output), ]
+
+            # 2. Extraer solo POLYGONs si vienen de colecciones mixtas
+            filtered_output <- sf::st_collection_extract(filtered_output, "POLYGON", warn = FALSE)
+
+            # 3. Separar cada parte del poligono en una fila (esto es lo que elimina el warning)
+            filtered_output <- filtered_output |>
+              sf::st_cast("POLYGON", group_or_split = TRUE,warn = FALSE)  # Este paso es clave
+
+            # 4. Limpiar atributos
+
+            # Eliminar columnas tipo list
+            filtered_output <- filtered_output[, !sapply(filtered_output, is.list), drop = FALSE]
+
+            # Abreviar nombres para Shapefile (max 10 caracteres)
+            names(filtered_output) <- make.unique(abbreviate(names(filtered_output), minlength = 10))
+
+            # Convertir factores a caracteres y truncar strings
+            filtered_output <- dplyr::mutate(filtered_output, dplyr::across(where(is.factor), as.character))
+            filtered_output <- dplyr::mutate(filtered_output, dplyr::across(where(is.character), \(x) substr(x, 1, 254)))
+
+            unique(sf::st_geometry_type(filtered_output))  # Solo deberia ser "POLYGON"
+
+
+
+            message("Reemplazo completado: ", nrow(new_rows), " nuevos poligonos insertados desde P1.")
+          } else {
+            message("No se identificaron candidatos validos para reemplazo desde P1.")
           }
+
+          # Construir nombre de salida final con sufijo '_new'
+          final_out_name <- paste0(base_name, "_new", ext)
+          final_output_file <- file.path(output_dir, final_out_name)
+
+          # Eliminar si ya existia
+          if (file.exists(final_output_file)) {
+            file.remove(final_output_file)
+          }
+
+          # Guardar shapefile con poligonos reemplazados
+          message("Saving final shapefile with P1 replacements: ", final_output_file)
+          suppressWarnings(sf::st_write(filtered_output, final_output_file, delete_layer = TRUE, quiet = TRUE))
+
         }
-
-        # LIMPIEZA FINAL DE GEOMETRIAS Y ATRIBUTOS
-
-        message("Cleaning attributes ")
-        # 1. Validar y limpiar geometrias vacias
-        filtered_output <- sf::st_make_valid(filtered_output)
-        filtered_output <- filtered_output[!sf::st_is_empty(filtered_output), ]
-
-        # 2. Extraer solo POLYGONs si vienen de colecciones mixtas
-        filtered_output <- sf::st_collection_extract(filtered_output, "POLYGON", warn = FALSE)
-
-        # 3. Separar cada parte del poligono en una fila (esto es lo que elimina el warning)
-        filtered_output <- filtered_output |>
-          sf::st_cast("POLYGON", group_or_split = TRUE,warn = FALSE)  # Este paso es clave
-
-        # 4. Limpiar atributos
-
-        # Eliminar columnas tipo list
-        filtered_output <- filtered_output[, !sapply(filtered_output, is.list), drop = FALSE]
-
-        # Abreviar nombres para Shapefile (max 10 caracteres)
-        names(filtered_output) <- make.unique(abbreviate(names(filtered_output), minlength = 10))
-
-        # Convertir factores a caracteres y truncar strings
-        filtered_output <- dplyr::mutate(filtered_output, dplyr::across(where(is.factor), as.character))
-        filtered_output <- dplyr::mutate(filtered_output, dplyr::across(where(is.character), \(x) substr(x, 1, 254)))
-
-        unique(sf::st_geometry_type(filtered_output))  # Solo deberia ser "POLYGON"
-
-
-        # --- GUARDAR ---
-
-        # Extract threshold from regeneration file name
-        regen_thresh <- stringr::str_extract(basename(regenera_files[1]), "thresh\\d+")
-
-        # Extract base name of the burned file up to before "_metrics" etc.
-        burned_base <- basename(burned_file)
-        burned_base <- tools::file_path_sans_ext(burned_base)
-        short_prefix <- sub("(_metrics.*|_filt.*|_thresh.*)", "", burned_base)
-
-        # Format regeneration ratio string
-        ratio_str <- paste0(sprintf("%02d", 100 * min_regen_ratio), collapse = "_")
-
-        # Format area ratio suffix if provided
-        if (!is.null(max_area_ratio_p1)) {
-          area_ratio_str <- paste0("_ratP1_", formatC(max_area_ratio_p1, format = "f", digits = 0))
-        } else {
-          area_ratio_str <- ""
-        }
-
-        # Final filename including threshold and area ratio
-        short_name <- paste0(short_prefix, "_reg_", regen_thresh, "_", regen_labels_str,
-                             "_r", ratio_str,
-                             area_ratio_str,
-                             "_new.shp")
-
-        # Output path
-        new_poly_output_file <- file.path(output_dir, short_name)
-
-        delete_shapefile(new_poly_output_file)
-
-        tryCatch({
-          suppressWarnings(sf::st_write(filtered_output, new_poly_output_file, delete_layer = TRUE, quiet = TRUE))
-          message("Saved new polygons: ", new_poly_output_file)
-        }, error = function(e) {
-          warning("Failed to write shapefile: ", conditionMessage(e))
-        })
       }
     }
-
 
 
   }
 
 }
+
+
+
 

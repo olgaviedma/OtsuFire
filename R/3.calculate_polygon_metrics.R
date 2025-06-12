@@ -1,90 +1,90 @@
 #' Calculate Geometric Metrics and Filter Fire Polygons (Batch Mode)
 #'
 #' @description
-#' This function calculates geometric descriptors for fire-affected polygons from
-#' a list of input shapefiles. Metrics include area, perimeter, bounding box dimensions,
-#' and elongation. Optionally, spatial filters can be applied to retain only polygons
-#' that meet certain geometric criteria.
+#' Calculates geometric descriptors for fire-affected polygons from a list of input shapefiles.
+#' Metrics include area, perimeter, bounding box dimensions, rotated bounding box, and shape ratios.
+#' Optionally applies spatial filters and performs attribute joins to enrich outputs.
 #'
-#' For each input shapefile, the function saves:
-#' - A shapefile with all polygons and computed metrics.
-#' - A filtered shapefile with only polygons passing all active filters.
-#' - Optionally, joined versions of the above with attributes from the original input shapefile.
+#' For each input shapefile, the function:
+#' - Computes metrics per polygon and saves a new shapefile.
+#' - Applies spatial filters and saves a filtered version.
+#' - Optionally joins metrics back to the original input polygons (if `join_attributes = TRUE`).
 #'
-#' If the input fire events are subdivided by CORINE or ECOREGION classes, adjacent geometries can be dissolved before metric calculation to reconstruct contiguous burned areas.
-#' In that case, a numeric `burned_id` is assigned to each disjoint polygon in the dissolved geometry. This ID is retained in the spatial joins to allow tracking the disaggregated components of each event.
+#' If `dissolve = TRUE`, adjacent polygons are merged to reconstruct contiguous burned areas.
+#' A numeric `burned_id` is then assigned to each resulting polygon and used in subsequent joins.
 #'
-#' ## Metrics calculated per polygon:
+#' ## Metrics computed per polygon:
 #' - `area_ha`: Area in hectares.
-#' - `bbox_wx`: Width of the axis-aligned bounding box (east-west).
-#' - `bbox_hy`: Height of the axis-aligned bounding box (north-south).
-#' - `perim_m`: Polygon perimeter in meters.
-#' - `p_w_ratio`: Perimeter-to-width ratio (`perim_m / bbox_wx`), proxy for complexity.
-#' - `h_w_ratio`: Height-to-width ratio (`bbox_hy / bbox_wx`), proxy for anisotropy.
-#' - `burned_id`: Integer identifier (1 to N) assigned to each polygon in the dissolved output.
+#' - `bbox_wx`: Width of axis-aligned bounding box (x).
+#' - `bbox_hy`: Height of axis-aligned bounding box (y).
+#' - `perim_m`: Perimeter in meters.
+#' - `p_w_ratio`: Perimeter-to-width ratio.
+#' - `h_w_ratio`: Height-to-width ratio.
+#' - `burned_id`: Polygon ID if `dissolve = TRUE`.
 #'
-#' ## Filtering behavior:
-#' All filter thresholds are optional. If a parameter is `NULL`, its corresponding filter is skipped.
-#' A polygon must satisfy **all active filters** to appear in the filtered output, unless `filter_logic = "OR"` is used.
+#' ## Filter behavior:
+#' All thresholds are optional. If a threshold is `NULL`, the corresponding filter is skipped.
+#' If `filter_logic = "AND"`, all active filters must be satisfied. If `"OR"`, any filter match is sufficient.
 #'
-#' ## Spatial Join (optional):
-#' If the input shapefiles contain attribute data (e.g., CORINE codes, ecoregion classes), these attributes
-#' are preserved in the output by performing a spatial join **from the original shapefile to the metrics output**.
-#' - `joined_metrics`: polygons from the original shapefile with appended metric fields and `event_id`.
-#' - `joined_filtered`: filtered version of the above.
+#' ## Spatial join (`join_attributes = TRUE`):
+#' - Attributes from the original input shapefile are preserved via intersection-based joins.
+#' - Only input polygons with area ? `min_input_area_ha` are used.
+#' - The join selects, for each input polygon, the intersecting output polygon with the largest shared area.
+#' - Only polygons that intersect filtered outputs are retained in the joined outputs.
+#' - Optionally, you can restrict which variables from the original shapefile to retain using `columns_to_keep`.
 #'
 #' @name calculate_polygon_metrics
 #' @rdname calculate_polygon_metrics
 #'
-#' @param shapefile_paths Character vector of paths to input polygon shapefiles.
-#' @param output_dir Directory to save the output shapefiles. If `NULL`, outputs are saved next to input files.
-#' @param area_min_ha Minimum area in hectares (`area_ha`). Set to `NULL` to disable. Default: 10.
+#' @param shapefile_paths Character vector. Paths to input shapefiles.
+#' @param output_dir Optional. Directory to save outputs. Defaults to the input file's folder.
+#' @param area_min_ha Minimum area in hectares (`area_ha`). Default: 10.
 #' @param bbox_h_min Minimum height of axis-aligned bounding box (`bbox_hy`). Default: 630.
-#' @param mnbbx_wd_min Minimum width of rotated bounding box (`mnbbx_wd`). Default: 800.
-#' @param p_w_ratio_min Minimum perimeter-to-width ratio (`p_w_ratio`). Default: 4.0.
-#' @param h_w_ratio_min Minimum height-to-width ratio (`h_w_ratio`). Default: 0.35.
-#' @param output_format Character. Output format for saved files: `"shp"` (default) or `"geojson"`.
-#' @param filter_logic Logical combination of filters: `"AND"` (default) requires all filters to be met, `"OR"` passes polygons meeting any filter.
-#' @param dissolve Logical. If TRUE, dissolve adjacent polygons into contiguous shapes before computing metrics. Default: TRUE.
-#' @param overlay_polygons Optional. `sf` object or path to shapefile to be joined by spatial intersection. If `NULL`, no spatial join is performed.
+#' @param mnbbx_wd_min Minimum width of rotated bounding box. Default: 800.
+#' @param p_w_ratio_min Minimum perimeter-to-width ratio. Default: 4.0.
+#' @param h_w_ratio_min Minimum height-to-width ratio. Default: 0.35.
+#' @param output_format Output format for saved files: `"shp"` or `"geojson"`. Default: `"shp"`.
+#' @param filter_logic Logical combination of filters: `"AND"` (default) or `"OR"`.
+#' @param dissolve Logical. If `TRUE`, dissolve adjacent polygons before computing metrics. Default: TRUE.
+#' @param join_attributes Logical. If `TRUE`, joins filtered/dissolved polygons back to the original shapefile. Default: TRUE.
+#' @param min_input_area_ha Minimum area (in hectares) for input polygons used in spatial joins. Default: 10.
+#' @param overlay_polygons_path Optional. `sf` object or path to shapefile to be used for join instead of the input shapefile. Default: `NULL`.
+#' @param columns_to_keep Optional. Character vector of variable names to retain from the original shapefile during spatial join. Default: `NULL` (keep all).
 #'
-#' @return A named list with one entry per input shapefile. Each entry contains:
+#' @return A named list (one element per input file), each containing:
 #' \describe{
 #'   \item{metrics}{Path to shapefile with all polygons and computed metrics.}
-#'   \item{filtered}{Path to shapefile with only filtered polygons.}
-#'   \item{joined_metrics}{Path to joined shapefile: original polygons + metrics + event ID.}
-#'   \item{joined_filtered}{Path to joined filtered shapefile: original polygons + metrics + event ID.}
-#'   \item{polygons_all}{`sf` object with all input polygons and metrics.}
-#'   \item{polygons_filtered}{`sf` object with only polygons that passed filters.}
+#'   \item{filtered}{Path to shapefile with only polygons passing the filters.}
+#'   \item{joined_metrics}{(If `join_attributes = TRUE`) Path to joined shapefile with original attributes + metrics.}
+#'   \item{joined_filtered}{(If `join_attributes = TRUE`) Path to joined filtered shapefile.}
+#'   \item{polygons_all}{`sf` object of all polygons with computed metrics.}
+#'   \item{polygons_filtered}{`sf` object of polygons that passed the filters.}
 #' }
+#'
+#' @note Examples require large external raster files (hosted on Zenodo).
+#' Therefore, they are wrapped#' in dontrun{} to avoid errors during R CMD check
+#' and to ensure portability.
 #'
 #' @examples
 #' \dontrun{
-#' # Load example fire polygons and apply geometric filtering
-#' burned_dir <- system.file("extdata", package = "OtsuFire")
-#' burned_files <- list.files(
-#'   burned_dir, pattern = glob2rx("burned_areas_*.shp$"), full.names = TRUE
-#' )
+#' burned_files <- list.files("path/to/shapefiles", pattern = "\\.shp$", full.names = TRUE)
 #'
-#' # Define filtering thresholds
-#' result_list <- calculate_polygon_metrics(
+#' results <- calculate_polygon_metrics(
 #'   shapefile_paths = burned_files,
-#'   output_dir = burned_dir,
+#'   output_dir = "outputs/",
 #'   area_min_ha = 10,
-#'   bbox_h_min = 630,
+#'   bbox_h_min = 600,
 #'   mnbbx_wd_min = 800,
 #'   p_w_ratio_min = 4.0,
-#'   h_w_ratio_min = 0.35,
+#'   h_w_ratio_min = 0.25,
 #'   output_format = "geojson",
 #'   filter_logic = "AND",
-#'   dissolve = TRUE
+#'   dissolve = TRUE,
+#'   join_attributes = TRUE,
+#'   min_input_area_ha = 5,
+#'   columns_to_keep = c("CLC_CODE", "ECOR_REGION")
 #' )
-#'
-#' # Access filtered and joined outputs
-#' print(result_list[[1]]$filtered)
-#' print(result_list[[1]]$joined_filtered)
 #' }
-#'
 #' @importFrom sf st_read st_write st_geometry st_bbox st_length st_transform st_as_binary st_minimum_rotated_rectangle st_coordinates st_cast st_area st_make_valid
 #' @importFrom purrr map_dbl
 #' @importFrom dplyr filter first
@@ -99,13 +99,17 @@
 #' @export
 #'
 utils::globalVariables(c(
-  ".", "ID", "P1_id", "abline", "area_ha", "area_m2", "axis",
-  "burn_area_ha", "burned_id", "dev.off", "doy", "fid_final",
-  "first", "glob2rx", "h_w_ratio", "int_area_ha", "legend", "mnbbx_wd",
-  "mtext", "na.omit", "ornt_bbox", "p_w_ratio", "par", "png",
-  "regen_area_ha", "regen_area_ha_sum", "setNames", "total_burned_area",
-  "year", "%>%", ":="
+  "area_orig",
+  "sub_uid",
+  "bbox_wx",
+  "bbox_hy",
+  "perim_m",
+  "mnbbx_ln",
+  "mnbbx_el",
+  "inter_area",
+  "logic_tag"
 ))
+
 
 calculate_polygon_metrics <- function(
     shapefile_paths,
@@ -119,10 +123,18 @@ calculate_polygon_metrics <- function(
     filter_logic = c("AND", "OR"),
     dissolve = TRUE,
     join_attributes = TRUE,
-    overlay_polygons = NULL) {
+    min_input_area_ha = 10,
+    overlay_polygons_path = NULL,
+    columns_to_keep = NULL
+) {
 
   output_format <- match.arg(output_format, choices = c("shp", "geojson"))
-  filter_logic <- match.arg(filter_logic, choices = c("AND", "OR"))
+
+  if (!is.null(filter_logic)) {
+    filter_logic <- match.arg(filter_logic, choices = c("AND", "OR"))
+  }
+
+  join_attributes <- isTRUE(join_attributes)
 
   results <- list()
 
@@ -149,6 +161,24 @@ calculate_polygon_metrics <- function(
       polys <- sf::st_make_valid(polys)
     }
 
+    # Lista de patrones de metricas a recalcular
+    metric_patterns <- c("area_", "bbox_", "perim_", "p_w_", "h_w_", "mnbbx_", "uid", "ornt_bbox")
+
+    # Detectar columnas a eliminar
+    cols_to_remove <- names(polys)[sapply(metric_patterns, function(pat) {
+      any(grepl(pat, names(polys)))
+    })]
+
+    cols_to_remove <- unique(unlist(lapply(metric_patterns, function(pat) {
+      grep(pat, names(polys), value = TRUE)
+    })))
+
+    if (length(cols_to_remove) > 0) {
+      message("Removing existing metric columns (lax match): ", paste(cols_to_remove, collapse = ", "))
+      polys <- polys[, !(names(polys) %in% cols_to_remove)]
+    }
+
+
     if (isTRUE(dissolve)) {
       message("Dissolving adjacent polygons...")
       union_geom <- sf::st_union(polys)
@@ -164,6 +194,10 @@ calculate_polygon_metrics <- function(
       message("Dissolve not applied.")
     }
 
+
+    if (!all(sf::st_is_valid(polys))) {
+      polys <- sf::st_make_valid(polys)
+    }
 
     polys$area_m2 <- sf::st_area(polys)
     polys$area_ha <- round(as.numeric(polys$area_m2) / 10000, 3)
@@ -206,132 +240,274 @@ calculate_polygon_metrics <- function(
     sf::st_write(polys, metrics_path, append = FALSE, quiet = TRUE)
     message("Saved metrics file (unfiltered): ", metrics_path)
 
-    # FILTERING LOGIC
-    m_area     <- if (!is.null(area_min_ha)) polys$area_ha >= area_min_ha else NA
-    m_bbox_h   <- if (!is.null(bbox_h_min)) polys$bbox_hy >= bbox_h_min else NA
-    m_mnbbx_wd <- if (!is.null(mnbbx_wd_min)) polys$mnbbx_wd >= (mnbbx_wd_min + 1e-6) else NA
-    m_p_w      <- if (!is.null(p_w_ratio_min)) polys$p_w_ratio >= (p_w_ratio_min + 1e-6) else NA
-    m_h_w      <- if (!is.null(h_w_ratio_min)) polys$h_w_ratio >= (h_w_ratio_min + 1e-6) else NA
+    # FILTERING LOGIC (revisado)
+    if (!is.null(filter_logic)) {
+      safe_ge <- function(x, threshold) {
+        !is.na(x) & x >= threshold
+      }
 
-    masks <- list(m_area, m_bbox_h, m_mnbbx_wd, m_p_w, m_h_w)
-    filter_labels <- c("area", "bbox_h", "mnbbx_wd", "p_w_ratio", "h_w_ratio")
-    valid <- !sapply(masks, function(x) all(is.na(x)))
-    masks <- masks[valid]
-    filter_labels <- filter_labels[valid]
+      masks <- list()
+      filter_labels <- c()
 
-    if (length(masks) == 0) {
-      filtered <- polys
-      suffix <- "nofilter"
-    } else {
-      combined_mask <- Reduce(
-        if (filter_logic == "AND") `&` else `|`,
-        masks
-      )
-      filtered <- polys[combined_mask, ]
-      suffix <- if (length(filter_labels) == 5) {
-        "all"
+      # Filtros activos
+      if (!is.null(area_min_ha)) {
+        m_area <- safe_ge(polys$area_ha, area_min_ha)
+        masks <- c(masks, list(m_area))
+        filter_labels <- c(filter_labels, "area")
+        message("- Area ? ", area_min_ha, ": ", sum(m_area), " / ", length(m_area))
+      }
+
+      if (!is.null(bbox_h_min)) {
+        m_bbox_h <- safe_ge(polys$bbox_hy, bbox_h_min)
+        masks <- c(masks, list(m_bbox_h))
+        filter_labels <- c(filter_labels, "bbox_h")
+        message("- BBox Height ? ", bbox_h_min, ": ", sum(m_bbox_h))
+      }
+
+      if (!is.null(mnbbx_wd_min)) {
+        m_mnbbx_wd <- safe_ge(polys$mnbbx_wd, mnbbx_wd_min + 1e-6)
+        masks <- c(masks, list(m_mnbbx_wd))
+        filter_labels <- c(filter_labels, "mnbbx_wd")
+        message("- MinBBox Width ? ", mnbbx_wd_min, ": ", sum(m_mnbbx_wd))
+      }
+
+      if (!is.null(p_w_ratio_min)) {
+        m_p_w <- safe_ge(polys$p_w_ratio, p_w_ratio_min + 1e-6)
+        masks <- c(masks, list(m_p_w))
+        filter_labels <- c(filter_labels, "p_w_ratio")
+        message("- Perim/Width Ratio ? ", p_w_ratio_min, ": ", sum(m_p_w))
+      }
+
+      if (!is.null(h_w_ratio_min)) {
+        m_h_w <- safe_ge(polys$h_w_ratio, h_w_ratio_min + 1e-6)
+        masks <- c(masks, list(m_h_w))
+        filter_labels <- c(filter_labels, "h_w_ratio")
+        message("- Height/Width Ratio ? ", h_w_ratio_min, ": ", sum(m_h_w))
+      }
+
+      if (length(masks) == 0) {
+        warning("No filters specified, skipping filtering.")
+        combined_mask <- rep(TRUE, nrow(polys))
       } else {
-        paste(filter_labels, collapse = "_")
+        combined_mask <- if (filter_logic == "AND") {
+          Reduce(`&`, masks)
+        } else {
+          Reduce(`|`, masks)
+        }
       }
-    }
 
-    filtered_path <- file.path(out_dir, paste0(shp_name, "_metrics_filt_", suffix, ext))
+      filtered <- polys[combined_mask, ]
 
-    if (output_format == "shp") {
-      shp_base <- tools::file_path_sans_ext(filtered_path)
-      shp_exts <- c(".shp", ".shx", ".dbf", ".prj", ".cpg")
-      for (ext_i in shp_exts) {
-        f <- paste0(shp_base, ext_i)
-        if (file.exists(f)) file.remove(f)
+      suffix <- if (length(filter_labels) == 5) "all" else paste(filter_labels, collapse = "_")
+      suffix_tag <- paste0(suffix, "_", tolower(filter_logic))
+
+      base_name <- paste0(shp_name, "_metrics_filt_", suffix_tag)
+      filtered_path <- file.path(out_dir, paste0(base_name, ext))
+
+      # Cambiar a GPKG si es muy largo
+      if (nchar(filtered_path) > 240 && output_format == "shp") {
+        message("Path too long for SHP format. Switching to GPKG.")
+        ext <- ".gpkg"
+        filtered_path <- file.path(out_dir, paste0(base_name, ext))
       }
+
+      # Eliminar archivos previos si existen
+      if (ext == ".shp") {
+        shp_base <- tools::file_path_sans_ext(filtered_path)
+        shp_exts <- c(".shp", ".shx", ".dbf", ".prj", ".cpg")
+        for (ext_i in shp_exts) {
+          f <- paste0(shp_base, ext_i)
+          tryCatch({ if (file.exists(f)) file.remove(f) }, error = function(e) {})
+        }
+      } else {
+        if (file.exists(filtered_path)) file.remove(filtered_path)
+      }
+
+      sf::st_write(filtered, filtered_path, append = FALSE, quiet = TRUE)
+      message("saved filtered metrics file (", filter_logic, "): ", filtered_path)
+
     } else {
-      if (file.exists(filtered_path)) file.remove(filtered_path)
+      message("No filtering applied because 'filter_logic' is NULL.")
+      filtered <- NULL
+      filtered_path <- NULL
     }
 
-    sf::st_write(filtered, filtered_path, append = FALSE, quiet = TRUE)
-    message("Saved filtered metrics file: ", filtered_path)
 
+ # Perform spatial join to propagate metrics from dissolved polygons back to original sub-polygons
 
-    # Union espacial con shapefile original solo si join_attributes = TRUE
-    if (isTRUE(join_attributes)) {
-
+    if (!is.null(join_attributes) && isTRUE(join_attributes)) {
       message("Joining attributes from original shapefile: ", shapefile_path)
 
-      overlay_polygons <- tryCatch({
+      overlay_polygons <- if (is.null(overlay_polygons_path)) {
         sf::st_read(shapefile_path, quiet = TRUE)
+      } else {
+        sf::st_read(overlay_polygons_path, quiet = TRUE)
+      }
+
+      overlay_polygons <- sf::st_make_valid(overlay_polygons)
+      overlay_polygons <- sf::st_transform(overlay_polygons, sf::st_crs(polys))
+      overlay_polygons$area_orig <- round(as.numeric(sf::st_area(overlay_polygons)) / 10000, 3)
+
+      if (!is.null(min_input_area_ha)) {
+        initial_n <- nrow(overlay_polygons)
+        overlay_polygons <- overlay_polygons %>% dplyr::filter(area_orig >= min_input_area_ha)
+        filtered_n <- nrow(overlay_polygons)
+        message("Filtered input polygons: ", initial_n - filtered_n,
+                " polygons removed (area < ", min_input_area_ha, " ha).")
+      }
+
+      overlay_polygons$sub_uid <- seq_len(nrow(overlay_polygons))
+
+      if (!is.null(columns_to_keep)) {
+        valid_cols <- intersect(columns_to_keep, names(overlay_polygons))
+        overlay_polygons <- overlay_polygons %>%
+          dplyr::select(all_of(c("sub_uid", valid_cols)))
+      } else {
+        overlay_polygons <- overlay_polygons %>% dplyr::select(sub_uid)
+      }
+
+      # ==== JOINED_ALL ====
+      message("Computing intersection-based join for full metrics (preserving original geometry)...")
+      joined_all <- tryCatch({
+        inter_geom <- sf::st_intersection(
+          overlay_polygons,
+          polys %>% dplyr::select(burned_id, area_ha, bbox_wx, bbox_hy, perim_m,
+                                  p_w_ratio, h_w_ratio, mnbbx_wd, mnbbx_ln, mnbbx_el)
+        )
+        inter_geom$inter_area <- sf::st_area(inter_geom)
+
+        best_match <- inter_geom %>%
+          dplyr::group_by(sub_uid) %>%
+          dplyr::slice_max(order_by = inter_area, n = 1) %>%
+          dplyr::ungroup() %>%
+          dplyr::mutate(inter_area = as.numeric(inter_area)) %>%
+          dplyr::select(-inter_area)
+
+        best_match
       }, error = function(e) {
-        warning("Could not read original shapefile: ", e$message)
+        warning("Intersection-based join failed for full polygons: ", e$message)
         return(NULL)
       })
 
-      if (!is.null(overlay_polygons)) {
-        overlay_polygons <- sf::st_make_valid(overlay_polygons)
-        overlay_polygons <- sf::st_transform(overlay_polygons, sf::st_crs(polys))
+      # ==== JOINED_FILTERED ====
+      message("Computing intersection-based join for filtered metrics...")
+      joined_filtered <- tryCatch({
+        inter_geom_filt <- sf::st_intersection(
+          overlay_polygons,
+          filtered %>% dplyr::select(burned_id, area_ha, bbox_wx, bbox_hy, perim_m,
+                                     p_w_ratio, h_w_ratio, mnbbx_wd, mnbbx_ln, mnbbx_el)
+        )
+        inter_geom_filt$inter_area <- sf::st_area(inter_geom_filt)
 
-        # Union espacial sobre todos los poligonos con metricas
-        joined <- tryCatch({
-          sf::st_join(overlay_polygons, polys, join = sf::st_intersects, left = FALSE)
+        best_match_filt <- inter_geom_filt %>%
+          dplyr::group_by(sub_uid) %>%
+          dplyr::slice_max(order_by = inter_area, n = 1) %>%
+          dplyr::ungroup() %>%
+          dplyr::mutate(inter_area = as.numeric(inter_area)) %>%
+          dplyr::select(-inter_area)
+
+        best_match_filt
+      }, error = function(e) {
+        warning("Intersection-based join failed for filtered polygons: ", e$message)
+        return(NULL)
+      })
+
+
+      # ==== GUARDAR ====
+      if (!exists("result_list")) result_list <- list()
+      if (is.null(result_list[[shapefile_path]])) result_list[[shapefile_path]] <- list()
+
+      ext <- if (output_format[1] == "geojson") ".geojson" else ".shp"
+
+      # Guardar joined_all
+      if (!is.null(joined_all)) {
+        joined_all <- sf::st_make_valid(joined_all)
+        joined_all <- joined_all[!sf::st_is_empty(joined_all), ]
+        joined_all <- joined_all[sf::st_geometry_type(joined_all) %in% c("POLYGON", "MULTIPOLYGON"), ]
+
+        # Abreviar nombres si es SHP
+        if (ext == ".shp") names(joined_all) <- abbreviate(names(joined_all), minlength = 8, strict = TRUE)
+
+        joined_all_path <- sub("\\.shp$", paste0("_metricsJ", ext), shapefile_path)
+
+        # Convertir a .gpkg si el nombre es muy largo
+        if (nchar(joined_all_path) > 240 && ext == ".shp") {
+          message("Path too long for SHP (joined_all). Switching to GPKG.")
+          ext <- ".gpkg"
+          joined_all_path <- sub("\\.shp$", paste0("_metricsJ", ext), shapefile_path)
+        }
+
+        message("Saving joined full metrics: ", joined_all_path)
+        tryCatch({
+          suppressWarnings(
+            suppressMessages(
+              sf::st_write(joined_all, joined_all_path, delete_dsn = TRUE, quiet = TRUE)
+            )
+          )
+          result_list[[shapefile_path]]$joined_metrics <- joined_all_path
         }, error = function(e) {
-          warning("st_join() failed for original polygons: ", e$message)
-          return(NULL)
+          message("error while writing joined_all: ", e$message)
         })
-
-
-        if (!is.null(joined)) {
-          message("Join result over all polygons: ", nrow(joined), " rows.")
-          polys <- joined
-        }
-
-        # Union espacial sobre poligonos filtrados
-        joined_filter <- tryCatch({
-          sf::st_join(overlay_polygons, filtered, join = sf::st_intersects, left = FALSE)
-        }, error = function(e) {
-          warning("st_join() failed for filtered polygons: ", e$message)
-          return(NULL)
-        })
-
-
-        if (!is.null(joined_filter)) {
-          message("Join result over filtered polygons: ", nrow(joined_filter), " rows.")
-          filtered <- joined_filter
-        }
-
-        # Guardar las versiones con union espacial
-        joined_metrics_path <- file.path(out_dir, paste0(shp_name, "_metrics_joined", ext))
-        joined_filtered_path <- file.path(out_dir, paste0(shp_name, "_metrics_filt_", suffix, "_joined", ext))
-
-        # Eliminar si ya existen
-        for (f in c(joined_metrics_path, joined_filtered_path)) {
-          if (output_format == "shp") {
-            shp_base <- tools::file_path_sans_ext(f)
-            shp_exts <- c(".shp", ".shx", ".dbf", ".prj", ".cpg")
-            for (ext_i in shp_exts) {
-              file_i <- paste0(shp_base, ext_i)
-              if (file.exists(file_i)) file.remove(file_i)
-            }
-          } else {
-            if (file.exists(f)) file.remove(f)
-          }
-        }
-
-        # Guardar los shapefiles con union
-        sf::st_write(polys, joined_metrics_path, append = FALSE, quiet = TRUE)
-        sf::st_write(filtered, joined_filtered_path, append = FALSE, quiet = TRUE)
-        message("Saved joined metrics file: ", joined_metrics_path)
-        message("Saved joined filtered file: ", joined_filtered_path)
 
       }
+
+
+      # Guardar joined_filtered
+      if (!is.null(joined_filtered)) {
+        joined_filtered <- sf::st_make_valid(joined_filtered)
+        joined_filtered <- joined_filtered[!sf::st_is_empty(joined_filtered), ]
+        joined_filtered <- joined_filtered[sf::st_geometry_type(joined_filtered) %in% c("POLYGON", "MULTIPOLYGON"), ]
+
+        if (nrow(joined_filtered) == 0) {
+          warning("No valid geometries in joined_filtered; skipping save.")
+        } else {
+          if (ext == ".shp") names(joined_filtered) <- abbreviate(names(joined_filtered), minlength = 8, strict = TRUE)
+
+          # Usar mismo sufijo de filtrado que en filtered_path
+          suffix_tag <- if (length(filter_labels) == 5) {
+            "all"
+          } else {
+            paste(filter_labels, collapse = "_")
+          }
+          suffix_tag <- paste0(suffix_tag, "_", tolower(filter_logic))
+
+          joined_filtered_name <- paste0("_metrics_filtJ_", suffix_tag, ext)
+          joined_filtered_path <- sub("\\.shp$", joined_filtered_name, shapefile_path)
+
+          if (nchar(joined_filtered_path) > 240 && ext == ".shp") {
+            message("Path too long for SHP (joined_filtered). Switching to GPKG.")
+            ext <- ".gpkg"
+            joined_filtered_path <- sub("\\.shp$", paste0("_metrics_filtJ", logic_tag, ext), shapefile_path)
+          }
+
+          message("Saving joined filtered metrics: ", joined_filtered_path)
+          tryCatch({
+            suppressWarnings(
+              suppressMessages(
+                sf::st_write(joined_filtered, joined_filtered_path, delete_dsn = TRUE, quiet = TRUE)
+              )
+            )
+            result_list[[shapefile_path]]$joined_filtered <- joined_filtered_path
+          }, error = function(e) {
+            message("error while writing joined_filtered: ", e$message)
+          })
+        }
+      }
+
     }
 
     # Resultado actualizado
-    results[[shapefile_path]] <- list(
+    result_list <- list(
       metrics = metrics_path,
       filtered = filtered_path,
-      joined_metrics = joined_metrics_path,
-      joined_filtered = joined_filtered_path,
+      joined_metrics = if (join_attributes && exists("joined_all_path")) joined_all_path else NULL,
+      joined_filtered = if (join_attributes && exists("joined_filtered_path")) joined_filtered_path else NULL,
       polygons_all = polys,
       polygons_filtered = filtered
     )
+
+
+    results[[shapefile_path]] <- result_list
 
   }
 

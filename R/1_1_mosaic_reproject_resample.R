@@ -31,9 +31,9 @@
 #' 4. Clean NoData values and assign band names ('rbr', 'doy').
 #' 5. Save compressed GeoTIFF output.
 #'
-#' @importFrom terra rast vect crop mask crs NAflag writeRaster ext ncell
-#' @importFrom gdalUtilities gdalbuildvrt gdalwarp
-#' @importFrom stringr str_detect str_replace
+#' @note Examples require large external raster files (hosted on Zenodo)
+#' and depend on external software (Python, GDAL). Therefore, they are wrapped
+#' in dontrun{} to avoid errors during R CMD check and to ensure portability.
 #'
 #' @examples
 #' \dontrun{
@@ -46,6 +46,10 @@
 #'   res_target = 90
 #' )
 #' }
+#'
+#' @importFrom terra rast vect crop mask crs NAflag writeRaster ext ncell
+#' @importFrom gdalUtilities gdalbuildvrt gdalwarp
+#' @importFrom stringr str_detect str_replace
 #'
 #' @export
 mosaic_reproject_resample <- function(

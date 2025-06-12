@@ -60,6 +60,10 @@ The function supports either a single shapefile (original burned areas) or a nam
 of shapefiles or `sf` objects generated with different Otsu thresholds.
 }
 \note{
+Examples require large external raster files (hosted on Zenodo)
+and depend on external software (Python, GDAL). Therefore, they are wrapped
+in dontrun{} to avoid errors during R CMD check and to ensure portability.
+
 The DOY raster band should be derived from a Landsat composite generated in Google Earth Engine (GEE),
 following the approach described by Quintero et al. (2025).
 }

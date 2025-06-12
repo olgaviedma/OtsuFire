@@ -62,6 +62,10 @@
 #'
 #' @return Named list of `sf` polygons grouped by segmentation. Output files saved to `output_dir`.
 #'
+#' @note Examples require large external raster files (hosted on Zenodo)
+#' and depend on external software (Python, GDAL). Therefore, they are wrapped
+#' in dontrun{} to avoid errors during R CMD check and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' # Example 1: Basic Otsu thresholds (global)
@@ -669,7 +673,7 @@ process_otsu_rasters <- function(
       temp_raster <- file.path(tile_dir, sprintf("binary_%s.tif", label))
       terra::writeRaster(binary_raster, temp_raster, overwrite = TRUE,
                          datatype = "INT1U", gdal = c("COMPRESS=LZW", "NAflag=0"))
-      shp_path <- file.path(output_dir, sprintf("burned_areas_%s_otsu_%s.shp", year, label))
+      shp_path <- file.path(output_dir, sprintf("BA_%s_otsu_%s.shp", year, label))
       system(glue::glue('"{python_exe}" "{gdal_polygonize_script}" "{temp_raster}" -f "ESRI Shapefile" "{shp_path}" DN'))
       if (file.exists(temp_raster)) file.remove(temp_raster)
       polys <- sf::st_read(shp_path, quiet = TRUE)
@@ -711,6 +715,10 @@ process_otsu_rasters <- function(
     plot_path <- file.path(figures_dir, paste0("otsu_plot_", year, "_", label, ".png"))
 
     png(plot_path, width = 1600, height = 800, res = 150)
+
+	oldpar <- par(no.readonly = TRUE)
+    on.exit(par(oldpar))
+
     par(mfrow = c(1, 2))
     par(mar = c(5, 4, 4, 5) + 0.1)
     plot(hist_values$mids, smoothed_counts, type = "h", col = "grey", lwd = 2,
@@ -1068,7 +1076,7 @@ process_otsu_rasters <- function(
 
           combined <- do.call(rbind, all_polys)
 
-          filename_base <- sprintf("burned_areas_%s_percentiles_corine_ecoregion_P%02d_toP%02d",
+          filename_base <- sprintf("BA_%s_PERC_CORI_ECOREG_P%02d_toP%02d",
                                    year, round(pmin * 100), round(pmax * 100))
 
           ext <- if (output_format == "geojson") ".geojson" else ".shp"
@@ -1089,7 +1097,7 @@ process_otsu_rasters <- function(
 
           log_file <- file.path(
             output_dir,
-            sprintf("burned_areas_%s_corine_ecoregion_percentiles_P%02d_toP%02d.txt",
+            sprintf("BA_%s_CORI_ECOREG_PERC_P%02d_toP%02d.txt",
                     year, round(pmin * 100), round(pmax * 100))
           )
           if (file.exists(log_file)) file.remove(log_file)
@@ -1162,7 +1170,7 @@ process_otsu_rasters <- function(
     ###########  SAVING #######
 
           # Construir nombre base del archivo
-          filename_base <- sprintf("burned_areas_%s_percentiles_corine_P%02d_toP%02d",
+          filename_base <- sprintf("BA_%s_PERC_CORI_P%02d_toP%02d",
                                    year, round(pmin * 100), round(pmax * 100))
 
           # Definir la extension segun el formato
@@ -1188,7 +1196,7 @@ process_otsu_rasters <- function(
 
           log_file <- file.path(
             output_dir,
-            sprintf("burned_areas_%s_corine_percentiles_P%02d_toP%02d.txt",
+            sprintf("BA_%s_CORI_PERC_P%02d_toP%02d.txt",
                     year, round(pmin * 100), round(pmax * 100))
           )
 
@@ -1259,7 +1267,7 @@ process_otsu_rasters <- function(
           names(combined) <- make.unique(substr(names(combined), 1, 10))
 
           # Construir nombre base del archivo
-          filename_base <- sprintf("burned_areas_%s_percentiles_ecoregion_P%02d_toP%02d",
+          filename_base <- sprintf("BA_%s_PERC_ECOREG_P%02d_toP%02d",
                                    year, round(pmin * 100), round(pmax * 100))
 
 
@@ -1283,7 +1291,7 @@ process_otsu_rasters <- function(
 
           log_file <- file.path(
             output_dir,
-            sprintf("burned_areas_%s_ecoregion_percentiles_P%02d_toP%02d.txt",
+            sprintf("BA_%s_ECOREG_PERC_P%02d_toP%02d.txt",
                     year, round(pmin * 100), round(pmax * 100))
           )
 
@@ -1337,7 +1345,7 @@ process_otsu_rasters <- function(
 
 
           # Construir nombre base del archivo
-          filename_base <- sprintf("burned_areas_%s_percentiles_original_P%02d_toP%02d",
+          filename_base <- sprintf("BA_%s_PERC_ORIG_P%02d_toP%02d",
                                    year, round(pmin * 100), round(pmax * 100))
 
 
@@ -1365,7 +1373,7 @@ process_otsu_rasters <- function(
 
           log_file <- file.path(
             output_dir,
-            sprintf("burned_areas_%s_percentiles_P%02d_toP%02d.txt",
+            sprintf("BA_%s_PERC_P%02d_toP%02d.txt",
                                 year, round(pmin * 100), round(pmax * 100))
             )
 
@@ -1431,7 +1439,7 @@ process_otsu_rasters <- function(
       ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
       # Crear nombre de archivo con extension adecuada
-      out_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_original%s", year, ext))
+      out_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ORIG%s", year, ext))
 
       # Eliminar archivo existente segun formato
       if (output_format == "shp") {
@@ -1451,7 +1459,7 @@ process_otsu_rasters <- function(
       # Mensaje opcional
       message("Saved: ", out_file)
 
-      log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_original_log.txt", year, otsu_min))
+      log_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ORIG_log.txt", year, otsu_min))
 
       if (file.exists(log_file)) file.remove(log_file)
 
@@ -1516,7 +1524,7 @@ process_otsu_rasters <- function(
         ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
         # Construir nombre de archivo con extension correcta
-        out_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_ge%d%s", year, otsu_min, ext))
+        out_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ge%d%s", year, otsu_min, ext))
 
         # Eliminar archivos previos si existen
         if (output_format == "shp") {
@@ -1536,7 +1544,7 @@ process_otsu_rasters <- function(
         # Mensaje de confirmacion
         message("Saved: ", out_file)
 
-        log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_ge%d_log.txt", year, otsu_min))
+        log_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ge%d_log.txt", year, otsu_min))
 
         if (file.exists(log_file)) file.remove(log_file)
 
@@ -1598,7 +1606,7 @@ process_otsu_rasters <- function(
       names(combined) <- make.unique(substr(names(combined), 1, 10))
 
       ext <- if (output_format == "geojson") ".geojson" else ".shp"
-      out_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_ecoregion_original%s", year, ext))
+      out_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ORIG%s", year, ext))
 
       if (output_format == "shp") {
         shp_base <- tools::file_path_sans_ext(out_file)
@@ -1614,7 +1622,7 @@ process_otsu_rasters <- function(
       message("Saved: ", out_file)
 
 
-      log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_ecoregion_original_log.txt", year))
+      log_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ORIG_log.txt", year))
 
       if (file.exists(log_file)) file.remove(log_file)
 
@@ -1670,7 +1678,7 @@ process_otsu_rasters <- function(
         combined <- sf::st_make_valid(combined)
         names(combined) <- make.unique(substr(names(combined), 1, 10))
 
-        filename <- sprintf("burned_areas_%s_otsu_ecoregion_ge%d", year, otsu_min)
+        filename <- sprintf("BA_%s_otsu_ECOREG_ge%d", year, otsu_min)
 
         ext <- if (output_format == "geojson") ".geojson" else ".shp"
         out_file <- file.path(output_dir, paste0(filename, ext))
@@ -1688,7 +1696,7 @@ process_otsu_rasters <- function(
         sf::st_write(combined, out_file, append = FALSE, quiet = TRUE)
         message("Saved: ", out_file)
 
-        log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_ecoregion_ge%d_log.txt", year, otsu_min))
+        log_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ge%d_log.txt", year, otsu_min))
 
         if (file.exists(log_file)) file.remove(log_file)
         write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
@@ -1761,7 +1769,7 @@ process_otsu_rasters <- function(
       combined <- sf::st_make_valid(combined)
       names(combined) <- make.unique(substr(names(combined), 1, 10))
 
-      filename <- sprintf("burned_areas_%s_original_corine_ecoregion.shp", year)
+      filename <- sprintf("BA_%s_ORIG_CORI_ECOREG.shp", year)
       out_file <- file.path(output_dir, filename)
 
       shp_base <- tools::file_path_sans_ext(out_file)
@@ -1773,7 +1781,7 @@ process_otsu_rasters <- function(
       sf::st_write(combined, out_file, append = FALSE, quiet = TRUE)
       message("Saved: ", out_file)
 
-      log_file <- file.path(output_dir, sprintf("burned_areas_%s_original_corine_ecoregion_log.txt", year))
+      log_file <- file.path(output_dir, sprintf("BA_%s_ORIG_CORI_ECOREG_log.txt", year))
       if (file.exists(log_file)) file.remove(log_file)
       write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
 
@@ -1839,7 +1847,7 @@ process_otsu_rasters <- function(
         ext <- if (output_format == "geojson") ".geojson" else ".shp"
 
         # Crear nombre de archivo con extension adecuada
-        out_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_ecoregion_ge%d%s", year, otsu_min, ext))
+        out_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ECOREG_ge%d%s", year, otsu_min, ext))
 
         # Eliminar archivo existente segun formato
         if (output_format == "shp") {
@@ -1856,7 +1864,7 @@ process_otsu_rasters <- function(
         sf::st_write(combined, out_file, append = FALSE, quiet = TRUE)
         message("Saved: ", out_file)
 
-        log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_corine_ecoregion_ge%d_log.txt", year, otsu_min))
+        log_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ECOREG_ge%d_log.txt", year, otsu_min))
         if (file.exists(log_file)) file.remove(log_file)
         write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
 
@@ -1895,7 +1903,7 @@ process_otsu_rasters <- function(
     combined <- sf::st_make_valid(res_output$polys)
 
     ext <- if (output_format == "geojson") ".geojson" else ".shp"
-    out_file <- file.path(output_dir, sprintf("burned_areas_%s_%s%s", year, label_real, ext))
+    out_file <- file.path(output_dir, sprintf("BA_%s_%s%s", year, label_real, ext))
 
     if (output_format == "shp") {
       shp_base <- tools::file_path_sans_ext(out_file)
@@ -1910,7 +1918,7 @@ process_otsu_rasters <- function(
     sf::st_write(combined, out_file, append = FALSE, quiet = TRUE)
     message("Saved: ", out_file)
 
-    log_file <- file.path(output_dir, sprintf("burned_areas_%s_%s_log.txt", year, label_real))
+    log_file <- file.path(output_dir, sprintf("BA_%s_%s_log.txt", year, label_real))
     if (file.exists(log_file)) file.remove(log_file)
     write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
 
@@ -1950,7 +1958,7 @@ process_otsu_rasters <- function(
       combined <- sf::st_make_valid(res_output$polys)
 
       ext <- if (output_format == "geojson") ".geojson" else ".shp"
-      out_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_%s%s", year, label_real, ext))
+      out_file <- file.path(output_dir, sprintf("BA_%s_otsu_%s%s", year, label_real, ext))
 
       if (output_format == "shp") {
         shp_base <- tools::file_path_sans_ext(out_file)
@@ -1965,7 +1973,7 @@ process_otsu_rasters <- function(
       sf::st_write(combined, out_file, append = FALSE, quiet = TRUE)
       message("Saved: ", out_file)
 
-      log_file <- file.path(output_dir, sprintf("burned_areas_%s_otsu_%s_log.txt", year, label_real))
+      log_file <- file.path(output_dir, sprintf("BA_%s_otsu_%s_log.txt", year, label_real))
       if (file.exists(log_file)) file.remove(log_file)
       write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
 

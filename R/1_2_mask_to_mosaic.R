@@ -42,6 +42,10 @@
 #' @importFrom terra rast mask crop compareGeom project vect crs writeRaster ext nlyr ncell
 #' @importFrom tools file_path_sans_ext
 #'
+#' @note Examples require large external raster files (hosted on Zenodo).
+#' Therefore, they are wrapped in dontrun{} to avoid errors during R CMD check
+#' and to ensure portability.
+#'
 #' @examples
 #' \dontrun{
 #' # Case 1: Let the function generate the output name in the same folder

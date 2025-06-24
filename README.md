@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/OtsuFire_logo.png" width="400"/>
 </p>
 
-<h1 align="center">OtsuFire: Fire Mapping and Regeneration Assessment Toolkit</h1>
+<h1 align="center">OtsuFire: Fire Scars and Severity Mapping Toolkit</h1>
 ================
 
 ``` r
@@ -745,3 +745,18 @@ for (regen_status in unique(df_valid$rgnr_f)) {
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/Fig11_burned_areas_2012_otsu_corine_ge0_metrics_filt_all_reg_thr100_P1P2_rat30_RBR_no_regenera.png" width="900"/>
 </p>
 
+# Acknowledgements
+
+We gratefully acknowledge funding from project INFORICAM (PID2020-119402RB-I00), funded by the Spanish MCIN/AEI/ 10.13039/501100011033 and by the "European Union NextGenerationEU/PRTR". Carlos Silva was supported by the NASA's Carbon Monitoring System funding (CMS, grant 22-CMS22-0015).
+
+# Reporting Issues
+
+Please report any issue regarding the OtsuFire package to Dr. Olga Viedma ([olga.viedma\@uclm.es](mailto:olga.viedma@uclm.es){.email})
+
+# Citing OtsuFire
+
+Quintero, N.; Viedma,O.;Achour, H. & Moreno, JM (2025). OtsuFire: Fire Scars and Severity Mapping Using 'Otsu' Thresholding.version 0.1.4, accessed on june. 24 2025, available at: <https://cran.r-project.org/web/packages/OtsuFire/index.html>
+
+# Disclaimer
+
+**OtsuFire package comes with no guarantee, expressed or implied, and the authors hold no responsibility for its use or reliability of its outputs.**

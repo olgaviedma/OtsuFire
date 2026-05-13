@@ -1,0 +1,170 @@
+# Supervised Stage
+
+The supervised stage is the second methodological block of the workflow. In the current repository state, the operational supervised workflow is the one-year pipeline implemented in `03_PATCH_LEVEL_PIPELINE_2.R` and bridged by `run_oneyear_supervised_pipeline()`. LOYO remains a separate temporal-validation concept and is not represented by an active current runtime.
+
+## Current Status
+
+The handoff supports the following interpretation.
+
+- The standalone one-year supervised script is the current operational patch-level runtime.
+- The package bridge exists and correctly sources the standalone runtime.
+- Strict package-vs-standalone supervised equivalence has been validated (2026-04-16) under frozen deterministic inputs, with exact match across 1002 polygons and zero differences in both `p_burned` and `p_burned_current_year`.
+
+Two unburned-pool strategies are available. `all_sources` is the operational default used in production runs and by the MASTER orchestrator. `deterministic_direct` is the canonical baseline used for benchmarking and reproducibility comparisons.
+
+## Inputs And Support Layers
+
+The active one-year workflow starts from deterministic outputs of the same year and scenario.
+
+| Input group | Current role |
+|---|---|
+| `internal_decisions` | Defines the polygon universe to relabel, train, score, and filter |
+| Main `change_index` mosaic | Main burned-sensitive predictor surface |
+| `delayed_change_index` | Optional persistence-style support layer used in current feature extraction |
+| DEM and slope | Topographic predictors |
+| CORINE land-cover support | Polygon-level land-cover composition features |
+| Ecoregions | Dominant ecoregion context per polygon |
+| Hotspots when available | Optional feature support and current-year temporal filtering support |
+| `burned_like_registry_path` | Scenario-specific multiyear registry for append and transfer support |
+
+The `PAQUETE` tables describe these as canonical supervised inputs. The current bridge implementation stores several custom input overrides in the configuration object, but the delegated runtime still relies mainly on the standard project layout when the supervised pipeline actually runs. For that reason, this chapter documents both the conceptual inputs and the current implementation caveat.
+
+## Pool Construction
+
+The supervised stage does not bypass the deterministic stage. It begins by reading `internal_decisions.gpkg` and auditing the deterministic labels before building pools.
+
+In the current one-year runtime:
+
+- deterministic `keep` polygons become the starting `burned_pool`,
+- deterministic `review` polygons become the `review_pool`,
+- the full audited deterministic universe becomes the `scoring_pool`.
+
+After that, the workflow constructs an `unburned_pool` and combines it with the burned pool to create `train_labeled`.
+
+## Unburned Pool Taxonomy
+
+The current operational default is `all_sources`, which routes candidate unburned polygons through four independent source buckets with separate capacity caps relative to the number of burned training polygons.
+
+| Bucket | Source tag | Cap | Notes |
+|---|---|---|---|
+| `contextual_exclusion` | `geo_excluded_hot` and deterministic drops via corine_na_high | 0.25× burned count | Geometrically or contextually excluded polygons |
+| `spectral_hard_negative` | `spectral_reject_medium` | 1× burned count | Supply is effectively zero in modern data years |
+| `random_background_sampled` | `background_cell` | 1× burned count | Random burnable-background sample excluding burned-like context |
+| `otsu_unburned_sampled` | `otsu_patch_drop` only (S_PATCH_PA ≤ 0.15) | 1× burned count | Legacy Otsu patches that were dropped; excludes review and keep patches |
+
+This four-bucket architecture replaced a simpler two-source design in Phase 2A (closed 2026-04-17). The key design decisions are:
+
+- `contextual_exclusion` is capped at 0.25× rather than 1× because these polygons share spatial context with burned areas and may carry ambiguous signal.
+- `spectral_hard_negative` nominally supplies one slot per burned polygon but has zero qualifying candidates in modern data years, so its cap is theoretical rather than operative.
+- `otsu_unburned_sampled` accepts drop-only patches from the legacy Otsu pipeline. Review and keep patches are explicitly excluded to prevent contamination from spectrally ambiguous positives.
+- `random_background_sampled` provides the most reliable unambiguous negatives and is the primary fill source in all validated runs.
+
+The alternative strategy `deterministic_direct` is the canonical baseline for benchmarking. It uses a single combined pool of deterministic drop polygons plus random background without bucket routing or independent caps. It is the strategy used in package-vs-standalone equivalence validation and should be used for any fair comparison that requires controlling negative-pool composition.
+
+::: {.callout-note}
+`otsu_unburned_generation` is a deprecated strategy name that redirects to `all_sources`. If it appears in older configs or scripts, treat it as equivalent to `all_sources`.
+:::
+
+### Validated composition
+
+Phase 2A validation runs for 2025/balanced and 2012/balanced under `all_sources` produced the following training composition (counts are per run; ratios are all-sources bucket sums relative to burned count):
+
+| Year | Burned selected | Hard-negative selected | Random selected | Total training |
+|---|---|---|---|---|
+| 2025 | 307 | 307 | 307 | 921 |
+| 2012 | 207 | 207 | 207 | 621 |
+
+In both runs, `hard_negative_to_burned_ratio = 1` and `random_to_burned_ratio = 1` were achieved. The hard-negative slot was filled entirely from `random_background_sampled` in practice (spectral supply = 0).
+
+## Spatial Folds And Feature Extraction
+
+After pool construction, the workflow builds spatial block folds and writes them to `02_FOLDS`. The current runtime evaluates candidate block sizes, writes a `train_with_folds` layer, and uses repeated spatially structured resampling for within-year diagnostics.
+
+Feature extraction then writes `03_FEATURES/features_geometry.gpkg` and related RDS files. The active feature stage aligns all support rasters to the main annual change-index template and extracts polygon-level summaries from:
+
+- the main annual change index,
+- post-fire day-of-year support,
+- delayed change when available,
+- DEM and slope,
+- grouped CORINE composition,
+- dominant ecoregion,
+- hotspot density and intensity metrics when hotspot data are available.
+
+This is one of the clearest places where the mosaic stage remains methodologically central: every support raster is checked against the same annual template before feature extraction is allowed to proceed.
+
+## OOF Diagnostics
+
+The one-year workflow includes an explicit OOF block written to `05_OOF`. These outputs include aggregate metrics, long-form predictions, labeled OOF summaries, and recommended thresholds.
+
+The current sources support a clear interpretation of OOF:
+
+- OOF is an internal same-year diagnostic framework,
+- it helps assess model behavior under spatial autocorrelation,
+- it supports threshold review,
+- it does not replace cross-year validation.
+
+The supervised methodology note is explicit on the last point: the supervised stage should export probabilities and diagnostic thresholds, but it should not force a final burned-versus-unburned thresholded classification inside the annual supervised stage.
+
+## Final Model, Public Map, And Registry Update
+
+After OOF, the current runtime trains the final model, scores the full deterministic universe, and writes the annual supervised outputs. The most important outputs are:
+
+| Output | Current role |
+|---|---|
+| `final_map_full` | Complete scored deterministic universe |
+| `final_map` | Current-year public map after temporal filtering and column selection |
+| `burned_like_scored` | Scored deterministic subset exported for registry maintenance |
+| Scenario registry candidate layer | Full history of eligible burned-like candidates above the probability floor |
+| Scenario registry selected layer | Top 1 percent high-confidence multiyear registry used for transfer support |
+
+## Post-Threshold Validation
+
+The supervised workflow exports probabilities and diagnostic threshold information. When external validation of a supervised map is needed, first threshold `p_burned` or `p_burned_current_year` into a compatible burned-area prediction layer, then call the shared `validate_fire_maps()` utility. This keeps validation workflow-independent and does not change the supervised stage into a forced binary-classification step.
+
+The final scorer adds a current-year temporal adjustment before producing the public map. In the active implementation this adjustment combines previous-year overlap information and hotspot-density support to calculate:
+
+- `p_burned_model`,
+- `temporal_penalty`,
+- `p_burned_current_year`,
+- `temporal_conflict_flag`.
+
+The public `final_map` is then derived from that adjusted annual view, while `final_map_full` preserves the complete scored universe for auditability.
+
+## Scenario-Specific Registry Products
+
+The current registry design is scenario-specific and lives outside the annual year folders under `Results/<SCENARIO_UPPER>/`.
+
+Two layers are central:
+
+- `burned_high_conf_registry_candidates`: candidate history layer containing all eligible supervised burned-like polygons above the probability floor,
+- `burned_high_conf_registry`: selected multiyear registry containing only the top 1 percent highest-probability members after the floor is applied.
+
+The workflow also writes a ranked CSV and a short text summary. These products are part of the current transfer infrastructure and are relevant for later historical application, even though the dedicated historical tutorial is still pending.
+
+## Registry-Based Augmentation: Rejected Design Path
+
+A design was developed and evaluated for augmenting the supervised positive pool using the scenario-specific `burned_high_conf_registry` (Mode B / `historical_registry_augment`). This design was formally rejected on 2026-04-17 after full specification review. It is not a pending feature, a deferred task, or a future roadmap item. It is a closed rejected branch retained for traceability.
+
+The registry products (`burned_high_conf_registry_candidates` and `burned_high_conf_registry`) are still written and maintained by the supervised pipeline for potential future use (e.g., as deterministic RBR reference support, currently parked in Section 37 of the handoff). But they do not feed back into the supervised training pool under any current validated strategy.
+
+## LOYO And Historical Application: Current Documented Status
+
+::: {.callout-warning}
+The current sources do not yet support a full operational tutorial for LOYO.
+
+- `YEAR_OOF_PIPELINE.R` is archived and stops with a redirect to the active one-year pipeline.
+- The handoff states that LOYO will be redesigned in a new dedicated multiyear script.
+- The paper draft contains conceptual reminders about LOYO and multiyear validation, but not a stable current runtime description.
+:::
+
+The same caution applies to historical application. The paper draft does support the idea of applying fixed deterministic rules and the trained classifier to non-training years, and the current registry design clearly supports temporal transfer. However, the repository does not yet provide a dedicated, current, step-by-step historical-application entry point that can be documented with the same level of confidence as the one-year workflow.
+
+For now, the safe interpretation is:
+
+- one-year supervised plus OOF is the documented operational annual workflow,
+- LOYO is a separate validation concept still pending redesign,
+- historical transfer is partially supported by the registry infrastructure but still needs a dedicated tutorial.
+
+TODO:
+- Add a dedicated LOYO chapter when the new multiyear validation script and its outputs are available.
+- Add a dedicated historical-application tutorial when the repository exposes a stable, current entry point beyond the scenario-specific registry infrastructure.

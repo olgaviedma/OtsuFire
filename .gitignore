@@ -1,0 +1,53 @@
+# R / RStudio
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.Rapp.history
+
+# R package build artifacts
+*.Rcheck/
+*.tar.gz
+src/*.o
+src/*.so
+src/*.dll
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Backups (manuales)
+*.manual_backup
+NAMESPACE.manual_backup
+
+# pkgdown output
+docs/
+
+# Python (por si acaso)
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+
+# Quarto cache and outputs
+.quarto/
+_book/
+_freeze/
+*_files/
+*_cache/
+
+# Generated docs
+docs/

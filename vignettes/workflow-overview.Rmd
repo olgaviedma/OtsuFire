@@ -1,0 +1,173 @@
+---
+title: "OtsuFire workflow overview"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{OtsuFire workflow overview}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", eval = FALSE
+)
+```
+
+This vignette describes the four-layer OtsuFire workflow at the API
+level. Code chunks are shown but **not evaluated** because the
+deterministic and supervised workflows operate on full-scale annual
+mosaics (~Iberian Peninsula, 90 m resolution) that are too large to
+ship with a CRAN package. The toy examples in
+`vignette("OtsuFire", package = "OtsuFire")` cover the API surface
+without external data.
+
+## 1. Mosaic stage
+
+`change_index_mosaic()` builds an annual change-index raster (RBR
+or dNBR) from per-tile inputs. Output is a single GeoTIFF per year
+that becomes the `change_index` argument to the deterministic /
+supervised configs.
+
+```{r mosaic}
+library(OtsuFire)
+
+mosaic_path <- change_index_mosaic(
+  input_dir   = "/path/to/yearly/tiles",
+  output_dir  = "/path/to/Composites_90m/Min_Min",
+  target_year = 2020L,
+  index_type  = "RBR"
+)
+```
+
+## 2. Deterministic stage
+
+The deterministic workflow runs Otsu segmentation per CORINE x
+ecoregion unit, grows seed-supported components, applies multi-stage
+filtering, and emits an `internal_decisions.gpkg` layer.
+
+```{r det}
+det_cfg <- build_burned_mapping_config(
+  scenario     = "balanced",
+  change_index = mosaic_path,
+  target_year  = 2020L,
+  output_dir   = "/path/to/Results"
+)
+
+det_run <- run_deterministic_pipeline(det_cfg)
+det_run$internal_decisions_gpkg
+```
+
+The `scenario` argument selects a per-CORINE-class parameter preset
+(`balanced`, `original`, `lax`, `restrictive`). The presets are
+loaded from `inst/extdata/` and are part of the validated
+scientific defaults; they are **not** intended to be edited.
+
+If you need step-by-step access, the deterministic stage decomposes
+into three modular helpers:
+
+```{r det-modular}
+patches  <- detect_burned_patches(det_cfg)
+scored   <- score_burned_patches(det_cfg, patches)
+# scored is an sf with class_final, filter_1..3, etc.
+```
+
+## 3. Supervised one-year stage
+
+The supervised stage trains an XGBoost model on the deterministic
+decisions plus contextual unburned negatives, runs OOF diagnostics,
+and emits a `final_map.gpkg` whose `p_burned` field is the per-patch
+burned probability.
+
+```{r sup}
+sup_cfg <- build_supervised_burned_config(
+  scenario           = "balanced",
+  internal_decisions = det_run$internal_decisions_gpkg,
+  change_index       = mosaic_path,
+  hotspots           = "/path/to/Hotspots/hotspots_iberia_2020.geojson",
+  target_year        = 2020L,
+  output_dir         = "/path/to/Results",
+  options = list(
+    data_base            = "/path/to/Data",
+    composite_base       = "/path/to/Imagery/Composites_90m",
+    result_name          = "Min_Min",
+    negative_pool_policy = "all_sources"
+  )
+)
+
+sup_run <- run_oneyear_supervised_pipeline(
+  config           = sup_cfg,
+  run_consistency  = TRUE,
+  overwrite        = FALSE
+)
+```
+
+`negative_pool_policy` controls how unburned negatives are sourced:
+
+* `"deterministic_direct"` — Mode A baseline. Uses only the
+  deterministic decisions to derive contextual exclusions, spectral
+  hard negatives, random burnable background, and Otsu-unburned
+  samples.
+* `"all_sources"` — operational default for the `balanced`,
+  `restrictive`, and `strict` scenarios. Adds a current-year Otsu
+  unburned pool computed by the package-internal legacy helpers
+  (`polygonize_Otsu()`, `coverage_by_patch_raster()`,
+  `run_scenarios()`, `process_otsu_rasters_()`).
+
+Both modes are entirely package-internal: no external `sys.source()`
+of legacy scripts and no namespace mutation are performed.
+
+If you want explicit access to the supervised sub-stages,
+`build_supervised_training_pools()`, `make_spatial_folds()`,
+`extract_supervised_features()`, `run_oof_diagnostics()`,
+`train_final_burned_model()`, `score_supervised_burned_map()`, and
+`update_burned_like_registry()` each cover one stage of the
+pipeline.
+
+## 4. Validation and consistency
+
+`validate_fire_maps()` is workflow-independent: it can be applied to
+any compatible burned-area prediction layer, including supervised
+outputs after thresholding `p_burned`.
+
+```{r validate}
+val <- validate_fire_maps(
+  predicted = sup_run$final_map_gpkg,
+  reference = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
+  threshold = 0.5
+)
+```
+
+`check_supervised_consistency()` compares the deterministic and
+supervised outputs of the same run and writes per-issue diagnostic
+GPKG/CSV/TXT artefacts:
+
+```{r consistency}
+cons <- check_supervised_consistency(
+  deterministic_decisions = det_run$internal_decisions_gpkg,
+  final_map               = sup_run$final_map_gpkg,
+  config                  = sup_cfg
+)
+```
+
+The consistency check is also invoked automatically when
+`run_oneyear_supervised_pipeline(..., run_consistency = TRUE)` is
+called and `options$data_base` is supplied.
+
+## Outputs
+
+A single supervised one-year run for one (year, scenario) tuple
+produces, under
+`<output_dir>/<target_year>/<run_name>/SUPERVISED/<scenario>/`:
+
+* `01_POOLS/...gpkg` — burned + unburned training pools.
+* `02_FOLDS/...gpkg` — spatial folds for OOF.
+* `03_FEATURES/features_geometry.gpkg` — full feature matrix.
+* `04_MATRIX/...rds` — XGBoost design matrix snapshot.
+* `05_OOF/..._oof_agg.csv` — out-of-fold diagnostics.
+* `07_FINAL_MODEL_V2/..._final_model.rds` — trained model.
+* `09_FINAL_MAP/..._final_map.gpkg` — final per-patch
+  `p_burned` map.
+* `11_CONSISTENCY_CHECKS/...` — consistency artefacts when enabled.
+
+The deterministic stage writes its outputs under the parallel
+`DETERMINISTIC/<scenario>/` tree.

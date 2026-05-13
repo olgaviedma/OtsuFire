@@ -1,0 +1,168 @@
+# Canonical model feature whitelist + legacy residual deny-list.
+#
+# OtsuFire 0.4.0 architectural refactor (decided by Natalia 2026-05-09):
+# the supervised model sees ONLY the columns in `.supervised_feature_cols`
+# (plus their auto-generated `<col>_isNA` companions). Everything else
+# (administrative metadata, fold assignments, deterministic-stage
+# residuals, geometric sampling-biased features, Otsu metadata, OOF
+# outputs, labels) is filtered at the LAST mile, inside
+# `train_final_model_direct()` and the scoring path.
+#
+# Upstream stages (`extract_features()`, pool builders, orchestrator)
+# preserve all input columns unchanged. The drops that lived inside
+# `extract_features()` until 0.3.x have been removed entirely.
+#
+# History:
+#   * 0.3.0 (Agent F): canonical residual deny list defined here as
+#     `.deterministic_residual_cols`. Consumed by `extract_features()`
+#     (input contract), `train_final_model_direct()` (extra_drop_cols
+#     + forbidden detector) and `run_dm_oof_pipeline()` (drop_regex).
+#   * 0.3.1 (Agent G): six load-bearing administrative columns
+#     (`neg_type`, `cell_id`, `training_selected`, `training_group`,
+#     `training_reason`, `intersects_deterministic`) removed from the
+#     deny list because they are pipeline-internal metadata, not
+#     deterministic-stage residuals.
+#   * 0.4.0 (Agent H): the whitelist `.supervised_feature_cols` becomes
+#     the single source of truth for what enters the model matrix.
+#     `extract_features()` no longer drops anything. The legacy
+#     `.deterministic_residual_cols` constant is retained as an audit
+#     log of historically known residuals — it is no longer applied as
+#     a runtime filter by `extract_features()`, and the matrix-build
+#     site uses the whitelist semantics instead.
+#   * 0.4.1 (2026-05-09): `hs_any` re-included after Natalia's review
+#     decision. Initially removed in 0.4.0 because it is a derived
+#     helper synthesised from `hs_used_n > 0`; reverted to maintain
+#     historical parity with Phase B and the 30 production runs,
+#     and for cleaner reading in feature-importance tables.
+#
+# NOT exported.
+
+#' Canonical supervised-model feature whitelist (OtsuFire 0.4.1).
+#'
+#' The 51 columns the supervised XGBoost model sees, plus their
+#' auto-generated `<col>_isNA` missingness companions when the matrix
+#' builder synthesises them. Decided by Natalia on 2026-05-09. This list
+#' is FIXED — additions or removals are an explicit methodological
+#' decision and require a major-version bump and Natalia's approval.
+#'
+#' Notes:
+#'   * `block_id`, `fold_rep1`, `fold_rep2` are NOT features — they are
+#'     fold-assignment metadata consumed by the OOF wrapper. They must
+#'     survive in the GPKG but must NOT enter the model matrix.
+#'   * No ecoregion features (`eco_*`) in this build. The current
+#'     production config (`use_ecoregions = FALSE`) does not produce
+#'     them. A future build that enables them must add them to this
+#'     whitelist explicitly.
+#'   * Hotspot block (13 columns): the `hotspot_available`,
+#'     `hs_support_present`, `hs_no_support_when_available` and
+#'     `hs_only_buffer_support` flags are integers; their `_isNA`
+#'     companions are typically degenerate (no NAs) and the matrix
+#'     builder skips them. The non-flag hotspot columns
+#'     (`hs_in_poly`, `hs_in_buffer`, `hs_used_n`, `hs_min_dist_m`,
+#'     `hs_frp_sum`, `hs_frp_max`, `hs_conf_mean`, `hs_hiConf_n`) DO
+#'     get `_isNA` companions when the upstream year has no MODIS
+#'     hotspot data available (`hotspot_available == 0` in the
+#'     features extractor); those companions encode "no hotspots data
+#'     available" as a real signal.
+#'   * `hs_any` is a binary helper feature synthesised in
+#'     `internal-sup-create-matrix.R` from `hs_used_n > 0`. It is
+#'     included in the whitelist for historical parity with prior
+#'     Phase B runs.
+#'
+#' @keywords internal
+#' @noRd
+.supervised_feature_cols <- c(
+  # RBR same-window (5)
+  "rbr_valid_frac", "rbr_p10", "rbr_med", "rbr_p90", "rbr_iqr",
+
+  # CORINE land cover (7)
+  "cor_open_frac", "cor_wetlands_frac", "cor_water_frac",
+  "cor_herbaceous_frac", "cor_urban_frac", "cor_agri_frac",
+  "cor_forest_frac",
+
+  # Topography - elevation (7)
+  "elev_valid_frac", "elev_p10", "elev_med", "elev_p90",
+  "elev_iqr", "elev_mean", "elev_sd",
+
+  # Topography - slope (7)
+  "slope_valid_frac", "slope_p10", "slope_med", "slope_p90",
+  "slope_iqr", "slope_mean", "slope_sd",
+
+  # DOY (5)
+  "doy_valid_frac", "doy_p10", "doy_med", "doy_p90", "doy_iqr",
+
+  # RBR all-window + persistence (7)
+  "rbr_aw_valid_frac", "rbr_aw_p10", "rbr_aw_med", "rbr_aw_p90",
+  "rbr_aw_iqr", "persist_delta", "persist_ratio",
+
+  # Hotspots (13)
+  "hotspot_available", "hs_in_poly", "hs_in_buffer", "hs_used_n",
+  "hs_min_dist_m", "hs_frp_sum", "hs_frp_max", "hs_conf_mean",
+  "hs_hiConf_n", "hs_support_present", "hs_no_support_when_available",
+  "hs_only_buffer_support", "hs_any"
+)
+
+# Legacy deny list — RETAINED as an audit log of historically known
+# deterministic-stage residuals and sampling-biased columns. Under
+# 0.4.0 this list is NOT applied as a runtime filter by
+# `extract_features()` (which has been refactored to be ADD-only).
+# `train_final_model_direct()` no longer consults this list either;
+# its filter operates on the whitelist semantics
+# (`.supervised_feature_cols`). The constant is kept exported within
+# the package namespace because a small number of legacy regression
+# tests still reference it; it can be deleted in a future major
+# release once those tests are migrated.
+
+#' @keywords internal
+#' @noRd
+.deterministic_residual_cols <- c(
+  # Filter / decisions
+  "filter_1", "reason_1", "filter_2", "reason_2", "filter_3", "reason_3",
+  "preyear_action", "preyear_reason", "preyear_overlap_frac",
+  "class_final", "raw_class", "class_audited",
+  "legacy_decision",
+  # Geometric features deliberately excluded (sampling-induced size
+  # bias documented in NEWS.md 0.3.1).
+  "n_pix", "area_ha", "log_area", "perim_m",
+  "compactness", "elongation", "n_holes",
+  # Spectral residuals from deterministic Otsu/grow + scoring stages
+  "median_rbr",
+  "p_above_keep_q25", "p_above_keep_ref", "p_above_keep_q05",
+  "p_above_keep_q50", "p_above_keep_q75", "p_above_keep_q95",
+  "percentile_in_keep",
+  "conf_area", "conf_pix",
+  "flag_rbr",
+  # QA + OOF audit columns
+  "qa_changed", "qa_cert", "qa_uncert", "qa_final", "qa_action", "qa_contra",
+  "p_oof_mean", "p_oof_med", "p_oof_sd", "n_preds",
+  "p_oof_min_long", "p_oof_max_long", "n_oof_long",
+  "class_oof", "class_mismatch",
+  # Legacy GDAL/polygonize attributes that survive sf reads
+  "DN", "N_PIX_PIX", "AREA_HA_HA", "PATCH_ID_I", "N_TOTAL_TO",
+  "N_REF_100_", "REF_100_10", "CV_BASE_BA",
+  "NUCLEO", "VECINDAD", "DIST_M_M", "W_DIST_DIS",
+  "BOOST", "S_PATCH_PA", "T_STAR_STA", "BUF_M_M",
+  "THR_CORE_C", "ALPHA", "MB_MIN_MIN", "DPWR",
+  "KEEPHI", "DROP_LO_LO", "KEEP_P_P", "DECISION",
+  "CVPCT", "WKPCT"
+)
+
+# Helper: given a data.frame / sf names vector, return the subset of
+# names that are admissible model features under the 0.4.0 whitelist
+# semantics (a feature in the active `whitelist`, or its
+# auto-generated `<feat>_isNA` companion). Used by
+# `train_final_model_direct()`, `run_dm_oof_pipeline()`, and by tests
+# that assert the matrix builder's column set is a subset of this.
+#
+# 0.5.0 (2026-05-09): the `whitelist` argument lets callers pass an
+# active feature subset (e.g. `feature_whitelist_override`) while
+# defaulting to the canonical `.supervised_feature_cols`.
+#
+# @keywords internal
+# @noRd
+.filter_to_supervised_whitelist <- function(nms, whitelist = .supervised_feature_cols) {
+  feature_base <- whitelist
+  isNA_companions <- paste0(feature_base, "_isNA")
+  allowed <- c(feature_base, isNA_companions)
+  intersect(nms, allowed)
+}

@@ -1,0 +1,233 @@
+build_design_matrix_patches <- function(
+    labelled, burned_like,
+    
+    # columnas clave (para guardar y, ids)
+    id_col    = "fire_uid",
+    class_col = "class",
+    pos_lab   = "burned",
+    
+    # 1) columnas que NO son features
+    id_cols = c("fire_uid","class","source","poly_id","block_id","fold_rep1","fold_rep2"),
+    
+    # 2) filtros por patrón (regex)
+    drop_regex = c("^fold_rep", "^block_id$", "^source$", "^class$", "^fire_uid$", "^poly_id$"),
+    
+    # 3) categóricas a factor + "(missing)"
+    cat_cols = c("eco_major"),
+    
+    # 4) lógica hotspots (pon NA para desactivarla)
+    hs_n_col    = "hs_used_n",
+    hs_conf_col = "hs_conf_mean",
+    hs_frp_col  = "hs_frp_max",
+    
+    # 5) imputación
+    median_from = c("labelled", "all"),
+    
+    # 6) debug
+    return_prepared_df = FALSE,
+    
+    # 7) SAVE (nuevo)
+    save_dir = NULL,                 # si no es NULL -> guarda bundle
+    save_prefix = "patch_dm",         # prefijo de archivos
+    overwrite = TRUE,
+    save_matrix_market = FALSE,       # opcional: también guarda .mtx
+    verbose = TRUE
+) {
+  median_from <- match.arg(median_from)
+  
+  if (!requireNamespace("Matrix", quietly = TRUE)) stop("Falta paquete 'Matrix'.")
+  if (!requireNamespace("dplyr", quietly = TRUE))  stop("Falta paquete 'dplyr'.")
+  
+  stopifnot(is.data.frame(labelled), is.data.frame(burned_like))
+  if (!id_col %in% names(labelled)) stop("labelled no tiene id_col: ", id_col)
+  if (!id_col %in% names(burned_like)) stop("burned_like no tiene id_col: ", id_col)
+  if (!class_col %in% names(labelled)) stop("labelled no tiene class_col: ", class_col)
+  
+  msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
+  
+  # ---- 0) elegir columnas que entran al modelo ----
+  feat_cols <- setdiff(intersect(names(labelled), names(burned_like)), id_cols)
+  if (length(feat_cols) < 3) stop("Muy pocas features tras quitar id_cols.")
+  
+  if (length(drop_regex) > 0) {
+    keep <- rep(TRUE, length(feat_cols))
+    for (rgx in drop_regex) keep <- keep & !grepl(rgx, feat_cols)
+    feat_cols <- feat_cols[keep]
+  }
+  if (length(feat_cols) < 3) stop("Muy pocas features tras drop_regex. Revisa id_cols/drop_regex.")
+  
+  XL_feat  <- labelled[,    feat_cols, drop = FALSE]
+  XBL_feat <- burned_like[, feat_cols, drop = FALSE]
+  X_all <- dplyr::bind_rows(XL_feat, XBL_feat)
+  nL <- nrow(labelled)
+  
+  # Keep only explicitly requested categorical predictors.
+  other_cat_cols <- names(X_all)[vapply(X_all, function(x) is.character(x) || is.factor(x), logical(1))]
+  other_cat_cols <- setdiff(other_cat_cols, intersect(cat_cols, names(X_all)))
+  if (length(other_cat_cols) > 0) {
+    msg(
+      "Dropping categorical columns not listed in cat_cols: %s",
+      paste(other_cat_cols, collapse = ", ")
+    )
+    X_all <- X_all[, setdiff(names(X_all), other_cat_cols), drop = FALSE]
+  }
+  
+  # ---- 1) hotspots rules ----
+  # Derived helper feature: hs_any = 1 if at least one hotspot detected
+  # in the polygon, 0 otherwise. Synthesised from hs_used_n. Included
+  # in `.supervised_feature_cols` whitelist for historical parity.
+  # Restored in 0.4.1 after temporary removal in 0.4.0.
+  if (!is.na(hs_n_col) && hs_n_col %in% names(X_all)) {
+    X_all$hs_any <- as.integer(X_all[[hs_n_col]] > 0)
+  }
+
+  if (!is.na(hs_n_col) && !is.na(hs_conf_col) &&
+      all(c(hs_n_col, hs_conf_col) %in% names(X_all))) {
+    flag <- paste0(hs_conf_col, "_isNA")
+    X_all[[flag]] <- as.integer(is.na(X_all[[hs_conf_col]]))
+    X_all[[hs_conf_col]][is.na(X_all[[hs_conf_col]]) & X_all[[hs_n_col]] == 0] <- 0
+  }
+  
+  if (!is.na(hs_n_col) && !is.na(hs_frp_col) &&
+      all(c(hs_n_col, hs_frp_col) %in% names(X_all))) {
+    flag <- paste0(hs_frp_col, "_isNA")
+    X_all[[flag]] <- as.integer(is.na(X_all[[hs_frp_col]]))
+    X_all[[hs_frp_col]][is.na(X_all[[hs_frp_col]]) & X_all[[hs_n_col]] == 0] <- 0
+  }
+  
+  # ---- 2) categóricas ----
+  to_factor_with_missing <- function(x) {
+    x <- as.factor(x)
+    x <- addNA(x)
+    lev <- levels(x); lev[is.na(lev)] <- "(missing)"
+    levels(x) <- lev
+    x
+  }
+  
+  cat_cols_present <- intersect(cat_cols, names(X_all))
+  for (nm in cat_cols_present) X_all[[nm]] <- to_factor_with_missing(X_all[[nm]])
+  
+  factor_levels <- list()
+  fac_names <- names(X_all)[vapply(X_all, is.factor, logical(1))]
+  for (nm in fac_names) factor_levels[[nm]] <- levels(X_all[[nm]])
+  
+  # sparse.model.matrix() fails on factors with a single observed level.
+  single_level_factors <- fac_names[vapply(
+    X_all[fac_names],
+    function(x) nlevels(x) < 2,
+    logical(1)
+  )]
+  if (length(single_level_factors) > 0) {
+    msg(
+      "Dropping single-level factor columns before model matrix: %s",
+      paste(single_level_factors, collapse = ", ")
+    )
+    X_all <- X_all[, setdiff(names(X_all), single_level_factors), drop = FALSE]
+    factor_levels <- factor_levels[setdiff(names(factor_levels), single_level_factors)]
+    fac_names <- setdiff(fac_names, single_level_factors)
+  }
+  
+  # ---- 3) numéricas: flag NA + imputación ----
+  logical_cols <- names(X_all)[vapply(X_all, is.logical, logical(1))]
+  if (length(logical_cols) > 0) {
+    msg(
+      "Converting logical columns to integer before model matrix: %s",
+      paste(logical_cols, collapse = ", ")
+    )
+    for (nm in logical_cols) X_all[[nm]] <- as.integer(X_all[[nm]])
+  }
+  
+  num_names <- names(X_all)[vapply(X_all, is.numeric, logical(1))]
+  idx_median <- if (median_from == "labelled") seq_len(nL) else seq_len(nrow(X_all))
+  medians_used <- list()
+  
+  for (nm in num_names) {
+    # Bug 8 (0.3.0): only synthesise an `_isNA` flag for columns that
+    # are not themselves already `_isNA` flags. Otherwise we generate
+    # `<x>_isNA_isNA` second-order flags that bloat the matrix and
+    # leak through the deny lists.
+    is_existing_flag <- grepl("_isNA$", nm)
+    if (!is_existing_flag) {
+      flag_nm <- paste0(nm, "_isNA")
+      if (!flag_nm %in% names(X_all)) X_all[[flag_nm]] <- as.integer(is.na(X_all[[nm]]))
+    }
+
+    med <- stats::median(X_all[[nm]][idx_median], na.rm = TRUE)
+    if (is.na(med)) med <- 0
+    medians_used[[nm]] <- med
+    X_all[[nm]][is.na(X_all[[nm]])] <- med
+  }
+  
+  # ---- 4) matriz sparse ----
+  X_all_mat <- Matrix::sparse.model.matrix(~ . - 1, data = X_all, na.action = stats::na.pass)
+  XL_mat  <- X_all_mat[seq_len(nL), , drop = FALSE]
+  XBL_mat <- X_all_mat[(nL + 1):nrow(X_all_mat), , drop = FALSE]
+  
+  prep <- list(
+    feat_cols_used  = feat_cols,
+    id_col          = id_col,
+    class_col       = class_col,
+    pos_lab         = pos_lab,
+    id_cols_used    = id_cols,
+    drop_regex_used = drop_regex,
+    cat_cols_used   = cat_cols_present,
+    dropped_non_cat_cols = other_cat_cols,
+    dropped_single_level_factors = single_level_factors,
+    logical_cols_as_integer = logical_cols,
+    factor_levels   = factor_levels,
+    medians_used    = medians_used,
+    median_from     = median_from,
+    matrix_colnames = colnames(X_all_mat),
+    n_labelled      = nL
+  )
+  
+  # target + ids (para guardar)
+  y <- ifelse(labelled[[class_col]] == pos_lab, 1L, 0L)
+  id_labelled    <- labelled[[id_col]]
+  id_burned_like <- burned_like[[id_col]]
+  
+  out <- list(
+    XL_mat = XL_mat,
+    XBL_mat = XBL_mat,
+    y = y,
+    id_labelled = id_labelled,
+    id_burned_like = id_burned_like,
+    prep = prep
+  )
+  if (return_prepared_df) out$X_all_prepared <- X_all
+  
+  # ---- 5) SAVE bundle (opcional) ----
+  if (!is.null(save_dir)) {
+    dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+    
+    rds_path <- file.path(save_dir, paste0(save_prefix, "_design_bundle.rds"))
+    if (file.exists(rds_path) && !overwrite) stop("Ya existe: ", rds_path)
+    
+    bundle <- list(
+      XL_mat = XL_mat,
+      XBL_mat = XBL_mat,
+      y = y,
+      id_labelled = id_labelled,
+      id_burned_like = id_burned_like,
+      prep = prep,
+      meta = list(
+        created = Sys.time(),
+        R = R.version.string
+      )
+    )
+    
+    saveRDS(bundle, rds_path)
+    msg("Saved bundle: %s", rds_path)
+    
+    if (isTRUE(save_matrix_market)) {
+      Matrix::writeMM(XL_mat,  file.path(save_dir, paste0(save_prefix, "_XL_mat.mtx")))
+      Matrix::writeMM(XBL_mat, file.path(save_dir, paste0(save_prefix, "_XBL_mat.mtx")))
+      utils::write.csv(data.frame(y = y), file.path(save_dir, paste0(save_prefix, "_y.csv")), row.names = FALSE)
+      msg("Saved MatrixMarket + y.csv in: %s", save_dir)
+    }
+    
+    out$saved_bundle_path <- rds_path
+  }
+  
+  out
+}

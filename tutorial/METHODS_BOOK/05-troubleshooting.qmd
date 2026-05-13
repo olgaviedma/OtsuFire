@@ -1,0 +1,65 @@
+# Troubleshooting
+
+This chapter collects the failure modes and interpretation problems that are already visible in the current code and handoff. The goal is to direct users toward the first file or layer they should inspect, not to speculate beyond the available sources.
+
+## Quick Orientation
+
+Before debugging a specific stage, confirm five basics.
+
+1. The same `target_year`, `scenario`, and `result_name` are being used across all annual stages.
+2. The deterministic and supervised stages are reading the same annual mosaic family.
+3. The registry path corresponds to the intended scenario folder under `Results/<SCENARIO_UPPER>/`.
+4. The unburned-pool strategy is known in advance: `deterministic_direct` for benchmarking and equivalence testing, `all_sources` for standard operational runs.
+5. Support rasters used by supervised feature extraction match the geometry of the main annual change-index raster.
+
+## Symptom Matrix
+
+| Symptom | Likely cause | First place to inspect |
+|---|---|---|
+| Mosaic stage reports no rasters found | `folder_path` or `raster_pattern` does not match the intended annual tiles, or candidate files were already filtered as mosaic-like outputs | Tile names in the source folder and the `raster_pattern` passed to `change_index_mosaic()` |
+| Mosaic stage stops on CRS, resolution, origin, or band mismatch | Annual tiles are not geometrically compatible enough to be merged safely | The candidate tile set itself; compare each tile to the first selected reference tile |
+| Deterministic outputs differ across repeated runs | Registry state changed between runs or the deterministic seed was not controlled | Scenario-specific registry path and the `deterministic_seed` value |
+| `filter_2` is `not_applied` throughout `internal_decisions` | No hotspot file was available for that year | `1_DATA/Hotspots/hotspots_iberia_<year>.geojson` and the `filter_2` / `reason_2` columns |
+| Deterministic run fails before validation even when final validation was expected to be off | The current deterministic workflow still requires some reference inputs upstream of the final validation workbook | `Effis_CA_<year>.shp` and the deterministic input checks near the start of the runtime |
+| Supervised run aborts because the burned pool is empty | The deterministic stage did not leave enough `keep` polygons after QA | `05_DECISIONS/internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
+| Supervised run aborts because the review pool is empty | The deterministic stage did not leave an ambiguous annual set for supervised scoring | `internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
+| Feature extraction stops on raster geometry mismatch | DEM, slope, delayed change, or CORINE layers are not aligned to the main annual mosaic | The raster-geometry checks that run before `extract_features()` and the main annual mosaic used as template |
+| Package and standalone supervised results do not match | Deterministic inputs were not frozen, registry state differed, or the compared runs used different unburned-pool strategies | Frozen `internal_decisions`, registry snapshot, and whether `deterministic_direct` was forced in the bridge |
+| Registry update appears to write to the wrong place | The workflow is falling back to the legacy shared registry instead of the intended scenario-specific registry | `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg` versus `Results/_REGISTRIES/RBR_TRAINING_REGISTRY.gpkg` |
+| MASTER and standalone supervised results differ | This is expected when MASTER uses `all_sources` and the standalone script defaults to `deterministic_direct` | `SUP_UNB_STRATEGY` in `MASTER_FIRE_MAPPING_PIPELINE.R` and `UNB_STRATEGY` in `03_PATCH_LEVEL_PIPELINE_2.R` |
+| `all_sources` run fails with "Names must be unique: geometry at locations 23 and 55" | sf objects with different column counts were passed to `dplyr::bind_rows()`; fixed in Phase 2A by the `.bind_sf_safe()` helper | `03_PATCH_LEVEL_PIPELINE_2.R` STEP A4 `all_sources` branch; confirm `.bind_sf_safe()` is defined and called for the `det_final_raw` + `otsu_raw` combine |
+| `all_sources` run fails with "object 'res_unb' not found" | `res_unb` is assigned in the `deterministic_direct` branch but was not initialized in the `all_sources` branch | `03_PATCH_LEVEL_PIPELINE_2.R` STEP A4 `all_sources` branch end; confirm `res_unb <- NULL` is present |
+| User looks for the active LOYO script and finds a hard stop | The old LOYO script is archived on purpose | `00_USAGE/02_SUPERVISED_USAGE/YEAR_OOF_PIPELINE.R` |
+
+## Files Worth Checking First
+
+When a run looks wrong, these files are usually the highest-value first checks.
+
+| Workflow stage | First file or layer to inspect | Why |
+|---|---|---|
+| Mosaic | Annual mosaic GeoTIFF and returned diagnostics | Confirms the common raster base for all later stages |
+| Deterministic | `05_DECISIONS/internal_decisions.gpkg` | Canonical annual deterministic state |
+| Supervised pools | `01_POOLS/<year>_<scenario>_pools.gpkg` | Shows the actual burned, unburned, review, and scoring pools |
+| Supervised folds | `02_FOLDS/<year>_train_with_folds_<blocksize>m.gpkg` | Confirms fold assignment and training geometry |
+| Features | `03_FEATURES/features_geometry.gpkg` | Confirms feature extraction completed on the intended polygons |
+| OOF | `05_OOF/*_oof_agg.csv` and `*_oof_best_thresholds.csv` | Confirms same-year diagnostic behavior |
+| Final map | `09_FINAL_MAP/*_final_map.gpkg` | Distinguishes `final_map_full` from the public `final_map` |
+| Registry | `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg` plus ranked CSV and summary TXT | Confirms append behavior and scenario separation |
+| Consistency checks | `11_CONSISTENCY_CHECKS/*_consistency_summary.txt` | Summarizes supervised-vs-deterministic coherence issues |
+
+## Current Pending Gaps
+
+Some issues are known and should be treated as documentation boundaries rather than user mistakes.
+
+1. LOYO needs a new dedicated multiyear script and tutorial. The archived `YEAR_OOF_PIPELINE.R` confirms that the replacement is still pending.
+2. Historical application is only partially documented through registry behavior and paper-level transfer logic. A dedicated operational entry point is still pending.
+3. ~~Five exported package functions are missing Rd documentation pages~~ **RESOLVED (2026-04-22, F6/F9)** — the 4 bridge exports (`build_burned_mapping_config`, `build_supervised_burned_config`, `run_deterministic_pipeline`, `run_oneyear_supervised_pipeline`) plus the workflow-independent validation utility `validate_fire_maps()` now have roxygen2-generated Rd pages. `build_supervised_burned_config` was missing from NAMESPACE (fixed). `%||%` removed from public API. 15 exports total. See HANDOFF Sections 53, 58, 58b.
+4. ~~`validate_fire_maps.Rd` documents a v1 signature; run `devtools::document()` to regenerate from current source~~ **RESOLVED (2026-04-22, F6)** — `devtools::document()` was run; all Rd pages regenerated from current source. No further action needed unless new exports are added.
+
+::: {.callout-note}
+Supervised package-vs-standalone equivalence has been validated (2026-04-16) under frozen deterministic inputs for 2025/balanced (`deterministic_direct` strategy, exact match across 1002 polygons). For reproducibility comparisons, always force `UNB_STRATEGY = "deterministic_direct"` in the standalone script and pass `negative_pool_policy = "deterministic_direct"` through the bridge config.
+:::
+
+::: {.callout-note}
+The registry-based positive-pool augmentation design (Mode B / `historical_registry_augment`) was formally rejected on 2026-04-17. It is not a pending gap. If old documentation or config files reference it as planned work, treat those references as stale.
+:::

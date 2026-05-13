@@ -1,0 +1,56 @@
+Package: OtsuFire
+Title: Otsu-Based Burned-Area Mapping with rule-based unsupervised filters and supervised classification
+Version: 0.5.0
+Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
+             person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
+             person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
+             person("Jose Manuel", "Moreno", email = "jm.moreno@uclm.es", role = "ctb"))
+Description: Reproducible multi-year burned-area mapping from change-index
+    rasters. Provides a mosaic stage, a unsupervised Otsu/grow segmentation
+    workflow, a supervised one-year probabilistic workflow, and a shared
+    workflow-independent validation utility. 
+License: GPL-3
+URL: https://github.com/olgaviedma/OtsuFire
+BugReports: https://github.com/olgaviedma/OtsuFire/issues
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.2)
+Imports:
+    sf,
+    terra,
+    dplyr,
+    tibble,
+    stringr,
+    glue,
+    openxlsx,
+    exactextractr,
+    data.table,
+    future,
+    future.apply,
+    progressr,
+    parallelly,
+    magrittr,
+    xgboost,
+    stats,
+    utils,
+    tools,
+    graphics,
+    grDevices
+Suggests:
+    OtsuSeg,
+    whitebox,
+    gdalUtilities,
+    lwgeom,
+    Matrix,
+    igraph,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,
+    only used when grow_engine = "whitebox" in the deterministic stage);
+    Python (>= 3.8) with GDAL bindings (optional, only required when
+    negative_pool_policy = "all_sources" in the supervised one-year
+    workflow, which shells out to gdal_polygonize.py and ogr2ogr).
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+RoxygenNote: 7.3.2

@@ -1,0 +1,143 @@
+# One-Year Workflows
+
+This chapter is the practical tutorial layer of the book. It summarizes how the currently documented annual pieces fit together and which entry point is most appropriate for each use case.
+
+## Choose An Entry Point
+
+| Need | Recommended entry point | Why |
+|---|---|---|
+| Build the annual mosaic | `change_index_mosaic()` | Current package-facing mosaic function |
+| Run annual deterministic mapping | `00_USAGE/01_DETERMINISTIC_USAGE/DETERMINISTIC_PIPELINE.R` | Clearest canonical standalone runtime |
+| Run deterministic through the package layer | `build_burned_mapping_config()` + `run_deterministic_pipeline()` | Current bridge API |
+| Run annual supervised mapping | `00_USAGE/02_SUPERVISED_USAGE/03_PATCH_LEVEL_PIPELINE_2.R` | Clearest canonical standalone runtime |
+| Run supervised through the package layer | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` | Current bridge API |
+| Validate a compatible burned-area prediction layer | `validate_fire_maps()` | Shared workflow-independent validation utility |
+| Run deterministic plus supervised in one convenience wrapper | `MASTER_FIRE_MAPPING_PIPELINE.R` | Useful for batch orchestration, but not a neutral benchmark for supervised defaults |
+
+## Recommended Annual Sequence
+
+The current annual workflow should be read in the following order.
+
+1. Prepare the annual change-index mosaic for the target year.
+2. Run the deterministic stage for the same year and scenario.
+3. Inspect `05_DECISIONS/internal_decisions.gpkg` before moving on.
+4. Run the one-year supervised workflow on the same year and scenario.
+5. Review the annual public map, the full scored universe, and the scenario-specific registry update.
+
+That sequence reflects the active runtime design: the supervised stage consumes the deterministic annual output rather than replacing it.
+
+## Package-Facing Annual Example
+
+The bridge layer is useful when a package-style entry point is preferred and the standard project layout is available.
+
+### Deterministic bridge
+
+```r
+det_cfg <- build_burned_mapping_config(
+  target_year = 2025,
+  scenario = "balanced",
+  scripts_root = "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS",
+  result_name = "Min_Min",
+  deterministic_seed = 12345
+)
+
+det_run <- run_deterministic_pipeline(det_cfg)
+```
+
+The most important object to inspect after this run is `internal_decisions.gpkg`.
+
+### Supervised bridge
+
+```r
+sup_cfg <- build_supervised_burned_config(
+  target_year = 2025,
+  scenario = "balanced",
+  scripts_root = "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS",
+  result_name = "Min_Min",
+  options = list(
+    negative_pool_policy = "deterministic_direct"
+  )
+)
+
+sup_run <- run_oneyear_supervised_pipeline(
+  sup_cfg,
+  run_consistency = FALSE
+)
+```
+
+Use `negative_pool_policy = "deterministic_direct"` when the goal is benchmarking, reproducibility testing, or package-vs-standalone comparison. This forces the canonical baseline unburned strategy. For standard production runs, omit the override and use `all_sources` (the operational default), which applies the Phase 2A four-bucket unburned taxonomy.
+
+::: {.callout-note}
+The current supervised bridge stores several custom path overrides in its configuration object, but the delegated runtime still relies mainly on the standard project layout when it actually runs. In other words, the bridge is usable, but it is still a bridge rather than a fully path-agnostic package workflow.
+:::
+
+## Standalone Annual Sequence
+
+The standalone scripts remain the clearest operational reference.
+
+1. Create or confirm the annual mosaic.
+2. Run `DETERMINISTIC_PIPELINE.R` for the target year and scenario.
+3. Run `03_PATCH_LEVEL_PIPELINE_2.R` for the same year and scenario.
+4. Optionally run `CHECK_DETERMINISTIC_SUPERVISED_CONSISTENCY.R` after supervised scoring.
+
+## What To Inspect After Each Stage
+
+### After mosaic
+
+- Confirm that the annual GeoTIFF exists and has the expected year and run naming.
+- Check whether the returned diagnostics show the expected number of tiles and the intended lower-cap behavior.
+
+### After deterministic
+
+- Inspect `05_DECISIONS/internal_decisions.gpkg`.
+- Confirm that `filter_1`, `filter_2`, `filter_3`, `preyear_action`, and `class_final` are populated as expected for the year.
+- If validation is enabled, inspect the validation workbook and aligned validation layers.
+
+### After supervised
+
+- Inspect `01_POOLS` to confirm burned, unburned, review, and scoring pools.
+- Inspect `02_FOLDS` and `03_FEATURES` before interpreting OOF or final-map results.
+- Inspect `05_OOF` as a diagnostic block, not as the final annual classification.
+- Inspect `09_FINAL_MAP` for `final_map_full`, `final_map`, and `burned_like_scored`.
+- For external validation, threshold `p_burned` or `p_burned_current_year` first, then validate the resulting prediction layer with `validate_fire_maps()`.
+- Inspect `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg` and its ranked summary files after registry update.
+
+## Annual Output Layout
+
+The current folder conventions are part of the workflow and should be understood as stable interpretive units.
+
+### Deterministic annual folders
+
+| Folder | Current role |
+|---|---|
+| `01_GROW` | Initial Otsu plus grow polygon outputs |
+| `02_REFINE` | Refined and merged candidate polygons |
+| `03_SCORE_PHASE1` and `04_SCORE_PHASE2` | Intermediate scoring outputs |
+| `05_DECISIONS` | Canonical deterministic decision layers |
+| `06_VALIDATION` | Validation rasters, prediction layers, and workbook |
+
+### Supervised annual folders
+
+| Folder | Current role |
+|---|---|
+| `01_POOLS` | Deterministic pool QA plus burned, unburned, review, and scoring pools |
+| `02_FOLDS` | Spatial blocks, fold tables, and `train_with_folds` |
+| `03_FEATURES` | Train and scoring feature layers |
+| `04_MATRIX` | Design matrices and model-input bundles |
+| `05_OOF` | OOF diagnostics and threshold summaries |
+| `07_FINAL_MODEL_V2` | Final model objects and model summary files |
+| `08_SCORED` | Full scored deterministic universe |
+| `09_FINAL_MAP` | `final_map_full`, `final_map`, counts, and burned-like export |
+| `11_CONSISTENCY_CHECKS` | Optional deterministic-versus-supervised consistency diagnostics |
+
+## Benchmarking And Comparisons
+
+The handoff provides clear guidance for fair comparisons.
+
+- Deterministic comparisons must use the same frozen registry snapshot and the same explicit `deterministic_seed`.
+- Supervised comparisons should freeze the deterministic input layer and the registry snapshot and should force `negative_pool_policy = "deterministic_direct"` (the `deterministic_direct` baseline strategy).
+- The MASTER workflow should not be used as a neutral comparison baseline for supervised benchmarking because it uses the `all_sources` operational strategy rather than the canonical baseline.
+
+::: {.callout-warning}
+LOYO is not part of the current one-year workflow tutorial. The old `YEAR_OOF_PIPELINE.R` entry point is archived, and the replacement multiyear workflow still needs dedicated documentation.
+:::

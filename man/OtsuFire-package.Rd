@@ -37,17 +37,23 @@ workflow-independent validation utility.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/nat-kin/OtsuFire}
-  \item Report bugs at \url{https://github.com/nat-kin/OtsuFire/issues}
+  \item \url{https://github.com/olgaviedma/OtsuFire}
+  \item Report bugs at \url{https://github.com/olgaviedma/OtsuFire/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Natalia Kinitskyi \email{nat.kin1807@gmail.com}
+\strong{Maintainer}: Olga Viedma \email{olga.viedma@uclm.es}
 
 Authors:
 \itemize{
-  \item Olga Viedma
+  \item Natalia Quintero \email{natalia.quintero@alu.uclm.es}
+}
+
+Other contributors:
+\itemize{
+  \item Hammadi Achour \email{hammadi.achour@gmail.com} [contributor]
+  \item Jose Manuel Moreno \email{jm.moreno@uclm.es} [contributor]
 }
 
 }

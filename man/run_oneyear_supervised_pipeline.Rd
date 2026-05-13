@@ -12,8 +12,10 @@ run_oneyear_supervised_pipeline(
   spectral_hard_negative_to_burned_ratio = 1,
   random_to_burned_ratio = 1,
   otsu_unburned_to_burned_ratio = 1,
-  additional_drop_cols = character(0),
-  reuse_upstream = FALSE
+  feature_whitelist_override = NULL,
+  feature_weights = NULL,
+  reuse_upstream = FALSE,
+  ...
 )
 }
 \arguments{
@@ -45,17 +47,32 @@ multiple of `n_burned`. Default `1.0` (historical behaviour).}
 unburned-patch negatives for the FINAL model, as a multiple of
 `n_burned`. Default `1.0` (historical behaviour).}
 
-\item{additional_drop_cols}{Character vector. Extra column names to
-drop from the design matrix when fitting the FINAL model. ADDITIVE
-to the default `extra_drop_cols` of `train_final_model_direct()`
-(the wrapper combines them via `unique(c(default, additional_drop_cols))`).
-Intended for feature-ablation experiments — for example, excluding
-the eight hotspot-presence features
-`c("hs_in_poly", "hs_in_buffer", "hs_used_n", "hs_min_dist_m",
-"hs_frp_sum", "hs_frp_max", "hs_conf_mean", "hs_hiConf_n")` to test
-whether the "hotspot ⇒ burned" collapse documented in the 2025 / 2012
-supervised audits is mitigated by removing the dominant feature
-group. Default `character(0)` (no additions, historical behaviour).}
+\item{feature_whitelist_override}{Character vector. Optional subset
+of the canonical `.supervised_feature_cols` whitelist that the
+supervised stages (OOF + final model) are allowed to see. Names
+not in `.supervised_feature_cols` are rejected with an error: the
+canonical list is fixed and this argument can only RESTRICT it,
+never extend it. Default `NULL` reproduces the canonical 51-feature
+behaviour. The OOF wrapper and the final model both consume the
+same active whitelist, so OOF metrics and final-model behaviour
+stay symmetric. Phase B Exp4b example: pass
+`setdiff(OtsuFire:::.supervised_feature_cols,
+        c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`
+to drop the four hotspot-presence features.}
+
+\item{feature_weights}{Named numeric vector forwarded to xgboost via
+the `xgb.DMatrix` `feature_weights` info on every per-fold OOF
+dtrain/dtest and on the final-model dtrain/dval. Names must
+correspond to columns of the supervised design matrix
+(i.e. members of the active whitelist or their `_isNA`
+companions). Names that do not appear in the active feature space
+trigger a warning and are silently dropped; features the caller
+does not name implicitly receive weight 1.0. Values must be
+finite and >= 0; values in (0, 1) attenuate, > 1 boost. Default
+`NULL` reproduces the canonical uniform-1.0 behaviour. Phase B
+Exp5a example: pass
+`setNames(rep(0.05, length(hs_cols)), hs_cols)` for the 13
+hotspot columns to attenuate them by 20×.}
 
 \item{reuse_upstream}{Logical. When `TRUE`, skip STEP A (pools),
 STEP B1-B2 (folds), and STEP B3 (features), and consume pre-existing
@@ -91,18 +108,35 @@ NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
 Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
 be passed to [validate_fire_maps()] for external validation.
 }
-\section{Phase B sampling caps}{
+\section{Phase B sampling caps and feature space}{
 
-The six extra arguments above are pure pass-through hooks introduced
-on 2026-05-07 to support the Phase B experiment matrix
+The pass-through hooks above support the Phase B experiment matrix
 (cap_contextual ∈ {0.25, 1.0, Inf} × cap_spectral ∈ {1.0, 2.0} ×
 hotspot-feature variants {All, L1, L2, None}) and the eventual mass
 re-training (10 years × 3 scenarios). All defaults reproduce the
-historical behaviour byte-for-byte; a caller that does not pass them
-obtains exactly the same final model as before this update. See
-`1_DATA/Results/PIPELINE_AUDIT/wrapper_update_report_v2.md` and the
-"Wrapper update — supervised sampling caps and feature exclusion"
-section of the project HANDOFF.
+historical behaviour byte-for-byte; a caller that does not pass
+them obtains exactly the same final model as before.
+
+OtsuFire 0.5.0 (2026-05-09): the deprecated `additional_drop_cols`
+deny-list was removed. Callers that pass it now get a hard error
+with a migration message pointing at `feature_whitelist_override`.
+Phase B Exp4b is reproduced by passing
+`feature_whitelist_override = setdiff(.supervised_feature_cols,
+c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`;
+Phase B Exp5a is reproduced by passing a `feature_weights` vector
+that sets the 13 hotspot columns to 0.05.
+}
+
+\section{terra memory ceiling}{
+
+On entry the function lifts `terra::terraOptions(memmax)` to 16 GB
+and restores the previous value on exit (`on.exit()`), so the
+caller's R session is not contaminated. The default terra ceiling
+(~1 GB) forces per-feature processing on large mosaics and was
+exhausting RAM inside `extract_features()` and downstream raster
+stages when the annual mosaic carried ~16k polygons (e.g. 2025).
+The 16 GB ceiling assumes the host has at least that much free
+RAM available; the package was developed on a 64 GB machine.
 }
 
 \seealso{

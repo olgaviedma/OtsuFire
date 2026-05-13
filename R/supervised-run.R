@@ -90,6 +90,16 @@
 #' Phase B Exp5a is reproduced by passing a `feature_weights` vector
 #' that sets the 13 hotspot columns to 0.05.
 #'
+#' @section terra memory ceiling:
+#' On entry the function lifts `terra::terraOptions(memmax)` to 16 GB
+#' and restores the previous value on exit (`on.exit()`), so the
+#' caller's R session is not contaminated. The default terra ceiling
+#' (~1 GB) forces per-feature processing on large mosaics and was
+#' exhausting RAM inside `extract_features()` and downstream raster
+#' stages when the annual mosaic carried ~16k polygons (e.g. 2025).
+#' The 16 GB ceiling assumes the host has at least that much free
+#' RAM available; the package was developed on a 64 GB machine.
+#'
 #' @return A named list of class `otsufire_supervised_run` with fields:
 #'   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
 #'   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,

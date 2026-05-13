@@ -90,6 +90,16 @@
 #' Phase B Exp5a is reproduced by passing a `feature_weights` vector
 #' that sets the 13 hotspot columns to 0.05.
 #'
+#' @section terra memory ceiling:
+#' On entry the function lifts `terra::terraOptions(memmax)` to 16 GB
+#' and restores the previous value on exit (`on.exit()`), so the
+#' caller's R session is not contaminated. The default terra ceiling
+#' (~1 GB) forces per-feature processing on large mosaics and was
+#' exhausting RAM inside `extract_features()` and downstream raster
+#' stages when the annual mosaic carried ~16k polygons (e.g. 2025).
+#' The 16 GB ceiling assumes the host has at least that much free
+#' RAM available; the package was developed on a 64 GB machine.
+#'
 #' @return A named list of class `otsufire_supervised_run` with fields:
 #'   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
 #'   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
@@ -142,6 +152,24 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
     stop("Unused arguments passed to run_oneyear_supervised_pipeline(): ",
          paste(names(.dots), collapse = ", "), call. = FALSE)
   }
+
+  # terra memory ceiling: lift from default (~1 GB) to 16 GB for the
+  # whole one-year supervised run, so large mosaics (e.g. ~16k polygons
+  # in 2025) do not force terra into per-feature mode inside
+  # extract_features() and downstream raster stages. Restored on exit
+  # so the user's R session is not contaminated.
+  .prev_memmax <- tryCatch(
+    terra::terraOptions(print = FALSE)$memmax,
+    error = function(e) NA_real_
+  )
+  terra::terraOptions(memmax = 16)
+  on.exit({
+    if (is.finite(.prev_memmax)) {
+      terra::terraOptions(memmax = .prev_memmax)
+    } else {
+      terra::terraOptions(default = TRUE)
+    }
+  }, add = TRUE)
 
   .of_check_input_file(config$inputs$internal_decisions, "internal_decisions")
   .of_check_input_file(config$inputs$change_index,       "change_index")

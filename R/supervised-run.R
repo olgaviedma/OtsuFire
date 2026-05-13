@@ -143,6 +143,24 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
          paste(names(.dots), collapse = ", "), call. = FALSE)
   }
 
+  # terra memory ceiling: lift from default (~1 GB) to 16 GB for the
+  # whole one-year supervised run, so large mosaics (e.g. ~16k polygons
+  # in 2025) do not force terra into per-feature mode inside
+  # extract_features() and downstream raster stages. Restored on exit
+  # so the user's R session is not contaminated.
+  .prev_memmax <- tryCatch(
+    terra::terraOptions(print = FALSE)$memmax,
+    error = function(e) NA_real_
+  )
+  terra::terraOptions(memmax = 16)
+  on.exit({
+    if (is.finite(.prev_memmax)) {
+      terra::terraOptions(memmax = .prev_memmax)
+    } else {
+      terra::terraOptions(default = TRUE)
+    }
+  }, add = TRUE)
+
   .of_check_input_file(config$inputs$internal_decisions, "internal_decisions")
   .of_check_input_file(config$inputs$change_index,       "change_index")
 

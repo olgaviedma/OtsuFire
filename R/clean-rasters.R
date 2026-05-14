@@ -133,9 +133,13 @@ clean_raster_inmem <- function(
   raster_min <- NA_real_
   min_below_cap <- FALSE
   if (isTRUE(cap_below)) {
-    raster_min <- terra::global(r, "min", na.rm = TRUE)[1, 1]
-    if (is.finite(raster_min)) {
-      min_below_cap <- raster_min < lower_cap
+    raster_min <- terra::global(
+      terra::ifel(is.finite(r), r, NA),
+      "min",
+      na.rm = TRUE
+    )[1, 1]
+    if (is.finite(raster_min) && raster_min < lower_cap) {
+      min_below_cap <- TRUE
     }
   }
 

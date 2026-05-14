@@ -21,6 +21,11 @@
 #' when writing a freshly built mosaic: replace non-finite pixels with `NA`,
 #' cap pixels below `lower_cap`, and force the NoData flag to
 #' `expected_nodata`.
+#'
+#' This is an internal helper used by `clean_raster_file()` and by the
+#' deterministic and supervised orchestrators of OtsuFire as a safeguard
+#' before segmentation and feature extraction. For public use, prefer
+#' [clean_raster_file()] which operates on file paths.
 #' @param r `SpatRaster`. Raster to inspect.
 #' @param name Character scalar. Label used in messages, warnings, and stop
 #'   conditions to identify the raster being processed.
@@ -49,7 +54,7 @@
 #'
 #' clean_raster_inmem(r, name = "rbr_summer_2022", action = "report_only")
 #' }
-#' @noRd
+#' @keywords internal
 clean_raster_inmem <- function(
     r,
     name = "raster",
@@ -301,15 +306,44 @@ clean_raster_inmem <- function(
 #'   `"ask"`, or when an overwrite is performed (the final file lives at the
 #'   original path).
 #' @examples
-#' \dontrun{
-#' clean_raster_file("path/to/rbr_summer_2022.tif")
+#' # Synthetic example: a clean raster on disk. Because it is already clean,
+#' # the function returns the path without prompting even with action = "ask".
+#' tmp_path <- tempfile(fileext = ".tif")
+#' r <- terra::rast(
+#'   nrows = 10, ncols = 10,
+#'   xmin = 0, xmax = 10,
+#'   ymin = 0, ymax = 10,
+#'   vals = c(rep(NA_real_, 20), seq(-500, 290, length.out = 80))
+#' )
+#' terra::writeRaster(
+#'   r,
+#'   tmp_path,
+#'   overwrite = TRUE,
+#'   wopt = list(
+#'     datatype = "FLT4S",
+#'     NAflag = -9999,
+#'     gdal = c("COMPRESS=LZW", "TILED=YES")
+#'   )
+#' )
 #'
 #' clean_raster_file(
-#'   "path/to/rbr_summer_2022.tif",
-#'   action = "backup_and_overwrite"
+#'   raster_path = tmp_path,
+#'   expected_nodata = -9999,
+#'   lower_cap = -1000,
+#'   action = "ask",
+#'   verbose = TRUE
+#' )
+#'
+#' \dontrun{
+#' # Example with a generic user path
+#' clean_raster_file(
+#'   raster_path = "path/to/your/raster.tif",
+#'   expected_nodata = -9999,
+#'   lower_cap = -1000,
+#'   action = "ask"
 #' )
 #' }
-#' @noRd
+#' @export
 clean_raster_file <- function(
     raster_path,
     expected_nodata = -9999,

@@ -1,4 +1,4 @@
-# OtsuFire: Fire Mapping Assessment Toolkit
+﻿# OtsuFire: Fire Mapping Assessment Toolkit
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/OtsuFire_logo.png" width="400"/>
@@ -164,6 +164,32 @@ out_mosaic
 
 ```
 
+## 0.1b. OPTIONAL: Clean raster values before segmentation
+```r
+# Input from the mosaic/resample step
+in_file  <- "ZENODO/exdata/MinMin_2025_mosaic_res90m.tif"
+out_file <- "ZENODO/exdata/MinMin_2025_mosaic_res90m_clean.tif"
+
+# Write cleaned raster to disk
+clean_raster_file(
+  in_file = in_file,
+  out_file = out_file,
+  set_na_values = c(-9999, -32768),
+  clamp_min = 0,
+  clamp_max = 1500,
+  overwrite = TRUE
+)
+
+# Optional in-memory variant
+r <- terra::rast(in_file)
+r_clean <- clean_raster_inmem(
+  r = r,
+  set_na_values = c(-9999, -32768),
+  clamp_min = 0,
+  clamp_max = 1500
+)
+```
+
 ## 0.2. OPTIONAL: Reclassify and mask CORINE raster
 ```r
 
@@ -198,7 +224,7 @@ base_dir <- "ZENODO/exdata"
 out <- corine_mask_reclass(
   corine_rasters       = file.path(base_dir, "U2018_CLC2018_V2020_20u1_IBERIAN_ETRS89.tif"),
   peninsula_shapefile  = file.path(base_dir,"iberian_peninsula_proj_final.shp"),
-  template_raster_path = file.path(base_dir,"MinMin_2025_mosaic_res90m.tif"),
+  template_raster_path = file.path(base_dir,"MinMin_2025_mosaic_res90m_clean.tif"),
 
   corine_value_col   = "GRID_CODE",
   group_rcl_matrix   = my_reclass,
@@ -239,7 +265,7 @@ dir.create(base_out, showWarnings = FALSE, recursive = TRUE)
 
 base_dir <- "ZENODO/exdata"
 
-raster_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m.tif")
+raster_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m_clean.tif")
 corine_raster_path <- file.path(base_dir,"corine18_burnable_classes.tif")
 ecoregion_shapefile_path <- file.path(base_dir,"ecoregiones_olson.shp")
 peninsula_shapefile <- file.path(base_dir,"iberian_peninsula_proj_final.shp")
@@ -323,7 +349,7 @@ peninsula_shapefile <- file.path(base_dir,"iberian_peninsula_proj_final.shp")
 ```r
 
 base_dir <- "ZENODO/exdata"
-raster_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m.tif")
+raster_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m_clean.tif")
 corine_raster_path <- file.path(base_dir,"corine18_reclass.tif")
 ecoregion_shapefile_path <- file.path(base_dir,"ecoregiones_olson.shp")
 peninsula_shapefile <- file.path(base_dir,"iberian_peninsula_proj_final.shp")
@@ -430,7 +456,7 @@ final_merged <- merge_aoi_shapefiles(
   polys_stage2_path <- file.path(out_growth, "BA_2025_REFINE_MERGED_300_100_seed30_30_classes.gpkg")
   
   base_dir <- "ZENODO/exdata"
-  rbr_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m.tif")
+  rbr_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m_clean.tif")
   
   # If you have reference burned polygons as file, use path. If already loaded (ref_effis), skip this.
   ref_effis_path <- file.path(base_dir,"Effis_CA_2025.shp")
@@ -541,7 +567,7 @@ sf::st_layers(gpkg_phase1)
 stage2_keep_review <- sf::st_read(gpkg_phase1, layer = "internal_flagged", quiet = TRUE)
 
 base_dir <- "ZENODO/exdata"
-rbr_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m.tif")
+rbr_path <- file.path(base_dir, "MinMin_2025_mosaic_res90m_clean.tif")
 rbr_rast <- terra::rast(rbr_path)
 rbr_rast <- rbr_rast[[1]]
 
@@ -785,7 +811,7 @@ sf::st_layers(gpkg_phase2_ref)
 effis_scored <- sf::st_read(gpkg_phase2_ref, layer = "scored", quiet = TRUE)
 
 
-rbr_path <- "ZENODO/exdata/MinMin_2025_mosaic_res90m.tif"
+rbr_path <- "ZENODO/exdata/MinMin_2025_mosaic_res90m_clean.tif"
 rbr_rast <- terra::rast(rbr_path)
 rbr_rast <- rbr_rast[[1]]
 
@@ -807,7 +833,7 @@ res <- histograms_internal_external(
 out_dir_merge1 <- file.path(out_scoring, "phase4a_histograms_tests")
 dir.create(out_dir_merge1, recursive = TRUE, showWarnings = FALSE)
 
-# 2) If RBFR median doesnÃƒâ€šÃ‚Â´t exist or is empty-> use raster "rbr_rast""
+# 2) If RBFR median doesnÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´t exist or is empty-> use raster "rbr_rast""
 res <- phase4_diagnostics_internal_external(
   internal_sf = internal_scored,
   ref_sf      = effis_scored,
@@ -997,8 +1023,8 @@ borders_shp <- "ZENODO/exdata/iberian_peninsula_comunidades.shp"
 burnable_raster <- "ZENODO/exdata/corine90_burnable_mask_binary.tif"
 
 origin_to_nameunit <- c(
-  "Andalucia" = "AndalucÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a",
-  "CataluÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a"  = "CataluÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a/Catalunya",
+  "Andalucia" = "AndalucÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a",
+  "CataluÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±a"  = "CataluÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±a/Catalunya",
   "CLM"       = "Castilla-La Mancha",
   "Madrid"    = "Comunidad de Madrid",
   "Navarra"   = "Comunidad Foral de Navarra",
@@ -1185,7 +1211,7 @@ out_scoring   <- file.path(base_out, "CORINE_ECOREG_seed_30pix")
 validation_dir <- file.path(out_scoring, "VALIDATION_BURNEABLE_LULC_ALL_POLYS/VAL/VAL_2025_burneable_LULC_all_polys/CONF")
 polys <- file.path(validation_dir,"VAL_2025_confusion_polys_2025_burneable_LULC_all_polys.gpkg")
 
-rbr_fire <- "ZENODO/exdata/MinMin_2025_mosaic_res90m.tif"
+rbr_fire <- "ZENODO/exdata/MinMin_2025_mosaic_res90m_clean.tif"
 
 res <- validation_statistics(
   polys = polys,
@@ -1220,6 +1246,7 @@ Quintero, N.; Viedma, O.; Achour, H.; and Moreno, J. M. (2025). OtsuFire: Fire S
 ## Disclaimer
 
 **OtsuFire package comes with no guarantee, expressed or implied, and the authors hold no responsibility for its use or reliability of its outputs.**
+
 
 
 

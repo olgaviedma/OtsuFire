@@ -76,7 +76,7 @@ print(osgeo.gdal.__version__)
 - Functions support large-area mosaics, tiling, and region-specific thresholding.
 - Always ensure gdal_polygonize.py is accessible and executable.
 
-## Note: All input files are automatically downloaded and extracted from Zenodo (https://doi.org/10.5281/zenodo.15322380) into a local ZENODO/exdata directory. Paths in this document assume that directory structure.
+<small> Note: All input files are automatically downloaded and extracted from Zenodo (https://doi.org/10.5281/zenodo.15322380) into a local ZENODO/exdata directory. Paths in this document assume that directory structure.
 
 # Getting Started
 

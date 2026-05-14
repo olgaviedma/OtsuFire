@@ -1,5 +1,11 @@
 # OtsuFire: Fire Mapping Assessment Toolkit
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/OtsuFire_logo.png" width="400"/>
+</p>
+
+<h1 align="center">OtsuFire: Fire Scars and Severity Mapping Toolkit</h1>
+
 **Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, Jose Manuel Moreno
 
 Automated tools to map fire scars using Landsat-based RBR/dNBR composites and Otsu thresholding. Includes mosaic preparation, segmentation, refinement, scoring, merging, and validation workflows.

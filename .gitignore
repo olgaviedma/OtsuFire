@@ -50,3 +50,4 @@ Thumbs.db
 .Rbuildignore
 .Rcheck/
 *.tar.gz
+.positai

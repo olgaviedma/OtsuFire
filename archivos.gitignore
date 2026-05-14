@@ -1,0 +1,43 @@
+# Archivos de configuración y sesiones locales
+.Renviron
+.Rhistory
+.RData
+.Rproj.user/
+
+# Archivos de pruebas temporales
+tests/testthat/_snaps/
+tests/testthat/_local/
+
+# Archivos temporales comunes
+*.tmp
+*.bak
+*.old
+*.log
+
+# Archivos de salida pesados
+*.tif
+*.las
+*.aux.xml
+*.shp
+*.dbf
+*.shx
+*.prj
+*.cpg
+
+# Carpetas de salida (ajustar según tus scripts)
+output/
+outputs/
+temp/
+tmp/
+*.Rout
+*.Rout.save
+
+# Archivos del README generados localmente
+README.Rmd
+README.md
+
+# Archivos de sistema (Windows/Mac)
+.DS_Store
+Thumbs.db
+
+

@@ -1,7 +1,7 @@
 Package: OtsuFire
 Type: Package
 Title: Fire Scars, Severity and Regeneration Mapping Using 'Otsu' Thresholding
-Version: 0.1.4
+Version: 0.1.5
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
              person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
              person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
@@ -19,19 +19,18 @@ BugReports: https://github.com/olgaviedma/OtsuFire/issues
 Depends: R (>= 4.1.0)
 Imports:
     data.table,
-    dplyr,
     gdalUtilities,
     glue,
-    purrr,
-    raster,
     sf,
     stringr,
-    terra,
-    magrittr,
-    tidyr,
-    rlang,
-    OtsuSeg
-Suggests: 
+    terra
+Suggests:
+    OtsuSeg,
+    whitebox,
     testthat (>= 3.0.0)
+SystemRequirements:
+    GDAL (gdalwarp, gdalbuildvrt; optional gdal_polygonize.py),
+    Python (optional, for gdal_polygonize.py),
+    WhiteboxTools (optional, for grow_engine='whitebox')
 RoxygenNote: 7.3.2
 Config/testthat/edition: 3

@@ -6,9 +6,8 @@
 #' either clean it, abort, or just report. A raster is considered "dirty" when
 #' at least one of three criteria fails:
 #' \enumerate{
-#'   \item The declared NoData flag (`terra::NAflag()`) does not match
-#'     `expected_nodata` (an undeclared or `NaN` flag also counts as a
-#'     mismatch).
+#'   \item The declared NoData value does not match `expected_nodata`
+#'     (an undeclared value also counts as a mismatch).
 #'   \item The global minimum is below `lower_cap` (only checked when
 #'     `cap_below = TRUE`).
 #'   \item There are non-finite pixel values such as `Inf`, `-Inf`, or
@@ -81,8 +80,55 @@ clean_raster_inmem <- function(
     stop("'verbose' must be TRUE or FALSE.")
   }
 
-  current_nodata <- terra::NAflag(r)
-  nodata_mismatch <- any(is.na(current_nodata) | current_nodata != expected_nodata)
+  current_nodata <- NA_real_
+  current_nodata_label <- "not checked"
+  nodata_mismatch <- FALSE
+
+  source_paths <- unique(trimws(terra::sources(r)))
+  source_paths <- source_paths[
+    !is.na(source_paths) & nzchar(source_paths) & file.exists(source_paths)
+  ]
+
+  if (length(source_paths) > 0L) {
+    current_nodata <- numeric(0)
+    current_nodata_raw <- character(0)
+
+    for (source_path in source_paths) {
+      source_info <- terra::describe(source_path)
+      band_idx <- grep("^Band [0-9]+ ", source_info)
+
+      if (length(band_idx) == 0L) {
+        current_nodata <- c(current_nodata, NA_real_)
+        current_nodata_raw <- c(current_nodata_raw, "<missing>")
+        next
+      }
+
+      band_end <- c(band_idx[-1L] - 1L, length(source_info))
+      source_nodata <- rep(NA_real_, length(band_idx))
+      source_nodata_raw <- rep("<missing>", length(band_idx))
+
+      for (i in seq_along(band_idx)) {
+        band_lines <- source_info[band_idx[i]:band_end[i]]
+        nodata_line <- grep("NoData Value=", band_lines, value = TRUE)
+
+        if (length(nodata_line) > 0L) {
+          source_nodata_raw[i] <- trimws(sub(".*NoData Value=", "", nodata_line[1L]))
+          source_nodata[i] <- suppressWarnings(as.numeric(source_nodata_raw[i]))
+        }
+      }
+
+      current_nodata <- c(current_nodata, source_nodata)
+      current_nodata_raw <- c(current_nodata_raw, source_nodata_raw)
+    }
+
+    current_nodata_label <- paste(current_nodata_raw, collapse = ", ")
+    nodata_mismatch <- any(is.na(current_nodata) | current_nodata != expected_nodata)
+  } else if (isTRUE(verbose)) {
+    message(sprintf(
+      "[clean_raster_inmem] '%s': NoData mismatch check skipped: in-memory raster has no source file.",
+      name
+    ))
+  }
 
   raster_min <- NA_real_
   min_below_cap <- FALSE
@@ -108,7 +154,7 @@ clean_raster_inmem <- function(
       failed,
       sprintf(
         "NoData mismatch (declared = %s, expected = %s)",
-        paste(format(current_nodata), collapse = ", "),
+        current_nodata_label,
         format(expected_nodata)
       )
     )

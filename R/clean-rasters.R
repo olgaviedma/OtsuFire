@@ -12,6 +12,10 @@
 #'     `cap_below = TRUE`).
 #'   \item There are non-finite pixel values such as `Inf`, `-Inf`, or
 #'     pixel-level `NaN` (only checked when `check_finite = TRUE`).
+#'     For source-backed rasters whose physical metadata declares the
+#'     expected NoData value in all bands, this criterion is skipped:
+#'     in-memory non-finite counts in FLT4S/FLT8S files reflect the
+#'     declared NoData pixels rather than corruption.
 #' }
 #' Cleaning, when applied, mirrors the logic used by `mosaic_from_tiles()`
 #' when writing a freshly built mosaic: replace non-finite pixels with `NA`,
@@ -130,6 +134,11 @@ clean_raster_inmem <- function(
     ))
   }
 
+  metadata_nodata_matches_expected <-
+    length(source_paths) > 0L &&
+    !any(is.na(current_nodata)) &&
+    all(current_nodata == expected_nodata)
+
   raster_min <- NA_real_
   min_below_cap <- FALSE
   if (isTRUE(cap_below)) {
@@ -146,9 +155,19 @@ clean_raster_inmem <- function(
   n_nonfinite <- 0
   has_nonfinite <- FALSE
   if (isTRUE(check_finite)) {
-    n_nonfinite <- terra::global(!is.finite(r), "sum", na.rm = TRUE)[1, 1]
-    if (is.finite(n_nonfinite)) {
-      has_nonfinite <- n_nonfinite > 0
+    if (isTRUE(metadata_nodata_matches_expected)) {
+      if (isTRUE(verbose)) {
+        message(sprintf(
+          "[clean_raster_inmem] '%s': non-finite check skipped: file declares NoData = %s correctly for all bands; in-memory non-finite count would reflect declared NoData pixels, not corruption.",
+          name,
+          format(expected_nodata)
+        ))
+      }
+    } else {
+      n_nonfinite <- terra::global(!is.finite(r), "sum", na.rm = TRUE)[1, 1]
+      if (is.finite(n_nonfinite)) {
+        has_nonfinite <- n_nonfinite > 0
+      }
     }
   }
 

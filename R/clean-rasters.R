@@ -222,7 +222,11 @@ clean_raster_inmem <- function(
 
   terra::NAflag(r) <- expected_nodata
   if (isTRUE(verbose)) {
-    message(sprintf("[clean_raster_inmem] '%s': NAflag forced to %s.", name, format(expected_nodata)))
+    message(sprintf(
+      "[clean_raster_inmem] '%s': NAflag set in memory to %s; terra may still report NAflag = NaN when reopening FLT4S files from disk.",
+      name,
+      format(expected_nodata)
+    ))
   }
 
   r

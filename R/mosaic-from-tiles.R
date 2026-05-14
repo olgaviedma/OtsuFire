@@ -24,13 +24,70 @@
 #'   implemented.
 #' @return Character scalar with the path to the written mosaic GeoTIFF.
 #' @examples
+#' # Synthetic example: build a small mosaic from two tiles created on the fly
+#' tmp_dir <- tempfile("mosaic_example_")
+#' dir.create(tmp_dir)
+#'
+#' tile1 <- terra::rast(
+#'   nrows = 2, ncols = 2,
+#'   xmin = 0, xmax = 2,
+#'   ymin = 0, ymax = 2,
+#'   crs = "EPSG:3035",
+#'   vals = 1:4
+#' )
+#' tile2 <- terra::rast(
+#'   nrows = 2, ncols = 2,
+#'   xmin = 2, xmax = 4,
+#'   ymin = 0, ymax = 2,
+#'   crs = "EPSG:3035",
+#'   vals = 5:8
+#' )
+#'
+#' terra::writeRaster(
+#'   tile1,
+#'   file.path(tmp_dir, "synthetic_tile_2020_a.tif"),
+#'   overwrite = TRUE
+#' )
+#' terra::writeRaster(
+#'   tile2,
+#'   file.path(tmp_dir, "synthetic_tile_2020_b.tif"),
+#'   overwrite = TRUE
+#' )
+#'
+#' mask_path <- file.path(tmp_dir, "synthetic_mask.gpkg")
+#' mask_vect <- terra::vect(
+#'   matrix(c(
+#'     0, 0,
+#'     4, 0,
+#'     4, 2,
+#'     0, 2,
+#'     0, 0
+#'   ), ncol = 2, byrow = TRUE),
+#'   type = "polygons",
+#'   crs = "EPSG:3035"
+#' )
+#' terra::writeVector(mask_vect, mask_path, overwrite = TRUE)
+#'
+#' result_path <- mosaic_from_tiles(
+#'   folder_path = tmp_dir,
+#'   mask_path = mask_path,
+#'   raster_pattern = "synthetic_tile_2020_*.tif",
+#'   lower_cap = -1000
+#' )
+#'
+#' result_path
+#' terra::rast(result_path)
+#'
 #' \dontrun{
-#' mosaic_from_tiles(
-#'   folder_path = "C:/path/to/tiles",
-#'   mask_path = "C:/path/to/mask.shp"
+#' # Example with generic user paths
+#' result <- mosaic_from_tiles(
+#'   folder_path = "path/to/tiles_directory",
+#'   mask_path = "path/to/study_area_mask.shp",
+#'   raster_pattern = "my_tiles_2020_*.tif",
+#'   lower_cap = -1000
 #' )
 #' }
-#' @noRd
+#' @export
 mosaic_from_tiles <- function(
     folder_path,
     mask_path,

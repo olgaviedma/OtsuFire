@@ -601,11 +601,11 @@ save_overlaid_hist_percent <- function(x1, x2, name1, name2, png_path,
 
 #' Save Phase-4 overlaid histograms (multiple variables)
 #'
-#' Convenience wrapper around \code{phase4_histograms_internal_external2()}
+#' Convenience wrapper around \code{phase4_histograms_internal_external()}
 #' to iterate over `value_cols`. If `median_rbr` is needed and missing/empty, it is
 #' computed once and reused.
 #'
-#' @inheritParams phase4_histograms_internal_external2
+#' @inheritParams phase4_histograms_internal_external
 #' @param value_cols Character vector of numeric columns to analyze.
 #'
 #' @return Named list (by `value_col`) of output-path lists.

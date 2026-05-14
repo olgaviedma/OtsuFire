@@ -337,14 +337,6 @@
 #' @importFrom rlang .data
 #' @importFrom tools file_ext
 #' @importFrom utils write.csv
-#'
-utils::globalVariables(c(
-  ".data",
-  "area_before_ha",
-  "area_after_ha",
-  "burnable_ratio",
-  "nonburn_ratio"
-))
 #' @export
 prepare_fire_polys_for_validation <- function(
     # --- inputs (file, vector of files, or directory)
@@ -2141,3 +2133,11 @@ prepare_fire_polys_for_validation <- function(
     years = out_years
   )
 }
+
+utils::globalVariables(c(
+  ".data",
+  "area_before_ha",
+  "area_after_ha",
+  "burnable_ratio",
+  "nonburn_ratio"
+))

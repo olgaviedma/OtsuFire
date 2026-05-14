@@ -13,150 +13,55 @@
 #' }
 #'
 #' @details
-#' \section{Pixel (grid) validation (confusion matrix)}{
+#' Detailed behavior is organized in the sections below.
+#' @section Pixel (grid) validation (confusion matrix):
 #' The AOI mask polygon is rasterized to an analysis grid at \code{template_res} meters.
-#' Reference and detected polygons are rasterized on the same grid, producing two binary rasters
-#' (reference vs detection). Confusion-matrix counts are computed over the grid domain:
-#' \itemize{
-#'   \item \strong{TP}: cells burned in both detection and reference
-#'   \item \strong{FP}: cells burned in detection but unburned in reference
-#'   \item \strong{FN}: cells unburned in detection but burned in reference
-#'   \item \strong{TN}: cells unburned in both detection and reference
-#' }
-#' From these counts the function reports:
-#' \itemize{
-#'   \item \strong{Precision} (commission error complement):
-#'     \eqn{Precision = TP / (TP + FP)}{Precision = TP/(TP+FP)}
-#'   \item \strong{Recall} (sensitivity; omission error complement):
-#'     \eqn{Recall = TP / (TP + FN)}{Recall = TP/(TP+FN)}
-#'   \item \strong{F1 score}:
-#'     \eqn{F1 = 2 * Precision * Recall / (Precision + Recall)}{F1 = 2PR/(P+R)}
-#'   \item \strong{IoU} (Jaccard index):
-#'     \eqn{IoU = TP / (TP + FP + FN)}{IoU = TP/(TP+FP+FN)}
-#'   \item \strong{ErrorRate} (overall misclassification rate):
-#'     \eqn{ErrorRate = (FP + FN) / (TP + FP + FN + TN)}{ErrorRate = (FP+FN)/(TP+FP+FN+TN)}
-#'   \item \strong{Commission}:
-#'     \eqn{Commission = 1 - Precision}{Commission = 1-Precision}
-#'   \item \strong{Omission}:
-#'     \eqn{Omission = 1 - Recall}{Omission = 1-Recall}
-#' }
-#' Cell-based areas are derived as:
-#' \eqn{cell\_area\_ha = (res_x * res_y) / 10000}{cell_area_ha = (res_x*res_y)/10000}.
+#' Reference and detected polygons are rasterized on the same grid, producing two binary rasters.
+#' Confusion-matrix counts are computed over the grid domain.
 #'
-#' \strong{Notes on pixel domain controls:}
-#' \code{pixel_domain} and \code{pixel_na_as_zero} are kept for call compatibility.
-#' In the current implementation, evaluation is performed over the mask domain raster
-#' (\code{domain_mask}), where reference and prediction are written as 0/1 inside the mask
-#' and NA outside, so these options may not change results unless you adapt the internals.
+#' Main metrics reported:
+#' \itemize{
+#'   \item \strong{Precision} = TP / (TP + FP)
+#'   \item \strong{Recall} = TP / (TP + FN)
+#'   \item \strong{F1} = 2 * Precision * Recall / (Precision + Recall)
+#'   \item \strong{IoU} = TP / (TP + FP + FN)
+#'   \item \strong{ErrorRate} = (FP + FN) / (TP + FP + FN + TN)
+#'   \item \strong{Commission} = 1 - Precision
+#'   \item \strong{Omission} = 1 - Recall
 #' }
 #'
-#' \section{Polygon / area validation (coverage of reference polygons)}{
-#' Polygon-level detection is defined by the fraction of each reference polygon covered by detections:
+#' @section Polygon / area validation:
+#' Polygon-level detection is based on coverage of each reference polygon by detections:
 #' \eqn{Coverage_i = 100 * Area(ref_i \cap det) / Area(ref_i)}{Coverage_i = 100*A(intersection)/A(ref)}.
-#' A reference polygon \emph{is detected} if \code{Coverage_i >= min_detected_percent}, and it is
-#' \emph{completely detected} if \code{Coverage_i >= threshold_completely_detected}.
+#' A reference polygon is detected when \code{Coverage_i >= min_detected_percent}, and completely
+#' detected when \code{Coverage_i >= threshold_completely_detected}.
 #'
-#' Summary outputs include:
+#' @section Dissolve behavior:
+#' Reference and detection polygons are clipped to the mask. Optional post-clip dissolve can be applied
+#' with \code{dissolve_ref_by} and \code{dissolve_input_by} to recombine fragments by ID.
+#'
+#' @section Confusion outputs (optional):
+#' If \code{write_confusion_pixel_raster=TRUE}, a pixel confusion raster is written:
 #' \itemize{
-#'   \item \strong{N\_Detected\_Polygons}, \strong{Perc\_Detected\_Polygons}
-#'   \item \strong{N\_Completely\_Detected}
-#'   \item \strong{Area\_Reference\_ha}: total reference area (ha)
-#'   \item \strong{Area\_Detected\_ha}: total detected area (ha). If \code{union_detections_for_area=TRUE},
-#'     detected area is computed from the unioned detection geometry (avoids double counting overlaps).
-#'   \item \strong{Area\_Intersection\_ha}: total intersection area (ha)
-#'   \item \strong{Recall\_Area\_percent}:
-#'     \eqn{100 * Area\_Intersection / Area\_Reference}{100*Aint/Aref}
-#'   \item \strong{Precision\_Area\_percent}:
-#'     \eqn{100 * Area\_Intersection / Area\_Detected}{100*Aint/Adet}
+#'   \item 1 = TN
+#'   \item 2 = FN
+#'   \item 3 = FP
+#'   \item 4 = TP
 #' }
-#' }
+#' If \code{write_confusion_vectors=TRUE}, a GeoPackage with TP/FP/FN polygon labels is written.
 #'
-#' \section{Dissolve behavior (reference and detections)}{
-#' Both reference and detection polygons are first \emph{clipped to the mask} (via \code{st_intersection}).
-#' This clip can fragment geometries (e.g., one original polygon becomes multiple pieces).
-#' The \code{dissolve_ref_by} and \code{dissolve_input_by} parameters control an \emph{optional dissolve}
-#' step applied \strong{after clipping} to recombine fragments that share the same identifier.
+#' @section Class-wise metrics (optional):
+#' If \code{class_raster} is provided, confusion-matrix metrics are also computed by class.
+#' Optional class-wise omission/commission summaries are written when
+#' \code{write_classwise_errors=TRUE}.
 #'
-#' \strong{When to use it:}
-#' \itemize{
-#'   \item Use \code{dissolve_input_by = "<ID_FIELD>"} if you want \strong{one feature per original detection polygon}
-#'         after clipping to the mask (recommended when your detections have a stable polygon ID).
-#'   \item Use \code{dissolve_input_by = NULL} to \strong{preserve the clipped fragments as separate rows}
-#'         (recommended if you need to preserve the input row structure \emph{exactly} after clip).
-#'   \item Use \code{dissolve_ref_by} analogously for reference polygons (e.g., if the reference has repeated IDs
-#'         that should be treated as a single fire perimeter).
-#' }
+#' @section Caching and reproducibility:
+#' Reference polygons and rasterized reference masks are cached inside the output folder.
+#' Use \code{force_reprocess_ref=TRUE} to force a rebuild.
 #'
-#' \strong{Important note about attributes:}
-#' Dissolving necessarily aggregates non-geometry attributes within each group. In this implementation:
-#' \itemize{
-#'   \item The dissolve field is kept as the group identifier.
-#'   \item Numeric/integer fields keep the first non-NA value (representative).
-#'   \item Date/POSIXt fields keep the first non-NA value.
-#'   \item Character/factor fields are concatenated as unique values separated by \code{;}.
-#' }
-#' If you require \strong{100\% preservation of the original per-row attributes without aggregation},
-#' keep \code{dissolve_input_by = NULL} (and accept that clipping may create multiple rows per original ID).
-#'
-#' \strong{Effect on outputs:}
-#' \itemize{
-#'   \item Pixel metrics are based on rasterized geometries, so dissolving typically affects results only when
-#'         overlaps/duplicates exist or when union/double-counting would otherwise occur.
-#'   \item Confusion polygon outputs (\code{write_confusion_vectors}) and error vectors are written from the
-#'         post-processed (clipped + optionally dissolved) layers, and therefore their feature counts/attributes
-#'         reflect the chosen dissolve settings.
-#' }
-#' }
-#'
-#' \section{Confusion outputs (optional)}{
-#' If \code{write_confusion_pixel_raster=TRUE}, the function writes a single-band GeoTIFF where each pixel is coded as:
-#' \itemize{
-#'   \item 1 = TN, 2 = FN, 3 = FP, 4 = TP
-#' }
-#' A companion \code{confusion_LUT.csv} is written (once per run) in the confusion output folder.
-#'
-#' If \code{write_confusion_vectors=TRUE}, the function writes a GeoPackage combining:
-#' \itemize{
-#'   \item Reference polygons labeled \code{TP} (detected by coverage rule) or \code{FN}
-#'   \item Detection polygons labeled \code{TP} (any overlap with reference) or \code{FP}
-#' }
-#' (TN is not defined for polygons unless an explicit negative polygon set is modeled.)
-#' When \code{compute_det_overlap_stats=TRUE}, detections also store overlap area and percent relative to detection area.
-#' }
-#'
-#' \section{Class-wise pixel metrics (optional)}{
-#' If \code{class_raster} is provided, the same confusion-matrix metrics are computed \emph{within each class}
-#' of the categorical raster (aligned to the analysis grid). Domain handling is controlled by \code{class_domain}:
-#' \itemize{
-#'   \item \code{"class"}: evaluate only cells where class is non-NA
-#'   \item \code{"complete_cases"}: evaluate only cells where class, pred and ref are all non-NA
-#' }
-#' When \code{class_lut} is supplied (CSV path or data.frame), outputs include a \code{ClassLabel} column.
-#' If \code{class_include_all_lut_ids=TRUE}, LUT ids absent in the raster can be included with zero counts/areas
-#' and NA metrics where appropriate.
-#' }
-#'
-#' \section{Omission / commission by class (optional)}{
-#' When \code{write_classwise_errors=TRUE}, the function derives:
-#' \itemize{
-#'   \item \strong{Omission polygons}: reference polygons \emph{not detected} by the coverage rule
-#'   \item \strong{Commission polygons}: detected polygons with \emph{no overlap} with any reference polygon
-#' }
-#' These polygons are rasterized on the analysis grid and cross-tabulated against \code{class_raster}
-#' to produce omission/commission \emph{areas by class} (ha), written as CSV outputs.
-#' }
-#'
-#' \section{Caching and reproducibility}{
-#' The reference polygons and their rasterized mask are cached inside \code{validation_output_dir}
-#' using a short hash of key parameters (paths, year, resolution, dissolve, and thresholds).
-#' Use \code{force_reprocess_ref=TRUE} to rebuild the cached reference products.
-#' }
-#'
-#' \section{ArcGIS-friendly GeoPackage outputs}{
-#' When \code{arcgis_wkt1=TRUE}, GeoPackages are written with WKT1_ESRI CRS serialization via
-#' \code{OGR_WKT_FORMAT="WKT1_ESRI"}, and outputs are written to a temporary file and then renamed
-#' to reduce partial-write and file-lock issues (common on Windows/ArcGIS).
-#' }
+#' @section ArcGIS-friendly outputs:
+#' When \code{arcgis_wkt1=TRUE}, GeoPackages are written with WKT1_ESRI CRS serialization
+#' and via a temporary-write/rename strategy to reduce lock issues on Windows/ArcGIS.
 #'
 #' @param input_shapefile Path(s) to detected polygons (vector), or an \code{sf} object.
 #'   If multiple paths are provided, outputs are indexed by \code{InputIndex}.
@@ -167,8 +72,8 @@
 #' @param validation_dir Character. Output base directory.
 #'
 #' @param template_res Numeric. Grid resolution (meters) for pixel metrics and for rasterizing classwise errors.
-#' @param min_detected_percent Numeric. Reference polygon considered detected if \code{Coverage_i >=} this (%).
-#' @param threshold_completely_detected Numeric. Reference polygon considered completely detected if \code{Coverage_i >=} this (%).
+#' @param min_detected_percent Numeric. Reference polygon considered detected if \code{Coverage_i >=} this (\%).
+#' @param threshold_completely_detected Numeric. Reference polygon considered completely detected if \code{Coverage_i >=} this (\%).
 #'
 #' @param min_area_reference_ha Numeric or NULL. Minimum reference polygon area to retain (ha). If NULL, no filter.
 #' @param force_reprocess_ref Logical. If TRUE, delete cached reference products and rebuild them.
@@ -306,7 +211,7 @@
 #' )
 #'
 #' # Multiple detection inputs (vector of paths); outputs are indexed by InputIndex
-#' res_multi <- validate_fire_maps_natalia(
+#' res_multi <- validate_fire_maps(
 #'   input_shapefile = c("D:/PROJECT/DET/runA.gpkg", "D:/PROJECT/DET/runB.gpkg"),
 #'   ref_shapefile   = "D:/PROJECT/REF/effis_ref.gpkg",
 #'   mask_shapefile  = "D:/PROJECT/MASK/aoi_3035.shp",
@@ -327,7 +232,6 @@
 #' @importFrom rlang .data
 #' @importFrom tools file_ext file_path_sans_ext
 #' @importFrom utils write.table
-#' @export
 #' @export
 validate_fire_maps <- function(
     input_shapefile,

@@ -18,19 +18,33 @@ URL: https://github.com/olgaviedma/OtsuFire
 BugReports: https://github.com/olgaviedma/OtsuFire/issues
 Depends: R (>= 4.1.0)
 Imports:
+    OtsuSeg,
     data.table,
+    dplyr,
+    future,
+    future.apply,
     gdalUtilities,
+    ggplot2,
     glue,
+    magrittr,
+    multcompView,
+    parallelly,
+    PMCMRplus,
+    progressr,
+    purrr,
+    raster,
+    rlang,
     sf,
     stringr,
-    terra
+    terra,
+    tidyr
 Suggests:
-    OtsuSeg,
+    openxlsx,
     whitebox,
     testthat (>= 3.0.0)
 SystemRequirements:
     GDAL (gdalwarp, gdalbuildvrt; optional gdal_polygonize.py),
     Python (optional, for gdal_polygonize.py),
     WhiteboxTools (optional, for grow_engine='whitebox')
-RoxygenNote: 7.3.2
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

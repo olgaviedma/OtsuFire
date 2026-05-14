@@ -18,7 +18,7 @@
 #' at least \code{min_seed_pixels_per_component} seed pixels (seed-supported growth).
 #'
 #' @details
-#' \section{Required inputs (for \code{workflow="otsu_grow"})}{
+#' @section Required inputs (for \code{workflow="otsu_grow"}):
 #' \itemize{
 #'   \item Provide either \code{raster_path} (single-band severity index) OR both
 #'   \code{nbr_pre_path} and \code{nbr_post_path} (to compute \code{index_type}).
@@ -26,15 +26,13 @@
 #'   \code{corine_raster_path}, \code{ecoregion_shapefile_path}, and
 #'   \code{segment_by_intersection=TRUE}.
 #' }
-#' }
 #'
-#' \section{Units (CORINE x ecoregion)}{
+#' @section Units (CORINE x ecoregion):
 #' Units are built as an integer unit raster (one value per CORINE x ecoregion combination).
 #' Otsu is estimated independently per unit. Use \code{ecoregion_touches=TRUE} to reduce
 #' boundary gaps when rasterizing ecoregions.
-#' }
 #'
-#' \section{Otsu estimation (does NOT change raster values)}{
+#' @section Otsu estimation (does NOT change raster values):
 #' Otsu is estimated on real severity values using a smoothed-histogram approach:
 #' values are linearly scaled to 0--255 for histogram-based Otsu and then mapped back
 #' to real units. Two optional filters affect only the values used for estimation:
@@ -45,9 +43,8 @@
 #' A single global Otsu threshold is also estimated from a large random sample and used
 #' \emph{only} as a fallback when unit-level estimation is unreliable (small units, low
 #' samples, or failed Otsu), if \code{fallback_to_global=TRUE}.
-#' }
 #'
-#' \section{Seed threshold (recommended, non-redundant)}{
+#' @section Seed threshold (recommended, non-redundant):
 #' \strong{Important:} despite its name, \code{otsu_thresholds} does \emph{not} change how Otsu
 #' is estimated. It defines run-specific \emph{global seed lower bounds} (LB_GLOBAL) and
 #' produces one run per value.
@@ -64,9 +61,8 @@
 #' }
 #' \code{otsu_min_by_class} supports \code{$corine}, \code{$ecoregion}, and \code{$intersection}.
 #' Each entry should be named by the class identifier (stored as character keys).
-#' }
 #'
-#' \section{Growth threshold (expansion from seeds)}{
+#' @section Growth threshold (expansion from seeds):
 #' Growth expands candidate pixels down from THR_SEED:
 #' \preformatted{
 #' THR_GROW = max(THR_SEED - DELTA_USED, GROW_FLOOR_USED)
@@ -80,24 +76,21 @@
 #' }
 #' Candidate components are labeled on the growth mask and retained only if they contain at
 #' least \code{min_seed_pixels_per_component} seed pixels.
-#' }
 #'
-#' \section{Advanced/legacy seed floors (usually redundant)}{
+#' @section Advanced/legacy seed floors (usually redundant):
 #' \code{min_otsu_threshold_value} and \code{min_otsu_threshold_by_class} provide an additional
 #' \emph{seed floor} applied after lower bounds. In practice, they are often redundant if you
 #' already use \code{otsu_thresholds} (LB_GLOBAL) and \code{otsu_min_by_class} (LB_CLASS).
 #' They only change THR_SEED when they are more restrictive than both lower bounds.
 #' For most users, leaving them as \code{NULL} avoids overlapping controls.
-#' }
 #'
-#' \section{Outputs}{
+#' @section Outputs:
 #' For each run, the function writes:
 #' \itemize{
 #'   \item a vector file (\code{.shp} or \code{.geojson}) with one polygon per retained component, and
 #'   \item a tab-delimited \code{*_log.txt} with unit-level thresholds, bounds applied, and Otsu sampling diagnostics.
 #' }
 #' The return value is a named list keyed by the run label.
-#' }
 #'
 #' @name process_otsu_rasters_grow
 #' @rdname process_otsu_rasters_grow
@@ -229,15 +222,9 @@
 #' @importFrom stats quantile
 #' @importFrom graphics hist
 #' @importFrom tools file_path_sans_ext
-#' @importFrom utils write.table getExportedValue
+#' @importFrom utils write.table
 #' @export
 #'
-utils::globalVariables(c(
-  "CLUMP_ID",
-  "ECO_ID_INTERNAL",
-  "UNIT_ID"
-))
-
 process_otsu_rasters_grow <- function(
     raster_path = NULL,
     nbr_pre_path = NULL,
@@ -1599,3 +1586,9 @@ process_otsu_rasters_grow <- function(
 
   return(results)
 }
+
+utils::globalVariables(c(
+  "CLUMP_ID",
+  "ECO_ID_INTERNAL",
+  "UNIT_ID"
+))

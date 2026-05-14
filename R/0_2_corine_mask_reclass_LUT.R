@@ -242,9 +242,7 @@
 #' @importFrom sf st_read st_crs st_transform st_make_valid st_is_valid st_collection_extract st_as_sf st_write
 #' @importFrom tools file_path_sans_ext file_ext
 #' @export
-utils::globalVariables(c("CLC_CODE", "GRID_CODE"))
-
-  corine_mask_reclass <- function(
+corine_mask_reclass <- function(
     corine_rasters,
     peninsula_shapefile,
 
@@ -1149,3 +1147,5 @@ utils::globalVariables(c("CLC_CODE", "GRID_CODE"))
 
     invisible(results)
   }
+
+utils::globalVariables(c("CLC_CODE", "GRID_CODE"))

@@ -184,8 +184,6 @@
 #' @importFrom parallelly availableCores
 #' @importFrom tools file_path_sans_ext
 #' @export
-utils::globalVariables(c("AREA_M2", "REFINE_REASON", "AOI_ID", "AOI_GROUP"))
-
 segmentation_refinement <- function(
     n_workers = 6,
     raster_path,
@@ -1082,3 +1080,5 @@ segmentation_refinement <- function(
     results = out_list
   )
 }
+
+utils::globalVariables(c("AREA_M2", "REFINE_REASON", "AOI_ID", "AOI_GROUP"))

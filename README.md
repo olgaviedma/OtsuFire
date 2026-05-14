@@ -1,4 +1,4 @@
-# OtsuFire: Fire Mapping and Regeneration Assessment Toolkit
+# OtsuFire: Fire Mapping Assessment Toolkit
 
 **Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, Jose Manuel Moreno
 

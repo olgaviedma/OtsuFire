@@ -74,6 +74,12 @@ detect_burned_patches <- function(config, aoi = NULL, write_outputs = TRUE,
     aoi <- .of_validate_aoi(aoi)
   }
 
+  # Sanity-check ONLY the change_index raster in memory before detection.
+  # Never rewrites disk, never cleans silently: a dirty raster aborts with
+  # a clear error (clean_raster_inmem(action = "fail")). Tunable via
+  # config$options$change_index_validation (see build_burned_mapping_config()).
+  .of_validate_change_index(config)
+
   res <- .of_run_detection(config, aoi = aoi,
                            write_outputs = isTRUE(write_outputs),
                            overwrite = isTRUE(overwrite))
@@ -105,6 +111,49 @@ detect_burned_patches <- function(config, aoi = NULL, write_outputs = TRUE,
            call. = FALSE)
     }
   }
+  invisible(NULL)
+}
+
+#' @keywords internal
+#' @noRd
+.of_resolve_change_index_validation <- function(config) {
+  defaults <- .of_change_index_validation_defaults()
+  blk <- config$options[["change_index_validation"]]
+  if (is.null(blk)) return(defaults)
+  # Structural validity (named list, recognized keys) was already enforced
+  # by build_burned_mapping_config(); merge user values over the defaults.
+  utils::modifyList(defaults, blk)
+}
+
+#' @keywords internal
+#' @noRd
+.of_validate_change_index <- function(config) {
+  spec <- config$inputs$change_index
+  ci_rast <-
+    if (!is.null(spec$value) && inherits(spec$value, "SpatRaster")) {
+      spec$value
+    } else if (!is.null(spec$path) && !is.na(spec$path) &&
+               nzchar(spec$path)) {
+      terra::rast(spec$path)
+    } else {
+      stop("detect_burned_patches(): change_index could not be read for ",
+           "validation.", call. = FALSE)
+    }
+
+  v <- .of_resolve_change_index_validation(config)
+
+  # action = "fail": clean raster -> returns silently; dirty raster ->
+  # stop() with a message that includes the lower_cap value actually used.
+  clean_raster_inmem(
+    ci_rast,
+    name            = "change_index",
+    expected_nodata = v$expected_nodata,
+    lower_cap       = v$lower_cap,
+    cap_below       = v$cap_below,
+    check_finite    = v$check_finite,
+    action          = "fail",
+    verbose         = TRUE
+  )
   invisible(NULL)
 }
 

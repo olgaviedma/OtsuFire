@@ -196,7 +196,18 @@
 #'   methodological surface). Recognized keys: `deterministic_seed`,
 #'   `engine_root`, `registry_path`, `whitebox_exe`, `gdalwarp_path`,
 #'   `tool_paths`, `ecoregion_shapefile_path`, `peninsula_shapefile_path`,
-#'   `future_globals_maxsize`.
+#'   `future_globals_maxsize`, `change_index_validation`.
+#'
+#'   `options$change_index_validation` is an optional advanced sub-list
+#'   that tunes the in-memory sanity check applied to `change_index` by
+#'   [detect_burned_patches()] (it is never applied to `vegetation_map`
+#'   or `burnable_mask`, and no raster is read at config-build time).
+#'   Recognized sub-keys (all optional; defaults shown):
+#'   `expected_nodata` (`-9999`), `lower_cap` (`-1000`), `cap_below`
+#'   (`TRUE`), `check_finite` (`TRUE`). `lower_cap` is configurable on
+#'   purpose: the validated value `-1000` suits RBR, but other change
+#'   indices have different valid ranges, so it must not be hard-coded.
+#'   If supplied, the block must be a named list using only these keys.
 #'
 #' @return An S3 object of class `otsufire_burned_mapping_config` (a named
 #'   list). Stable fields: `target_year`, `inputs`, `run_name`,
@@ -254,6 +265,17 @@ build_burned_mapping_config <- function(
   }
   if (length(options) > 0L && (is.null(names(options)) || any(!nzchar(names(options))))) {
     stop("'options' must be a named list (all elements must have names).", call. = FALSE)
+  }
+
+  # Advanced change-index validation block: only structural validation
+  # here (named list, recognized keys). It is consumed at detection time
+  # by detect_burned_patches(); no raster is read here.
+  ci_val <- options[["change_index_validation"]]
+  if (!is.null(ci_val)) {
+    .of_check_named_list(ci_val, "options$change_index_validation")
+    .of_check_unknown_keys(
+      ci_val, names(.of_change_index_validation_defaults()),
+      "options$change_index_validation")
   }
 
   # ---- methodological parameter resolution --------------------------
@@ -408,6 +430,21 @@ print.otsufire_burned_mapping_config <- function(x, ...) {
                  paste(allowed, collapse = ", ")), call. = FALSE)
   }
   invisible(x)
+}
+
+# Default tuning for the in-memory change-index sanity check. lower_cap
+# is intentionally a default, not a hard-coded constant: RBR uses -1000
+# but other change indices have different valid ranges. Shared by the
+# builder (key validation) and detect_burned_patches() (resolution).
+#' @keywords internal
+#' @noRd
+.of_change_index_validation_defaults <- function() {
+  list(
+    expected_nodata = -9999,
+    lower_cap       = -1000,
+    cap_below       = TRUE,
+    check_finite    = TRUE
+  )
 }
 
 #' @keywords internal

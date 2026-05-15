@@ -76,14 +76,47 @@ test_that("run_name is the single visible experiment label and drives routes", {
                "my_custom_run_2025_res30.xlsx", fixed = TRUE)
 })
 
-test_that("registry path uses toupper(run_name)", {
+test_that("deterministic config is fully decoupled from registry_path", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+
   cfg <- build_burned_mapping_config(
     change_index = ci, burnable_mask = bm, target_year = 2025L,
     run_name = "expA", output_dir = tempdir()
   )
-  expect_match(cfg$registry_path,
-               "/EXPA/RBR_TRAINING_REGISTRY\\.gpkg$")
+  # No registry_path field is produced or stored.
+  expect_false("registry_path" %in% names(cfg))
+  expect_null(cfg$registry_path)
+  # No output route points at an RBR_TRAINING_REGISTRY.
+  expect_false(any(grepl("RBR_TRAINING_REGISTRY",
+                          unlist(cfg$output_routes), fixed = TRUE)))
+  # The obsolete resolver helper is gone.
+  expect_false(exists(".of_resolve_registry_path",
+                       where = asNamespace("OtsuFire"), inherits = FALSE))
+
+  # Passing options$registry_path is a hard error (no silent ignore),
+  # and the message explains the decoupling + the explicit keep_pool path.
+  err <- tryCatch(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      run_name = "expA", output_dir = tempdir(),
+      options = list(registry_path = "C:/whatever/REG.gpkg")
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "registry_path' is not accepted")
+  expect_match(err, "decoupled")
+  expect_match(err, "keep_pool")
+
+  # Also rejected even when explicitly NULL (presence of the key is what
+  # matters).
+  expect_error(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      run_name = "expA", output_dir = tempdir(),
+      options = list(registry_path = NULL)
+    ),
+    regexp = "registry_path' is not accepted"
+  )
 })
 
 test_that("empty run_name fails", {

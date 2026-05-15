@@ -66,6 +66,17 @@ test_that("score_burned_patches rejects config with NULL change_index", {
   )
 })
 
+test_that("deterministic scoring is decoupled from any external registry", {
+  # The scoring adapter must not read config$registry_path nor call the
+  # registry pool builder. Resolution is strictly explicit keep_pool or
+  # local fallback (engine cannot run here, so assert on the adapter body).
+  body_src <- paste(
+    deparse(body(OtsuFire:::.of_run_scoring)), collapse = "\n")
+  expect_false(grepl("registry_path", body_src, fixed = TRUE))
+  expect_false(grepl("build_rbr_keep_pool_from_registry", body_src,
+                      fixed = TRUE))
+})
+
 test_that("score_burned_patches rejects bad keep_pool types", {
   ci <- mk_tmp_tif3(); bm <- mk_tmp_mask3()
   cfg <- build_burned_mapping_config(change_index = ci, burnable_mask = bm,

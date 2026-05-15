@@ -48,7 +48,6 @@ and return shape are frozen by
 \seealso{
 Other modular: 
 \code{\link{check_supervised_consistency}()},
-\code{\link{score_burned_patches}()},
 \code{\link{update_burned_like_registry}()},
 \code{\link{validate_fire_maps}()}
 }

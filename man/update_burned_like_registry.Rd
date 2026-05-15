@@ -37,7 +37,6 @@ eligibility floor; the actual retained set is the top 1% by descending
 Other modular: 
 \code{\link{check_supervised_consistency}()},
 \code{\link{detect_burned_patches}()},
-\code{\link{score_burned_patches}()},
 \code{\link{validate_fire_maps}()}
 }
 \concept{modular}

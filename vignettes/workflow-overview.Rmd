@@ -47,20 +47,42 @@ filtering, and emits an `internal_decisions.gpkg` layer.
 
 ```{r det}
 det_cfg <- build_burned_mapping_config(
-  scenario     = "balanced",
-  change_index = mosaic_path,
-  target_year  = 2020L,
-  output_dir   = "/path/to/Results"
+  change_index   = mosaic_path,
+  vegetation_map = "/path/to/Corine_Masks/CLC_2018_peninsula.tif",
+  burnable_mask  = "/path/to/Corine_Masks/burnable_mask_binary.tif",
+  target_year    = 2020L,
+  output_dir     = "/path/to/Results",
+  run_name       = "rbr_2020_custom",
+  detect_params = list(
+    seed_threshold = 310,
+    growth_delta = 90,
+    minimum_growth_threshold = 240,
+    minimum_seed_pixels = 30L
+  ),
+  refine_params = list(
+    aoi_buffer_m = 5000,
+    minimum_detected_area_m2 = 10,
+    merge_overlaps = TRUE
+  ),
+  scoring_params = list(
+    support_buffer_m = 0,
+    previous_fire_exclusion_buffer_m = 90,
+    previous_fire_cleanup_buffer_m = 90,
+    minimum_remaining_area_m2 = 20000,
+    reference_buffer_m = 90
+  )
 )
 
 det_run <- run_deterministic_pipeline(det_cfg)
 det_run$internal_decisions_gpkg
 ```
 
-The `scenario` argument selects a per-CORINE-class parameter preset
-(`balanced`, `original`, `lax`, `restrictive`). The presets are
-loaded from `inst/extdata/` and are part of the validated
-scientific defaults; they are **not** intended to be edited.
+The deterministic builder no longer selects closed scenario presets.
+Instead, users pass explicit ecological controls through
+`detect_params`, `refine_params`, and `scoring_params`. Use the
+`*_by_vegetation` keys when seed or growth behaviour must differ by
+land-cover class; see `?build_burned_mapping_config` for the
+vegetation-class mapping and the interpretation of each parameter.
 
 If you need step-by-step access, the deterministic stage decomposes
 into three modular helpers:
@@ -170,4 +192,4 @@ produces, under
 * `11_CONSISTENCY_CHECKS/...` — consistency artefacts when enabled.
 
 The deterministic stage writes its outputs under the parallel
-`DETERMINISTIC/<scenario>/` tree.
+`DETERMINISTIC/<run_name>/` tree.

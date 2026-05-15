@@ -133,7 +133,7 @@
   ), ncol = 2, byrow = TRUE)
 }
 
-# ---------- scenario presets (mirrors DETERMINISTIC_PIPELINE.R) -----------
+# ---------- engine $corine wrappers (mirrors DETERMINISTIC_PIPELINE.R) ----
 #' @keywords internal
 #' @noRd
 .of_to_corine_list <- function(x) {
@@ -425,7 +425,7 @@
     grow_tag             = grow_tag,
     detection_diagnostics = list(
       engine_root      = engine_root,
-      scenario         = config$scenario,
+      run_name         = config$run_name,
       grow_tag         = grow_tag,
       params_otsu      = params_otsu,
       ran_refinement   = TRUE
@@ -550,7 +550,7 @@
     validate_ref_use_kept = TRUE,
     save_outputs = isTRUE(write_outputs),
     out_dir = phase1_dir,
-    prefix = paste0("BA_", config$target_year, "_", config$scenario),
+    prefix = paste0("BA_", config$target_year, "_", config$run_name),
     driver = "GPKG", overwrite = TRUE, quiet = TRUE,
     save_splits = FALSE, suppress_sf_warnings = TRUE
   )
@@ -597,7 +597,7 @@
     rbr_rast = rbr_rast,
     out_dir  = phase2_dir,
     prefix   = paste0("internal_", config$target_year, "_",
-                      config$scenario, "_p10_p5"),
+                      config$run_name, "_p10_p5"),
     keep_pool = if (!is.null(registry_keep_pool))
                   registry_keep_pool$keep_pool else NULL,
     use_keep_common_pool = FALSE,
@@ -633,7 +633,7 @@
         rbr_rast  = rbr_rast,
         out_dir   = phase2_dir,
         prefix    = paste0("reference_", config$target_year, "_",
-                           config$scenario, "_p10_p5"),
+                           config$run_name, "_p10_p5"),
         keep_pool = res_internal_rbr$keep_pool,
         save_outputs = isTRUE(write_outputs),
         driver = "GPKG", overwrite = TRUE, quiet = TRUE,
@@ -664,7 +664,7 @@
     internal_rbr     = res_internal_rbr$scored_sf,
     hotspots_sf      = hotspots_sf,
     target_year      = config$target_year,
-    scenario_name    = config$scenario,
+    scenario_name    = config$run_name,
     preyear_available = preyear_available
   )
 
@@ -700,7 +700,7 @@
         ref_validation = res_phase1$validation$ref_flagged,
         ref_rbr        = res_external_rbr$scored_sf,
         target_year    = config$target_year,
-        scenario_name  = config$scenario
+        scenario_name  = config$run_name
       ),
       error = function(e) {
         warning("build_reference_decisions failed: ",
@@ -730,7 +730,7 @@
     keep_pool_summary = res_internal_rbr$keep_pool,
     scoring_diagnostics = list(
       engine_root = engine_root,
-      scenario = config$scenario,
+      run_name = config$run_name,
       n_stage1 = nrow(polys_stage1),
       n_stage2 = nrow(polys_stage2),
       n_stage2_keep_review = nrow(stage2_keep_review),

@@ -5,7 +5,6 @@
 \title{Build a deterministic burned-mapping configuration object}
 \usage{
 build_burned_mapping_config(
-  scenario = "default",
   change_index = NULL,
   vegetation_map = NULL,
   burnable_mask,
@@ -22,13 +21,6 @@ build_burned_mapping_config(
 )
 }
 \arguments{
-\item{scenario}{Character scalar. Free-text traceability label only.
-It is no longer a methodological preset: it does not change any
-detection/refinement/scoring parameter. It is used purely to tag
-outputs, output routes, and the scenario-specific registry path.
-Must be non-empty and must not contain `/` or `\\`. Defaults to
-`"default"`.}
-
 \item{change_index}{Raster path, `terra::SpatRaster`, or `NULL`.
 Annual change-index raster (RBR, dNBR, RdNBR, ...). Required before
 detection runs; may be `NULL` at config-build time for configs that
@@ -56,8 +48,12 @@ naming outputs and filtering hotspots/previous-year layers.}
 \item{output_dir}{Character scalar. Root output directory.
 Defaults to `tempdir()`.}
 
-\item{run_name}{Character scalar. Stable run identifier used to name
-output folders and files. Defaults to `"deterministic_burned_map"`.}
+\item{run_name}{Character scalar. The single visible experiment
+identifier. Used to name output folders/files, the
+`.../DETERMINISTIC/<run_name>/...` route level, and the
+`Results/<toupper(run_name)>/RBR_TRAINING_REGISTRY.gpkg` registry
+path. Must be a single non-empty string and must not contain `/` or
+`\\`. Defaults to `"deterministic_burned_map"`.}
 
 \item{detect_params}{Named list. Detection parameters. Recognized keys:
 `seed_threshold` (default `310`), `growth_delta` (default `90`),
@@ -92,7 +88,7 @@ methodological surface). Recognized keys: `deterministic_seed`,
 }
 \value{
 An S3 object of class `otsufire_burned_mapping_config` (a named
-  list). Stable fields: `scenario`, `target_year`, `inputs`,
+  list). Stable fields: `target_year`, `inputs`, `run_name`,
   `output_routes`, `detect_params`, `refine_params`, `scoring_params`,
   `rescue_params`, `options`, `engine_root`, `deterministic_seed`,
   `tool_paths`, `registry_path`. The `detect_params`, `refine_params`,
@@ -117,6 +113,52 @@ accepts a small, fixed set of environmental-user-facing keys (see
 the parameter sections below). Any other internal/engine parameter is
 fixed to its validated default and is not configurable through this
 public API.
+}
+\details{
+The public parameter surface is organized as ecological controls rather
+than engine internals.
+
+\strong{Vegetation classes used by \code{*_by_vegetation} vectors}
+\itemize{
+\item \code{1} Agroforestry
+\item \code{2} Grassland
+\item \code{3} Sparse / burned
+\item \code{4} Shrubland
+\item \code{5} Broadleaved forest
+\item \code{6} Mixed forest
+\item \code{7} Conifer forest
+\item \code{8} Artificial areas
+\item \code{9} Agricultural areas
+\item \code{10} Water / wetlands
+\item \code{11} Bare
+}
+
+\strong{How to interpret \code{detect_params}}
+\itemize{
+\item \code{seed_threshold} (change-index units): global minimum change-index value required for a pixel to become a burned seed. Increasing it creates fewer, more conservative seeds with lower commission but higher omission; decreasing it creates more seeds and higher sensitivity but raises false-positive risk. Adjust when the whole map is systematically over- or under-detecting burned cores. Acts as a global floor that class-specific bounds can override.
+\item \code{seed_threshold_by_vegetation} (change-index units): class-specific lower bound for seed generation. Increasing a class value makes seed detection more conservative in that land-cover class; decreasing it makes seed generation more permissive there. Adjust when errors are concentrated in specific vegetation or land-cover types. The validated defaults are highest in water / wetlands and artificial / bare classes, and lower in vegetated burnable classes.
+\item \code{growth_delta} (change-index units): global reduction applied from seed threshold to growth threshold. Increasing it allows more permissive expansion from seeds, larger patches, and higher commission risk; decreasing it makes expansion more restrictive and patches smaller, at the cost of higher omission. Adjust when mapped patch boundaries are consistently too small or too large. Acts as a general fallback when no class-specific delta is supplied.
+\item \code{growth_delta_by_vegetation} (change-index units): class-specific amount by which the growth threshold is relaxed relative to the seed threshold. Increasing a class value allows stronger expansion within that class and increases connectivity; decreasing it limits expansion there and produces tighter patch boundaries. Adjust when over- or under-expansion is vegetation-specific. The validated defaults are larger in shrubland and forest classes, and very small in water / wetlands, artificial, agricultural, and bare classes.
+\item \code{minimum_growth_threshold} (change-index units): global minimum change-index floor allowed during region growing. Increasing it restricts growth to stronger change-index values and reduces over-expansion; decreasing it allows growth into weaker change-index values and can absorb unburned pixels. Adjust when growing systematically leaks into weak-change backgrounds or misses low-severity burn edges. Acts as a global floor that class-specific floors usually override.
+\item \code{minimum_growth_threshold_by_vegetation} (change-index units): class-specific minimum floor constraining region growing. Increasing a class value prevents growth into low-change pixels within that class and reduces commission; decreasing it allows growth into lower change pixels and can improve boundary completeness at the cost of more false positives. Adjust when boundary errors are class-specific. The validated defaults are highest in water / wetlands, artificial, agricultural, and bare classes, and lower in shrubland and forested classes.
+\item \code{minimum_seed_pixels} (pixels): minimum number of core seed pixels required to retain a grown patch. Increasing it removes small isolated detections and reduces salt-and-pepper false positives; decreasing it keeps smaller candidate patches and improves small-fire sensitivity at the cost of more noise. Adjust according to minimum fire size and raster resolution. Interpret this parameter together with pixel size: 30 pixels correspond to different areas at 20 m and 30 m resolution.
+}
+
+\strong{How to interpret \code{refine_params}}
+\itemize{
+\item \code{aoi_buffer_m} (meters): buffer around the area of interest used during refinement. Increasing it reduces edge artefacts near the AOI boundary but increases processing area; decreasing it reduces processing area but increases truncation risk at the edges. Adjust when fires near AOI boundaries are clipped or when processing cost is excessive. Not vegetation-specific.
+\item \code{minimum_detected_area_m2} (m\eqn{^2}): minimum area of detected polygons retained after segmentation. Increasing it removes tiny patches earlier in the workflow; decreasing it retains very small detections for later filtering. Adjust when segmentation produces excessive tiny fragments. This threshold is usually kept permissive because later filters handle patch reliability.
+\item \code{merge_overlaps} (logical): whether overlapping candidate geometries are merged during refinement. Setting it to \code{TRUE} produces more consolidated patches and avoids duplicate candidates; setting it to \code{FALSE} preserves overlapping detections separately. Adjust only if overlap structure must be preserved for diagnostics. Not vegetation-specific.
+}
+
+\strong{How to interpret \code{scoring_params}}
+\itemize{
+\item \code{support_buffer_m} (meters): buffer used to evaluate contextual support around candidate patches. Increasing it allows nearby support evidence to influence the patch; decreasing it restricts support evidence to the patch geometry itself. Adjust when evidence is spatially misaligned with patch boundaries. Usually conservative; hotspot and reference buffers are handled separately.
+\item \code{previous_fire_exclusion_buffer_m} (meters): buffer around previous-year burned areas used to identify temporal conflicts. Increasing it more aggressively removes or downgrades patches overlapping recent burns; decreasing it is more permissive with repeated or adjacent burns. Adjust when previous-year scars are being repeatedly detected as new burns. The validated default of 90 m is roughly one 90 m analysis pixel.
+\item \code{previous_fire_cleanup_buffer_m} (meters): buffer used to clean residual overlap with previous-year burned polygons. Increasing it removes more temporal-cleanup residue; decreasing it retains more boundary-adjacent area near old burns. Adjust when temporal-cleanup artefacts are visible along old fire boundaries. Not vegetation-specific.
+\item \code{minimum_remaining_area_m2} (m\eqn{^2}): minimum area required after previous-fire overlap removal. Increasing it drops more small remnants after temporal cleanup; decreasing it retains more residual fragments. Adjust when previous-fire erasure leaves many meaningless slivers or removes valid reburns. It should reflect the minimum meaningful patch size after cleanup.
+\item \code{reference_buffer_m} (meters): buffer used when constructing or comparing spectral support references. Increasing it allows more spatial tolerance around reference or support evidence; decreasing it makes the comparison stricter and more spatially exact. Adjust when spatial mismatch exists between candidate patches and support / reference layers. Not vegetation-specific.
+}
 }
 \seealso{
 Other workflow: 

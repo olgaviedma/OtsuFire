@@ -13,15 +13,23 @@ The current runtime resolves most inputs from the project layout, but the method
 | Ecoregions | Support stratified segmentation and contextual separation |
 | Hotspots when available | Provide an additional support filter in the canonical decisions |
 | Previous-year burned polygons when available | Support temporal-conflict handling through `preyear_*` fields |
-| Scenario-specific high-confidence registry when available | Supports the optional RBR keep pool used in later scoring |
+| Run-specific high-confidence registry when available | Supports the optional RBR keep pool used in later scoring |
 
-The paper draft supports the general logic of annual change index + ecological stratification + deterministic filtering. The current code adds the explicit project-state details: scenario-specific registries, deterministic seeds, and canonical decision-field writing.
+The paper draft supports the general logic of annual change index + ecological stratification + deterministic filtering. The current code adds the explicit project-state details: run-specific registries, deterministic seeds, and canonical decision-field writing.
 
-## Scenario Presets
+## Public Parameter Blocks
 
-The active deterministic runtime exposes four scenario presets: `original`, `lax`, `balanced`, and `restrictive`. These presets modify the Otsu thresholds, growth deltas, minimum growth floor, minimum seed pixels per component, rescue settings used during refinement, and related support parameters. The current default in the package bridge is `balanced`.
+The active deterministic builder now exposes three explicit parameter blocks instead of closed scenario presets:
 
-This book does not reproduce the full per-class parameter vectors. Those remain in `build_scenario_preset()` and should be treated as the authoritative source for exact threshold values.
+- `detect_params` for seed generation and region growth,
+- `refine_params` for AOI buffering and geometric cleanup,
+- `scoring_params` for contextual and previous-fire support rules.
+
+The validated default values reproduce the former `balanced` behaviour when the registry state and deterministic seed are frozen, but users are expected to pass explicit values rather than select a preset name. The public help for `build_burned_mapping_config()` is now the authoritative source for:
+
+- the vegetation-class mapping used by `*_by_vegetation`,
+- the meaning of each ecological parameter,
+- and the expected effect of increasing or decreasing each value.
 
 ## Stepwise Workflow
 
@@ -39,7 +47,7 @@ The third phase evaluates the refined polygons against burnable support, previou
 
 ### 4. RBR support scoring
 
-The next phase computes RBR-based support metrics for the keep-review universe. When a scenario-specific multiyear registry already exists, the deterministic stage can use that registry as the keep pool. Otherwise it falls back to the current year's own deterministic keep support. This step produces metrics such as `median_rbr`, `percentile_in_keep`, `conf_area`, and `conf_pix`.
+The next phase computes RBR-based support metrics for the keep-review universe. When a run-specific multiyear registry already exists, the deterministic stage can use that registry as the keep pool. Otherwise it falls back to the current year's own deterministic keep support. This step produces metrics such as `median_rbr`, `percentile_in_keep`, `conf_area`, and `conf_pix`.
 
 ### 5. Canonical decision writing
 
@@ -72,7 +80,7 @@ The special case in `class_final` is important: when exactly one active filter d
 | Refined patches | `02_REFINE/BA_<year>_REFINE_MERGED_<grow_tag>.gpkg` | Main refined candidate layer before canonical decisions |
 | Internal decisions | `05_DECISIONS/internal_decisions.gpkg` | Canonical annual deterministic output and supervised input |
 | Reference decisions | `05_DECISIONS/reference_decisions.gpkg` | Optional reference-side comparison layer |
-| Validation workbook | `06_VALIDATION/validation_ALL_<year>_<scenario>_res30.xlsx` | External validation summary when validation is run |
+| Validation workbook | `06_VALIDATION/validation_ALL_<year>_<run_name>_res30.xlsx` | External validation summary when validation is run |
 | Timing log | `99_LOGS_TIMING/<year>_timing_steps.csv` | Profiling and reproducibility support |
 
 ## Shared Validation Layer

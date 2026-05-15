@@ -43,7 +43,6 @@ engine; the same engine is also invoked from
 \seealso{
 Other modular: 
 \code{\link{detect_burned_patches}()},
-\code{\link{score_burned_patches}()},
 \code{\link{update_burned_like_registry}()},
 \code{\link{validate_fire_maps}()}
 }

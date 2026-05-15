@@ -1,32 +1,108 @@
 #' Run the full deterministic burned-area pipeline for one year
 #'
 #' @description
-#' High-level public wrapper that chains
-#' [detect_burned_patches()], [score_burned_patches()], and — when
-#' requested — the shared [validate_fire_maps()] utility, using a single
-#' [otsufire_burned_mapping_config][build_burned_mapping_config].
+#' High-level public wrapper that orchestrates the complete deterministic
+#' burned-area workflow for a single target year by sequentially chaining
+#' \code{\link[=detect_burned_patches]{detect_burned_patches()}},
+#' \code{\link[=score_burned_patches]{score_burned_patches()}}, and — when
+#' requested — the shared
+#' \code{\link[=validate_fire_maps]{validate_fire_maps()}} utility, using
+#' a single
+#' \code{\link[=build_burned_mapping_config]{otsufire_burned_mapping_config}}.
 #'
-#' This orchestrator is new in 0.2.x and is **not** a thin copy of the
-#' 0.1.x `8_deterministic_bridge.R`. It consumes the new public config
-#' object, calls the new modular public functions, and assembles a
-#' contract-shaped return value plus a timing log.
+#' The pipeline implements the full unsupervised OtsuFire decision
+#' workflow, including candidate patch delineation through adaptive
+#' seed-and-grow segmentation, sequential rule-based filtering,
+#' temporal-conflict assessment, spectral-support scoring, and final
+#' deterministic confidence assignment into `keep`, `review`, or `drop`.
+#'
+#' Within the current pipeline wrapper, deterministic scoring uses the
+#' same-year local spectral-support fallback. The lower-level function
+#' \code{\link[=score_burned_patches]{score_burned_patches()}}
+#' additionally supports an explicit `keep_pool` argument for direct
+#' scoring workflows. The deterministic pipeline does not read or depend
+#' on implicit external burned-like registries.
+#'
+#' This orchestrator is new in 0.2.x and is \strong{not} a thin copy of
+#' the legacy 0.1.x `8_deterministic_bridge.R`. It consumes the new
+#' public configuration object, calls the modular public functions, and
+#' assembles a contract-shaped return object together with timing
+#' diagnostics and output routes.
 #'
 #' Contract source: `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`,
 #' `DETERMINISTIC_OUTPUTS_FINAL.csv`.
 #'
-#' @param config An `otsufire_burned_mapping_config` object from
-#'   [build_burned_mapping_config()].
+#' @details
+#' \strong{Deterministic workflow structure}
+#'
+#' The pipeline executes the deterministic burned-area workflow in three
+#' main stages:
+#'
+#' \enumerate{
+#'   \item \strong{Detection stage.}
+#'     \code{\link[=detect_burned_patches]{detect_burned_patches()}}
+#'     applies adaptive Otsu thresholding and seed-and-grow segmentation
+#'     to the annual change-index raster in order to generate candidate
+#'     burned patches.
+#'   \item \strong{Scoring stage.}
+#'     \code{\link[=score_burned_patches]{score_burned_patches()}}
+#'     evaluates candidate patches through a sequential rule-based system
+#'     including:
+#'     \itemize{
+#'       \item Filter 1: seed support and burnable-context plausibility;
+#'       \item Filter 2: optional active-fire hotspot corroboration;
+#'       \item Temporal consistency assessment against previous-year
+#'         burned areas (a distinct step, not a numbered filter);
+#'       \item Filter 3: spectral-support evaluation relative to a
+#'         high-confidence keep-like reference distribution.
+#'     }
+#'     The outputs of these components are integrated into a final
+#'     deterministic confidence decision assigning each patch to `keep`,
+#'     `review`, or `drop`, while preserving full decision traceability.
+#'
+#'     Within the current wrapper, this scoring stage uses the local
+#'     same-year spectral-support fallback. Direct use of an explicit
+#'     `keep_pool` belongs to
+#'     \code{\link[=score_burned_patches]{score_burned_patches()}} rather
+#'     than to the current wrapper signature.
+#'   \item \strong{Validation stage.} When validation is enabled and a
+#'     reference burned-area layer is available,
+#'     \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
+#'     the resulting deterministic burned-area outputs against external
+#'     burned-area references.
+#' }
+#'
+#' @param config An `otsufire_burned_mapping_config` object returned by
+#'   \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.
 #' @param write_outputs Logical scalar. Whether the pipeline writes its
 #'   outputs to disk. Default `TRUE`.
 #' @param overwrite Logical scalar. Whether existing outputs from the same
 #'   run may be replaced. Default `FALSE`.
-#' @param run_validation Logical scalar or `"auto"`. Controls validation.
-#'   `TRUE` always attempts validation, `FALSE` skips, `"auto"` (default)
-#'   runs only when `config$inputs$reference_burned_map` is non-NULL.
+#' @param run_validation Logical scalar or `"auto"`. Controls validation
+#'   behaviour.
+#'   \itemize{
+#'     \item `TRUE`: always attempts validation;
+#'     \item `FALSE`: skips validation;
+#'     \item `"auto"` (default): runs validation only when
+#'       `config$inputs$reference_burned_map` is non-NULL.
+#'   }
 #'
 #' @return A named list of class `otsufire_deterministic_run` with fields:
-#'   `detection`, `scoring`, `validation`, `result_paths`, `timing_log`,
-#'   and `config`.
+#' \describe{
+#'   \item{`detection`}{Output object returned by
+#'     \code{\link[=detect_burned_patches]{detect_burned_patches()}}.}
+#'   \item{`scoring`}{Output object returned by
+#'     \code{\link[=score_burned_patches]{score_burned_patches()}}.}
+#'   \item{`validation`}{Validation outputs returned by
+#'     \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
+#'     validation is executed; otherwise `NULL`.}
+#'   \item{`result_paths`}{Named list of important written output paths
+#'     produced during the workflow.}
+#'   \item{`timing_log`}{Timing diagnostics summarising execution time
+#'     for each deterministic stage.}
+#'   \item{`config`}{The input configuration object used to run the
+#'     workflow.}
+#' }
 #'
 #' @family workflow
 #' @export

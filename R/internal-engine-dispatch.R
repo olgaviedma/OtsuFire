@@ -6,7 +6,7 @@
 #         -> segmentation_refinement
 #         -> merge_aoi_shapefiles
 #   (score ) scoring_burned_area_stage2
-#         -> [build_rbr_keep_pool_from_registry]     (optional, registry-based)
+#         -> [explicit keep_pool]                    (optional; no registry read)
 #         -> score_rbr_keep_classes
 #         -> build_internal_decisions
 #         -> write_canonical_decision_output
@@ -569,26 +569,16 @@
          call. = FALSE)
   }
 
-  # ---- Stage 5a: optional registry-based keep pool ------------------
+  # ---- Stage 5a: explicit keep pool only ----------------------------
+  # Deterministic scoring is fully decoupled from any external registry.
+  # The deterministic config no longer carries a registry_path field at
+  # all. Resolution is strictly:
+  #   1. caller-supplied keep_pool -> use it;
+  #   2. otherwise NULL -> Stage 5b builds the pool locally from the
+  #      current year (local fallback, still intact).
   registry_keep_pool <- NULL
   if (!is.null(keep_pool)) {
     registry_keep_pool <- keep_pool
-  } else if (!is.null(config$registry_path) &&
-             file.exists(config$registry_path)) {
-    registry_keep_pool <- tryCatch(
-      engine$build_rbr_keep_pool_from_registry(
-        registry_path = config$registry_path,
-        rbr_rast = rbr_rast,
-        registry_layer = "burned_high_conf_registry",
-        target_year = config$target_year,
-        verbose = TRUE
-      ),
-      error = function(e) {
-        warning("build_rbr_keep_pool_from_registry failed: ",
-                conditionMessage(e), call. = FALSE)
-        NULL
-      }
-    )
   }
 
   # ---- Stage 5b: score_rbr_keep_classes (internal) ------------------

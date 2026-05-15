@@ -26,7 +26,7 @@ test_that("config builder returns the expected S3 class and required fields", {
   )
 
   expect_s3_class(cfg, "otsufire_burned_mapping_config")
-  expect_identical(cfg$scenario, "default")
+  expect_false("scenario" %in% names(cfg))
   expect_identical(cfg$target_year, 2025L)
   expect_identical(cfg$run_name, "deterministic_burned_map")
   expect_type(cfg$inputs, "list")
@@ -40,42 +40,75 @@ test_that("config builder returns the expected S3 class and required fields", {
                   names(cfg$output_routes)))
 })
 
-test_that("scenario is a free-text label (no preset validation)", {
+test_that("scenario has been fully removed from the public surface", {
+  expect_false("scenario" %in% names(formals(build_burned_mapping_config)))
+
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+  cfg <- build_burned_mapping_config(
+    change_index = ci, burnable_mask = bm, target_year = 2025L,
+    output_dir = tempdir())
+  expect_false("scenario" %in% names(cfg))
+
+  # Passing scenario= is rejected as an unused argument.
+  expect_error(
+    build_burned_mapping_config(
+      scenario = "anything", change_index = ci, burnable_mask = bm,
+      target_year = 2025L),
+    regexp = "unused argument"
+  )
+})
+
+test_that("run_name is the single visible experiment label and drives routes", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
 
   cfg <- build_burned_mapping_config(
-    scenario = "my_custom_run_2025",
     change_index = ci, burnable_mask = bm, target_year = 2012L,
-    output_dir = tempdir()
+    run_name = "my_custom_run_2025", output_dir = tempdir()
   )
-  expect_identical(cfg$scenario, "my_custom_run_2025")
-  # scenario still flows into output routes / registry path as a label.
-  expect_match(cfg$output_routes$base, "my_custom_run_2025", fixed = TRUE)
+  expect_identical(cfg$run_name, "my_custom_run_2025")
+  # Single run_name segment: <year>/DETERMINISTIC/<run_name> (no duplicate).
+  expect_match(cfg$output_routes$base,
+               "2012/DETERMINISTIC/my_custom_run_2025",
+               fixed = TRUE)
+  expect_false(grepl("my_custom_run_2025/DETERMINISTIC/my_custom_run_2025",
+                      cfg$output_routes$base, fixed = TRUE))
+  expect_match(cfg$output_routes$validation_workbook,
+               "my_custom_run_2025_res30.xlsx", fixed = TRUE)
 })
 
-test_that("empty scenario fails", {
+test_that("registry path uses toupper(run_name)", {
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+  cfg <- build_burned_mapping_config(
+    change_index = ci, burnable_mask = bm, target_year = 2025L,
+    run_name = "expA", output_dir = tempdir()
+  )
+  expect_match(cfg$registry_path,
+               "/EXPA/RBR_TRAINING_REGISTRY\\.gpkg$")
+})
+
+test_that("empty run_name fails", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
   expect_error(
     build_burned_mapping_config(
-      scenario = "", change_index = ci, burnable_mask = bm,
-      target_year = 2025L),
-    regexp = "scenario"
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      run_name = ""),
+    regexp = "run_name"
   )
 })
 
-test_that("scenario containing / or backslash fails", {
+test_that("run_name containing / or backslash fails", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
   expect_error(
     build_burned_mapping_config(
-      scenario = "a/b", change_index = ci, burnable_mask = bm,
-      target_year = 2025L),
-    regexp = "scenario"
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      run_name = "a/b"),
+    regexp = "run_name"
   )
   expect_error(
     build_burned_mapping_config(
-      scenario = "a\\b", change_index = ci, burnable_mask = bm,
-      target_year = 2025L),
-    regexp = "scenario"
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      run_name = "a\\b"),
+    regexp = "run_name"
   )
 })
 
@@ -262,15 +295,15 @@ test_that("config builder accepts NULL change_index at build time", {
   expect_null(cfg$inputs$change_index)
 })
 
-test_that("output routes respect run_name, year, and scenario label", {
+test_that("output routes respect run_name and year", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
   cfg <- build_burned_mapping_config(
-    scenario = "smoke_scn", change_index = ci, burnable_mask = bm,
+    change_index = ci, burnable_mask = bm,
     target_year = 1985L, run_name = "smoke_x",
     output_dir = tempdir()
   )
   expect_match(cfg$output_routes$base,
-               "1985/smoke_x/DETERMINISTIC/smoke_scn", fixed = FALSE)
+               "1985/DETERMINISTIC/smoke_x", fixed = FALSE)
   expect_match(cfg$output_routes$internal_decisions,
                "internal_decisions\\.gpkg$")
 })

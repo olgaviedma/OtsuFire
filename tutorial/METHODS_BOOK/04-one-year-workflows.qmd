@@ -19,10 +19,10 @@ This chapter is the practical tutorial layer of the book. It summarizes how the 
 The current annual workflow should be read in the following order.
 
 1. Prepare the annual change-index mosaic for the target year.
-2. Run the deterministic stage for the same year and scenario.
+2. Run the deterministic stage for the same year and the chosen deterministic parameterization.
 3. Inspect `05_DECISIONS/internal_decisions.gpkg` before moving on.
 4. Run the one-year supervised workflow on the same year and scenario.
-5. Review the annual public map, the full scored universe, and the scenario-specific registry update.
+5. Review the annual public map, the full scored universe, and the run-specific registry update.
 
 That sequence reflects the active runtime design: the supervised stage consumes the deterministic annual output rather than replacing it.
 
@@ -34,17 +34,41 @@ The bridge layer is useful when a package-style entry point is preferred and the
 
 ```r
 det_cfg <- build_burned_mapping_config(
-  target_year = 2025,
-  scenario = "balanced",
-  scripts_root = "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS",
-  result_name = "Min_Min",
-  deterministic_seed = 12345
+  change_index = "C:/.../Imagery/Composites_90m/Min_Min/MinMin_2025_mosaic_res90m.tif",
+  vegetation_map = "C:/.../Corine_Masks/CLC_2018_peninsula.tif",
+  burnable_mask = "C:/.../Corine_Masks/burneable_mask_binary_corine90_wgs84.tif",
+  target_year = 2025L,
+  output_dir = "C:/.../Results",
+  run_name = "Min_Min_2025_det",
+  detect_params = list(
+    seed_threshold = 310,
+    growth_delta = 90,
+    minimum_growth_threshold = 240,
+    minimum_seed_pixels = 30L
+  ),
+  refine_params = list(
+    aoi_buffer_m = 5000,
+    minimum_detected_area_m2 = 10,
+    merge_overlaps = TRUE
+  ),
+  scoring_params = list(
+    support_buffer_m = 0,
+    previous_fire_exclusion_buffer_m = 90,
+    previous_fire_cleanup_buffer_m = 90,
+    minimum_remaining_area_m2 = 20000,
+    reference_buffer_m = 90
+  ),
+  options = list(
+    deterministic_seed = 12345L,
+    ecoregion_shapefile_path = "C:/.../Ecoregion/ecoregiones_olson.shp",
+    peninsula_shapefile_path = "C:/.../Borders/Iberian_Peninsula.shp"
+  )
 )
 
 det_run <- run_deterministic_pipeline(det_cfg)
 ```
 
-The most important object to inspect after this run is `internal_decisions.gpkg`.
+The most important object to inspect after this run is `internal_decisions.gpkg`. The deterministic bridge now exposes explicit ecological controls through `detect_params`, `refine_params`, and `scoring_params` rather than closed scenario presets.
 
 ### Supervised bridge
 
@@ -76,7 +100,7 @@ The current supervised bridge stores several custom path overrides in its config
 The standalone scripts remain the clearest operational reference.
 
 1. Create or confirm the annual mosaic.
-2. Run `DETERMINISTIC_PIPELINE.R` for the target year and scenario.
+2. Run `DETERMINISTIC_PIPELINE.R` for the target year and chosen deterministic parameterization.
 3. Run `03_PATCH_LEVEL_PIPELINE_2.R` for the same year and scenario.
 4. Optionally run `CHECK_DETERMINISTIC_SUPERVISED_CONSISTENCY.R` after supervised scoring.
 

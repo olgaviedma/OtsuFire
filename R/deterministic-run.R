@@ -215,7 +215,7 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
 #' @export
 print.otsufire_deterministic_run <- function(x, ...) {
   cat("<otsufire_deterministic_run>\n")
-  cat("  scenario   :", x$config$scenario, "\n")
+  cat("  run_name   :", x$config$run_name, "\n")
   cat("  target_year:", x$config$target_year, "\n")
   cat("  result_paths:\n")
   for (nm in names(x$result_paths)) {

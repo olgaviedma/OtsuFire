@@ -145,6 +145,32 @@ test_that("config builder rejects unnamed options list entries", {
   )
 })
 
+test_that("options$change_index_validation block is structurally validated", {
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+
+  # Accepted: a named list using only the recognized keys.
+  expect_s3_class(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      options = list(change_index_validation = list(lower_cap = -250))),
+    "otsufire_burned_mapping_config")
+
+  # Rejected: not a list.
+  expect_error(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      options = list(change_index_validation = "nope")),
+    regexp = "change_index_validation"
+  )
+  # Rejected: unknown sub-key.
+  expect_error(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm, target_year = 2025L,
+      options = list(change_index_validation = list(bogus = 1))),
+    regexp = "Unknown options\\$change_index_validation"
+  )
+})
+
 test_that("detect/refine/scoring params must be named lists", {
   ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
   expect_error(

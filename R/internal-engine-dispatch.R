@@ -152,91 +152,65 @@
   list(corine = setNames(as.numeric(x), names(x)))
 }
 
+# Build the engine-shaped params (params_otsu / params_refine) from the
+# resolved public methodological blocks stored on the config. The public
+# surface (detect_params / refine_params / scoring_params) is resolved in
+# build_burned_mapping_config(); here we only attach the fixed internal
+# parameters and apply the engine-side $corine wrapping. No closed
+# scenario presets remain.
 #' @keywords internal
 #' @noRd
-.of_build_scenario_preset <- function(scenario) {
-  scenario <- match.arg(scenario, c("original", "lax", "balanced", "restrictive"))
-
-  if (scenario == "original") {
-    main_seed  <- c("1"=300,"2"=350,"3"=350,"4"=350,"5"=350,"6"=350,"7"=350,"8"=500,"9"=470,"10"=670,"11"=480)
-    main_delta <- c("1"=100,"2"=50,"3"=100,"4"=100,"5"=50,"6"=50,"7"=50,"8"=10,"9"=10,"10"=5,"11"=10)
-    main_floor <- c("1"=200,"2"=300,"3"=250,"4"=250,"5"=300,"6"=300,"7"=300,"8"=430,"9"=400,"10"=560,"11"=400)
-    otsu_global <- 300; delta_global <- 100; floor_global <- 200
-    mask_edge <- 1L; seed_pix <- 30L; wbt_diag <- FALSE; aoi_buffer <- 5000
-  } else if (scenario == "lax") {
-    main_seed  <- c("1"=290,"2"=390,"3"=350,"4"=290,"5"=290,"6"=290,"7"=290,"8"=480,"9"=440,"10"=650,"11"=450)
-    main_delta <- c("1"=90,"2"=25,"3"=50,"4"=120,"5"=100,"6"=100,"7"=100,"8"=15,"9"=15,"10"=5,"11"=15)
-    main_floor <- c("1"=210,"2"=340,"3"=280,"4"=210,"5"=220,"6"=220,"7"=220,"8"=400,"9"=380,"10"=550,"11"=380)
-    otsu_global <- 300; delta_global <- 100; floor_global <- 220
-    mask_edge <- 1L; seed_pix <- 25L; wbt_diag <- TRUE; aoi_buffer <- 6000
-  } else if (scenario == "balanced") {
-    main_seed  <- c("1"=310,"2"=420,"3"=380,"4"=320,"5"=320,"6"=320,"7"=320,"8"=500,"9"=470,"10"=670,"11"=480)
-    main_delta <- c("1"=80,"2"=20,"3"=40,"4"=100,"5"=85,"6"=85,"7"=85,"8"=10,"9"=10,"10"=5,"11"=10)
-    main_floor <- c("1"=230,"2"=360,"3"=300,"4"=230,"5"=240,"6"=240,"7"=240,"8"=430,"9"=400,"10"=560,"11"=400)
-    otsu_global <- 310; delta_global <- 90; floor_global <- 240
-    mask_edge <- 1L; seed_pix <- 30L; wbt_diag <- FALSE; aoi_buffer <- 5000
-  } else {  # restrictive
-    main_seed  <- c("1"=340,"2"=450,"3"=400,"4"=360,"5"=360,"6"=360,"7"=360,"8"=540,"9"=500,"10"=700,"11"=520)
-    main_delta <- c("1"=60,"2"=15,"3"=30,"4"=80,"5"=65,"6"=65,"7"=65,"8"=5,"9"=5,"10"=5,"11"=5)
-    main_floor <- c("1"=260,"2"=390,"3"=330,"4"=270,"5"=280,"6"=280,"7"=280,"8"=470,"9"=430,"10"=600,"11"=440)
-    otsu_global <- 330; delta_global <- 80; floor_global <- 260
-    mask_edge <- 2L; seed_pix <- 40L; wbt_diag <- FALSE; aoi_buffer <- 4000
+.of_engine_params_from_config <- function(config) {
+  det <- config$detect_params
+  ref <- config$refine_params
+  rsc <- config$rescue_params
+  if (is.null(det) || is.null(ref) || is.null(rsc)) {
+    stop("Internal error: config is missing resolved detect/refine/rescue ",
+         "params. Rebuild it with build_burned_mapping_config().",
+         call. = FALSE)
   }
-
-  refine_seed  <- main_seed
-  refine_delta <- main_delta
-  refine_floor <- main_floor
-  relax_classes <- c("1","4","5","6","7")
-  refine_seed[relax_classes]  <- pmax(0, refine_seed[relax_classes] - 20)
-  refine_delta[relax_classes] <- refine_delta[relax_classes] + 10
-  refine_floor[relax_classes] <- pmax(0, refine_floor[relax_classes] - 20)
-  refine_seed["3"]  <- pmax(0, refine_seed["3"] - 10)
-  refine_delta["3"] <- refine_delta["3"] + 5
-  refine_floor["3"] <- pmax(0, refine_floor["3"] - 10)
 
   params_otsu <- list(
     otsu_value_range = c(0, 1500),
     trim_percentiles = list(min = 0.05, max = 0.99),
-    otsu_thresholds = otsu_global,
-    grow_delta = delta_global,
-    min_grow_threshold_value = floor_global,
-    otsu_min_by_class = .of_to_corine_list(main_seed),
-    grow_delta_by_class = .of_to_corine_list(main_delta),
-    min_grow_threshold_by_class = .of_to_corine_vec(main_floor),
-    mask_edge_n_pixels = mask_edge,
-    min_seed_pixels_per_component = seed_pix,
-    grow_engine = "whitebox", wbt_diag = wbt_diag,
+    otsu_thresholds = det$otsu_thresholds,
+    grow_delta = det$grow_delta,
+    min_grow_threshold_value = det$min_grow_threshold_value,
+    otsu_min_by_class = .of_to_corine_list(det$otsu_min_by_class),
+    grow_delta_by_class = .of_to_corine_list(det$grow_delta_by_class),
+    min_grow_threshold_by_class = .of_to_corine_vec(det$min_grow_threshold_by_class),
+    mask_edge_n_pixels = 1L,
+    min_seed_pixels_per_component = det$min_seed_pixels_per_component,
+    grow_engine = "whitebox", wbt_diag = FALSE,
     crop_to_units = TRUE, save_debug_rasters = FALSE,
     segment_by_intersection = TRUE, ecoregion_touches = TRUE
   )
 
   params_refine <- list(
     n_workers = 4, target_crs = "EPSG:3035",
-    aoi_buffer_m = aoi_buffer, omission_buffer_m = 0,
-    top_n_if_no_ref = Inf, min_detected_area_m2 = 10,
-    clip_aois_to_raster_extent = TRUE, merge_overlaps = TRUE,
-    merge_overlaps_buffer_m = 0, verbose = TRUE,
+    aoi_buffer_m = ref$aoi_buffer_m, omission_buffer_m = ref$omission_buffer_m,
+    top_n_if_no_ref = Inf, min_detected_area_m2 = ref$min_detected_area_m2,
+    clip_aois_to_raster_extent = TRUE, merge_overlaps = ref$merge_overlaps,
+    merge_overlaps_buffer_m = ref$merge_overlaps_buffer_m, verbose = TRUE,
     rescue_args = list(
       trim_percentiles = list(min = 0.05, max = 0.99),
       otsu_value_range = c(0, 1500),
-      otsu_thresholds = otsu_global,
-      otsu_min_by_class = .of_to_corine_list(refine_seed),
-      grow_delta = delta_global,
-      grow_delta_by_class = .of_to_corine_list(refine_delta),
-      min_grow_threshold_value = floor_global,
-      min_grow_threshold_by_class = .of_to_corine_vec(refine_floor),
-      mask_edge_n_pixels = mask_edge,
-      min_seed_pixels_per_component = seed_pix,
-      grow_engine = "whitebox", wbt_diag = wbt_diag,
+      otsu_thresholds = det$otsu_thresholds,
+      otsu_min_by_class = .of_to_corine_list(rsc$otsu_min_by_class),
+      grow_delta = det$grow_delta,
+      grow_delta_by_class = .of_to_corine_list(rsc$grow_delta_by_class),
+      min_grow_threshold_value = det$min_grow_threshold_value,
+      min_grow_threshold_by_class = .of_to_corine_vec(rsc$min_grow_threshold_by_class),
+      mask_edge_n_pixels = 1L,
+      min_seed_pixels_per_component = det$min_seed_pixels_per_component,
+      grow_engine = "whitebox", wbt_diag = FALSE,
       ecoregion_touches = TRUE, segment_by_intersection = TRUE,
       crop_to_units = TRUE, save_debug_rasters = FALSE,
       tile = FALSE, resolution = 90
     )
   )
 
-  list(params_otsu = params_otsu, params_refine = params_refine,
-       seed_pix = seed_pix, otsu_global = otsu_global,
-       delta_global = delta_global)
+  list(params_otsu = params_otsu, params_refine = params_refine)
 }
 
 #' @keywords internal
@@ -307,7 +281,7 @@
     }
   }
 
-  preset <- .of_build_scenario_preset(config$scenario)
+  preset <- .of_engine_params_from_config(config)
   params_otsu   <- preset$params_otsu
   params_refine <- preset$params_refine
 
@@ -547,6 +521,13 @@
   if (terra::nlyr(rbr_rast) > 1L) rbr_rast <- rbr_rast[[1L]]
 
   # ---- Stage 4: scoring_burned_area_stage2 --------------------------
+  # Public scoring surface comes from config$scoring_params (resolved in
+  # build_burned_mapping_config()); the remaining constants stay fixed.
+  scoring <- config$scoring_params
+  if (is.null(scoring)) {
+    stop("Internal error: config is missing resolved scoring_params. ",
+         "Rebuild it with build_burned_mapping_config().", call. = FALSE)
+  }
   stage2_args <- list(
     polys_stage2 = polys_stage2,
     polys_stage1 = polys_stage1,
@@ -555,14 +536,14 @@
     rbr_rast = rbr_rast,
     corine_na_scope = "all",
     max_corine_na_frac = 0.65,
-    support_buffer_m = 0,
+    support_buffer_m = scoring$support_buffer_m,
     preyear_polys = preyear_polys,
-    erase_mask_buffer_m = 90,
-    erase_post_shave_m = 90,
-    erase_min_area_m2 = 20000,
+    erase_mask_buffer_m = scoring$erase_mask_buffer_m,
+    erase_post_shave_m = scoring$erase_post_shave_m,
+    erase_min_area_m2 = scoring$erase_min_area_m2,
     ref_polys = ref_polys,
     score_ref_polys = !is.null(ref_polys),
-    ref_buffer_m = 90,
+    ref_buffer_m = scoring$ref_buffer_m,
     internal_keep_value = "keep",
     validate_use_clean = TRUE,
     validate_ref_use_clean = TRUE,

@@ -2,20 +2,29 @@
 #'
 #' @description
 #' Public entry point for the deterministic workflow. Collects the spatial
-#' inputs, scenario preset, output location, and advanced options needed by
-#' the rest of the deterministic stages into a single normalized object of
-#' class `otsufire_burned_mapping_config`. The function does not run any
-#' heavy processing: it validates arguments, stores them, and resolves
-#' registry and output routes.
+#' inputs, the methodological parameters, the output location, and the
+#' technical/runtime options needed by the rest of the deterministic
+#' stages into a single normalized object of class
+#' `otsufire_burned_mapping_config`. The function does not run any heavy
+#' processing: it validates arguments, resolves the methodological
+#' parameter blocks, and computes registry and output routes.
 #'
 #' Pass the returned object to [detect_burned_patches()],
 #' [score_burned_patches()], or [run_deterministic_pipeline()].
 #'
-#' Contract source: `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`,
-#' `DETERMINISTIC_INPUTS_FINAL.csv`, `OUTPUTS_ROUTES.csv`.
+#' The public methodological surface is exposed through three named
+#' lists: `detect_params`, `refine_params`, and `scoring_params`. Each
+#' accepts a small, fixed set of environmental-user-facing keys (see
+#' the parameter sections below). Any other internal/engine parameter is
+#' fixed to its validated default and is not configurable through this
+#' public API.
 #'
-#' @param scenario Character scalar. Methodological preset. One of
-#'   `"balanced"` (default), `"original"`, `"lax"`, or `"restrictive"`.
+#' @param scenario Character scalar. Free-text traceability label only.
+#'   It is no longer a methodological preset: it does not change any
+#'   detection/refinement/scoring parameter. It is used purely to tag
+#'   outputs, output routes, and the scenario-specific registry path.
+#'   Must be non-empty and must not contain `/` or `\\`. Defaults to
+#'   `"default"`.
 #' @param change_index Raster path, `terra::SpatRaster`, or `NULL`.
 #'   Annual change-index raster (RBR, dNBR, RdNBR, ...). Required before
 #'   detection runs; may be `NULL` at config-build time for configs that
@@ -37,20 +46,46 @@
 #'   Defaults to `tempdir()`.
 #' @param run_name Character scalar. Stable run identifier used to name
 #'   output folders and files. Defaults to `"deterministic_burned_map"`.
-#' @param options Named list. Container for advanced options. Recognized
-#'   keys include `engine_root`, `deterministic_seed`, `whitebox_exe`,
-#'   `gdalwarp_path`, `tool_paths`, `vegetation_reclass`, `strata_rules`,
-#'   `hotspot_fields`, `target_crs`, `tolerances`.
+#' @param detect_params Named list. Detection parameters. Recognized keys:
+#'   `seed_threshold` (default `310`), `growth_delta` (default `90`),
+#'   `minimum_growth_threshold` (default `240`), `minimum_seed_pixels`
+#'   (default `30`), and the per-vegetation-class vectors
+#'   `seed_threshold_by_vegetation`, `growth_delta_by_vegetation`,
+#'   `minimum_growth_threshold_by_vegetation` (named numeric vectors over
+#'   classes `"1"`..`"11"`). If a global scalar is given without its
+#'   matching `*_by_vegetation` vector, the global value is broadcast to
+#'   all 11 classes. A partial `*_by_vegetation` vector is completed with
+#'   the user global (if given) or otherwise the legacy default for the
+#'   missing class. Unknown keys raise an error.
+#' @param refine_params Named list. Refinement parameters. Recognized
+#'   keys: `aoi_buffer_m` (default `5000`), `omission_buffer_m`
+#'   (default `0`), `minimum_detected_area_m2` (default `10`),
+#'   `merge_overlaps` (default `TRUE`), `merge_overlaps_buffer_m`
+#'   (default `0`). Unknown keys raise an error.
+#' @param scoring_params Named list. Scoring parameters. Recognized keys:
+#'   `support_buffer_m` (default `0`),
+#'   `previous_fire_exclusion_buffer_m` (default `90`),
+#'   `previous_fire_cleanup_buffer_m` (default `90`),
+#'   `minimum_remaining_area_m2` (default `20000`),
+#'   `reference_buffer_m` (default `90`). Unknown keys raise an error.
+#' @param options Named list. Technical/runtime container only (NOT a
+#'   methodological surface). Recognized keys: `deterministic_seed`,
+#'   `engine_root`, `registry_path`, `whitebox_exe`, `gdalwarp_path`,
+#'   `tool_paths`, `ecoregion_shapefile_path`, `peninsula_shapefile_path`,
+#'   `future_globals_maxsize`.
 #'
 #' @return An S3 object of class `otsufire_burned_mapping_config` (a named
 #'   list). Stable fields: `scenario`, `target_year`, `inputs`,
-#'   `output_routes`, `options`, `engine_root`, `deterministic_seed`,
-#'   `tool_paths`, `registry_path`.
+#'   `output_routes`, `detect_params`, `refine_params`, `scoring_params`,
+#'   `rescue_params`, `options`, `engine_root`, `deterministic_seed`,
+#'   `tool_paths`, `registry_path`. The `detect_params`, `refine_params`,
+#'   and `scoring_params` fields hold the fully resolved parameter blocks
+#'   in their internal engine-name shape.
 #'
 #' @family workflow
 #' @export
 build_burned_mapping_config <- function(
-    scenario = c("balanced", "original", "lax", "restrictive"),
+    scenario = "default",
     change_index = NULL,
     vegetation_map = NULL,
     burnable_mask,
@@ -60,9 +95,22 @@ build_burned_mapping_config <- function(
     target_year,
     output_dir = tempdir(),
     run_name = "deterministic_burned_map",
+    detect_params = list(),
+    refine_params = list(),
+    scoring_params = list(),
     options = list()
 ) {
-  scenario <- match.arg(scenario)
+  # scenario is a free-text traceability label only: no match.arg(), no
+  # preset validation against balanced/original/lax/restrictive.
+  if (!is.character(scenario) || length(scenario) != 1L || is.na(scenario) ||
+      !nzchar(scenario)) {
+    stop("'scenario' must be a single non-empty character string.",
+         call. = FALSE)
+  }
+  if (grepl("[/\\\\]", scenario)) {
+    stop("'scenario' must not contain '/' or '\\\\' (it is used in output paths).",
+         call. = FALSE)
+  }
 
   if (missing(target_year) || is.null(target_year)) {
     stop("'target_year' is required.", call. = FALSE)
@@ -91,6 +139,12 @@ build_burned_mapping_config <- function(
   if (length(options) > 0L && (is.null(names(options)) || any(!nzchar(names(options))))) {
     stop("'options' must be a named list (all elements must have names).", call. = FALSE)
   }
+
+  # ---- methodological parameter resolution --------------------------
+  detect_resolved  <- .of_resolve_detect_params(detect_params)
+  refine_resolved  <- .of_resolve_refine_params(refine_params)
+  scoring_resolved <- .of_resolve_scoring_params(scoring_params)
+  rescue_resolved  <- .of_derive_rescue_params(detect_resolved)
 
   inputs <- list(
     change_index = .of_normalize_input_spec(change_index, "change_index",
@@ -149,6 +203,10 @@ build_burned_mapping_config <- function(
     engine_root = engine_root,
     deterministic_seed = deterministic_seed,
     tool_paths = tool_paths,
+    detect_params = detect_resolved,
+    refine_params = refine_resolved,
+    scoring_params = scoring_resolved,
+    rescue_params = rescue_resolved,
     options = options
   )
 
@@ -159,13 +217,24 @@ build_burned_mapping_config <- function(
 #' @export
 print.otsufire_burned_mapping_config <- function(x, ...) {
   cat("<otsufire_burned_mapping_config>\n")
-  cat("  scenario     :", x$scenario, "\n")
+  cat("  scenario     :", x$scenario, "(traceability label)\n")
   cat("  target_year  :", x$target_year, "\n")
   cat("  run_name     :", x$run_name, "\n")
   cat("  output_dir   :", x$output_dir, "\n")
   cat("  engine_root  :", x$engine_root %||% "<unresolved>", "\n")
   cat("  deterministic_seed:", x$deterministic_seed, "\n")
   cat("  registry_path:", x$registry_path %||% "<auto>", "\n")
+  cat("  detect_params: seed_threshold=", x$detect_params$otsu_thresholds,
+      " growth_delta=", x$detect_params$grow_delta,
+      " minimum_growth_threshold=", x$detect_params$min_grow_threshold_value,
+      " minimum_seed_pixels=", x$detect_params$min_seed_pixels_per_component,
+      "\n", sep = "")
+  cat("  refine_params: aoi_buffer_m=", x$refine_params$aoi_buffer_m,
+      " minimum_detected_area_m2=", x$refine_params$min_detected_area_m2,
+      "\n", sep = "")
+  cat("  scoring_params: support_buffer_m=", x$scoring_params$support_buffer_m,
+      " reference_buffer_m=", x$scoring_params$ref_buffer_m,
+      "\n", sep = "")
   cat("  inputs       :\n")
   for (nm in names(x$inputs)) {
     v <- x$inputs[[nm]]
@@ -176,6 +245,246 @@ print.otsufire_burned_mapping_config <- function(x, ...) {
                           v$type)))
   }
   invisible(x)
+}
+
+# --- methodological parameter resolution -------------------------------
+
+# Vegetation classes the per-class vectors are defined over.
+.OF_VEG_CLASSES <- as.character(1:11)
+
+#' @keywords internal
+#' @noRd
+.of_detect_param_defaults <- function() {
+  list(
+    seed_threshold = 310,
+    growth_delta = 90,
+    minimum_growth_threshold = 240,
+    minimum_seed_pixels = 30L,
+    seed_threshold_by_vegetation = c(
+      "1" = 310, "2" = 420, "3" = 380, "4" = 320, "5" = 320, "6" = 320,
+      "7" = 320, "8" = 500, "9" = 470, "10" = 670, "11" = 480),
+    growth_delta_by_vegetation = c(
+      "1" = 80, "2" = 20, "3" = 40, "4" = 100, "5" = 85, "6" = 85,
+      "7" = 85, "8" = 10, "9" = 10, "10" = 5, "11" = 10),
+    minimum_growth_threshold_by_vegetation = c(
+      "1" = 230, "2" = 360, "3" = 300, "4" = 230, "5" = 240, "6" = 240,
+      "7" = 240, "8" = 430, "9" = 400, "10" = 560, "11" = 400)
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.of_check_named_list <- function(x, label) {
+  if (!is.list(x)) {
+    stop(sprintf("'%s' must be a list().", label), call. = FALSE)
+  }
+  if (length(x) > 0L && (is.null(names(x)) || any(!nzchar(names(x))))) {
+    stop(sprintf("'%s' must be a named list (all elements must have names).",
+                 label), call. = FALSE)
+  }
+  invisible(x)
+}
+
+#' @keywords internal
+#' @noRd
+.of_check_unknown_keys <- function(x, allowed, label) {
+  unknown <- setdiff(names(x), allowed)
+  if (length(unknown) > 0L) {
+    stop(sprintf("Unknown %s key(s): %s. Allowed: %s.",
+                 label, paste(unknown, collapse = ", "),
+                 paste(allowed, collapse = ", ")), call. = FALSE)
+  }
+  invisible(x)
+}
+
+#' @keywords internal
+#' @noRd
+.of_check_scalar_num <- function(x, label) {
+  if (is.null(x)) return(invisible(NULL))
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x)) {
+    stop(sprintf("'%s' must be a single finite numeric value.", label),
+         call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+# Resolve one global/by-vegetation triple into a complete named numeric
+# vector over all 11 classes, following the closed resolution rules.
+#' @keywords internal
+#' @noRd
+.of_resolve_by_veg <- function(user_global, user_byveg,
+                               default_global, default_byveg, label) {
+  classes <- .OF_VEG_CLASSES
+  if (!is.null(user_byveg)) {
+    if (!is.numeric(user_byveg) || is.null(names(user_byveg)) ||
+        any(!nzchar(names(user_byveg)))) {
+      stop(sprintf("detect_params$%s must be a named numeric vector.",
+                   label), call. = FALSE)
+    }
+    unknown <- setdiff(names(user_byveg), classes)
+    if (length(unknown) > 0L) {
+      stop(sprintf(
+        "detect_params$%s has unknown vegetation class(es): %s (expected '1'..'11').",
+        label, paste(unknown, collapse = ", ")), call. = FALSE)
+    }
+  }
+  out <- stats::setNames(numeric(length(classes)), classes)
+  for (cl in classes) {
+    if (!is.null(user_byveg) && cl %in% names(user_byveg)) {
+      out[cl] <- as.numeric(user_byveg[[cl]])
+    } else if (!is.null(user_global)) {
+      out[cl] <- as.numeric(user_global)
+    } else {
+      out[cl] <- as.numeric(default_byveg[[cl]])
+    }
+  }
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.of_resolve_detect_params <- function(detect_params) {
+  .of_check_named_list(detect_params, "detect_params")
+  allowed <- c(
+    "seed_threshold", "growth_delta", "minimum_growth_threshold",
+    "minimum_seed_pixels", "seed_threshold_by_vegetation",
+    "growth_delta_by_vegetation", "minimum_growth_threshold_by_vegetation")
+  .of_check_unknown_keys(detect_params, allowed, "detect_params")
+
+  d <- .of_detect_param_defaults()
+
+  # Exact extraction only: `$` would partial-match e.g. `growth_delta`
+  # against `growth_delta_by_vegetation`.
+  seed_g  <- detect_params[["seed_threshold"]]
+  delta_g <- detect_params[["growth_delta"]]
+  floor_g <- detect_params[["minimum_growth_threshold"]]
+  .of_check_scalar_num(seed_g,  "detect_params$seed_threshold")
+  .of_check_scalar_num(delta_g, "detect_params$growth_delta")
+  .of_check_scalar_num(floor_g, "detect_params$minimum_growth_threshold")
+
+  msp <- detect_params[["minimum_seed_pixels"]]
+  if (is.null(msp)) {
+    msp <- d$minimum_seed_pixels
+  } else {
+    .of_check_scalar_num(msp, "detect_params$minimum_seed_pixels")
+    msp <- as.integer(round(msp))
+  }
+
+  list(
+    otsu_thresholds = if (!is.null(seed_g)) as.numeric(seed_g)
+                      else d$seed_threshold,
+    grow_delta = if (!is.null(delta_g)) as.numeric(delta_g)
+                 else d$growth_delta,
+    min_grow_threshold_value = if (!is.null(floor_g)) as.numeric(floor_g)
+                               else d$minimum_growth_threshold,
+    min_seed_pixels_per_component = msp,
+    otsu_min_by_class = .of_resolve_by_veg(
+      seed_g, detect_params[["seed_threshold_by_vegetation"]],
+      d$seed_threshold, d$seed_threshold_by_vegetation,
+      "seed_threshold_by_vegetation"),
+    grow_delta_by_class = .of_resolve_by_veg(
+      delta_g, detect_params[["growth_delta_by_vegetation"]],
+      d$growth_delta, d$growth_delta_by_vegetation,
+      "growth_delta_by_vegetation"),
+    min_grow_threshold_by_class = .of_resolve_by_veg(
+      floor_g, detect_params[["minimum_growth_threshold_by_vegetation"]],
+      d$minimum_growth_threshold, d$minimum_growth_threshold_by_vegetation,
+      "minimum_growth_threshold_by_vegetation")
+  )
+}
+
+#' @keywords internal
+#' @noRd
+.of_resolve_refine_params <- function(refine_params) {
+  .of_check_named_list(refine_params, "refine_params")
+  allowed <- c("aoi_buffer_m", "omission_buffer_m",
+               "minimum_detected_area_m2", "merge_overlaps",
+               "merge_overlaps_buffer_m")
+  .of_check_unknown_keys(refine_params, allowed, "refine_params")
+
+  g <- function(key, default) {
+    if (is.null(refine_params[[key]])) default else refine_params[[key]]
+  }
+
+  merge_overlaps <- g("merge_overlaps", TRUE)
+  if (!is.logical(merge_overlaps) || length(merge_overlaps) != 1L ||
+      is.na(merge_overlaps)) {
+    stop("refine_params$merge_overlaps must be a single TRUE/FALSE value.",
+         call. = FALSE)
+  }
+  out <- list(
+    aoi_buffer_m            = g("aoi_buffer_m", 5000),
+    omission_buffer_m       = g("omission_buffer_m", 0),
+    min_detected_area_m2    = g("minimum_detected_area_m2", 10),
+    merge_overlaps          = merge_overlaps,
+    merge_overlaps_buffer_m = g("merge_overlaps_buffer_m", 0)
+  )
+  .of_check_scalar_num(out$aoi_buffer_m, "refine_params$aoi_buffer_m")
+  .of_check_scalar_num(out$omission_buffer_m,
+                       "refine_params$omission_buffer_m")
+  .of_check_scalar_num(out$min_detected_area_m2,
+                       "refine_params$minimum_detected_area_m2")
+  .of_check_scalar_num(out$merge_overlaps_buffer_m,
+                       "refine_params$merge_overlaps_buffer_m")
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.of_resolve_scoring_params <- function(scoring_params) {
+  .of_check_named_list(scoring_params, "scoring_params")
+  allowed <- c("support_buffer_m", "previous_fire_exclusion_buffer_m",
+               "previous_fire_cleanup_buffer_m",
+               "minimum_remaining_area_m2", "reference_buffer_m")
+  .of_check_unknown_keys(scoring_params, allowed, "scoring_params")
+
+  g <- function(key, default) {
+    if (is.null(scoring_params[[key]])) default else scoring_params[[key]]
+  }
+  out <- list(
+    support_buffer_m    = g("support_buffer_m", 0),
+    erase_mask_buffer_m = g("previous_fire_exclusion_buffer_m", 90),
+    erase_post_shave_m  = g("previous_fire_cleanup_buffer_m", 90),
+    erase_min_area_m2   = g("minimum_remaining_area_m2", 20000),
+    ref_buffer_m        = g("reference_buffer_m", 90)
+  )
+  .of_check_scalar_num(out$support_buffer_m,
+                       "scoring_params$support_buffer_m")
+  .of_check_scalar_num(out$erase_mask_buffer_m,
+                       "scoring_params$previous_fire_exclusion_buffer_m")
+  .of_check_scalar_num(out$erase_post_shave_m,
+                       "scoring_params$previous_fire_cleanup_buffer_m")
+  .of_check_scalar_num(out$erase_min_area_m2,
+                       "scoring_params$minimum_remaining_area_m2")
+  .of_check_scalar_num(out$ref_buffer_m,
+                       "scoring_params$reference_buffer_m")
+  out
+}
+
+# Rescue thresholds are NOT public: they are derived automatically from
+# the resolved detection by-class vectors using the legacy relaxation
+# logic (classes 1,4,5,6,7: seed -20 / delta +10 / floor -20; class 3:
+# seed -10 / delta +5 / floor -10; all other classes unchanged).
+#' @keywords internal
+#' @noRd
+.of_derive_rescue_params <- function(detect_resolved) {
+  rescue_seed  <- detect_resolved$otsu_min_by_class
+  rescue_delta <- detect_resolved$grow_delta_by_class
+  rescue_floor <- detect_resolved$min_grow_threshold_by_class
+
+  relax_classes <- c("1", "4", "5", "6", "7")
+  rescue_seed[relax_classes]  <- pmax(0, rescue_seed[relax_classes] - 20)
+  rescue_delta[relax_classes] <- rescue_delta[relax_classes] + 10
+  rescue_floor[relax_classes] <- pmax(0, rescue_floor[relax_classes] - 20)
+  rescue_seed["3"]  <- pmax(0, rescue_seed["3"] - 10)
+  rescue_delta["3"] <- rescue_delta["3"] + 5
+  rescue_floor["3"] <- pmax(0, rescue_floor["3"] - 10)
+
+  list(
+    otsu_min_by_class           = rescue_seed,
+    grow_delta_by_class         = rescue_delta,
+    min_grow_threshold_by_class = rescue_floor
+  )
 }
 
 # --- internal helpers --------------------------------------------------

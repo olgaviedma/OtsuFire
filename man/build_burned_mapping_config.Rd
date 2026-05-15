@@ -5,7 +5,7 @@
 \title{Build a deterministic burned-mapping configuration object}
 \usage{
 build_burned_mapping_config(
-  scenario = c("balanced", "original", "lax", "restrictive"),
+  scenario = "default",
   change_index = NULL,
   vegetation_map = NULL,
   burnable_mask,
@@ -15,12 +15,19 @@ build_burned_mapping_config(
   target_year,
   output_dir = tempdir(),
   run_name = "deterministic_burned_map",
+  detect_params = list(),
+  refine_params = list(),
+  scoring_params = list(),
   options = list()
 )
 }
 \arguments{
-\item{scenario}{Character scalar. Methodological preset. One of
-`"balanced"` (default), `"original"`, `"lax"`, or `"restrictive"`.}
+\item{scenario}{Character scalar. Free-text traceability label only.
+It is no longer a methodological preset: it does not change any
+detection/refinement/scoring parameter. It is used purely to tag
+outputs, output routes, and the scenario-specific registry path.
+Must be non-empty and must not contain `/` or `\\`. Defaults to
+`"default"`.}
 
 \item{change_index}{Raster path, `terra::SpatRaster`, or `NULL`.
 Annual change-index raster (RBR, dNBR, RdNBR, ...). Required before
@@ -52,30 +59,64 @@ Defaults to `tempdir()`.}
 \item{run_name}{Character scalar. Stable run identifier used to name
 output folders and files. Defaults to `"deterministic_burned_map"`.}
 
-\item{options}{Named list. Container for advanced options. Recognized
-keys include `engine_root`, `deterministic_seed`, `whitebox_exe`,
-`gdalwarp_path`, `tool_paths`, `vegetation_reclass`, `strata_rules`,
-`hotspot_fields`, `target_crs`, `tolerances`.}
+\item{detect_params}{Named list. Detection parameters. Recognized keys:
+`seed_threshold` (default `310`), `growth_delta` (default `90`),
+`minimum_growth_threshold` (default `240`), `minimum_seed_pixels`
+(default `30`), and the per-vegetation-class vectors
+`seed_threshold_by_vegetation`, `growth_delta_by_vegetation`,
+`minimum_growth_threshold_by_vegetation` (named numeric vectors over
+classes `"1"`..`"11"`). If a global scalar is given without its
+matching `*_by_vegetation` vector, the global value is broadcast to
+all 11 classes. A partial `*_by_vegetation` vector is completed with
+the user global (if given) or otherwise the legacy default for the
+missing class. Unknown keys raise an error.}
+
+\item{refine_params}{Named list. Refinement parameters. Recognized
+keys: `aoi_buffer_m` (default `5000`), `omission_buffer_m`
+(default `0`), `minimum_detected_area_m2` (default `10`),
+`merge_overlaps` (default `TRUE`), `merge_overlaps_buffer_m`
+(default `0`). Unknown keys raise an error.}
+
+\item{scoring_params}{Named list. Scoring parameters. Recognized keys:
+`support_buffer_m` (default `0`),
+`previous_fire_exclusion_buffer_m` (default `90`),
+`previous_fire_cleanup_buffer_m` (default `90`),
+`minimum_remaining_area_m2` (default `20000`),
+`reference_buffer_m` (default `90`). Unknown keys raise an error.}
+
+\item{options}{Named list. Technical/runtime container only (NOT a
+methodological surface). Recognized keys: `deterministic_seed`,
+`engine_root`, `registry_path`, `whitebox_exe`, `gdalwarp_path`,
+`tool_paths`, `ecoregion_shapefile_path`, `peninsula_shapefile_path`,
+`future_globals_maxsize`.}
 }
 \value{
 An S3 object of class `otsufire_burned_mapping_config` (a named
   list). Stable fields: `scenario`, `target_year`, `inputs`,
-  `output_routes`, `options`, `engine_root`, `deterministic_seed`,
-  `tool_paths`, `registry_path`.
+  `output_routes`, `detect_params`, `refine_params`, `scoring_params`,
+  `rescue_params`, `options`, `engine_root`, `deterministic_seed`,
+  `tool_paths`, `registry_path`. The `detect_params`, `refine_params`,
+  and `scoring_params` fields hold the fully resolved parameter blocks
+  in their internal engine-name shape.
 }
 \description{
 Public entry point for the deterministic workflow. Collects the spatial
-inputs, scenario preset, output location, and advanced options needed by
-the rest of the deterministic stages into a single normalized object of
-class `otsufire_burned_mapping_config`. The function does not run any
-heavy processing: it validates arguments, stores them, and resolves
-registry and output routes.
+inputs, the methodological parameters, the output location, and the
+technical/runtime options needed by the rest of the deterministic
+stages into a single normalized object of class
+`otsufire_burned_mapping_config`. The function does not run any heavy
+processing: it validates arguments, resolves the methodological
+parameter blocks, and computes registry and output routes.
 
 Pass the returned object to [detect_burned_patches()],
 [score_burned_patches()], or [run_deterministic_pipeline()].
 
-Contract source: `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`,
-`DETERMINISTIC_INPUTS_FINAL.csv`, `OUTPUTS_ROUTES.csv`.
+The public methodological surface is exposed through three named
+lists: `detect_params`, `refine_params`, and `scoring_params`. Each
+accepts a small, fixed set of environmental-user-facing keys (see
+the parameter sections below). Any other internal/engine parameter is
+fixed to its validated default and is not configurable through this
+public API.
 }
 \seealso{
 Other workflow: 

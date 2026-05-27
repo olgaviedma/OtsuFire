@@ -34,290 +34,258 @@ validate_fire_maps(
 )
 }
 \arguments{
-\item{input_shapefile}{Character vector or `sf` object. One or more paths
-to shapefiles containing the burned polygons to validate, or a single
-in-memory `sf`. Each input is processed independently and produces one
-row in the output metrics tables.}
+\item{input_shapefile}{Character vector or `sf` object. One or more
+burned-area prediction layers to validate. Each input is processed
+independently and contributes one row to the global output tables.}
 
-\item{ref_shapefile}{Character path or `sf` object. Reference burned-area
-polygons.}
+\item{ref_shapefile}{Character path or `sf` object. Reference
+burned-area polygons.}
 
-\item{mask_shapefile}{Character. Path to the study-area boundary shapefile.}
+\item{mask_shapefile}{Character path. Study-area boundary polygon used
+to clip the evaluation domain.}
 
-\item{burnable_raster}{Character. Path to the burnable raster.}
+\item{burnable_raster}{Character path. Burnable-domain raster used to
+define the validation domain.}
 
-\item{year_target}{Numeric. Target year used to filter reference polygons
-to the correct fire season.}
+\item{year_target}{Numeric. Target year used to filter the reference
+polygons to the correct fire season.}
 
-\item{validation_dir}{Character. Root output directory. A `VALIDATION/`
-subfolder is created inside it to hold all output files.}
+\item{validation_dir}{Character. Root output directory. A
+`VALIDATION/` subfolder is created inside it.}
 
-\item{binary_burnable}{Logical. If `TRUE` (default), treats the burnable
-raster as binary: cells at or above `burnable_threshold` are burnable
-and cells below are masked as `NA`. If `FALSE`, use `burnable_classes`
-to specify which categorical raster values count as burnable.}
+\item{binary_burnable}{Logical. If `TRUE` (default), the burnable
+raster is treated as binary and cells at or above
+`burnable_threshold` are considered burnable. If `FALSE`,
+`burnable_classes` defines which raster codes are burnable.}
 
-\item{burnable_classes}{Optional numeric vector. Raster values considered
-burnable when `binary_burnable = FALSE`.}
+\item{burnable_classes}{Optional numeric vector. Raster values treated
+as burnable when `binary_burnable = FALSE`.}
 
-\item{burnable_threshold}{Numeric scalar (0–1). Threshold applied when
-`binary_burnable = TRUE`. Default `0.5`.}
+\item{burnable_threshold}{Numeric scalar in `[0, 1]`. Threshold used
+when `binary_burnable = TRUE`. Default `0.5`.}
 
-\item{class_shape}{Optional character. Path to a shapefile with landscape
-class polygons (e.g., CORINE land-cover classes or ecoregions) used for
-class-wise omission/commission breakdowns. Requires `class_field`.}
+\item{class_shape}{Optional character path. Polygon layer used for
+polygon-level omission / commission summaries by class. Requires
+`class_field`.}
 
-\item{class_field}{Optional character. Attribute field name in
-`class_shape` to group errors by class.}
+\item{class_field}{Optional character. Attribute in `class_shape` used
+to group polygon-level errors.}
 
-\item{buffer}{Numeric. Buffer distance (metres) applied around reference
-polygons before pixel-based comparison. Default `0`.}
+\item{buffer}{Numeric. Buffer distance in metres applied around
+reference polygons before pixel-based comparison. Default `0`.}
 
-\item{threshold_completely_detected}{Numeric (0–100). Minimum percentage
-of a reference polygon area that must be covered by detections to count
-it as completely detected. Default `90`.}
+\item{threshold_completely_detected}{Numeric scalar in `[0, 100]`.
+Minimum percentage of a reference polygon that must be covered by
+detections to count as completely detected. Default `90`.}
 
-\item{threshold_min_detected}{Numeric scalar (0–100). Minimum percentage
-of a reference polygon area that must be covered by detections to
-count it as "detected at all". This is the threshold used to compute
-`N_Detected_Polygons` (compare with `threshold_completely_detected`,
-which is stricter and counts `N_Completely_Detected`). Default `10`.}
+\item{threshold_min_detected}{Numeric scalar in `[0, 100]`. Minimum
+percentage of a reference polygon that must be covered by detections
+to count as detected at all. This controls `N_Detected_Polygons`.
+Default `10`.}
 
-\item{min_area_reference_ha}{Numeric. Minimum area (ha) a reference
-polygon must have after masking to the burnable domain to be retained.
-Default `NULL` (no filter).}
+\item{min_area_reference_ha}{Optional numeric. Minimum reference
+polygon area, in hectares after masking to the burnable domain, to
+retain in the analysis. Default `NULL`.}
 
-\item{force_reprocess_ref}{Logical. Force recalculation of the reference
-cache even if a cached version exists. Default `FALSE`.}
+\item{force_reprocess_ref}{Logical. If `TRUE`, rebuild the cached
+reference products even if they already exist.}
 
-\item{force_reprocess_pred}{Logical. Force recalculation of the detection
-cache. Default `FALSE`.}
+\item{force_reprocess_pred}{Logical. If `TRUE`, rebuild the cached
+prediction products even if they already exist.}
 
-\item{metrics_type}{Character. Which metrics to compute. One of `"all"`
-(default), `"pixel"`, or `"area"`.}
+\item{metrics_type}{Character. One of `"all"` (default), `"pixel"`, or
+`"area"`.}
 
 \item{dissolve_ref_by}{Optional character. Field used to dissolve
-reference polygons before comparison (e.g., `"fire_id"`).}
+reference polygons before comparison.}
 
 \item{dissolve_input_by}{Optional character. Field used to dissolve
-detection polygons before comparison (e.g., `"fire_id"`).}
+prediction polygons before comparison.}
 
-\item{strata_raster}{Optional. SpatRaster, raster path, or NULL.
-When supplied, per-stratum pixel-level confusion matrices
-(TP/FP/FN/TN) and derived metrics are computed in addition to the
-global pixel + polygon outputs. The raster must be aligned (or
-resampleable) to the burnable domain. Strata are integer ids;
-pixels with `NA` strata are excluded from per-stratum aggregation
-(they still count for the global pixel metrics).}
+\item{strata_raster}{Optional `SpatRaster`, raster path, or `NULL`.
+When supplied, per-stratum pixel-level confusion matrices and
+derived metrics are computed in addition to the global outputs.}
 
-\item{strata_lut}{Optional. `data.frame` with columns `id` and
-`label`, or a path to a CSV/XLSX with the same schema. Used to
-attach human-readable `Stratum_Label` to each per-stratum row.}
+\item{strata_lut}{Optional lookup table for `strata_raster`. Either a
+`data.frame` with columns `id` and `label`, or a CSV / XLSX path
+with the same schema.}
 
 \item{chunk_rows}{Integer. Row chunk size used by the per-stratum
-tabulator (memory-vs-speed knob). Default `1024L`.}
+tabulator. Larger values are usually faster but require more memory.
+Default `1024L`.}
 
-\item{na_strata_as_zero}{Logical. When `TRUE` (default), `NA`
-prediction or reference pixels inside the strata domain are
-treated as 0 (unburned), matching the legacy chunked validator.
-Set `FALSE` to drop them.}
+\item{na_strata_as_zero}{Logical. How to treat `NA` prediction or
+reference pixels inside the strata domain. If `TRUE` (default),
+treat them as unburned (`0`) to match the legacy validator. If
+`FALSE`, drop those pixels.}
 
-\item{write_excel}{Logical. When `TRUE`, also writes a combined
-Excel workbook (`validation_ALL_<year>_res30.xlsx`) with sheets
-`pixel_global`, `pixel_by_stratum`, `stratum_global`,
-`diagnostics_strata`, `polygon_global`, `run_info`. Requires the
+\item{write_excel}{Logical. If `TRUE`, also write a combined Excel
+workbook with the available validation outputs. Requires the
 `openxlsx` package. Default `FALSE`.}
 
-\item{excel_filename}{Optional character. Override for the Excel
-filename. Default builds `validation_ALL_<year_target>_res30.xlsx`
-per input.}
+\item{excel_filename}{Optional character. Custom Excel filename.
+Defaults to `validation_ALL_<year_target>_res30.xlsx`.}
 }
 \value{
 A named list with the following elements:
 \describe{
-  \item{`metrics`}{Pixel-based global confusion `data.table`,
-    or `NULL` when `metrics_type = "area"`.}
-  \item{`polygon_summary`}{Area-based polygon-level
+  \item{`metrics`}{Global pixel-based metrics as a `data.table`, or
+    `NULL` when `metrics_type = "area"`.}
+  \item{`polygon_summary`}{Global polygon / area-based metrics as a
     `data.table`, or `NULL` when `metrics_type = "pixel"`.}
-  \item{`pixel_by_stratum`}{Per-stratum confusion + derived
-    metrics `data.table`, or `NULL` when `strata_raster` is
-    not supplied.}
-  \item{`stratum_global`}{Single-row strata-domain aggregate
-    `data.table`, or `NULL` when `strata_raster` is not
-    supplied.}
-  \item{`diagnostics_strata`}{Diagnostics `data.table`
-    (sample sizes, NA fractions), or `NULL` when
-    `strata_raster` is not supplied.}
-  \item{`excel_path`}{Path to the combined Excel workbook,
-    or `NULL` when `write_excel = FALSE`.}
+  \item{`pixel_by_stratum`}{Per-stratum pixel metrics as a
+    `data.table`, or `NULL` when `strata_raster` is not supplied.}
+  \item{`stratum_global`}{Single-row aggregate over the strata domain,
+    or `NULL` when `strata_raster` is not supplied.}
+  \item{`diagnostics_strata`}{Diagnostics for the stratified branch,
+    or `NULL` when `strata_raster` is not supplied.}
+  \item{`excel_path`}{Path to the combined Excel workbook, or `NULL`
+    when `write_excel = FALSE`.}
 }
 }
 \description{
-Shared, workflow-independent validation utility and the single public
-validation function in OtsuFire 0.2.x. Computes pixel-based metrics
-(confusion-matrix statistics over the burnable domain) and area-based
-metrics (polygon-level detection rates) by comparing one or more
-burned-area prediction layers against independent reference fire polygons
-(e.g., EFFIS or a national fire atlas). Reference polygons are clipped to
-the study area, masked to the burnable domain, optionally filtered by a
-minimum area threshold, and optionally dissolved by a grouping field
-before comparison.
+Validate one or more burned-area prediction layers against an
+independent reference fire perimeter layer.
 
-Optional class-wise and pixel-level stratified outputs are produced
-when the corresponding inputs are supplied:
-* **Class-wise polygon breakdown** when both `class_shape` and
-  `class_field` are set: counts and hectares of un-detected
-  reference polygons and un-matched detection polygons, grouped by
-  the polygon class attribute (e.g. ecoregion).
-* **Pixel-level per-stratum confusion matrices** when
-  `strata_raster` (and optionally `strata_lut`) are set: TP / FP /
-  FN / TN per stratum plus derived metrics, computed over the
-  strata-defined evaluation domain via a chunked tabulator
-  (matches the legacy `pixel_by_stratum` / `stratum_global` /
-  `diagnostics_strata` outputs).
-* **Combined Excel workbook** when `write_excel = TRUE`:
-  `validation_ALL_<year>_res30.xlsx` with sheets `pixel_global`,
-  `pixel_by_stratum`, `stratum_global`, `diagnostics_strata`,
-  `polygon_global`, `run_info`.
+This is the workflow-independent public validation function in
+OtsuFire. It compares predicted burned polygons against reference
+polygons over the burnable domain and can compute:
+\itemize{
+  \item global pixel-based confusion-matrix metrics,
+  \item global polygon / area-based detection metrics,
+  \item optional polygon-level omission / commission summaries by
+    external class,
+  \item optional per-stratum pixel metrics from a strata raster,
+  \item an optional combined Excel workbook with the main outputs.
+}
 
-This function is workflow-independent: it can be called by
-[run_deterministic_pipeline()] internally, and it can be called directly
-by users on any compatible burned-area prediction layer, including
-supervised outputs after thresholding `p_burned` or
-`p_burned_current_year`. There is no `validate_burned_maps()` wrapper in
-0.2.x (see `NEWS.md`).
+Before comparison, reference polygons are filtered to the requested
+year, clipped to the study area, masked to the burnable domain,
+optionally filtered by minimum area, and optionally dissolved by a
+grouping field. Prediction layers are processed against the same
+evaluation domain.
 
-Intermediate masked-reference and masked-detection layers are cached on
-disk. If `min_area_reference_ha` is changed between runs, set
-`force_reprocess_ref = TRUE` to force recalculation of the reference
-cache. Use `force_reprocess_pred = TRUE` to force recalculation of the
-detection cache.
+Intermediate masked reference and prediction layers are cached on
+disk. If you change `min_area_reference_ha`, use
+`force_reprocess_ref = TRUE` to rebuild the reference cache. Use
+`force_reprocess_pred = TRUE` to rebuild the prediction cache.
 }
 \details{
-## Pixel-based metrics (`metrics_type` = `"pixel"` or `"all"`)
-TP / FP / FN / TN over the burnable domain, plus Precision, Recall,
-F1, IoU, `Specificity = TN / (TN + FP)`,
-`BalancedAccuracy = mean(c(Recall, Specificity), na.rm = TRUE)`,
-and `ErrorRate = (FP + FN) / (TP + FP + FN + TN)`. Written to
-`validation_dir/VALIDATION/metrics_summary_<year>.csv`. Returned in
-the `metrics` element of the result list.
+\strong{What this function computes}
 
-## Area-based metrics (`metrics_type` = `"area"` or `"all"`)
-`N_Reference_Polygons`, `N_Completely_Detected`, `N_Detected_Polygons`,
-`N_Not_Detected`, `Perc_Detected_Polygons`, `Area_Reference_ha`,
-`Area_Detected_ha`, `Area_Intersection_ha`, `Recall_Area_percent`,
-`Precision_Area_percent`, plus per-polygon coverage summaries
-`Coverage_mean`, `Coverage_median`, `Coverage_p10`, `Coverage_p90`
-(rounded to two decimals; `NA_real_` when no reference polygons
-remain) and a `Detected_Definition` string documenting the
-"detected at all" threshold actually applied (`sprintf("coverage_ref
->= %d%%", threshold_min_detected)`). Written to
-`polygon_summary_<year>.csv`. Returned in the `polygon_summary`
-element of the result list.
+Depending on `metrics_type` and the optional inputs supplied, the
+function can produce global pixel metrics, global polygon / area
+metrics, polygon-level error summaries by class, pixel-level
+per-stratum metrics, and a combined Excel workbook.
 
-Note that `N_Detected_Polygons` is governed by
-`threshold_min_detected` (default `10`). Prior to 0.2.1 the rule
-was effectively any non-zero overlap (`int_area_i > 0`); the new
-default is stricter and matches the legacy 1988 validation
-workbook (`coverage_ref >= 10%`). Pass
-`threshold_min_detected = 0` to recover the pre-0.2.1 behaviour.
+\strong{Global pixel-based metrics}
 
-## Class-wise polygon breakdown (`class_shape` + `class_field`)
-Optional polygon-level summary that groups un-detected reference
-polygons and un-matched detection polygons by an attribute of an
-external class layer (e.g. ecoregion shapefile). When both
-`class_shape` and `class_field` are provided and valid, two CSVs
-are written to `validation_dir/VALIDATION/`:
+When `metrics_type = "pixel"` or `"all"`, the function computes
+`TP`, `FP`, `FN`, and `TN` over the burnable domain, plus derived
+metrics such as `Precision`, `Recall`, `F1`, `IoU`, `Specificity`,
+`BalancedAccuracy`, and `ErrorRate`.
+
+Results are written to
+`validation_dir/VALIDATION/metrics_summary_<year>.csv` and returned in
+`metrics`.
+
+\strong{Global polygon / area-based metrics}
+
+When `metrics_type = "area"` or `"all"`, the function computes
+polygon-level detection and area summaries including:
 \itemize{
-  \item `omission_by_<class_field>_<input>.csv` --
-    columns `class`, `N_Omitted`, `Area_Omitted_ha`.
-  \item `commission_by_<class_field>_<input>.csv` --
-    columns `class`, `N_Commission`, `Area_Commission_ha`.
+  \item `N_Reference_Polygons`,
+  \item `N_Completely_Detected`,
+  \item `N_Detected_Polygons`,
+  \item `N_Not_Detected`,
+  \item `Perc_Detected_Polygons`,
+  \item `Area_Reference_ha`,
+  \item `Area_Detected_ha`,
+  \item `Area_Intersection_ha`,
+  \item `Recall_Area_percent`,
+  \item `Precision_Area_percent`,
+  \item `Coverage_mean`, `Coverage_median`, `Coverage_p10`,
+    `Coverage_p90`,
+  \item `Detected_Definition`.
 }
-This branch is **polygon-level**: it counts whole reference /
-detection polygons and their hectares per class. It does not
-produce a per-class confusion matrix.
 
-## Pixel-level per-stratum metrics (`strata_raster` + `strata_lut`)
-Optional pixel-level stratification using an integer-id raster.
-Mirrors the legacy `validation_ALL_<year>_<scenario>_res30.xlsx`
-workbook. When `strata_raster` is supplied, three CSVs are
-written to `validation_dir/VALIDATION/` per input:
+`Detected_Definition` records the rule used for
+`N_Detected_Polygons`, namely `coverage_ref >= threshold_min_detected`.
+
+Results are written to
+`validation_dir/VALIDATION/polygon_summary_<year>.csv` and returned in
+`polygon_summary`.
+
+The default `threshold_min_detected = 10` is stricter than the
+pre-0.2.1 behaviour, which counted any non-zero overlap as detected.
+Use `threshold_min_detected = 0` to recover that older behaviour.
+
+\strong{Optional polygon-level omission / commission by class}
+
+If both `class_shape` and `class_field` are supplied, the function
+produces polygon-level summaries of:
 \itemize{
-  \item `pixel_by_stratum_<year>_<input>.csv` --
-    `Stratum_ID`, `Stratum_Label`, `TP`, `FP`, `FN`, `TN`,
-    `Precision`, `Recall`, `F1`, `IoU`, `Specificity`,
-    `BalancedAccuracy`, `Commission`, `Omission`, `ErrorRate`,
-    plus `Area_*_ha` and `*_Area_percent` columns.
-  \item `stratum_global_<year>_<input>.csv` -- single-row
-    aggregate over the strata-defined evaluation domain
-    (counts, derived ratios, areas, `cell_area_ha`).
-  \item `diagnostics_strata_<year>_<input>.csv` -- evaluation
-    sample sizes (`n_eval_pixels`), NA counts inside the
-    strata domain (`na_pred_inside_domain`,
-    `na_ref_inside_domain`) and their fractions, plus the
-    `chunk_rows` and `na_as_zero` settings.
+  \item omitted reference polygons by class,
+  \item commission polygons by class.
 }
-The algorithm is a chunked-row tabulator (`chunk_rows`)
-that streams `pred_r`, `ref_r`, and `strata_r` together; pixels
-with `NA` strata are excluded from per-stratum aggregation.
-Inside the strata domain, `NA` predictions / references are
-treated as 0 (unburned) by default (`na_strata_as_zero = TRUE`,
-matching the legacy validator). Set `na_strata_as_zero = FALSE`
-to drop those pixels instead.
 
-This branch is **pixel-level**: it produces a full confusion
-matrix per stratum from the rasterized prediction and reference.
-It is independent of the polygon-level `class_shape` branch and
-uses a different data input (a raster, not a shapefile). Both
-branches can be active in the same call.
+Two CSV files are written per input:
+\itemize{
+  \item `omission_by_<class_field>_<input>.csv`,
+  \item `commission_by_<class_field>_<input>.csv`.
+}
 
-## Combined Excel workbook (`write_excel = TRUE`)
-When `write_excel = TRUE`, an Excel workbook is also written
-(default name `validation_ALL_<year>_res30.xlsx`, override via
-`excel_filename`) with the legacy six-sheet layout:
-`pixel_global`, `pixel_by_stratum`, `stratum_global`,
-`diagnostics_strata`, `polygon_global`, `run_info`. Sheets that
-have no data (e.g. `pixel_by_stratum` when `strata_raster` is
-NULL) are omitted. Requires the `openxlsx` package.
+This branch is polygon-based. It does not create a confusion matrix by
+class.
 
-The `run_info` sheet captures the call-time arguments needed to
-reproduce the run: `year_target`, `validation_dir`,
-`binary_burnable`, `burnable_threshold`, `buffer`,
-`threshold_completely_detected`, `threshold_min_detected`,
-`min_area_reference_ha`, `metrics_type`, `dissolve_ref_by`,
-`dissolve_input_by`, `strata_used`, `chunk_rows`,
-`na_strata_as_zero`, a derived `cache_tag`
-(`y<year>_res<m>_dom{strata|burnable}_na0<TRUE|FALSE>`), and a
-`produced_at` timestamp.
+\strong{Optional pixel-level per-stratum metrics}
+
+If `strata_raster` is supplied, the function computes a full
+pixel-level confusion matrix within each stratum, plus derived
+metrics and diagnostic outputs. This mirrors the legacy
+stratified-validation workbook.
+
+Three CSV files are written per input:
+\itemize{
+  \item `pixel_by_stratum_<year>_<input>.csv`,
+  \item `stratum_global_<year>_<input>.csv`,
+  \item `diagnostics_strata_<year>_<input>.csv`.
+}
+
+The algorithm uses a chunked row-wise tabulator controlled by
+`chunk_rows`. Pixels with `NA` strata are excluded from the
+per-stratum aggregation. Within the strata domain, `NA` prediction or
+reference pixels are treated according to `na_strata_as_zero`.
+
+This branch is independent from the polygon-level `class_shape`
+branch. Both can be used in the same call.
+
+\strong{Combined Excel workbook}
+
+If `write_excel = TRUE`, the function also writes a combined Excel
+workbook with the legacy sheet layout:
+\itemize{
+  \item `pixel_global`,
+  \item `pixel_by_stratum`,
+  \item `stratum_global`,
+  \item `diagnostics_strata`,
+  \item `polygon_global`,
+  \item `run_info`.
+}
+
+Sheets with no data are omitted. The `run_info` sheet stores the main
+call arguments and derived cache settings needed to reproduce the
+validation run.
 }
 \note{
-Canonical v2 implementation (post 2026-04-16). The deprecated v1
-GDAL/Python parameters (`use_gdal`, `python_exe`,
-`gdal_polygonize_script`) are gone. Includes the F8b GDAL-generated FID
-drop that was required for GeoPackage writes to succeed after
-`sf::st_intersection()` propagated the FID field.
+This is the canonical v2 validation implementation. Deprecated v1
+GDAL / Python parameters are no longer part of the public interface.
 
-Block 10c added the optional `strata_raster` / `strata_lut` /
-`chunk_rows` / `na_strata_as_zero` / `write_excel` /
-`excel_filename` arguments to restore the legacy
-pixel-level stratified outputs (`pixel_by_stratum`,
-`stratum_global`, `diagnostics_strata`) and the combined Excel
-workbook. All of these arguments are optional and default to
-the pre-Block-10c behaviour, so existing call sites continue to
-work unchanged.
-
-Version 0.2.1 added `Specificity` / `BalancedAccuracy` /
-`ErrorRate` to `pixel_global` / `pixel_by_stratum` /
-`stratum_global`; `Coverage_mean` / `Coverage_median` /
-`Coverage_p10` / `Coverage_p90` and `Detected_Definition` to
-`polygon_global`; the new `threshold_min_detected` argument
-(default `10`); and `dissolve_ref_by`, `dissolve_input_by`,
-`cache_tag` to `run_info`. **Behaviour change:** the default
-`threshold_min_detected = 10` is stricter than the pre-0.2.1
-rule (any non-zero overlap counted as "detected"). To preserve
-previous behaviour, pass `threshold_min_detected = 0`
-explicitly.
+Version 0.2.1 added `Specificity`, `BalancedAccuracy`, and
+`ErrorRate` to the global and stratified pixel outputs; coverage
+summaries plus `Detected_Definition` to the polygon outputs; and the
+`threshold_min_detected`, `dissolve_ref_by`, and `dissolve_input_by`
+controls.
 }
 \examples{
 \dontrun{
@@ -352,10 +320,10 @@ validate_fire_maps(
 }
 \seealso{
 [run_deterministic_pipeline()] for the deterministic
-  workflow that produces the prediction layer typically passed to
+  workflow that commonly produces the prediction layer passed to
   `input_shapefile`; [run_oneyear_supervised_pipeline()] for the
-  supervised one-year workflow whose `final_map.gpkg` (after
-  thresholding `p_burned`) is also a valid input.
+  supervised workflow whose thresholded `final_map.gpkg` is also a
+  valid input here.
 
 Other modular: 
 \code{\link{check_supervised_consistency}()},

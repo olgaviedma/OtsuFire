@@ -201,13 +201,16 @@ during scoring.
 Spectral-support references used during scoring are obtained either:
 \itemize{
   \item from an explicit \code{keep_pool} supplied to
-    \code{\link[=score_burned_patches]{score_burned_patches()}},
-  \item or from a local reference automatically constructed from
-    high-confidence current-year candidate patches.
+    \code{\link[=score_burned_patches]{score_burned_patches()}} and
+    built from trusted \emph{external} years,
+  \item or from a local same-year reference automatically constructed
+    from high-confidence current-year candidate patches.
 }
 
-These references are used internally only to compute spectral-support
-metrics during scoring.
+Explicit same-year \code{keep_pool} references are not a supported
+public mode; same-year scoring should use the native local fallback
+(\code{keep_pool = NULL}). These references are used internally only
+to compute spectral-support metrics during scoring.
 }
 \details{
 \strong{Workflow structure}

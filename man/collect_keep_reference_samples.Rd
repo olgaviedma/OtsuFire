@@ -85,14 +85,13 @@ This is the first of a two-step explicit workflow:
     (\code{build_keep_pool_from_samples()}).
 }
 
-\strong{Not integrated.} Neither this function nor
-\code{build_keep_pool_from_samples()} is currently called
-automatically by
-\code{\link[=score_burned_patches]{score_burned_patches()}} or
-\code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-They are standalone helpers that can be tested and used independently;
-the resulting \code{keep_pool} may then be passed explicitly to
-\code{score_burned_patches(..., keep_pool = ...)}.
+\strong{Explicit helper workflow.} Neither this function nor
+\code{build_keep_pool_from_samples()} is called automatically by the
+deterministic pipeline. They remain standalone helpers that can be
+tested and used independently; the resulting \code{keep_pool} may
+then be passed explicitly to
+\code{score_burned_patches(..., keep_pool = ...)} or
+\code{run_deterministic_pipeline(..., keep_pool = ...)}.
 }
 \details{
 \strong{V1 design (closed):} the caller supplies the exact decision

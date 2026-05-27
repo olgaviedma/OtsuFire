@@ -1,7 +1,8 @@
 # Focused tests for the historical keep-reference helpers:
 #   collect_keep_reference_samples() and build_keep_pool_from_samples().
 # Minimal, controlled fixtures only. These functions are standalone
-# (not integrated into score_burned_patches() / run_deterministic_pipeline()).
+# helpers; users build the historical keep_pool explicitly and then pass it
+# into score_burned_patches() / run_deterministic_pipeline().
 
 # --- fixtures --------------------------------------------------------------
 

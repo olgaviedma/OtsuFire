@@ -61,11 +61,14 @@ This is the second of a two-step explicit workflow:
     (this function).
 }
 
-\strong{Not integrated.} This function is NOT called automatically by
-\code{score_burned_patches()} nor
+\strong{Explicit helper workflow.} This function is not called
+automatically by
+\code{\link[=score_burned_patches]{score_burned_patches()}} nor
 \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-It is a standalone helper; the resulting \code{keep_pool} can be passed
-explicitly via \code{score_burned_patches(..., keep_pool = ...)}.
+It remains a standalone helper; the resulting \code{keep_pool} can be
+passed explicitly via
+\code{score_burned_patches(..., keep_pool = ...)} or
+\code{run_deterministic_pipeline(..., keep_pool = ...)}.
 }
 \details{
 \strong{V1 design (closed):} the caller supplies exact raster paths in

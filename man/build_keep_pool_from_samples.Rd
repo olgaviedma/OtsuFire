@@ -69,6 +69,11 @@ It remains a standalone helper; the resulting \code{keep_pool} can be
 passed explicitly via
 \code{score_burned_patches(..., keep_pool = ...)} or
 \code{run_deterministic_pipeline(..., keep_pool = ...)}.
+
+In the supported public workflow, these explicit pools should come
+from trusted \emph{external} years. Same-year explicit pools are not a
+supported public mode; for same-year scoring, use the native local
+fallback (\code{keep_pool = NULL}).
 }
 \details{
 \strong{V1 design (closed):} the caller supplies exact raster paths in

@@ -20,8 +20,15 @@ collect_keep_reference_samples(
 deterministic decision files. Required; explicit (no autodiscovery).}
 
 \item{target_year}{Optional scalar year. When supplied, polygons with
-\code{year == target_year} are excluded (to avoid leaking the year
-being scored into its own reference).}
+\code{year == target_year} are excluded. This is the recommended
+setting when the helper is being used to build an explicit
+historical reference for scoring a specific target year, because it
+avoids leaking the scored year into its own explicit reference.
+Helper-generated explicit pools that still include the target year
+are rejected later by
+\code{\link[=score_burned_patches]{score_burned_patches()}} and
+\code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}
+when their metadata reveal that overlap.}
 
 \item{years_include}{Optional numeric/integer vector. When supplied,
 only these years are kept.}
@@ -73,8 +80,11 @@ polygons passing every predicate.
 \description{
 Selects high-confidence historical \emph{keep}-like polygons from one
 or more previously written deterministic decision layers, using a
-single fixed selection rule (\code{"strict_hotspot"}). The resulting
-samples are intended to feed
+single fixed selection rule (\code{"strict_hotspot"}). In the public
+deterministic workflow, these helpers are intended for building
+explicit \emph{external} reference pools from trusted years other than
+the target year being scored. The resulting samples are intended to
+feed
 \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}},
 which turns them into a reusable spectral-support \code{keep_pool}.
 

@@ -37,11 +37,9 @@
 #' downstream validation steps.
 #'
 #' @details
-#' \strong{The three practical Filter-3 reference modes}
+#' \strong{The two supported Filter-3 reference modes}
 #'
-#' In practice, users usually encounter three different ways of running
-#' \code{Filter 3}. They are easy to confuse, so here they are in plain
-#' language:
+#' Publicly, the package supports two ways of running \code{Filter 3}:
 #'
 #' \enumerate{
 #'   \item \strong{Same year, local fallback (`keep_pool = NULL`).}
@@ -50,21 +48,17 @@
 #'   defined by \code{flag_internal == "keep"} after the seed-support and
 #'   burnable-context screening. This is the native automatic baseline.
 #'
-#'   \item \strong{Same year, explicit keep pool.}
-#'   The spectral reference is still based on the target year, but it is
-#'   built \emph{outside} the scorer from a previously written decision
-#'   layer using
-#'   \code{\link[=collect_keep_reference_samples]{collect_keep_reference_samples()}} and
-#'   \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
-#'   This is stricter than the local fallback because it uses final
-#'   curated keeps, but it is also more circular because the same year is
-#'   being used to score itself.
-#'
 #'   \item \strong{Other years, explicit keep pool.}
 #'   The spectral reference is built outside the scorer from trusted
 #'   decision layers belonging to other years. This is the cleanest
 #'   explicit historical-reference mode.
 #' }
+#'
+#' A same-year \emph{explicit} \code{keep_pool} is intentionally not a
+#' supported public mode. It is methodologically circular and, when the
+#' helper-generated metadata reveal that the explicit pool contains the
+#' target year, the scorer rejects it and instructs the user to use
+#' \code{keep_pool = NULL} instead.
 #'
 #' \strong{Rule-based deterministic scoring workflow}
 #'
@@ -191,7 +185,7 @@
 #'     `percentile_in_keep`.
 #' }
 #'
-#' \strong{Explicit reference built from trusted decision layers}
+#' \strong{Explicit reference built from trusted external decision layers}
 #'
 #' When `keep_pool` is supplied, Filter 3 uses that explicit external
 #' reference directly and does not rebuild the local same-year fallback.
@@ -218,6 +212,12 @@
 #'
 #' This makes the explicit historical \code{keep_pool} stricter and more
 #' externally controlled than the internal same-year fallback.
+#'
+#' Helper-generated explicit pools retain \code{metadata$years_used}. If
+#' those years include the current \code{target_year}, the public scorer
+#' rejects the pool as an unsupported same-year explicit reference. In
+#' that case, use \code{keep_pool = NULL} for the native same-year local
+#' fallback.
 #'
 #' \strong{Final deterministic integration}
 #'
@@ -254,15 +254,15 @@
 #'   \itemize{
 #'     \item `keep_pool = NULL` means: "use the same year, automatically,
 #'       from the early internal keep core";
-#'     \item `keep_pool = <explicit pool from the same year>` means: "use
-#'       the same year again, but now force Filter 3 to learn from a
-#'       previous strict final keep set";
 #'     \item `keep_pool = <explicit pool from other years>` means: "score
 #'       this year against a burned-like reference learned from trusted
 #'       external years".
 #'   }
 #'
 #'   When supplied, the scoring workflow uses this reference directly.
+#'   Explicit pools built from the same target year are intentionally not
+#'   a supported public mode; use `keep_pool = NULL` for same-year
+#'   scoring.
 #'   For backward compatibility, a legacy wrapper of the form
 #'   \code{list(keep_pool = <summary>)} is also accepted and unwrapped
 #'   internally.
@@ -343,6 +343,10 @@ score_burned_patches <- function(burned_candidates, config, keep_pool = NULL,
   }
 
   keep_pool <- .of_normalize_keep_pool_arg(keep_pool)
+  keep_pool <- .of_validate_keep_pool_target_year(
+    keep_pool,
+    config$target_year
+  )
 
   res <- .of_run_scoring(burned_candidates, config, keep_pool = keep_pool,
                          write_outputs = isTRUE(write_outputs),

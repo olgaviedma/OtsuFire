@@ -165,6 +165,37 @@
   )
 }
 
+#' @keywords internal
+#' @noRd
+.of_validate_keep_pool_target_year <- function(keep_pool,
+                                               target_year,
+                                               arg = "keep_pool") {
+  if (is.null(keep_pool) || is.null(target_year) ||
+      length(target_year) != 1L || !is.finite(target_year)) {
+    return(keep_pool)
+  }
+
+  yrs <- keep_pool$metadata$years_used %||% NULL
+  if (is.null(yrs)) return(keep_pool)
+
+  yrs <- suppressWarnings(as.integer(yrs))
+  yrs <- yrs[is.finite(yrs)]
+  if (length(yrs) == 0L) return(keep_pool)
+
+  target_year <- as.integer(target_year)[1L]
+  if (target_year %in% yrs) {
+    stop(
+      sprintf(
+        "'%s' cannot include the target year (%s) in keep_pool$metadata$years_used.\nUse keep_pool = NULL for the native same-year local fallback, or build the explicit keep_pool from trusted external years only.",
+        arg, target_year
+      ),
+      call. = FALSE
+    )
+  }
+
+  keep_pool
+}
+
 # ---------- canonical CORINE reclass matrix (from validated pipeline) -----
 #' @keywords internal
 #' @noRd

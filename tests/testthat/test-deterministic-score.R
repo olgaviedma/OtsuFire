@@ -12,7 +12,9 @@ mk_tmp_mask3 <- function() {
   terra::writeRaster(r, f, overwrite = TRUE)
   f
 }
-mk_keep_pool_summary3 <- function() {
+mk_keep_pool_summary3 <- function(years_used = NULL) {
+  md <- if (is.null(years_used)) NULL else
+    list(years_used = as.integer(years_used))
   structure(
     list(
       min_area_ha = 10,
@@ -23,7 +25,8 @@ mk_keep_pool_summary3 <- function() {
       qref_keep = 250,
       q25_keep = 300,
       pixel_area_ha = 0.81,
-      keep_medians = c(260, 310, 400)
+      keep_medians = c(260, 310, 400),
+      metadata = md
     ),
     class = c("otsufire_keep_pool", "list")
   )
@@ -120,6 +123,26 @@ test_that("keep_pool normalization accepts flat summaries and legacy wrappers", 
   )
 })
 
+test_that("same-year explicit keep_pool is rejected when metadata reveal target-year overlap", {
+  env <- asNamespace("OtsuFire")
+  pool_same  <- mk_keep_pool_summary3(2025L)
+  pool_other <- mk_keep_pool_summary3(c(2017L, 2022L))
+  pool_nomd  <- mk_keep_pool_summary3()
+
+  expect_error(
+    env$.of_validate_keep_pool_target_year(pool_same, 2025L),
+    regexp = "cannot include the target year"
+  )
+  expect_identical(
+    env$.of_validate_keep_pool_target_year(pool_other, 2025L),
+    pool_other
+  )
+  expect_identical(
+    env$.of_validate_keep_pool_target_year(pool_nomd, 2025L),
+    pool_nomd
+  )
+})
+
 test_that("score_burned_patches rejects malformed keep_pool lists early", {
   ci <- mk_tmp_tif3(); bm <- mk_tmp_mask3()
   cfg <- build_burned_mapping_config(change_index = ci, burnable_mask = bm,
@@ -129,5 +152,18 @@ test_that("score_burned_patches rejects malformed keep_pool lists early", {
   expect_error(
     score_burned_patches(fake_candidates, cfg, keep_pool = list(foo = 1)),
     regexp = "keep-pool summary list"
+  )
+})
+
+test_that("score_burned_patches rejects same-year explicit keep_pool before engine work", {
+  ci <- mk_tmp_tif3(); bm <- mk_tmp_mask3()
+  cfg <- build_burned_mapping_config(change_index = ci, burnable_mask = bm,
+                                      target_year = 2025L)
+  fake_candidates <- tempfile(fileext = ".gpkg"); file.create(fake_candidates)
+
+  expect_error(
+    score_burned_patches(fake_candidates, cfg,
+                         keep_pool = mk_keep_pool_summary3(2025L)),
+    regexp = "cannot include the target year"
   )
 })

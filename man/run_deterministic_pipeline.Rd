@@ -28,7 +28,9 @@ through to
 should be a pre-built keep-pool summary object such as the output of
 \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
 When `NULL` (default), the pipeline uses the deterministic scoring
-local fallback for the target year.}
+local fallback for the target year. Explicit pools that include the
+same target year are intentionally rejected when helper metadata
+reveal that overlap; for same-year scoring, use `keep_pool = NULL`.}
 
 \item{run_validation}{Logical scalar or `"auto"`. Controls validation
 behaviour.
@@ -74,10 +76,11 @@ temporal-conflict assessment, spectral-support scoring, and final
 deterministic confidence assignment into `keep`, `review`, or `drop`.
 
 Deterministic scoring within the pipeline can reuse an explicit
-spectral-support \code{keep_pool} supplied by the caller, or fall back
-to the same-year local reference automatically when \code{keep_pool}
-is omitted. The deterministic pipeline does not read or depend on
-implicit external burned-like registries.
+spectral-support \code{keep_pool} supplied by the caller from trusted
+external years, or fall back to the same-year local reference
+automatically when \code{keep_pool} is omitted. The deterministic
+pipeline does not read or depend on implicit external burned-like
+registries.
 
 This orchestrator is new in 0.2.x and is \strong{not} a thin copy of
 the legacy 0.1.x `8_deterministic_bridge.R`. It consumes the new
@@ -117,9 +120,10 @@ main stages:
     `review`, or `drop`, while preserving full decision traceability.
 
     Within the current wrapper, this scoring stage can use either an
-    explicit \code{keep_pool} supplied by the caller or the local
-    same-year spectral-support fallback when \code{keep_pool} is
-    omitted.
+    explicit \code{keep_pool} built from trusted external years or the
+    local same-year spectral-support fallback when \code{keep_pool} is
+    omitted. Explicit same-year \code{keep_pool} references are not a
+    supported public mode.
   \item \strong{Validation stage.} When validation is enabled and a
     reference burned-area layer is available,
     \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates

@@ -12,6 +12,25 @@ mk_tmp_mask4 <- function() {
   terra::writeRaster(r, f, overwrite = TRUE)
   f
 }
+mk_keep_pool_summary4 <- function(years_used = NULL) {
+  md <- if (is.null(years_used)) NULL else
+    list(years_used = as.integer(years_used))
+  structure(
+    list(
+      min_area_ha = 10,
+      min_pix = 13L,
+      promote_percentile = 0.10,
+      promote_p_above_ref = 0.50,
+      qref_prob = 0.05,
+      qref_keep = 250,
+      q25_keep = 300,
+      pixel_area_ha = 0.81,
+      keep_medians = c(260, 310, 400),
+      metadata = md
+    ),
+    class = c("otsufire_keep_pool", "list")
+  )
+}
 
 test_that("run_deterministic_pipeline exists and is no longer NotYetImplemented", {
   expect_true(is.function(run_deterministic_pipeline))
@@ -54,6 +73,16 @@ test_that("run_deterministic_pipeline validates keep_pool before engine work", {
                regexp = "keep-pool summary list")
   expect_error(run_deterministic_pipeline(cfg, keep_pool = list(foo = 1)),
                regexp = "keep-pool summary list")
+})
+
+test_that("run_deterministic_pipeline rejects same-year explicit keep_pool before detection", {
+  ci <- mk_tmp_tif4(); bm <- mk_tmp_mask4()
+  cfg <- build_burned_mapping_config(change_index = ci, burnable_mask = bm,
+                                      target_year = 2025L)
+  expect_error(
+    run_deterministic_pipeline(cfg, keep_pool = mk_keep_pool_summary4(2025L)),
+    regexp = "cannot include the target year"
+  )
 })
 
 test_that("run_deterministic_pipeline threads keep_pool into scoring", {

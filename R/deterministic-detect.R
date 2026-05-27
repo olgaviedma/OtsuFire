@@ -1,33 +1,161 @@
-#' Detect candidate burned patches from the annual change index
+#' @title Detect candidate burned patches from an annual change-index raster
 #'
 #' @description
-#' Public modular detection function. Consumes an
-#' [otsufire_burned_mapping_config][build_burned_mapping_config]
-#' and produces the intermediate and final detection products needed by
-#' [score_burned_patches()]. Conceptually this stage covers
-#' Otsu thresholding, seed-supported growth, segmentation refinement, and
-#' candidate merging.
+#' Detect candidate burned patches from an annual change-index product
+#' using the deterministic OtsuFire workflow.
 #'
-#' This function validates inputs and delegates the heavy numerical work
-#' to the validated internal engine (not exported). Its public signature
-#' and return shape are frozen by
-#' `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv` and
-#' `DETERMINISTIC_OUTPUTS_FINAL.csv`.
+#' This function performs the detection stage of the deterministic
+#' pipeline. It consumes an
+#' [otsufire_burned_mapping_config][build_burned_mapping_config] object
+#' and produces the intermediate and final detection products later used
+#' by [score_burned_patches()].
 #'
-#' @param config An `otsufire_burned_mapping_config` object from
-#'   [build_burned_mapping_config()].
-#' @param aoi Optional sf POLYGON, SpatVector, or path. Restricts detection
-#'   to the supplied geometry. When `NULL`, detection runs over the full
-#'   valid extent of the change-index raster.
-#' @param write_outputs Logical scalar. Whether to write detection products
-#'   to disk. Default `TRUE` because running this stage alone is usually
-#'   for inspection.
+#' Conceptually, this stage includes:
+#' \enumerate{
+#'   \item Otsu-based threshold estimation,
+#'   \item seed generation,
+#'   \item seed-supported region growing,
+#'   \item segmentation refinement,
+#'   \item candidate merging.
+#' }
+#'
+#' The function validates inputs, prepares runtime structures, and
+#' delegates the computational processing to the validated internal
+#' engine (not exported).
+#'
+#' This stage is deterministic and fully reproducible given identical
+#' inputs and parameter settings.
+#'
+#' @param config An `otsufire_burned_mapping_config` object generated with
+#'   [build_burned_mapping_config()]. This object contains validated
+#'   workflow inputs, methodological parameters, output routes, and
+#'   runtime options.
+#' @param aoi Optional AOI geometry used to spatially restrict the
+#'   detection process. Accepted formats are an `sf` POLYGON object, a
+#'   `terra::SpatVector`, or a valid vector path. When `NULL`, detection
+#'   is performed over the full valid extent of the change-index raster.
+#'   Useful for regional testing, debugging, sensitivity analyses, or
+#'   tile-based processing.
+#' @param write_outputs Logical scalar. Whether intermediate and final
+#'   detection products should be written to disk. Defaults to `TRUE`
+#'   because this stage is commonly inspected visually during workflow
+#'   development and QA/QC.
 #' @param overwrite Logical scalar. Whether existing outputs may be
-#'   replaced when `write_outputs = TRUE`. Default `FALSE`.
+#'   replaced when `write_outputs = TRUE`. Defaults to `FALSE`.
 #'
-#' @return A named list with fields:
-#'   `otsu_raster`, `seed_raster`, `grown_patches`, `refined_patches`,
-#'   `detection_diagnostics`, and the corresponding `*_path` entries.
+#' @details
+#' \strong{Workflow overview}
+#'
+#' The detection stage transforms a continuous annual change-index raster
+#' into spatially coherent candidate burned patches.
+#'
+#' The workflow proceeds conceptually as follows:
+#' \enumerate{
+#'   \item estimate vegetation-aware seed thresholds from the
+#'     change-index distribution,
+#'   \item identify high-confidence burned seed pixels,
+#'   \item expand seeds into neighbouring burned-like pixels using
+#'     constrained region growing,
+#'   \item refine and filter candidate polygons,
+#'   \item merge overlapping or fragmented detections where appropriate.
+#' }
+#'
+#' The resulting outputs represent candidate burned patches only. Final
+#' reliability assessment and confidence scoring are performed later by
+#' [score_burned_patches()].
+#'
+#' The detection stage operates exclusively on the deterministic
+#' candidate-generation workflow and does not perform probabilistic
+#' classification or supervised scoring.
+#'
+#' Detection behaviour is controlled through the parameter blocks stored
+#' inside `config`, particularly:
+#' \itemize{
+#'   \item `detect_params`
+#'   \item `refine_params`
+#' }
+#'
+#' Key methodological controls include:
+#' \itemize{
+#'   \item seed-generation thresholds,
+#'   \item vegetation-specific constraints,
+#'   \item region-growing permissiveness,
+#'   \item minimum patch size,
+#'   \item overlap-merging behaviour.
+#' }
+#'
+#' Before delegating to the internal engine, the function also validates
+#' that the required inputs exist on disk and runs the configured
+#' `change_index` sanity check through [clean_raster_inmem()] with
+#' `action = "fail"`.
+#'
+#' \strong{Why this stage matters}
+#'
+#' Burned-area mapping errors often originate during candidate generation
+#' rather than during later scoring.
+#'
+#' The deterministic detection stage is designed to:
+#' \itemize{
+#'   \item maximise spatial coherence,
+#'   \item reduce obvious false positives early,
+#'   \item preserve low-severity burned edges where possible,
+#'   \item produce an auditable candidate universe for later scoring.
+#' }
+#'
+#' Separating deterministic candidate generation from later scoring
+#' improves interpretability, reproducibility, and workflow auditability.
+#'
+#' @return Returns a named list containing the main detection products and
+#'   their associated file paths.
+#'
+#'   Stable public fields currently include:
+#'   \itemize{
+#'     \item `otsu_raster`
+#'     \item `seed_raster`
+#'     \item `grown_patches`
+#'     \item `grown_patches_path`
+#'     \item `refined_patches`
+#'     \item `refined_patches_path`
+#'     \item `detection_diagnostics`
+#'   }
+#'
+#'   In the current public wrapper, `grown_patches_path`,
+#'   `refined_patches_path`, and `detection_diagnostics` are the main
+#'   populated outputs. The object placeholders `otsu_raster`,
+#'   `seed_raster`, `grown_patches`, and `refined_patches` are retained
+#'   for contract stability and currently return `NULL`.
+#'
+#'   The exact internal implementation should not be relied upon beyond
+#'   these stable public outputs.
+#'
+#' @examples
+#' \dontrun{
+#' config <- build_burned_mapping_config(
+#'   change_index = "MinMin_2022_mosaic_res90m.tif",
+#'   vegetation_map = "CLC_2018_peninsula.tif",
+#'   burnable_mask = "burnable_mask_binary_corine_2018_ETRS89.tif",
+#'   hotspots = "hotspots_2022.gpkg",
+#'   target_year = 2022,
+#'   output_dir = "results/",
+#'   run_name = "balanced_2022"
+#' )
+#'
+#' detection <- detect_burned_patches(config)
+#'
+#' detection$refined_patches_path
+#' refined <- sf::st_read(detection$refined_patches_path, quiet = TRUE)
+#' plot(sf::st_geometry(refined))
+#' }
+#'
+#' @seealso
+#' Related deterministic workflow functions:
+#' \itemize{
+#'   \item [build_burned_mapping_config()]
+#'   \item [score_burned_patches()]
+#'   \item [run_deterministic_pipeline()]
+#'   \item [validate_fire_maps()]
+#'   \item [build_supervised_burned_config()]
+#' }
 #'
 #' @family modular
 #' @export

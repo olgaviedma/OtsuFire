@@ -118,6 +118,53 @@
        call. = FALSE)
 }
 
+#' @keywords internal
+#' @noRd
+.of_keep_pool_required_fields <- function() {
+  c("min_area_ha", "min_pix", "promote_percentile",
+    "promote_p_above_ref", "qref_prob", "qref_keep", "q25_keep",
+    "pixel_area_ha", "keep_medians")
+}
+
+#' @keywords internal
+#' @noRd
+.of_is_keep_pool_summary <- function(x) {
+  is.list(x) &&
+    length(setdiff(.of_keep_pool_required_fields(), names(x))) == 0L
+}
+
+#' @keywords internal
+#' @noRd
+.of_normalize_keep_pool_arg <- function(keep_pool, arg = "keep_pool") {
+  if (is.null(keep_pool)) return(NULL)
+
+  if (.of_is_keep_pool_summary(keep_pool)) {
+    return(keep_pool)
+  }
+
+  if (is.list(keep_pool) && !is.null(keep_pool$keep_pool)) {
+    nested <- keep_pool$keep_pool
+    if (.of_is_keep_pool_summary(nested)) {
+      return(nested)
+    }
+    stop(
+      sprintf("'%s$keep_pool' must be a keep-pool summary list with fields: %s.",
+              arg,
+              paste(.of_keep_pool_required_fields(), collapse = ", ")),
+      call. = FALSE
+    )
+  }
+
+  stop(
+    sprintf(
+      "'%s' must be NULL or a keep-pool summary list with fields: %s.\nFor backward compatibility, list(keep_pool = <summary>) is also accepted.",
+      arg,
+      paste(.of_keep_pool_required_fields(), collapse = ", ")
+    ),
+    call. = FALSE
+  )
+}
+
 # ---------- canonical CORINE reclass matrix (from validated pipeline) -----
 #' @keywords internal
 #' @noRd
@@ -519,6 +566,7 @@
   burnable_corine <- terra::rast(burnable_path)
   rbr_rast <- terra::rast(change_index_path)
   if (terra::nlyr(rbr_rast) > 1L) rbr_rast <- rbr_rast[[1L]]
+  explicit_keep_pool <- .of_normalize_keep_pool_arg(keep_pool)
 
   # ---- Stage 4: scoring_burned_area_stage2 --------------------------
   # Public scoring surface comes from config$scoring_params (resolved in
@@ -576,11 +624,6 @@
   #   1. caller-supplied keep_pool -> use it;
   #   2. otherwise NULL -> Stage 5b builds the pool locally from the
   #      current year (local fallback, still intact).
-  registry_keep_pool <- NULL
-  if (!is.null(keep_pool)) {
-    registry_keep_pool <- keep_pool
-  }
-
   # ---- Stage 5b: score_rbr_keep_classes (internal) ------------------
   rbr_args_internal <- list(
     polys_sf = stage2_keep_review,
@@ -588,8 +631,7 @@
     out_dir  = phase2_dir,
     prefix   = paste0("internal_", config$target_year, "_",
                       config$run_name, "_p10_p5"),
-    keep_pool = if (!is.null(registry_keep_pool))
-                  registry_keep_pool$keep_pool else NULL,
+    keep_pool = explicit_keep_pool,
     use_keep_common_pool = FALSE,
     keep_fallback_col = "flag_internal",
     keep_fallback_value = "keep",
@@ -726,7 +768,8 @@
       n_stage2_keep_review = nrow(stage2_keep_review),
       n_decisions = if (is.null(internal_decisions_sf)) 0L
                     else nrow(internal_decisions_sf),
-      registry_keep_pool_used = !is.null(registry_keep_pool)
+      explicit_keep_pool_used = !is.null(explicit_keep_pool),
+      registry_keep_pool_used = !is.null(explicit_keep_pool)
     )
   )
 }

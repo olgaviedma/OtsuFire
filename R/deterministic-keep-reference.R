@@ -9,11 +9,10 @@
 #   2. build_keep_pool_from_samples()    -> turn those samples + per-year
 #      change-index rasters into a reusable keep_pool object.
 #
-# They are deliberately NOT wired into score_burned_patches() nor
-# run_deterministic_pipeline() yet. The keep_pool produced by
-# build_keep_pool_from_samples() is, however, structurally compatible
-# with the explicit `keep_pool` argument already accepted by
-# score_burned_patches() (see that function's contract).
+# They remain explicit helpers: the package does not auto-discover or
+# auto-build historical keep pools on its own. However, the keep_pool
+# produced by build_keep_pool_from_samples() is now accepted directly by
+# score_burned_patches() and run_deterministic_pipeline(keep_pool = ...).
 
 # ---------------------------------------------------------------------------
 # internal helper: row-bind a list of sf objects with column alignment.
@@ -67,14 +66,13 @@
 #'     (\code{build_keep_pool_from_samples()}).
 #' }
 #'
-#' \strong{Not integrated.} Neither this function nor
-#' \code{build_keep_pool_from_samples()} is currently called
-#' automatically by
-#' \code{\link[=score_burned_patches]{score_burned_patches()}} or
-#' \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-#' They are standalone helpers that can be tested and used independently;
-#' the resulting \code{keep_pool} may then be passed explicitly to
-#' \code{score_burned_patches(..., keep_pool = ...)}.
+#' \strong{Explicit helper workflow.} Neither this function nor
+#' \code{build_keep_pool_from_samples()} is called automatically by the
+#' deterministic pipeline. They remain standalone helpers that can be
+#' tested and used independently; the resulting \code{keep_pool} may
+#' then be passed explicitly to
+#' \code{score_burned_patches(..., keep_pool = ...)} or
+#' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 #'
 #' @details
 #' \strong{V1 design (closed):} the caller supplies the exact decision
@@ -391,11 +389,14 @@ collect_keep_reference_samples <- function(decision_paths,
 #'     (this function).
 #' }
 #'
-#' \strong{Not integrated.} This function is NOT called automatically by
-#' \code{score_burned_patches()} nor
+#' \strong{Explicit helper workflow.} This function is not called
+#' automatically by
+#' \code{\link[=score_burned_patches]{score_burned_patches()}} nor
 #' \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-#' It is a standalone helper; the resulting \code{keep_pool} can be passed
-#' explicitly via \code{score_burned_patches(..., keep_pool = ...)}.
+#' It remains a standalone helper; the resulting \code{keep_pool} can be
+#' passed explicitly via
+#' \code{score_burned_patches(..., keep_pool = ...)} or
+#' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 #'
 #' @details
 #' \strong{V1 design (closed):} the caller supplies exact raster paths in

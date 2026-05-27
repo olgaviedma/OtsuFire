@@ -104,10 +104,16 @@
 #' @param config An `otsufire_burned_mapping_config` object returned by
 #'   \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.
 #' @param keep_pool Optional explicit keep-like reference pool used for
-#'   spectral-support scoring in `Filter 3`. May be supplied either as an
-#'   sf POLYGON layer or as a pre-built keep-pool summary object.
+#'   spectral-support scoring in `Filter 3`. This should be a pre-built
+#'   keep-pool summary object matching the contract consumed by
+#'   \code{\link[=score_rbr_keep_classes]{score_rbr_keep_classes()}},
+#'   for example the object returned by
+#'   \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
 #'
 #'   When supplied, the scoring workflow uses this reference directly.
+#'   For backward compatibility, a legacy wrapper of the form
+#'   \code{list(keep_pool = <summary>)} is also accepted and unwrapped
+#'   internally.
 #'
 #'   When `NULL`, the scoring engine automatically constructs a local
 #'   same-year reference distribution from high-confidence current-year
@@ -186,11 +192,7 @@ score_burned_patches <- function(burned_candidates, config, keep_pool = NULL,
     )
   }
 
-  if (!is.null(keep_pool) &&
-      !(inherits(keep_pool, c("sf", "SpatVector")) || is.list(keep_pool))) {
-    stop("'keep_pool' must be NULL, an sf / SpatVector, or a keep-pool list.",
-         call. = FALSE)
-  }
+  keep_pool <- .of_normalize_keep_pool_arg(keep_pool)
 
   res <- .of_run_scoring(burned_candidates, config, keep_pool = keep_pool,
                          write_outputs = isTRUE(write_outputs),

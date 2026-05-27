@@ -16,12 +16,11 @@
 #' temporal-conflict assessment, spectral-support scoring, and final
 #' deterministic confidence assignment into `keep`, `review`, or `drop`.
 #'
-#' Within the current pipeline wrapper, deterministic scoring uses the
-#' same-year local spectral-support fallback. The lower-level function
-#' \code{\link[=score_burned_patches]{score_burned_patches()}}
-#' additionally supports an explicit `keep_pool` argument for direct
-#' scoring workflows. The deterministic pipeline does not read or depend
-#' on implicit external burned-like registries.
+#' Deterministic scoring within the pipeline can reuse an explicit
+#' spectral-support \code{keep_pool} supplied by the caller, or fall back
+#' to the same-year local reference automatically when \code{keep_pool}
+#' is omitted. The deterministic pipeline does not read or depend on
+#' implicit external burned-like registries.
 #'
 #' This orchestrator is new in 0.2.x and is \strong{not} a thin copy of
 #' the legacy 0.1.x `8_deterministic_bridge.R`. It consumes the new
@@ -60,11 +59,10 @@
 #'     deterministic confidence decision assigning each patch to `keep`,
 #'     `review`, or `drop`, while preserving full decision traceability.
 #'
-#'     Within the current wrapper, this scoring stage uses the local
-#'     same-year spectral-support fallback. Direct use of an explicit
-#'     `keep_pool` belongs to
-#'     \code{\link[=score_burned_patches]{score_burned_patches()}} rather
-#'     than to the current wrapper signature.
+#'     Within the current wrapper, this scoring stage can use either an
+#'     explicit \code{keep_pool} supplied by the caller or the local
+#'     same-year spectral-support fallback when \code{keep_pool} is
+#'     omitted.
 #'   \item \strong{Validation stage.} When validation is enabled and a
 #'     reference burned-area layer is available,
 #'     \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
@@ -78,6 +76,13 @@
 #'   outputs to disk. Default `TRUE`.
 #' @param overwrite Logical scalar. Whether existing outputs from the same
 #'   run may be replaced. Default `FALSE`.
+#' @param keep_pool Optional explicit keep-like reference pool passed
+#'   through to
+#'   \code{\link[=score_burned_patches]{score_burned_patches()}}. This
+#'   should be a pre-built keep-pool summary object such as the output of
+#'   \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
+#'   When `NULL` (default), the pipeline uses the deterministic scoring
+#'   local fallback for the target year.
 #' @param run_validation Logical scalar or `"auto"`. Controls validation
 #'   behaviour.
 #'   \itemize{
@@ -108,6 +113,7 @@
 #' @export
 run_deterministic_pipeline <- function(config, write_outputs = TRUE,
                                        overwrite = FALSE,
+                                       keep_pool = NULL,
                                        run_validation = "auto") {
 
   if (!inherits(config, "otsufire_burned_mapping_config")) {
@@ -120,6 +126,7 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
   if (!is.logical(overwrite) || length(overwrite) != 1L) {
     stop("'overwrite' must be TRUE or FALSE.", call. = FALSE)
   }
+  keep_pool <- .of_normalize_keep_pool_arg(keep_pool)
   if (!((is.logical(run_validation) && length(run_validation) == 1L) ||
         (is.character(run_validation) && length(run_validation) == 1L &&
          identical(run_validation, "auto")))) {
@@ -175,7 +182,7 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
   scoring <- score_burned_patches(
     burned_candidates = candidates_path,
     config = config_scoring,
-    keep_pool = NULL,
+    keep_pool = keep_pool,
     write_outputs = write_outputs,
     overwrite = overwrite
   )

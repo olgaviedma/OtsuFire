@@ -1,41 +1,171 @@
-#' Build a deterministic burned-mapping configuration object
+#' @title Build a deterministic burned-area mapping configuration object
 #'
 #' @description
-#' Public entry point for the deterministic workflow. Collects the spatial
-#' inputs, the methodological parameters, the output location, and the
-#' technical/runtime options needed by the rest of the deterministic
-#' stages into a single normalized object of class
-#' \code{otsufire_burned_mapping_config}. The function does not run any
-#' heavy processing: it validates arguments, resolves the methodological
-#' parameter blocks, and computes the output routes and normalized
-#' parameter structures used internally by the deterministic workflow.
+#' Build a complete configuration object for the deterministic burned-area
+#' workflow.
 #'
-#' Pass the returned object to
-#' \code{\link[=detect_burned_patches]{detect_burned_patches()}},
-#' \code{\link[=score_burned_patches]{score_burned_patches()}}, or
-#' \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
+#' This function is the main public entry point used to configure
+#' deterministic burned-area mapping in OtsuFire. It gathers:
+#' \itemize{
+#'   \item the spatial inputs,
+#'   \item the methodological parameters,
+#'   \item the output structure,
+#'   \item and the technical runtime options
+#' }
+#' into a single validated configuration object that can later be passed
+#' to:
+#' \itemize{
+#'   \item \code{\link[=detect_burned_patches]{detect_burned_patches()}},
+#'   \item \code{\link[=score_burned_patches]{score_burned_patches()}},
+#'   \item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
+#' }
 #'
-#' The public methodological surface is exposed through three named
-#' lists: \code{detect_params}, \code{refine_params}, and
-#' \code{scoring_params}. Each accepts a small, fixed set of
-#' environmental-user-facing keys (see the parameter sections below). Any
-#' other internal/engine parameter is fixed to its validated default and
-#' is not configurable through this public API.
+#' The function itself does not execute segmentation, polygonization, or
+#' burned-area detection. It performs validation, normalization, and
+#' workflow preparation only.
 #'
-#' The deterministic workflow is fully self-contained. Spectral-support
-#' references used during scoring are derived either from an explicit
-#' \code{keep_pool} supplied to
-#' \code{\link[=score_burned_patches]{score_burned_patches()}} or, when
-#' \code{keep_pool} is omitted, from a local reference automatically
-#' constructed for the target year from high-confidence current-year
-#' candidate patches (the deterministic scoring local fallback). No
-#' external burned-like registry is consulted.
+#' The public methodological surface is intentionally restricted to three
+#' parameter blocks:
+#' \itemize{
+#'   \item \code{detect_params},
+#'   \item \code{refine_params},
+#'   \item \code{scoring_params}.
+#' }
+#' Each block exposes a small set of user-facing methodological controls.
+#' Internal engine parameters remain fixed to validated defaults and are
+#' not configurable through the public API.
+#'
+#' \strong{Deterministic scoring references}
+#'
+#' The deterministic workflow is fully self-contained and does not depend
+#' on external burned-area registries or external burned-like archives
+#' during scoring.
+#'
+#' Spectral-support references used during scoring are obtained either:
+#' \itemize{
+#'   \item from an explicit \code{keep_pool} supplied to
+#'     \code{\link[=score_burned_patches]{score_burned_patches()}},
+#'   \item or from a local reference automatically constructed from
+#'     high-confidence current-year candidate patches.
+#' }
+#'
+#' These references are used internally only to compute spectral-support
+#' metrics during scoring.
+#'
+#' @param change_index Raster path, `terra::SpatRaster`, or `NULL`.
+#'   Annual change-index raster (e.g. RBR, dNBR, RdNBR). Required before
+#'   detection runs but may be `NULL` when the configuration will only be
+#'   used with pre-built candidates, for example direct calls to
+#'   \code{\link[=score_burned_patches]{score_burned_patches()}}.
+#' @param vegetation_map Raster, `sf` object, or path. Optional vegetation
+#'   or land-cover stratification layer (CORINE-compatible in OtsuFire
+#'   0.2.x).
+#' @param burnable_mask Raster, `sf` object, or path. Required binary
+#'   burnable-area mask (`1 = burnable`, `0 = non-burnable`).
+#' @param hotspots `sf` POINT layer or path. Optional hotspot layer for
+#'   the target year.
+#' @param previous_year_burned `sf` POLYGON layer or path. Optional
+#'   previous-year burned map used for temporal conflict assessment.
+#' @param reference_burned_map `sf` POLYGON, raster, or path. Optional
+#'   burned reference used by
+#'   \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
+#'   validation is requested.
+#' @param target_year Integer scalar. Target year used for naming outputs
+#'   and filtering temporal layers.
+#' @param output_dir Character scalar. Root output directory. Defaults to
+#'   `tempdir()`.
+#' @param run_name Character scalar. Visible experiment identifier used to
+#'   name output folders and files. Must be a single non-empty string and
+#'   must not contain `/` or `\\`. Defaults to
+#'   `"deterministic_burned_map"`.
+#' @param detect_params Named list containing detection-stage parameters.
+#'   Recognized keys:
+#'   \itemize{
+#'     \item `seed_threshold`
+#'     \item `growth_delta`
+#'     \item `minimum_growth_threshold`
+#'     \item `minimum_seed_pixels`
+#'     \item `seed_threshold_by_vegetation`
+#'     \item `growth_delta_by_vegetation`
+#'     \item `minimum_growth_threshold_by_vegetation`
+#'   }
+#'   Unknown keys raise an error.
+#' @param refine_params Named list containing refinement-stage parameters.
+#'   Recognized keys:
+#'   \itemize{
+#'     \item `aoi_buffer_m`
+#'     \item `omission_buffer_m`
+#'     \item `minimum_detected_area_m2`
+#'     \item `merge_overlaps`
+#'     \item `merge_overlaps_buffer_m`
+#'   }
+#'   Unknown keys raise an error.
+#' @param scoring_params Named list containing scoring-stage parameters.
+#'   Recognized keys:
+#'   \itemize{
+#'     \item `support_buffer_m`
+#'     \item `previous_fire_exclusion_buffer_m`
+#'     \item `previous_fire_cleanup_buffer_m`
+#'     \item `minimum_remaining_area_m2`
+#'     \item `reference_buffer_m`
+#'   }
+#'   Unknown keys raise an error.
+#' @param options Named list containing technical/runtime options only
+#'   (not methodological controls). Recognized keys include:
+#'   \itemize{
+#'     \item `deterministic_seed`
+#'     \item `engine_root`
+#'     \item `whitebox_exe`
+#'     \item `gdalwarp_path`
+#'     \item `tool_paths`
+#'     \item `ecoregion_shapefile_path`
+#'     \item `peninsula_shapefile_path`
+#'     \item `future_globals_maxsize`
+#'     \item `change_index_validation`
+#'   }
+#'
+#'   The deterministic workflow does not consume external burned-area
+#'   registries during scoring. Consequently, supplying
+#'   `options$registry_path` raises an error.
+#'
+#'   \strong{\code{options$change_index_validation}}
+#'
+#'   Optional advanced sub-list controlling the sanity check applied to
+#'   `change_index` before detection. Recognized sub-keys:
+#'   \itemize{
+#'     \item `expected_nodata`
+#'     \item `lower_cap`
+#'     \item `cap_below`
+#'     \item `check_finite`
+#'   }
+#'
+#'   Defaults:
+#'   \preformatted{list(
+#'   expected_nodata = -9999,
+#'   lower_cap = -1000,
+#'   cap_below = TRUE,
+#'   check_finite = TRUE
+#' )}
+#'
+#'   The validated default `lower_cap = -1000` is appropriate for RBR
+#'   products. Other change indices may require different valid ranges.
 #'
 #' @details
-#' The public parameter surface is organized as ecological controls rather
-#' than engine internals.
+#' \strong{Workflow structure}
 #'
-#' \strong{Vegetation classes used by the \code{*_by_vegetation} vectors}
+#' The deterministic workflow is organised into three methodological
+#' stages:
+#' \enumerate{
+#'   \item detection,
+#'   \item refinement,
+#'   \item scoring.
+#' }
+#'
+#' Each stage exposes a restricted public parameter surface designed to
+#' preserve methodological reproducibility while still allowing
+#' ecological adaptation.
+#'
+#' \strong{Vegetation classes used by \code{*_by_vegetation}}
 #' \itemize{
 #'   \item \code{1} Agroforestry
 #'   \item \code{2} Grassland
@@ -50,235 +180,128 @@
 #'   \item \code{11} Bare
 #' }
 #'
-#' \strong{Internal spectral-support references}
+#' \strong{Detection parameters}
 #'
-#' \code{\link[=score_burned_patches]{score_burned_patches()}} operates
-#' either on an explicit \code{keep_pool} supplied by the user or on a
-#' local reference automatically derived, for the target year, from
-#' high-confidence current-year candidate patches (the deterministic
-#' scoring local fallback). These references are used internally only to
-#' compute spectral-support metrics during scoring (e.g. percentile
-#' position within the keep distribution and fractions exceeding support
-#' thresholds). They do \strong{not} construct \code{filter_1}: that
-#' filter is independent and is not affected by these spectral-support
-#' references.
-#'
-#' \strong{How to interpret \code{detect_params}}
 #' \itemize{
-#'   \item \code{seed_threshold} (change-index units): global minimum
-#'     change-index value required for a pixel to become a burned seed.
-#'     Increasing it creates fewer, more conservative seeds with lower
-#'     commission but higher omission; decreasing it creates more seeds
-#'     and higher sensitivity but raises false-positive risk. Adjust when
-#'     the whole map is systematically over- or under-detecting burned
-#'     cores. Acts as a global floor that class-specific bounds can
-#'     override.
-#'   \item \code{seed_threshold_by_vegetation} (change-index units):
-#'     class-specific lower bound for seed generation. Increasing a class
-#'     value makes seed detection more conservative in that land-cover
-#'     class; decreasing it makes seed generation more permissive there.
-#'     Adjust when errors are concentrated in specific vegetation or
-#'     land-cover types. The validated defaults are highest in water /
-#'     wetlands and artificial / bare classes, and lower in vegetated
-#'     burnable classes.
-#'   \item \code{growth_delta} (change-index units): global reduction
-#'     applied from seed threshold to growth threshold. Increasing it
-#'     allows more permissive expansion from seeds, larger patches, and
-#'     higher commission risk; decreasing it makes expansion more
-#'     restrictive and patches smaller, at the cost of higher omission.
-#'     Adjust when mapped patch boundaries are consistently too small or
-#'     too large. Acts as a general fallback when no class-specific delta
-#'     is supplied.
-#'   \item \code{growth_delta_by_vegetation} (change-index units):
-#'     class-specific amount by which the growth threshold is relaxed
-#'     relative to the seed threshold. Increasing a class value allows
-#'     stronger expansion within that class and increases connectivity;
-#'     decreasing it limits expansion there and produces tighter patch
-#'     boundaries. Adjust when over- or under-expansion is
-#'     vegetation-specific. The validated defaults are larger in
-#'     shrubland and forest classes, and very small in water / wetlands,
-#'     artificial, agricultural, and bare classes.
-#'   \item \code{minimum_growth_threshold} (change-index units): global
-#'     minimum change-index floor allowed during region growing.
-#'     Increasing it restricts growth to stronger change-index values and
-#'     reduces over-expansion; decreasing it allows growth into weaker
-#'     change-index values and can absorb unburned pixels. Adjust when
-#'     growing systematically leaks into weak-change backgrounds or misses
-#'     low-severity burn edges. Acts as a global floor that class-specific
-#'     floors usually override.
-#'   \item \code{minimum_growth_threshold_by_vegetation} (change-index
-#'     units): class-specific minimum floor constraining region growing.
-#'     Increasing a class value prevents growth into low-change pixels
-#'     within that class and reduces commission; decreasing it allows
-#'     growth into lower change pixels and can improve boundary
-#'     completeness at the cost of more false positives. Adjust when
-#'     boundary errors are class-specific. The validated defaults are
-#'     highest in water / wetlands, artificial, agricultural, and bare
-#'     classes, and lower in shrubland and forested classes.
-#'   \item \code{minimum_seed_pixels} (pixels): minimum number of core
-#'     seed pixels required to retain a grown patch. Increasing it removes
-#'     small isolated detections and reduces salt-and-pepper false
-#'     positives; decreasing it keeps smaller candidate patches and
-#'     improves small-fire sensitivity at the cost of more noise. Adjust
-#'     according to minimum fire size and raster resolution. Interpret
-#'     this parameter together with pixel size: 30 pixels correspond to
-#'     different areas at 20 m and 30 m resolution.
+#'   \item \code{seed_threshold}: global minimum change-index value
+#'   required for a pixel to become a burned seed. Higher values produce
+#'   fewer and more conservative seeds; lower values increase sensitivity
+#'   but also false-positive risk.
+#'
+#'   \item \code{seed_threshold_by_vegetation}: class-specific lower
+#'   bounds for seed generation. Use when omission or commission errors
+#'   are concentrated in specific vegetation types.
+#'
+#'   \item \code{growth_delta}: global reduction applied from the seed
+#'   threshold to the growth threshold. Higher values allow more
+#'   permissive expansion and larger patches; lower values produce
+#'   tighter and more conservative boundaries.
+#'
+#'   \item \code{growth_delta_by_vegetation}: class-specific relaxation
+#'   applied during region growing. Controls vegetation-specific patch
+#'   expansion behaviour.
+#'
+#'   \item \code{minimum_growth_threshold}: global minimum floor allowed
+#'   during region growing. Higher values restrict expansion into weak
+#'   spectral change; lower values allow growth into lower-severity
+#'   pixels.
+#'
+#'   \item \code{minimum_growth_threshold_by_vegetation}: class-specific
+#'   minimum floor constraining region growing. Useful when over- or
+#'   under-expansion is concentrated in particular land-cover classes.
+#'
+#'   \item \code{minimum_seed_pixels}: minimum number of seed pixels
+#'   required to retain a candidate patch. Higher values remove small
+#'   isolated detections; lower values increase small-fire sensitivity.
+#'   Interpret together with raster resolution.
 #' }
 #'
-#' \strong{How to interpret \code{refine_params}}
+#' \strong{Refinement parameters}
+#'
 #' \itemize{
-#'   \item \code{aoi_buffer_m} (meters): buffer around the area of
-#'     interest used during refinement. Increasing it reduces edge
-#'     artefacts near the AOI boundary but increases processing area;
-#'     decreasing it reduces processing area but increases truncation
-#'     risk at the edges. Adjust when fires near AOI boundaries are
-#'     clipped or when processing cost is excessive. Not
-#'     vegetation-specific.
-#'   \item \code{minimum_detected_area_m2} (m^2): minimum area of detected
-#'     polygons retained after segmentation. Increasing it removes tiny
-#'     patches earlier in the workflow; decreasing it retains very small
-#'     detections for later filtering. Adjust when segmentation produces
-#'     excessive tiny fragments. This threshold is usually kept permissive
-#'     because later filters handle patch reliability.
-#'   \item \code{merge_overlaps} (logical): whether overlapping candidate
-#'     geometries are merged during refinement. Setting it to \code{TRUE}
-#'     produces more consolidated patches and avoids duplicate candidates;
-#'     setting it to \code{FALSE} preserves overlapping detections
-#'     separately. Adjust only if overlap structure must be preserved for
-#'     diagnostics. Not vegetation-specific.
+#'   \item \code{aoi_buffer_m}: buffer around the area of interest used
+#'   during refinement. Controls edge artefacts near AOI boundaries.
+#'
+#'   \item \code{minimum_detected_area_m2}: minimum polygon area retained
+#'   after segmentation. Usually kept permissive because later filters
+#'   evaluate patch reliability.
+#'
+#'   \item \code{merge_overlaps}: logical flag controlling whether
+#'   overlapping polygons are merged during refinement.
 #' }
 #'
-#' \strong{How to interpret \code{scoring_params}}
+#' \strong{Scoring parameters}
+#'
 #' \itemize{
-#'   \item \code{support_buffer_m} (meters): buffer used to evaluate
-#'     contextual support around candidate patches. Increasing it allows
-#'     nearby support evidence to influence the patch; decreasing it
-#'     restricts support evidence to the patch geometry itself. Adjust
-#'     when evidence is spatially misaligned with patch boundaries.
-#'     Usually conservative; hotspot and reference buffers are handled
-#'     separately.
-#'   \item \code{previous_fire_exclusion_buffer_m} (meters): buffer around
-#'     previous-year burned areas used to identify temporal conflicts.
-#'     Increasing it more aggressively removes or downgrades patches
-#'     overlapping recent burns; decreasing it is more permissive with
-#'     repeated or adjacent burns. Adjust when previous-year scars are
-#'     being repeatedly detected as new burns. The validated default of
-#'     90 m is roughly one 90 m analysis pixel.
-#'   \item \code{previous_fire_cleanup_buffer_m} (meters): buffer used to
-#'     clean residual overlap with previous-year burned polygons.
-#'     Increasing it removes more temporal-cleanup residue; decreasing it
-#'     retains more boundary-adjacent area near old burns. Adjust when
-#'     temporal-cleanup artefacts are visible along old fire boundaries.
-#'     Not vegetation-specific.
-#'   \item \code{minimum_remaining_area_m2} (m^2): minimum area required
-#'     after previous-fire overlap removal. Increasing it drops more small
-#'     remnants after temporal cleanup; decreasing it retains more
-#'     residual fragments. Adjust when previous-fire erasure leaves many
-#'     meaningless slivers or removes valid reburns. It should reflect the
-#'     minimum meaningful patch size after cleanup.
-#'   \item \code{reference_buffer_m} (meters): buffer used when
-#'     constructing or comparing spectral support references. Increasing
-#'     it allows more spatial tolerance around reference or support
-#'     evidence; decreasing it makes the comparison stricter and more
-#'     spatially exact. Adjust when spatial mismatch exists between
-#'     candidate patches and support / reference layers. Not
-#'     vegetation-specific.
+#'   \item \code{support_buffer_m}: buffer used to evaluate contextual
+#'   support around candidate patches.
+#'
+#'   \item \code{previous_fire_exclusion_buffer_m}: buffer around
+#'   previous-year burned areas used to identify temporal conflicts.
+#'   Increasing this value makes repeated-burn detection more
+#'   conservative.
+#'
+#'   \item \code{previous_fire_cleanup_buffer_m}: buffer used to clean
+#'   residual overlap with previous-year burned polygons.
+#'
+#'   \item \code{minimum_remaining_area_m2}: minimum polygon area
+#'   retained after temporal cleanup. Useful for removing residual
+#'   slivers after overlap removal.
+#'
+#'   \item \code{reference_buffer_m}: buffer used when constructing or
+#'   comparing spectral-support references.
 #' }
 #'
-#' @param change_index Raster path, `terra::SpatRaster`, or `NULL`.
-#'   Annual change-index raster (RBR, dNBR, RdNBR, ...). Required before
-#'   detection runs; may be `NULL` at config-build time for configs that
-#'   will be used only with pre-built candidates (e.g. direct calls to
-#'   \code{\link[=score_burned_patches]{score_burned_patches()}}).
-#' @param vegetation_map Raster, sf object, or path. Optional vegetation or
-#'   land-cover stratification layer (CORINE-compatible in 0.2.x).
-#' @param burnable_mask Raster, sf object, or path. Required: binary mask
-#'   of burnable area (1 burnable, 0 non-burnable).
-#' @param hotspots sf POINT layer or path. Optional hotspot layer for the
-#'   target year.
-#' @param previous_year_burned sf POLYGON layer or path. Optional
-#'   previous-year burned map for temporal conflict assessment.
-#' @param reference_burned_map sf POLYGON, raster, or path. Optional burned
-#'   reference used by
-#'   \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-#'   validation is requested.
-#' @param target_year Integer scalar. Target year. Required: used for
-#'   naming outputs and filtering hotspots/previous-year layers.
-#' @param output_dir Character scalar. Root output directory.
-#'   Defaults to `tempdir()`.
-#' @param run_name Character scalar. The single visible experiment
-#'   identifier. Used to name output folders/files and the
-#'   `.../DETERMINISTIC/<run_name>/...` route level. Must be a single
-#'   non-empty string and must not contain `/` or `\\`. Defaults to
-#'   `"deterministic_burned_map"`.
-#' @param detect_params Named list. Detection parameters. Recognized keys:
-#'   `seed_threshold` (default `310`), `growth_delta` (default `90`),
-#'   `minimum_growth_threshold` (default `240`), `minimum_seed_pixels`
-#'   (default `30`), and the per-vegetation-class vectors
-#'   `seed_threshold_by_vegetation`, `growth_delta_by_vegetation`,
-#'   `minimum_growth_threshold_by_vegetation` (named numeric vectors over
-#'   classes `"1"`..`"11"`). If a global scalar is given without its
-#'   matching `*_by_vegetation` vector, the global value is broadcast to
-#'   all 11 classes. A partial `*_by_vegetation` vector is completed with
-#'   the user global (if given) or otherwise the validated default for
-#'   the missing class. Unknown keys raise an error.
-#' @param refine_params Named list. Refinement parameters. Recognized
-#'   keys: `aoi_buffer_m` (default `5000`), `omission_buffer_m`
-#'   (default `0`), `minimum_detected_area_m2` (default `10`),
-#'   `merge_overlaps` (default `TRUE`), `merge_overlaps_buffer_m`
-#'   (default `0`). Unknown keys raise an error.
-#' @param scoring_params Named list. Scoring parameters. Recognized keys:
-#'   `support_buffer_m` (default `0`),
-#'   `previous_fire_exclusion_buffer_m` (default `90`),
-#'   `previous_fire_cleanup_buffer_m` (default `90`),
-#'   `minimum_remaining_area_m2` (default `20000`),
-#'   `reference_buffer_m` (default `90`). Unknown keys raise an error.
-#' @param options Named list. Technical/runtime container only (NOT a
-#'   methodological surface). Recognized keys: `deterministic_seed`,
-#'   `engine_root`, `whitebox_exe`, `gdalwarp_path`,
-#'   `tool_paths`, `ecoregion_shapefile_path`, `peninsula_shapefile_path`,
-#'   `future_globals_maxsize`, and `change_index_validation`.
+#' @return Returns an S3 object of class
+#'   `otsufire_burned_mapping_config`.
 #'
-#'   The deterministic workflow does not consume external burned-like
-#'   registries during scoring. Consequently, supplying
-#'   `options$registry_path` raises an error. Spectral-support references
-#'   used by \code{\link[=score_burned_patches]{score_burned_patches()}}
-#'   must instead be provided explicitly through the `keep_pool` argument
-#'   or, when omitted, are constructed automatically for the target year
-#'   from high-confidence current-year candidate patches (the
-#'   deterministic scoring local fallback).
+#'   Stable public fields include:
+#'   \itemize{
+#'     \item `target_year`
+#'     \item `inputs`
+#'     \item `run_name`
+#'     \item `output_routes`
+#'     \item `detect_params`
+#'     \item `refine_params`
+#'     \item `scoring_params`
+#'     \item `rescue_params`
+#'     \item `options`
+#'     \item `engine_root`
+#'     \item `deterministic_seed`
+#'     \item `tool_paths`
+#'   }
 #'
-#'   `options$change_index_validation` is an optional advanced sub-list
-#'   that tunes the in-memory sanity check applied to `change_index` by
-#'   \code{\link[=detect_burned_patches]{detect_burned_patches()}} (it is
-#'   never applied to `vegetation_map` or `burnable_mask`, and no raster
-#'   is read at config-build time). Recognized sub-keys (all optional;
-#'   defaults shown): `expected_nodata` (`-9999`), `lower_cap`
-#'   (`-1000`), `cap_below` (`TRUE`), and `check_finite` (`TRUE`).
+#'   The configuration object stores fully resolved parameter blocks in
+#'   their internal engine-ready structure.
 #'
-#'   `lower_cap` is configurable on purpose: the validated value `-1000`
-#'   suits RBR, but other change indices have different valid ranges, so
-#'   it must not be hard-coded. If supplied, the block must be a named
-#'   list using only these keys.
+#'   Internal implementation details beyond these stable public fields
+#'   should not be relied upon by downstream user code.
 #'
-#' @return An S3 object of class `otsufire_burned_mapping_config` (a named
-#'   list). Stable public fields include: `target_year`, `inputs`,
-#'   `run_name`, `output_routes`, `detect_params`, `refine_params`,
-#'   `scoring_params`, `rescue_params`, `options`, `engine_root`,
-#'   `deterministic_seed`, and `tool_paths`.
+#' @examples
+#' \dontrun{
+#' config <- build_burned_mapping_config(
+#'   change_index = "MinMin_2022_mosaic_res90m.tif",
+#'   vegetation_map = "CLC_2018_peninsula.tif",
+#'   burnable_mask = "burnable_mask_binary_corine_2018_ETRS89.tif",
+#'   hotspots = "hotspots_2022.gpkg",
+#'   target_year = 2022,
+#'   output_dir = "results/",
+#'   run_name = "balanced_2022"
+#' )
 #'
-#'   The `detect_params`, `refine_params`, and `scoring_params` fields
-#'   hold the fully resolved parameter blocks in their internal
-#'   engine-name shape. Internal implementation details beyond these
-#'   stable public fields should not be relied upon by downstream user
-#'   code.
+#' final_map <- run_deterministic_pipeline(config)
+#' }
 #'
-#'   The configuration object does not carry a registry path nor a
-#'   `keep_pool`. The spectral-support reference (an explicit `keep_pool`
-#'   or the local current-year fallback) is a scoring-time concern
-#'   handled by
-#'   \code{\link[=score_burned_patches]{score_burned_patches()}}, not a
-#'   field of this configuration object.
+#' @seealso
+#' Related workflow functions:
+#' \itemize{
+#'   \item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}
+#'   \item \code{\link[=change_index_mosaic]{change_index_mosaic()}}
+#'   \item \code{\link[=detect_burned_patches]{detect_burned_patches()}}
+#'   \item \code{\link[=score_burned_patches]{score_burned_patches()}}
+#'   \item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}
+#'   \item \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
+#' }
 #'
 #' @family workflow
 #' @export

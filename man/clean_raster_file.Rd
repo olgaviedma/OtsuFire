@@ -2,7 +2,7 @@
 % Please edit documentation in R/clean-rasters.R
 \name{clean_raster_file}
 \alias{clean_raster_file}
-\title{Detect and clean a dirty raster file on disk}
+\title{Detect and optionally repair raster integrity problems on disk}
 \usage{
 clean_raster_file(
   raster_path,
@@ -18,98 +18,141 @@ clean_raster_file(
 \arguments{
 \item{raster_path}{Character scalar. Path to an existing raster file.}
 
-\item{expected_nodata}{Numeric scalar. Value that should be declared as
-NoData on the raster (also used as `NAflag` when rewriting).}
+\item{expected_nodata}{Numeric scalar. Expected NoData value to enforce in
+the raster metadata.}
 
-\item{lower_cap}{Numeric scalar. Lower bound; pixels below this value are
-considered dirty and, during cleaning, capped to this value.}
+\item{lower_cap}{Numeric scalar. Minimum accepted pixel value. Pixels
+below this threshold are considered invalid and are capped during
+cleaning.}
 
-\item{cap_below}{Logical scalar. Whether the minimum-below-`lower_cap`
-criterion is evaluated (and, during cleaning, applied).}
+\item{cap_below}{Logical scalar. Whether values below `lower_cap` should
+be treated as integrity problems.}
 
-\item{check_finite}{Logical scalar. Whether the non-finite-pixels criterion
-is evaluated (and, during cleaning, applied).}
+\item{check_finite}{Logical scalar. Whether non-finite values (`Inf`,
+`-Inf`, `NaN`) should be checked and cleaned.}
 
-\item{action}{Character scalar. One of:
-\itemize{
-  \item `"ask"` (default): when the raster is dirty, print a summary and
-    prompt the user via `readline()` to choose between
-    `1 = backup_and_overwrite`, `2 = overwrite` (no backup),
-    `3 = skip` (do not touch disk), or `4 = fail`.
-  \item `"backup_and_overwrite"`: rename the original with
-    `backup_suffix` plus a timestamp inserted before the extension, then
-    write the cleaned raster to the original path.
-  \item `"overwrite"`: destructive overwrite without backup. Requires
-    explicit interactive confirmation: the user must type `OVERWRITE`
-    (uppercase) at a `readline()` prompt. Use `"backup_and_overwrite"`
-    in batch/non-interactive contexts.
-  \item `"fail"`: call `stop()` with a detailed message.
-}}
+\item{action}{Character scalar controlling how integrity problems are
+  handled.
 
-\item{backup_suffix}{Character scalar. Suffix inserted before the timestamp
-when renaming the original file under `"backup_and_overwrite"` (or the
-interactive equivalent). Resulting name pattern:
-`<stem><backup_suffix>_<YYYYmmdd_HHMMSS><ext>`.}
+  Available options:
+  \itemize{
+    \item `"ask"`: interactive diagnostic mode. When the raster is dirty,
+      prompts the user to choose between backup-and-overwrite, overwrite,
+      skip, or fail.
+    \item `"backup_and_overwrite"`: safely rewrites the raster after
+      creating a timestamped backup.
+    \item `"overwrite"`: destructive overwrite without backup. In
+      interactive use, the function requires explicit confirmation before
+      proceeding.
+    \item `"fail"`: stops execution with a detailed error.
+  }}
 
-\item{verbose}{Logical scalar. When `TRUE`, emit informational `message()`
-calls, including a confirmation when the file is already clean.}
+\item{backup_suffix}{Character scalar. Suffix inserted before the
+  timestamp when creating backup files.
+
+  Resulting filename pattern:
+  `<stem><backup_suffix>_<YYYYmmdd_HHMMSS><ext>`.}
+
+\item{verbose}{Logical scalar. If `TRUE`, informative progress messages
+are emitted, including confirmation when the raster is already clean.}
 }
 \value{
-A character scalar with the path to the raster file. The path is
-  unchanged when the file is clean, when the user picks `skip` under
-  `"ask"`, or when an overwrite is performed (the final file lives at the
-  original path).
+A character scalar containing the raster path.
+
+  If the raster is already clean, the original path is returned
+  unchanged.
+
+  If the raster is cleaned and rewritten, the returned path still points
+  to the cleaned raster location.
+
+  If `action = "ask"` and the user chooses `skip`, the original path is
+  returned unchanged without rewriting the file.
+
+  If `action = "fail"` and integrity problems are detected, the function
+  aborts with `stop()`.
 }
 \description{
-Wrapper around [clean_raster_inmem()] that operates on a raster file. The
-file is loaded with `terra::rast()`, diagnosed against the same three
-dirtiness criteria (NoData mismatch, minimum below `lower_cap`, non-finite
-pixels), and — if dirty — handled according to `action`. When the raster
-is clean, the function returns the input path unchanged without touching
-disk regardless of `action`.
+Diagnose and optionally repair raster integrity problems directly on disk.
 
-The on-disk writer always uses
-`wopt = list(NAflag = expected_nodata, gdal = c("COMPRESS=LZW",
-"BIGTIFF=YES", "TILED=YES"))`, matching `mosaic_from_tiles()`.
+This function is the file-based counterpart of [clean_raster_inmem()]. It
+loads a raster using `terra::rast()`, evaluates whether the file is
+internally consistent, and optionally rewrites the raster using standard
+OtsuFire output settings.
+
+Typical problems detected include:
+\itemize{
+  \item missing or inconsistent NoData metadata,
+  \item corrupted or non-finite pixel values (`Inf`, `-Inf`, `NaN`),
+  \item unexpected extreme negative values below the accepted lower bound.
+}
+
+The function is designed to prevent silent failures and unstable
+behaviour in large-scale automated workflows.
+
+When the raster is already clean, the function returns the original file
+path unchanged without modifying disk contents.
 }
 \details{
-Detect and clean a dirty raster file on disk
+The raster is evaluated using the same integrity rules as
+[clean_raster_inmem()].
+
+A raster is considered inconsistent when at least one of the following
+conditions is detected:
+\enumerate{
+  \item the declared NoData value differs from `expected_nodata`,
+  \item the raster minimum falls below `lower_cap`,
+  \item non-finite values (`Inf`, `-Inf`, `NaN`) are present.
+}
+
+When cleaning is applied, the function performs the following
+operations:
+\enumerate{
+  \item replaces non-finite values with `NA`,
+  \item caps values below `lower_cap`,
+  \item rewrites raster metadata using the expected NoData value,
+  \item writes the raster using standard OtsuFire GDAL options.
+}
+
+The raster is always written using:
+`wopt = list(NAflag = expected_nodata, gdal = c("COMPRESS=LZW",
+"BIGTIFF=YES", "TILED=YES"))`.
+
+This matches the writing strategy used internally by `mosaic_from_tiles()`.
+
+Large remote-sensing workflows frequently depend on chained raster
+operations involving mosaicking, thresholding, polygonization, and
+machine-learning pipelines.
+
+Corrupted raster metadata or invalid pixel values may silently cause:
+\itemize{
+  \item failed processing steps,
+  \item unstable summary statistics,
+  \item incorrect thresholds,
+  \item invalid polygons,
+  \item model instability,
+  \item or inconsistent burned-area products.
+}
+
+This function provides a reproducible and auditable mechanism for
+validating and standardising raster integrity before analysis.
 }
 \examples{
-# Synthetic example: a clean raster on disk. Because it is already clean,
-# the function returns the path without prompting even with action = "ask".
-tmp_path <- tempfile(fileext = ".tif")
-r <- terra::rast(
-  nrows = 10, ncols = 10,
-  xmin = 0, xmax = 10,
-  ymin = 0, ymax = 10,
-  vals = c(rep(NA_real_, 20), seq(-500, 290, length.out = 80))
-)
-terra::writeRaster(
-  r,
-  tmp_path,
-  overwrite = TRUE,
-  wopt = list(
-    datatype = "FLT4S",
-    NAflag = -9999,
-    gdal = c("COMPRESS=LZW", "TILED=YES")
-  )
-)
-
-clean_raster_file(
-  raster_path = tmp_path,
-  expected_nodata = -9999,
-  lower_cap = -1000,
-  action = "ask",
-  verbose = TRUE
-)
-
 \dontrun{
-# Example with a generic user path
+# Example: safely clean a raster while preserving a backup
 clean_raster_file(
-  raster_path = "path/to/your/raster.tif",
-  expected_nodata = -9999,
-  lower_cap = -1000,
+  raster_path = "MinMin_2022_mosaic_res90m.tif",
+  action = "backup_and_overwrite"
+)
+
+# Example: strict validation inside a production pipeline
+clean_raster_file(
+  raster_path = "MinMin_2022_mosaic_res90m.tif",
+  action = "fail"
+)
+
+# Example: interactive QA inspection
+clean_raster_file(
+  raster_path = "MinMin_2022_mosaic_res90m.tif",
   action = "ask"
 )
 }

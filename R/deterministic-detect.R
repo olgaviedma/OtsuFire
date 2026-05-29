@@ -89,6 +89,37 @@
 #' `change_index` sanity check through [clean_raster_inmem()] with
 #' `action = "fail"`.
 #'
+#' \strong{Current AOI limitation and what to do instead}
+#'
+#' At the moment, `aoi` is intentionally rejected rather than partially
+#' applied. The current detection engine still runs through the full grow
+#' and refine machinery without a true AOI-aware execution path, so
+#' allowing `aoi` now would be misleading.
+#'
+#' If you need an AOI-limited run today, you must guarantee that the
+#' workflow inputs have already been prepared externally for that AOI
+#' before calling `detect_burned_patches()`. In practice, this means that
+#' the files on disk should already be cropped or masked to the intended
+#' AOI for at least:
+#' \itemize{
+#'   \item `change_index`,
+#'   \item `vegetation_map`,
+#'   \item `burnable_mask`,
+#'   \item and any supporting spatial layers used later in the workflow,
+#'     especially the study-area boundary and ecoregion layers referenced
+#'     through `config$options`.
+#' }
+#'
+#' If later deterministic stages should also remain AOI-limited, the same
+#' external preparation principle should be applied consistently to other
+#' relevant spatial inputs, such as hotspot layers or previous-year
+#' burned maps.
+#'
+#' The planned future implementation is the deeper engine-level approach:
+#' `aoi` will be propagated through the underlying grow and refine stages
+#' so that detection can be restricted internally, instead of relying
+#' only on user-managed pre-cropped inputs.
+#'
 #' \strong{Why this stage matters}
 #'
 #' Many burned-area mapping errors start during candidate generation,

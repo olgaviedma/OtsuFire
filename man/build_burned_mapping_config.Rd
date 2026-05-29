@@ -65,39 +65,93 @@ must not contain `/` or `\\`. Defaults to
 `"deterministic_burned_map"`.}
 
 \item{detect_params}{Named list containing detection-stage parameters.
-Recognized keys:
-\itemize{
-  \item `seed_threshold`
-  \item `growth_delta`
-  \item `minimum_growth_threshold`
-  \item `minimum_seed_pixels`
-  \item `seed_threshold_by_vegetation`
-  \item `growth_delta_by_vegetation`
-  \item `minimum_growth_threshold_by_vegetation`
-}
-Unknown keys raise an error.}
+  Recognized keys:
+  \itemize{
+    \item `seed_threshold`
+    \item `growth_delta`
+    \item `minimum_growth_threshold`
+    \item `minimum_seed_pixels`
+    \item `seed_threshold_by_vegetation`
+    \item `growth_delta_by_vegetation`
+    \item `minimum_growth_threshold_by_vegetation`
+  }
+  Unknown keys raise an error.
+
+  When `detect_params = list()`, the package uses the following
+  defaults:
+  \preformatted{list(
+  seed_threshold = 310,
+  growth_delta = 90,
+  minimum_growth_threshold = 240,
+  minimum_seed_pixels = 30L,
+  seed_threshold_by_vegetation = c(
+    "1" = 310, "2" = 420, "3" = 380, "4" = 320, "5" = 320,
+    "6" = 320, "7" = 320, "8" = 500, "9" = 470, "10" = 670, "11" = 480
+  ),
+  growth_delta_by_vegetation = c(
+    "1" = 80, "2" = 20, "3" = 40, "4" = 100, "5" = 85,
+    "6" = 85, "7" = 85, "8" = 10, "9" = 10, "10" = 5, "11" = 10
+  ),
+  minimum_growth_threshold_by_vegetation = c(
+    "1" = 230, "2" = 360, "3" = 300, "4" = 230, "5" = 240,
+    "6" = 240, "7" = 240, "8" = 430, "9" = 400, "10" = 560, "11" = 400
+  )
+)}
+
+  These defaults are RBR-oriented operational starting values. They
+  are not hard-coded methodological rules: users can replace them with
+  year-specific or study-area-specific settings when another change
+  index or ecological context requires different thresholds.}
 
 \item{refine_params}{Named list containing refinement-stage parameters.
-Recognized keys:
-\itemize{
-  \item `aoi_buffer_m`
-  \item `omission_buffer_m`
-  \item `minimum_detected_area_m2`
-  \item `merge_overlaps`
-  \item `merge_overlaps_buffer_m`
-}
-Unknown keys raise an error.}
+  Recognized keys:
+  \itemize{
+    \item `aoi_buffer_m`
+    \item `omission_buffer_m`
+    \item `minimum_detected_area_m2`
+    \item `merge_overlaps`
+    \item `merge_overlaps_buffer_m`
+  }
+  Unknown keys raise an error.
+
+  When `refine_params = list()`, the package uses:
+  \preformatted{list(
+  aoi_buffer_m = 5000,
+  omission_buffer_m = 0,
+  minimum_detected_area_m2 = 10,
+  merge_overlaps = TRUE,
+  merge_overlaps_buffer_m = 0
+)}
+
+  These defaults are the standard RBR-oriented refinement settings
+  used by the deterministic workflow, but users may update them to
+  match a different mapping scale, polygonization behaviour, or study
+  design.}
 
 \item{scoring_params}{Named list containing scoring-stage parameters.
-Recognized keys:
-\itemize{
-  \item `support_buffer_m`
-  \item `previous_fire_exclusion_buffer_m`
-  \item `previous_fire_cleanup_buffer_m`
-  \item `minimum_remaining_area_m2`
-  \item `reference_buffer_m`
-}
-Unknown keys raise an error.}
+  Recognized keys:
+  \itemize{
+    \item `support_buffer_m`
+    \item `previous_fire_exclusion_buffer_m`
+    \item `previous_fire_cleanup_buffer_m`
+    \item `minimum_remaining_area_m2`
+    \item `reference_buffer_m`
+  }
+  Unknown keys raise an error.
+
+  When `scoring_params = list()`, the package uses:
+  \preformatted{list(
+  support_buffer_m = 0,
+  previous_fire_exclusion_buffer_m = 90,
+  previous_fire_cleanup_buffer_m = 90,
+  minimum_remaining_area_m2 = 20000,
+  reference_buffer_m = 90
+)}
+
+  These defaults are the standard RBR-oriented scoring settings used
+  by the deterministic workflow. They can be changed by the user when
+  temporal-cleanup or support-reference behaviour needs to be adapted
+  to another index, resolution, or application context.}
 
 \item{options}{Named list containing technical/runtime options only
   (not methodological controls). Recognized keys include:

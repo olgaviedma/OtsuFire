@@ -1,8 +1,8 @@
 #' @title Detect and optionally repair raster integrity problems in memory
 #' @description
-#' Diagnose and optionally repair common raster integrity problems before
-#' running segmentation, mosaicking, thresholding, or feature-extraction
-#' workflows.
+#' Check an in-memory raster for common integrity problems and, if you
+#' choose, repair them before running segmentation, mosaicking,
+#' thresholding, or feature-extraction workflows.
 #'
 #' The function inspects an in-memory `SpatRaster` and evaluates whether it is
 #' internally consistent according to three validation rules commonly required
@@ -22,8 +22,8 @@
 #'   \item or stop execution with a detailed error.
 #' }
 #'
-#' This function is primarily intended as a defensive preprocessing safeguard
-#' before downstream operations such as segmentation, compositing,
+#' This function is mainly a defensive preprocessing check before
+#' downstream operations such as segmentation, compositing,
 #' polygonization, or polygon-level feature extraction.
 #'
 #' For file-based workflows, see [clean_raster_file()].
@@ -38,10 +38,10 @@
 #'   treated as integrity problems (and capped during cleaning).
 #' @param check_finite Logical scalar. Whether non-finite values (`Inf`,
 #'   `-Inf`, `NaN`) should be checked and cleaned.
-#' @param action Character scalar controlling how detected problems are
-#'   handled. One of `"warn_and_clean"` (emit a warning and automatically clean
-#'   the raster), `"report_only"` (report integrity problems without modifying
-#'   the raster), or `"fail"` (stop execution with a detailed error).
+#' @param action Character scalar controlling what to do when a problem is
+#'   found. One of `"warn_and_clean"` (warn and clean automatically),
+#'   `"report_only"` (report the problem but leave the raster unchanged),
+#'   or `"fail"` (stop with a detailed error).
 #' @param verbose Logical scalar. If `TRUE`, informative progress messages are
 #'   emitted, including confirmation when the raster passes all checks.
 #' @details
@@ -84,8 +84,8 @@
 #'     products.
 #' }
 #'
-#' This function provides a reproducible and auditable mechanism to
-#' standardise raster integrity before analysis.
+#' In practice, this gives you a reproducible way to standardise raster
+#' integrity before analysis.
 #' @return A `SpatRaster`.
 #'
 #'   If the raster is already clean, the original raster is returned
@@ -329,11 +329,12 @@ clean_raster_inmem <- function(
 
 #' @title Detect and optionally repair raster integrity problems on disk
 #' @description
-#' Diagnose and optionally repair raster integrity problems directly on disk.
+#' Check a raster file for common integrity problems and, if needed,
+#' repair it directly on disk.
 #'
-#' This function is the file-based counterpart of [clean_raster_inmem()]. It
-#' loads a raster using `terra::rast()`, evaluates whether the file is
-#' internally consistent, and optionally rewrites the raster using standard
+#' This function is the file-based counterpart of [clean_raster_inmem()].
+#' It loads a raster with `terra::rast()`, checks whether the file is
+#' internally consistent, and optionally rewrites it using the standard
 #' OtsuFire output settings.
 #'
 #' Typical problems detected include:
@@ -343,8 +344,8 @@ clean_raster_inmem <- function(
 #'   \item unexpected extreme negative values below the accepted lower bound.
 #' }
 #'
-#' The function is designed to prevent silent failures and unstable
-#' behaviour in large-scale automated workflows.
+#' The goal is to catch problems early and avoid unstable behaviour in
+#' larger automated workflows.
 #'
 #' When the raster is already clean, the function returns the original file
 #' path unchanged without modifying disk contents.
@@ -358,8 +359,8 @@ clean_raster_inmem <- function(
 #'   be treated as integrity problems.
 #' @param check_finite Logical scalar. Whether non-finite values (`Inf`,
 #'   `-Inf`, `NaN`) should be checked and cleaned.
-#' @param action Character scalar controlling how integrity problems are
-#'   handled.
+#' @param action Character scalar controlling what to do when integrity
+#'   problems are found.
 #'
 #'   Available options:
 #'   \itemize{
@@ -421,8 +422,8 @@ clean_raster_inmem <- function(
 #'   \item or inconsistent burned-area products.
 #' }
 #'
-#' This function provides a reproducible and auditable mechanism for
-#' validating and standardising raster integrity before analysis.
+#' In practice, this gives you a reproducible way to validate and
+#' standardise raster integrity before analysis.
 #' @return A character scalar containing the raster path.
 #'
 #'   If the raster is already clean, the original path is returned

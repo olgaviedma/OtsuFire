@@ -50,5 +50,8 @@ utils::globalVariables(c(
   # carryover from internal-det-segmentation-refinement.R
   "AREA_M2", "REFINE_REASON", "AOI_ID", "AOI_GROUP",
   # carryover from internal-det-process-otsu-grow.R
-  "CLUMP_ID", "ECO_ID_INTERNAL", "UNIT_ID"
+  "CLUMP_ID", "ECO_ID_INTERNAL", "UNIT_ID",
+  # data.table NSE symbols used inside validate_fire_maps
+  # (build_reference_observability / warn_reference_observability).
+  ".N", "N", "observable_flag", "observable_reason", "reference_row"
 ))

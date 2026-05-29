@@ -17,7 +17,9 @@ run_deterministic_pipeline(
 \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.}
 
 \item{write_outputs}{Logical scalar. Whether the pipeline writes its
-outputs to disk. Default `TRUE`.}
+outputs to disk. Default `TRUE`. When `FALSE`, shared validation is
+usually skipped because the validator expects an on-disk decision
+layer.}
 
 \item{overwrite}{Logical scalar. Whether existing outputs from the same
 run may be replaced. Default `FALSE`.}
@@ -50,9 +52,10 @@ A named list of class `otsufire_deterministic_run` with fields:
     \code{\link[=score_burned_patches]{score_burned_patches()}}.}
   \item{`validation`}{Validation outputs returned by
     \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-    validation is executed; otherwise `NULL`.}
+    validation is executed successfully; otherwise `NULL`.}
   \item{`result_paths`}{Named list of important written output paths
-    produced during the workflow.}
+    produced during the workflow. Some entries may be `NA` when a
+    stage did not write that product.}
   \item{`timing_log`}{Timing diagnostics summarising execution time
     for each deterministic stage.}
   \item{`config`}{The input configuration object used to run the
@@ -60,14 +63,12 @@ A named list of class `otsufire_deterministic_run` with fields:
 }
 }
 \description{
-High-level public wrapper that orchestrates the complete deterministic
-burned-area workflow for a single target year by sequentially chaining
+Run detection, scoring, and optional validation for one target year
+using a single deterministic configuration object.
+Internally, the wrapper chains
 \code{\link[=detect_burned_patches]{detect_burned_patches()}},
-\code{\link[=score_burned_patches]{score_burned_patches()}}, and — when
-requested — the shared
-\code{\link[=validate_fire_maps]{validate_fire_maps()}} utility, using
-a single
-\code{\link[=build_burned_mapping_config]{otsufire_burned_mapping_config}}.
+\code{\link[=score_burned_patches]{score_burned_patches()}}, and, when
+requested, \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
 
 The pipeline implements the full unsupervised OtsuFire decision
 workflow, including candidate patch delineation through adaptive
@@ -82,14 +83,9 @@ automatically when \code{keep_pool} is omitted. The deterministic
 pipeline does not read or depend on implicit external burned-like
 registries.
 
-This orchestrator is new in 0.2.x and is \strong{not} a thin copy of
-the legacy 0.1.x `8_deterministic_bridge.R`. It consumes the new
-public configuration object, calls the modular public functions, and
-assembles a contract-shaped return object together with timing
-diagnostics and output routes.
-
-Contract source: `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`,
-`DETERMINISTIC_OUTPUTS_FINAL.csv`.
+It also returns timing diagnostics and the main output paths in one
+place, so it is a convenient entry point when you want the full
+workflow rather than stage-by-stage control.
 }
 \details{
 \strong{Deterministic workflow structure}
@@ -117,15 +113,16 @@ main stages:
     }
     The outputs of these components are integrated into a final
     deterministic confidence decision assigning each patch to `keep`,
-    `review`, or `drop`, while preserving full decision traceability.
+    `review`, or `drop`, while preserving a clear decision trail.
 
     Within the current wrapper, this scoring stage can use either an
     explicit \code{keep_pool} built from trusted external years or the
     local same-year spectral-support fallback when \code{keep_pool} is
     omitted. Explicit same-year \code{keep_pool} references are not a
     supported public mode.
-  \item \strong{Validation stage.} When validation is enabled and a
-    reference burned-area layer is available,
+  \item \strong{Validation stage.} When validation is enabled, a
+    reference burned-area layer is available, and scoring produced an
+    on-disk decision layer that the shared validator can read,
     \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
     the resulting deterministic burned-area outputs against external
     burned-area references.

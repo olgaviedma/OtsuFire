@@ -31,6 +31,10 @@
 #'   names; matching columns are dropped when `strip_ecoregion=TRUE`.
 #' @param drop_cols Character vector or NULL. Additional explicit column
 #'   names to drop.
+#' @param overwrite Logical. If `TRUE`, an existing `out_path` is removed
+#'   before writing. If `FALSE` (default) and `out_path` already exists,
+#'   the function stops with an explicit error instead of silently
+#'   replacing the destination. P1-DET-02 contract.
 #'
 #' @return The `out_path` (invisibly). Stops with an error if nothing is found
 #'   or if all inputs are empty/invalid.
@@ -60,7 +64,10 @@ merge_aoi_shapefiles <- function(base_output_dir,
                                  strip_ecoregion = TRUE,
                                  ecoregion_field = NULL,
                                  drop_pattern = "(^ens|^enz|ecoreg|ecoregion|ecorreg|(^|_)eco(_|$)|cor_eco|coreco)",
-                                 drop_cols = NULL) {
+                                 drop_cols = NULL,
+
+                                 # P1-DET-02: explicit overwrite contract
+                                 overwrite = FALSE) {
 
   if (!dir.exists(base_output_dir)) stop("base_output_dir does not exist: ", base_output_dir)
   if (!is.character(out_path) || length(out_path) != 1) stop("out_path must be a single character path.")
@@ -105,7 +112,10 @@ merge_aoi_shapefiles <- function(base_output_dir,
     inv <- !sf::st_is_valid(x)
     if (any(inv)) x <- sf::st_make_valid(x)
 
-    x <- sf::st_collection_extract(x, "POLYGON", warn = FALSE)
+    # sf::st_collection_extract() emits "x is already of type POLYGON" when x
+    # is not a GEOMETRYCOLLECTION, ignoring `warn = FALSE`. Cosmetic noise; we
+    # silence it here so the call stays a no-op on plain polygon inputs.
+    x <- suppressWarnings(sf::st_collection_extract(x, "POLYGON", warn = FALSE))
     if (is.null(x) || nrow(x) == 0) return(NULL)
 
     sf::st_geometry(x) <- sf::st_cast(sf::st_geometry(x), "MULTIPOLYGON", warn = FALSE)
@@ -254,6 +264,18 @@ merge_aoi_shapefiles <- function(base_output_dir,
   # ----------------------------
   driver <- choose_driver(out_path)
   dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
+
+  # P1-DET-02: honor the overwrite contract. The previous behavior
+  # silently replaced any existing destination via delete_dsn = TRUE,
+  # which is incompatible with the documented overwrite = FALSE
+  # semantics propagated from the public detect/run wrappers.
+  out_exists <- file.exists(out_path) ||
+    (driver == "ESRI Shapefile" &&
+     file.exists(paste0(tools::file_path_sans_ext(out_path), ".shp")))
+  if (out_exists && !isTRUE(overwrite)) {
+    stop("merge_aoi_shapefiles: out_path already exists and ",
+         "overwrite = FALSE: ", out_path, call. = FALSE)
+  }
 
   if (driver == "ESRI Shapefile") {
     delete_shapefile_bundle(out_path)

@@ -1,31 +1,32 @@
-#' Validate burned-area maps against reference polygons
+#' Validate burned-area maps against independent reference fire perimeters
 #'
 #' @description
-#' Validate one or more burned-area prediction layers against an
-#' independent reference fire perimeter layer.
+#' `validate_fire_maps()` evaluates one or more burned-area prediction
+#' layers against an independent set of reference fire perimeters.
+#' It is the shared validation entry point in OtsuFire, so it can be
+#' used with outputs from the deterministic workflow, the supervised
+#' workflow, or any external burned-area map supplied as polygons.
 #'
-#' This is the workflow-independent public validation function in
-#' OtsuFire. It compares predicted burned polygons against reference
-#' polygons over the burnable domain and can compute:
-#' \itemize{
-#'   \item global pixel-based confusion-matrix metrics,
-#'   \item global polygon / area-based detection metrics,
-#'   \item optional polygon-level omission / commission summaries by
-#'     external class,
-#'   \item optional per-stratum pixel metrics from a strata raster,
-#'   \item an optional combined Excel workbook with the main outputs.
-#' }
-#'
-#' Before comparison, reference polygons are filtered to the requested
-#' year, clipped to the study area, masked to the burnable domain,
-#' optionally filtered by minimum area, and optionally dissolved by a
+#' The function compares predicted and reference burned areas within a
+#' common evaluation domain defined by the study-area mask and the
+#' burnable-area raster. Reference polygons are first harmonised to this
+#' domain by filtering them to the target year, clipping them to the
+#' study area, masking them to burnable land, optionally applying a
+#' minimum-area threshold, optionally excluding fires that were not
+#' temporally observable, and optionally dissolving polygons by a
 #' grouping field. Prediction layers are processed against the same
-#' evaluation domain.
+#' domain so that omission, commission, and agreement are evaluated
+#' consistently.
 #'
-#' Intermediate masked reference and prediction layers are cached on
-#' disk. If you change `min_area_reference_ha`, use
-#' `force_reprocess_ref = TRUE` to rebuild the reference cache. Use
-#' `force_reprocess_pred = TRUE` to rebuild the prediction cache.
+#' The function can compute two complementary types of validation
+#' output. Pixel-based metrics quantify agreement between burned and
+#' unburned pixels over the burnable domain using a confusion matrix.
+#' Polygon- and area-based metrics quantify whether known reference fires
+#' were detected, how much of their area was recovered, and how much
+#' predicted burned area overlaps the reference data. Optional branches
+#' can also summarise omission and commission by an external polygon
+#' class, compute pixel-level metrics by raster strata, and write the
+#' main outputs to a combined Excel workbook.
 #'
 #' @param input_shapefile Character vector or `sf` object. One or more
 #'   burned-area prediction layers to validate. Each input is processed
@@ -39,7 +40,8 @@
 #' @param year_target Numeric. Target year used to filter the reference
 #'   polygons to the correct fire season.
 #' @param validation_dir Character. Root output directory. A
-#'   `VALIDATION/` subfolder is created inside it.
+#'   `VALIDATION/` subfolder is created inside it. Main CSV and vector
+#'   outputs are currently written directly in that folder.
 #' @param binary_burnable Logical. If `TRUE` (default), the burnable
 #'   raster is treated as binary and cells at or above
 #'   `burnable_threshold` are considered burnable. If `FALSE`,
@@ -65,6 +67,18 @@
 #' @param min_area_reference_ha Optional numeric. Minimum reference
 #'   polygon area, in hectares after masking to the burnable domain, to
 #'   retain in the analysis. Default `NULL`.
+#' @param observability_raster Optional `SpatRaster`, raster path, or
+#'   `NULL`. When supplied, it is aligned to the validation domain and
+#'   used to exclude reference polygons whose latest observable day of
+#'   year does not reach the reference fire day. The current
+#'   implementation expects a single-layer DOY raster; if a multi-layer
+#'   raster is supplied, only the first layer is used.
+#' @param ref_end_doy_col Character. Reference attribute storing the fire
+#'   end day of year. Used first to derive `obs_ref_doy`. Default
+#'   `"end_doy"`.
+#' @param ref_start_doy_col Character. Reference attribute storing the
+#'   fire start day of year. Used as fallback when `ref_end_doy_col` is
+#'   missing for a polygon. Default `"start_doy"`.
 #' @param force_reprocess_ref Logical. If `TRUE`, rebuild the cached
 #'   reference products even if they already exist.
 #' @param force_reprocess_pred Logical. If `TRUE`, rebuild the cached
@@ -95,122 +109,186 @@
 #'   Defaults to `validation_ALL_<year_target>_res30.xlsx`.
 #'
 #' @details
-#' \strong{What this function computes}
+#' \strong{Conceptual workflow}
 #'
-#' Depending on `metrics_type` and the optional inputs supplied, the
-#' function can produce global pixel metrics, global polygon / area
-#' metrics, polygon-level error summaries by class, pixel-level
-#' per-stratum metrics, and a combined Excel workbook.
+#' `validate_fire_maps()` follows five main steps.
 #'
-#' \strong{Global pixel-based metrics}
+#' First, it builds a common validation domain. The study-area boundary
+#' defines the spatial extent, and the burnable raster defines where
+#' burned/unburned comparison is meaningful. When
+#' `binary_burnable = TRUE`, cells with values greater than or equal to
+#' `burnable_threshold` are treated as burnable. When
+#' `binary_burnable = FALSE`, the values listed in `burnable_classes`
+#' define the burnable domain.
 #'
-#' When `metrics_type = "pixel"` or `"all"`, the function computes
-#' `TP`, `FP`, `FN`, and `TN` over the burnable domain, plus derived
-#' metrics such as `Precision`, `Recall`, `F1`, `IoU`, `Specificity`,
-#' `BalancedAccuracy`, and `ErrorRate`.
+#' Second, it prepares the reference layer. Reference polygons are
+#' filtered to `year_target`, clipped to the study area, restricted to
+#' the burnable domain and, if requested, filtered by
+#' `min_area_reference_ha`. If `observability_raster` is supplied, the
+#' function also removes reference polygons whose fire date falls after
+#' the latest observable day of year inside the polygon. This avoids
+#' penalising a prediction layer for missing fires that could not be
+#' observed by the input imagery.
 #'
-#' Results are written to
-#' `validation_dir/VALIDATION/metrics_summary_<year>.csv` and returned in
-#' `metrics`.
+#' Third, it prepares each prediction layer. The object supplied through
+#' `input_shapefile` may be a single polygon layer, an `sf` object, or a
+#' vector of polygon paths. Each prediction layer is processed
+#' independently against the same reference layer and validation domain,
+#' allowing several candidate maps, thresholds, or scenarios to be
+#' compared in a single call.
 #'
-#' \strong{Global polygon / area-based metrics}
+#' Fourth, it computes the requested validation metrics. When
+#' `metrics_type = "pixel"` or `"all"`, the function rasterises the
+#' reference and prediction layers over the burnable domain and computes
+#' the pixel-level confusion matrix: true positives, false positives,
+#' false negatives, and true negatives. From these counts it derives
+#' standard accuracy metrics including precision, recall, F1,
+#' intersection over union, specificity, balanced accuracy, and error
+#' rate. These outputs are useful for quantifying overall spatial
+#' agreement between predicted and reference burned pixels.
 #'
 #' When `metrics_type = "area"` or `"all"`, the function computes
-#' polygon-level detection and area summaries including:
+#' polygon- and area-based validation summaries. These outputs describe
+#' how many reference fires were detected, how many were completely
+#' detected, how many were missed, and how much reference burned area was
+#' recovered by the predictions. A reference polygon is counted as
+#' detected when its percentage overlap with the prediction is greater
+#' than or equal to `threshold_min_detected`. It is counted as
+#' completely detected when its overlap is greater than or equal to
+#' `threshold_completely_detected`. This makes the detection rule
+#' explicit and avoids treating trivial overlaps as successful detections
+#' unless the user chooses that behaviour.
+#'
+#' Fifth, the function writes the requested outputs into
+#' `validation_dir/VALIDATION/`. The main global tables are currently
+#' written as `metrics_summary_<year>.csv` and
+#' `polygon_summary_<year>.csv`. When observability filtering is used,
+#' the summary table is written as
+#' `reference_observability_<year>_<tag>.csv`. When stratified metrics
+#' are requested, the current file names are
+#' `pixel_by_stratum_<year>_<input>.csv`,
+#' `stratum_global_<year>_<input>.csv`, and
+#' `diagnostics_strata_<year>_<input>.csv`. Error layers and cached
+#' intermediate rasters are also written in the same `VALIDATION/`
+#' folder using descriptive file names.
+#'
+#' \strong{Pixel-based validation}
+#'
+#' Pixel-based validation evaluates map agreement cell by cell over the
+#' burnable domain. It is best suited for measuring the spatial match
+#' between predicted and reference burned areas, including both omission
+#' and commission. The main outputs are:
 #' \itemize{
-#'   \item `N_Reference_Polygons`,
-#'   \item `N_Completely_Detected`,
-#'   \item `N_Detected_Polygons`,
-#'   \item `N_Not_Detected`,
-#'   \item `Perc_Detected_Polygons`,
-#'   \item `Area_Reference_ha`,
-#'   \item `Area_Detected_ha`,
-#'   \item `Area_Intersection_ha`,
-#'   \item `Recall_Area_percent`,
-#'   \item `Precision_Area_percent`,
-#'   \item `Coverage_mean`, `Coverage_median`, `Coverage_p10`,
-#'     `Coverage_p90`,
-#'   \item `Detected_Definition`.
+#'   \item `TP`: pixels mapped as burned in both prediction and
+#'     reference,
+#'   \item `FP`: pixels mapped as burned in the prediction but not in the
+#'     reference,
+#'   \item `FN`: pixels mapped as burned in the reference but missed by
+#'     the prediction,
+#'   \item `TN`: pixels mapped as unburned in both prediction and
+#'     reference.
 #' }
 #'
-#' `Detected_Definition` records the rule used for
-#' `N_Detected_Polygons`, namely `coverage_ref >= threshold_min_detected`.
+#' The function then derives accuracy metrics such as `Precision`,
+#' `Recall`, `F1`, `IoU`, `Specificity`, `BalancedAccuracy`, and
+#' `ErrorRate`. These metrics are returned in `metrics` and written to
+#' `validation_dir/VALIDATION/metrics_summary_<year>.csv`.
 #'
-#' Results are written to
-#' `validation_dir/VALIDATION/polygon_summary_<year>.csv` and returned in
-#' `polygon_summary`.
+#' \strong{Polygon- and area-based validation}
 #'
-#' The default `threshold_min_detected = 10` is stricter than the
-#' pre-0.2.1 behaviour, which counted any non-zero overlap as detected.
-#' Use `threshold_min_detected = 0` to recover that older behaviour.
+#' Polygon- and area-based validation evaluates detection at the
+#' fire-event level. This branch answers questions such as: How many
+#' reference fires were detected? How many were missed? How much
+#' reference burned area was recovered? How much predicted area overlaps
+#' reference perimeters?
 #'
-#' \strong{Optional polygon-level omission / commission by class}
+#' The main outputs include `N_Reference_Polygons`,
+#' `N_Detected_Polygons`, `N_Completely_Detected`, `N_Not_Detected`,
+#' `Area_Reference_ha`, `Area_Detected_ha`, `Area_Intersection_ha`,
+#' `Recall_Area_percent`, `Precision_Area_percent`, and coverage
+#' summaries. The field `Detected_Definition` records the rule used to
+#' count detected polygons, namely
+#' `coverage_ref >= threshold_min_detected`.
 #'
-#' If both `class_shape` and `class_field` are supplied, the function
-#' produces polygon-level summaries of:
-#' \itemize{
-#'   \item omitted reference polygons by class,
-#'   \item commission polygons by class.
-#' }
+#' By default, `threshold_min_detected = 10`, meaning that at least 10%
+#' of a reference polygon must overlap the prediction to be counted as
+#' detected. This is stricter than the earlier legacy behaviour, which
+#' counted any non-zero overlap as detection. To recover that older
+#' behaviour, set `threshold_min_detected = 0`.
 #'
-#' Two CSV files are written per input:
-#' \itemize{
-#'   \item `omission_by_<class_field>_<input>.csv`,
-#'   \item `commission_by_<class_field>_<input>.csv`.
-#' }
+#' \strong{Temporal observability filter}
 #'
-#' This branch is polygon-based. It does not create a confusion matrix by
-#' class.
+#' When `observability_raster` is supplied, `validate_fire_maps()`
+#' checks whether each reference fire was observable in the imagery used
+#' for mapping. The function compares the fire day of year, derived from
+#' `ref_end_doy_col` with fallback to `ref_start_doy_col`, against the
+#' maximum observable day of year inside each reference polygon.
 #'
-#' \strong{Optional pixel-level per-stratum metrics}
+#' For each reference polygon, the function records `obs_ref_doy`,
+#' `obs_doy_max`, `obs_doy_margin`, `observable_flag`, and
+#' `observable_reason`. Non-observable reference polygons are excluded
+#' from the validated reference set, and the observability summary table
+#' is returned as `reference_observability` and written to
+#' `validation_dir/VALIDATION/reference_observability_<year>_<tag>.csv`.
+#' This is useful when the prediction map is based on annual or seasonal
+#' composites that may not contain valid post-fire observations for all
+#' reference events.
 #'
-#' If `strata_raster` is supplied, the function computes a full
-#' pixel-level confusion matrix within each stratum, plus derived
-#' metrics and diagnostic outputs. This mirrors the legacy
-#' stratified-validation workbook.
+#' \strong{Polygon-level omission and commission by class}
 #'
-#' Three CSV files are written per input:
-#' \itemize{
-#'   \item `pixel_by_stratum_<year>_<input>.csv`,
-#'   \item `stratum_global_<year>_<input>.csv`,
-#'   \item `diagnostics_strata_<year>_<input>.csv`.
-#' }
+#' If `class_shape` and `class_field` are supplied, the function
+#' summarises omitted reference polygons and commission polygons by an
+#' external polygon classification. This is useful for diagnosing
+#' whether errors are concentrated in particular vegetation types,
+#' regions, administrative units, or other user-defined classes.
 #'
-#' The algorithm uses a chunked row-wise tabulator controlled by
-#' `chunk_rows`. Pixels with `NA` strata are excluded from the
-#' per-stratum aggregation. Within the strata domain, `NA` prediction or
-#' reference pixels are treated according to `na_strata_as_zero`.
+#' This branch is polygon-based. It does not produce a pixel-level
+#' confusion matrix by class. For pixel-level stratified validation, use
+#' `strata_raster`.
 #'
-#' This branch is independent from the polygon-level `class_shape`
-#' branch. Both can be used in the same call.
+#' \strong{Pixel-level validation by strata}
 #'
-#' \strong{Combined Excel workbook}
+#' If `strata_raster` is supplied, the function computes a pixel-level
+#' confusion matrix separately within each raster stratum. This can be
+#' used to evaluate map performance by land-cover class, ecoregion,
+#' vegetation group, or any other categorical raster layer.
 #'
-#' If `write_excel = TRUE`, the function also writes a combined Excel
-#' workbook with the legacy sheet layout:
-#' \itemize{
-#'   \item `pixel_global`,
-#'   \item `pixel_by_stratum`,
-#'   \item `stratum_global`,
-#'   \item `diagnostics_strata`,
-#'   \item `polygon_global`,
-#'   \item `run_info`.
-#' }
+#' The optional `strata_lut` argument can be used to attach
+#' human-readable labels to stratum IDs. Pixels with missing strata are
+#' excluded from the stratified aggregation. Within valid strata,
+#' missing prediction or reference pixels are treated according to
+#' `na_strata_as_zero`: if `TRUE`, they are treated as unburned to match
+#' the legacy validator; if `FALSE`, they are dropped from the stratified
+#' calculation.
 #'
-#' Sheets with no data are omitted. The `run_info` sheet stores the main
-#' call arguments and derived cache settings needed to reproduce the
-#' validation run.
+#' \strong{Caching and reprocessing}
 #'
-#' @return A named list with the following elements:
+#' The function caches intermediate masked reference and prediction
+#' layers in `validation_dir/VALIDATION/`. This avoids repeating
+#' expensive spatial preprocessing when the same validation setup is run
+#' multiple times.
+#'
+#' Use `force_reprocess_ref = TRUE` when changes to the reference-side
+#' settings require rebuilding the reference cache, especially after
+#' changing `min_area_reference_ha`, `observability_raster`,
+#' `dissolve_ref_by`, or the burnable-domain settings. Use
+#' `force_reprocess_pred = TRUE` when the prediction layer or
+#' prediction-side settings have changed and the cached prediction
+#' products should be rebuilt.
+#'
+#' @return A named list containing the available validation outputs:
 #' \describe{
-#'   \item{`metrics`}{Global pixel-based metrics as a `data.table`, or
-#'     `NULL` when `metrics_type = "area"`.}
-#'   \item{`polygon_summary`}{Global polygon / area-based metrics as a
-#'     `data.table`, or `NULL` when `metrics_type = "pixel"`.}
-#'   \item{`pixel_by_stratum`}{Per-stratum pixel metrics as a
-#'     `data.table`, or `NULL` when `strata_raster` is not supplied.}
-#'   \item{`stratum_global`}{Single-row aggregate over the strata domain,
-#'     or `NULL` when `strata_raster` is not supplied.}
+#'   \item{`metrics`}{Global pixel-based metrics, or `NULL` when
+#'     `metrics_type = "area"`.}
+#'   \item{`polygon_summary`}{Global polygon- and area-based metrics, or
+#'     `NULL` when `metrics_type = "pixel"`.}
+#'   \item{`reference_observability`}{Reference-polygon observability
+#'     diagnostics, or `NULL` when `observability_raster = NULL`.}
+#'   \item{`pixel_by_stratum`}{Per-stratum pixel metrics, or `NULL` when
+#'     `strata_raster` is not supplied.}
+#'   \item{`stratum_global`}{Aggregate metrics over the stratified
+#'     validation domain, or `NULL` when `strata_raster` is not
+#'     supplied.}
 #'   \item{`diagnostics_strata`}{Diagnostics for the stratified branch,
 #'     or `NULL` when `strata_raster` is not supplied.}
 #'   \item{`excel_path`}{Path to the combined Excel workbook, or `NULL`
@@ -225,7 +303,8 @@
 #' `ErrorRate` to the global and stratified pixel outputs; coverage
 #' summaries plus `Detected_Definition` to the polygon outputs; and the
 #' `threshold_min_detected`, `dissolve_ref_by`, and `dissolve_input_by`
-#' controls.
+#' controls. Version 0.5.0 adds the optional temporal observability
+#' filter controlled by `observability_raster`.
 #'
 #' @seealso [run_deterministic_pipeline()] for the deterministic
 #'   workflow that commonly produces the prediction layer passed to
@@ -246,8 +325,8 @@
 #' )
 #'
 #' # With pixel-level CORINE stratification + combined Excel workbook.
-#' # Produces pixel_by_stratum / stratum_global / diagnostics_strata
-#' # CSVs plus validation_ALL_2022_res30.xlsx with the 6 legacy sheets.
+#' # Produces 03_STRATA CSVs plus the optional Excel workbook in
+#' # 01_SUMMARY/validation_ALL_2022_res30.xlsx.
 #' validate_fire_maps(
 #'   input_shapefile = "predicted_2022.gpkg",
 #'   ref_shapefile   = "ref_polygons_2022.shp",
@@ -287,6 +366,9 @@ validate_fire_maps <- function(input_shapefile,
                                threshold_completely_detected = 90,
                                threshold_min_detected = 10,
                                min_area_reference_ha = NULL,
+                               observability_raster = NULL,
+                               ref_end_doy_col = "end_doy",
+                               ref_start_doy_col = "start_doy",
                                force_reprocess_ref = FALSE,
                                force_reprocess_pred = FALSE,
                                metrics_type = c("all", "pixel", "area"),
@@ -345,16 +427,324 @@ validate_fire_maps <- function(input_shapefile,
       dplyr::summarise(do_union = TRUE, .groups = "drop")
   }
 
+  make_cache_safe_tag <- function(x) {
+    x <- paste(x, collapse = "_")
+    x <- gsub("[^A-Za-z0-9]+", "-", x)
+    x <- gsub("(^-+|-+$)", "", x)
+    if (!nzchar(x)) "na" else substr(x, 1L, 80L)
+  }
+
+  make_short_cache_hash <- function(...) {
+    x <- paste(unlist(list(...), use.names = FALSE), collapse = "|")
+    ints <- utf8ToInt(enc2utf8(x))
+    if (!length(ints)) return("00000000")
+    mod <- 2147483647
+    h <- 0
+    for (ii in ints) {
+      h <- (h * 131 + ii) %% mod
+    }
+    hx <- toupper(as.character(as.hexmode(h)))
+    hx <- paste0(strrep("0", 8L), hx)
+    substr(hx, nchar(hx) - 7L, nchar(hx))
+  }
+
+  observability_cache_tag <- function(observability_raster,
+                                      ref_end_doy_col,
+                                      ref_start_doy_col) {
+    if (is.null(observability_raster)) return("obs-none")
+    obs_id <- NULL
+    layer_id <- NULL
+    if (inherits(observability_raster, "SpatRaster")) {
+      src <- tryCatch(terra::sources(observability_raster), error = function(e) character())
+      src <- src[nzchar(src)]
+      obs_id <- if (length(src)) basename(src[[1]]) else sprintf(
+        "spatraster-%sx%s-res%s",
+        terra::nrow(observability_raster),
+        terra::ncol(observability_raster),
+        paste(format(terra::res(observability_raster), trim = TRUE), collapse = "x")
+      )
+      layer_id <- paste(names(observability_raster), collapse = "+")
+    } else if (is.character(observability_raster) && length(observability_raster) == 1L) {
+      obs_id <- basename(normalizePath(observability_raster, winslash = "/", mustWork = FALSE))
+      layer_id <- paste(names(terra::rast(observability_raster)), collapse = "+")
+    } else {
+      obs_id <- class(observability_raster)[1]
+      layer_id <- obs_id
+    }
+    paste0(
+      "obs-",
+      make_short_cache_hash(
+        make_cache_safe_tag(obs_id),
+        make_cache_safe_tag(layer_id),
+        make_cache_safe_tag(ref_end_doy_col),
+        make_cache_safe_tag(ref_start_doy_col)
+      )
+    )
+  }
+
+  align_optional_raster <- function(x, template, mask_v) {
+    xr <- if (inherits(x, "SpatRaster")) x else terra::rast(x)
+    if (terra::nlyr(xr) > 1L) {
+      nm <- tolower(names(xr))
+      doy_idx <- which(nm == "doy" | grepl("(^|_)doy($|_)", nm))
+      if (!length(doy_idx)) {
+        stop(
+          "observability_raster has multiple layers but none is named 'doy'. ",
+          "Provide a single-layer DOY raster or rename the DOY layer to 'doy'.",
+          call. = FALSE
+        )
+      }
+      xr <- xr[[doy_idx[[1]]]]
+    }
+    if (terra::crs(xr) != terra::crs(template)) {
+      xr <- terra::project(xr, terra::crs(template), method = "near")
+    }
+    if (!terra::compareGeom(xr, template, stopOnError = FALSE)) {
+      xr <- terra::resample(xr, template, method = "near")
+    }
+    xr <- terra::crop(xr, mask_v)
+    xr <- terra::mask(xr, mask_v)
+    xr[is.na(template)] <- NA
+    xr
+  }
+
+  build_reference_observability <- function(ref_polygons, ref_mask_r,
+                                            observability_raster, domain_mask,
+                                            mask_v, cell_area_ha,
+                                            ref_end_doy_col,
+                                            ref_start_doy_col) {
+    has_end_doy <- ref_end_doy_col %in% names(ref_polygons)
+    has_start_doy <- ref_start_doy_col %in% names(ref_polygons)
+    if (!has_end_doy && !has_start_doy) {
+      stop(
+        "Reference DOY columns not found. Expected at least one of: ",
+        ref_end_doy_col, ", ", ref_start_doy_col,
+        call. = FALSE
+      )
+    }
+
+    obs_r <- align_optional_raster(observability_raster, domain_mask, mask_v)
+    ref_v <- safe_vect(ref_polygons, label = "ref_observability")
+
+    obs_extract <- terra::extract(obs_r, ref_v, fun = max, na.rm = TRUE)
+    obs_doy_max <- obs_extract[, 2]
+    obs_doy_max[!is.finite(obs_doy_max)] <- NA_real_
+
+    ref_area_pix <- terra::extract(ref_mask_r, ref_v, fun = sum, na.rm = TRUE)[, 2]
+    ref_area_pix[is.na(ref_area_pix)] <- 0
+    ref_area_domain_ha <- ref_area_pix * cell_area_ha
+
+    end_doy <- if (has_end_doy) {
+      suppressWarnings(as.numeric(ref_polygons[[ref_end_doy_col]]))
+    } else {
+      rep(NA_real_, nrow(ref_polygons))
+    }
+    start_doy <- if (has_start_doy) {
+      suppressWarnings(as.numeric(ref_polygons[[ref_start_doy_col]]))
+    } else {
+      rep(NA_real_, nrow(ref_polygons))
+    }
+    obs_ref_doy <- ifelse(is.finite(end_doy), end_doy, start_doy)
+    obs_ref_doy[!is.finite(obs_ref_doy)] <- NA_real_
+    obs_ref_doy_source <- ifelse(
+      is.finite(end_doy), ref_end_doy_col,
+      ifelse(is.finite(start_doy), ref_start_doy_col, NA_character_)
+    )
+
+    obs_doy_margin <- obs_doy_max - obs_ref_doy
+
+    observable_reason <- ifelse(
+      is.na(obs_ref_doy), "missing_reference_doy",
+      ifelse(
+        is.na(obs_doy_max), "no_observability_data",
+        ifelse(obs_doy_margin < 0, "obs_before_reference_doy", "observable")
+      )
+    )
+    observable_flag <- observable_reason == "observable"
+
+    out <- data.table::as.data.table(sf::st_drop_geometry(ref_polygons))
+    out[, reference_row := seq_len(.N)]
+    out[, ref_area_domain_ha := round(ref_area_domain_ha, 4)]
+    out[, obs_ref_doy := obs_ref_doy]
+    out[, obs_ref_doy_source := obs_ref_doy_source]
+    out[, obs_doy_max := obs_doy_max]
+    out[, obs_doy_margin := obs_doy_margin]
+    out[, observable_flag := observable_flag]
+    out[, observable_reason := observable_reason]
+    out
+  }
+
+  warn_reference_observability <- function(reference_observability) {
+    if (is.null(reference_observability) || !nrow(reference_observability)) return(invisible(NULL))
+    dropped <- reference_observability[observable_flag == FALSE]
+    if (!nrow(dropped)) return(invisible(NULL))
+    reason_counts <- dropped[, .N, by = observable_reason][order(-N)]
+    reason_text <- paste(sprintf("%s=%d", reason_counts$observable_reason, reason_counts$N), collapse = ", ")
+    warning(
+      sprintf(
+        "Temporal observability filter excluded %d of %d reference polygons (%s).",
+        nrow(dropped),
+        nrow(reference_observability),
+        reason_text
+      ),
+      call. = FALSE
+    )
+    invisible(NULL)
+  }
+
+  build_not_observable_reference_polygons <- function(ref_polygons,
+                                                      reference_observability) {
+    if (is.null(reference_observability) || !nrow(reference_observability)) return(NULL)
+    if (nrow(ref_polygons) != nrow(reference_observability)) {
+      stop(
+        "Internal error: reference geometry and observability rows do not align.",
+        call. = FALSE
+      )
+    }
+
+    dropped_idx <- which(reference_observability$observable_flag == FALSE)
+    if (!length(dropped_idx)) return(NULL)
+
+    out <- ref_polygons[dropped_idx, , drop = FALSE]
+    obs_cols <- c(
+      "obs_ref_doy",
+      "obs_ref_doy_source",
+      "obs_doy_max",
+      "obs_doy_margin",
+      "observable_flag",
+      "observable_reason"
+    )
+    for (col_nm in obs_cols) {
+      out[[col_nm]] <- reference_observability[[col_nm]][dropped_idx]
+    }
+    out
+  }
+
   # ---- output dir ----
   validation_output_dir <- file.path(validation_dir, "VALIDATION")
   if (!dir.exists(validation_output_dir)) dir.create(validation_output_dir, recursive = TRUE)
+  summary_output_dir <- file.path(validation_output_dir, "01_SUMMARY")
+  observability_output_dir <- file.path(validation_output_dir, "02_OBSERVABILITY")
+  strata_output_dir <- file.path(validation_output_dir, "03_STRATA")
+  error_output_dir <- file.path(validation_output_dir, "04_ERROR_LAYERS")
+  cache_output_dir <- file.path(validation_output_dir, "_CACHE")
+  legacy_output_dir <- file.path(validation_output_dir, "_LEGACY_FLAT_OUTPUTS")
+  for (dir_path in c(
+    summary_output_dir,
+    observability_output_dir,
+    strata_output_dir,
+    error_output_dir,
+    cache_output_dir,
+    legacy_output_dir
+  )) {
+    if (!dir.exists(dir_path)) dir.create(dir_path, recursive = TRUE)
+  }
+
+  validation_output_path <- function(section_dir, filename) {
+    file.path(section_dir, filename)
+  }
+
+  next_legacy_archive_path <- function(target_dir, filename) {
+    ext <- sub("^.*(\\.[^.]+)$", "\\1", filename)
+    if (identical(ext, filename)) ext <- ""
+    stem <- if (nzchar(ext)) substr(filename, 1L, nchar(filename) - nchar(ext)) else filename
+    candidate <- file.path(target_dir, filename)
+    idx <- 1L
+    while (file.exists(candidate)) {
+      candidate <- file.path(target_dir, sprintf("%s__legacy%02d%s", stem, idx, ext))
+      idx <- idx + 1L
+    }
+    candidate
+  }
+
+  move_legacy_flat_outputs <- function() {
+    legacy_patterns <- c(
+      "^metrics_summary_.*\\.csv$",
+      "^polygon_summary_.*\\.csv$",
+      "^pixel_by_stratum_.*\\.csv$",
+      "^stratum_global_.*\\.csv$",
+      "^diagnostics_strata_.*\\.csv$",
+      "^pixel_metrics_global_.*\\.csv$",
+      "^fire_metrics_global_.*\\.csv$",
+      "^pixel_metrics_by_stratum_.*\\.csv$",
+      "^pixel_metrics_strata_global_.*\\.csv$",
+      "^strata_diagnostics_.*\\.csv$",
+      "^pred_.*\\.tif$",
+      "^predicted_fire_mask_.*\\.tif$",
+      "^ref_mask_.*\\.tif$",
+      "^reference_fire_mask_.*\\.tif$",
+      "^ref_polygons_processed_.*\\.gpkg$",
+      "^reference_fires_processed_.*\\.gpkg$",
+      "^reference_observability_.*\\.csv$",
+      "^reference_fires_observability_.*\\.csv$",
+      "^reference_polygons_not_observable_.*\\.gpkg$",
+      "^reference_fires_not_observable_.*\\.gpkg$",
+      "^ref_polygons_not_detected_.*\\.gpkg$",
+      "^reference_fires_omission_.*\\.gpkg$",
+      "^input_polygons_not_matched_.*\\.gpkg$",
+      "^predicted_fires_commission_.*\\.gpkg$",
+      "^omission_by_.*\\.csv$",
+      "^commission_by_.*\\.csv$",
+      "^reference_fires_omission_by_.*\\.csv$",
+      "^predicted_fires_commission_by_.*\\.csv$",
+      "^validation_ALL_.*\\.xlsx$"
+    )
+    root_entries <- list.files(
+      validation_output_dir,
+      full.names = TRUE,
+      recursive = FALSE,
+      all.files = FALSE,
+      no.. = TRUE
+    )
+    if (!length(root_entries)) return(invisible(NULL))
+    root_files <- root_entries[file.info(root_entries)$isdir == FALSE]
+    if (!length(root_files)) return(invisible(NULL))
+
+    base_names <- basename(root_files)
+    to_move <- root_files[vapply(
+      base_names,
+      function(x) any(grepl(paste(legacy_patterns, collapse = "|"), x, perl = TRUE)),
+      logical(1)
+    )]
+    if (!length(to_move)) return(invisible(NULL))
+
+    for (src in to_move) {
+      dst <- next_legacy_archive_path(legacy_output_dir, basename(src))
+      ok <- file.rename(src, dst)
+      if (!ok) {
+        ok <- file.copy(src, dst, overwrite = FALSE, copy.mode = TRUE, copy.date = TRUE)
+        if (ok) unlink(src, force = TRUE)
+      }
+      if (!ok) {
+        warning(
+          "Could not move legacy validation output to _LEGACY_FLAT_OUTPUTS/: ",
+          basename(src),
+          call. = FALSE
+        )
+      }
+    }
+    invisible(NULL)
+  }
+
+  move_legacy_flat_outputs()
 
   # ---- load mask & burnable ----
   mask_geom <- sf::st_read(mask_shapefile, quiet = TRUE) |> make_valid_sf()
-  # F8b: drop GDAL-generated FID column if present; it propagates through
-  # st_intersection into ref_polygons and causes a GeoPackage write failure
-  # ('Wrong field type for FID').
-  mask_geom <- mask_geom[, !(names(mask_geom) %in% "FID"), drop = FALSE]
+  # F8b + §N+7.6 (2026-05-29): drop ALL non-geometry attributes from
+  # mask_geom. We only need its geometry for clipping ref_polygons and
+  # det downstream via st_intersection; mask attributes are never
+  # consumed by the validator. Keeping them is unsafe because
+  # st_intersection appends them to ref_polygons/det, and the GPKG cache
+  # write at line ~921 then fails with
+  # "Field count reached: duplicate names present?" whenever an
+  # attribute name on mask collides with one on the reference under
+  # SQLite's case-insensitive identifier rules (e.g., reference column
+  # `id` vs Iberian peninsula mask column `Id`). The previous narrower
+  # `!names %in% "FID"` drop covered only one GDAL-generated case
+  # (F8b, "Wrong field type for FID"); generalising to geometry-only
+  # is the proper fix.
+  geom_col <- attr(mask_geom, "sf_column")
+  mask_geom <- mask_geom[, geom_col, drop = FALSE]
   burnable  <- terra::rast(burnable_raster)
 
   if (terra::crs(burnable) != sf::st_crs(mask_geom)$wkt) {
@@ -378,22 +768,80 @@ validate_fire_maps <- function(input_shapefile,
   domain_mask[!is.na(domain_mask)] <- 1
 
   cell_area_ha <- abs(prod(terra::res(domain_mask))) / 10000
+  obs_cache_tag <- observability_cache_tag(
+    observability_raster = observability_raster,
+    ref_end_doy_col = ref_end_doy_col,
+    ref_start_doy_col = ref_start_doy_col
+  )
 
   # ---- cache paths ----
-  ref_vec_cache  <- file.path(validation_output_dir, paste0("ref_polygons_processed_", year_target, ".gpkg"))
-  ref_rast_cache <- file.path(validation_output_dir, paste0("ref_mask_", year_target, ".tif"))
+  ref_vec_cache  <- validation_output_path(
+    cache_output_dir,
+    paste0("reference_fires_processed_", year_target, "_", obs_cache_tag, ".gpkg")
+  )
+  ref_rast_cache <- validation_output_path(
+    cache_output_dir,
+    paste0("reference_fire_mask_", year_target, "_", obs_cache_tag, ".tif")
+  )
+  ref_obs_cache  <- if (!is.null(observability_raster)) {
+    validation_output_path(
+      observability_output_dir,
+      paste0("reference_fires_observability_", year_target, "_", obs_cache_tag, ".csv")
+    )
+  } else {
+    NULL
+  }
+  ref_not_obs_cache <- if (!is.null(observability_raster)) {
+    validation_output_path(
+      observability_output_dir,
+      paste0("reference_fires_not_observable_", year_target, "_", obs_cache_tag, ".gpkg")
+    )
+  } else {
+    NULL
+  }
 
   if (force_reprocess_ref) {
     message("Force reprocessing reference polygons: deleting cached reference...")
     unlink(ref_vec_cache)
     unlink(ref_rast_cache)
+    if (!is.null(ref_obs_cache)) unlink(ref_obs_cache)
+    if (!is.null(ref_not_obs_cache)) unlink(ref_not_obs_cache)
   }
 
   # ---- build/load reference (vector + raster mask) ----
-  if (file.exists(ref_vec_cache) && file.exists(ref_rast_cache)) {
+  reference_observability <- NULL
+  ref_not_observable <- NULL
+  observability_applied <- !is.null(observability_raster)
+  n_reference_excluded_observability <- 0L
+  n_reference_observable <- NA_integer_
+  use_cached_reference <- file.exists(ref_vec_cache) &&
+    file.exists(ref_rast_cache) &&
+    (is.null(ref_obs_cache) || file.exists(ref_obs_cache))
+
+  if (use_cached_reference && !is.null(ref_obs_cache) && file.exists(ref_obs_cache)) {
+    reference_observability_meta <- data.table::fread(
+      ref_obs_cache,
+      select = "observable_flag"
+    )
+    n_excluded_cached <- sum(reference_observability_meta$observable_flag == FALSE, na.rm = TRUE)
+    if (n_excluded_cached > 0L && !file.exists(ref_not_obs_cache)) {
+      message(
+        "Cached observability diagnostics found without excluded-reference GeoPackage; rebuilding reference cache..."
+      )
+      use_cached_reference <- FALSE
+    }
+  }
+
+  if (use_cached_reference) {
     message("Loading cached reference (vector + raster mask)...")
     ref_polygons <- sf::st_read(ref_vec_cache, quiet = TRUE) |> make_valid_sf()
     ref_mask_r   <- terra::rast(ref_rast_cache)
+    if (!is.null(ref_obs_cache) && file.exists(ref_obs_cache)) {
+      reference_observability <- data.table::fread(ref_obs_cache)
+      n_reference_excluded_observability <- sum(!reference_observability$observable_flag, na.rm = TRUE)
+      n_reference_observable <- sum(reference_observability$observable_flag, na.rm = TRUE)
+      warn_reference_observability(reference_observability)
+    }
   } else {
     message("Processing reference polygons...")
     ref_polygons <- read_sf_any(ref_shapefile) |> make_valid_sf()
@@ -412,8 +860,9 @@ validate_fire_maps <- function(input_shapefile,
     message("Reference polygons after mask filter: ", nrow(ref_polygons))
     if (nrow(ref_polygons) == 0) stop("No reference polygons inside mask.")
     ref_polygons <- suppressWarnings(sf::st_intersection(ref_polygons, mask_geom)) |> make_valid_sf()
-
-    ref_polygons <- dissolve_by_field(ref_polygons, dissolve_ref_by) |> make_valid_sf()
+    if (is.null(observability_raster)) {
+      ref_polygons <- dissolve_by_field(ref_polygons, dissolve_ref_by) |> make_valid_sf()
+    }
 
     ref_v <- safe_vect(ref_polygons, label = "ref")
     ref_mask_r <- terra::rasterize(ref_v, domain_mask, field = 1, background = 0)
@@ -440,11 +889,65 @@ validate_fire_maps <- function(input_shapefile,
       ref_mask_r[is.na(domain_mask)] <- NA
     }
 
+    if (!is.null(observability_raster)) {
+      reference_observability <- build_reference_observability(
+        ref_polygons = ref_polygons,
+        ref_mask_r = ref_mask_r,
+        observability_raster = observability_raster,
+        domain_mask = domain_mask,
+        mask_v = mask_v,
+        cell_area_ha = cell_area_ha,
+        ref_end_doy_col = ref_end_doy_col,
+        ref_start_doy_col = ref_start_doy_col
+      )
+      ref_not_observable <- build_not_observable_reference_polygons(
+        ref_polygons = ref_polygons,
+        reference_observability = reference_observability
+      )
+      n_reference_excluded_observability <- sum(!reference_observability$observable_flag, na.rm = TRUE)
+      n_reference_observable <- sum(reference_observability$observable_flag, na.rm = TRUE)
+      warn_reference_observability(reference_observability)
+
+      ref_polygons <- ref_polygons[reference_observability$observable_flag, , drop = FALSE]
+      ref_polygons <- make_valid_sf(ref_polygons)
+      if (nrow(ref_polygons) == 0) {
+        stop("No observable reference polygons remain after temporal observability filtering.",
+             call. = FALSE)
+      }
+
+      ref_v <- safe_vect(ref_polygons, label = "ref_observable")
+      ref_mask_r <- terra::rasterize(ref_v, domain_mask, field = 1, background = 0)
+      ref_mask_r[is.na(domain_mask)] <- NA
+    }
+
+    if (!is.null(observability_raster)) {
+      ref_polygons <- dissolve_by_field(ref_polygons, dissolve_ref_by) |> make_valid_sf()
+    }
+    if (!is.null(dissolve_ref_by) && !is.null(observability_raster)) {
+      ref_v <- safe_vect(ref_polygons, label = "ref_dissolved")
+      ref_mask_r <- terra::rasterize(ref_v, domain_mask, field = 1, background = 0)
+      ref_mask_r[is.na(domain_mask)] <- NA
+    }
+
     sf::st_write(ref_polygons, ref_vec_cache, delete_dsn = TRUE, quiet = TRUE)
     terra::writeRaster(
       ref_mask_r, ref_rast_cache, overwrite = TRUE,
       datatype = "INT1U", gdal = c("COMPRESS=LZW", "NAflag=255")
     )
+    if (!is.null(ref_obs_cache) && !is.null(reference_observability)) {
+      data.table::fwrite(reference_observability, ref_obs_cache)
+    }
+    if (!is.null(ref_not_obs_cache)) {
+      if (is.null(ref_not_observable) || !nrow(ref_not_observable)) {
+        if (file.exists(ref_not_obs_cache)) unlink(ref_not_obs_cache)
+      } else {
+        sf::st_write(ref_not_observable, ref_not_obs_cache, delete_dsn = TRUE, quiet = TRUE)
+      }
+    }
+  }
+
+  if (is.null(reference_observability) && !is.null(observability_raster)) {
+    n_reference_observable <- nrow(ref_polygons)
   }
 
   # ---- normalize input list ----
@@ -515,7 +1018,10 @@ validate_fire_maps <- function(input_shapefile,
     input_name <- input_names[k]
     message("Processing input: ", input_name)
 
-    pred_tif <- file.path(validation_output_dir, paste0("pred_", input_name, "_", year_target, ".tif"))
+    pred_tif <- validation_output_path(
+      cache_output_dir,
+      paste0("predicted_fire_mask_", year_target, "_", input_name, ".tif")
+    )
     if (force_reprocess_pred && file.exists(pred_tif)) {
       message("Force reprocessing prediction raster: deleting ", basename(pred_tif))
       unlink(pred_tif)
@@ -581,6 +1087,9 @@ validate_fire_maps <- function(input_shapefile,
         Precision = precision, Recall = recall, F1 = f1, IoU = iou,
         Specificity = specificity, BalancedAccuracy = balanced_accuracy,
         ErrorRate = error_rate,
+        Reference_Observability_Filter_Applied = observability_applied,
+        N_Reference_Polygons_Observable = n_reference_observable,
+        N_Reference_Polygons_Excluded_Observability = n_reference_excluded_observability,
         InputName = input_name, Year = year_target
       )
     }
@@ -647,6 +1156,9 @@ validate_fire_maps <- function(input_shapefile,
         Coverage_median = cov_median,
         Coverage_p10 = cov_p10,
         Coverage_p90 = cov_p90,
+        Reference_Observability_Filter_Applied = observability_applied,
+        N_Reference_Polygons_Observable = n_reference_observable,
+        N_Reference_Polygons_Excluded_Observability = n_reference_excluded_observability,
         Detected_Definition = detected_definition
       )
 
@@ -658,14 +1170,20 @@ validate_fire_maps <- function(input_shapefile,
       if (nrow(ref_not_detected) > 0) {
         sf::st_write(
           ref_not_detected,
-          file.path(validation_output_dir, paste0("ref_polygons_not_detected_", input_name, ".gpkg")),
+          validation_output_path(
+            error_output_dir,
+            paste0("reference_fires_omission_", year_target, "_", input_name, ".gpkg")
+          ),
           delete_dsn = TRUE, quiet = TRUE
         )
       }
       if (nrow(det_not_matched) > 0) {
         sf::st_write(
           det_not_matched,
-          file.path(validation_output_dir, paste0("input_polygons_not_matched_", input_name, ".gpkg")),
+          validation_output_path(
+            error_output_dir,
+            paste0("predicted_fires_commission_", year_target, "_", input_name, ".gpkg")
+          ),
           delete_dsn = TRUE, quiet = TRUE
         )
       }
@@ -696,7 +1214,10 @@ validate_fire_maps <- function(input_shapefile,
 
             data.table::fwrite(
               omission_by_class,
-              file.path(validation_output_dir, paste0("omission_by_", class_field, "_", input_name, ".csv"))
+              validation_output_path(
+                error_output_dir,
+                paste0("reference_fires_omission_by_", class_field, "_", year_target, "_", input_name, ".csv")
+              )
             )
           }
 
@@ -714,7 +1235,10 @@ validate_fire_maps <- function(input_shapefile,
 
             data.table::fwrite(
               commission_by_class,
-              file.path(validation_output_dir, paste0("commission_by_", class_field, "_", input_name, ".csv"))
+              validation_output_path(
+                error_output_dir,
+                paste0("predicted_fires_commission_by_", class_field, "_", year_target, "_", input_name, ".csv")
+              )
             )
           }
 
@@ -743,21 +1267,24 @@ validate_fire_maps <- function(input_shapefile,
 
       data.table::fwrite(
         st_out$table,
-        file.path(validation_output_dir,
-                  paste0("pixel_by_stratum_", year_target, "_",
-                         input_name, ".csv"))
+        validation_output_path(
+          strata_output_dir,
+          paste0("pixel_metrics_by_stratum_", year_target, "_", input_name, ".csv")
+        )
       )
       data.table::fwrite(
         st_out$global,
-        file.path(validation_output_dir,
-                  paste0("stratum_global_", year_target, "_",
-                         input_name, ".csv"))
+        validation_output_path(
+          strata_output_dir,
+          paste0("pixel_metrics_strata_global_", year_target, "_", input_name, ".csv")
+        )
       )
       data.table::fwrite(
         st_out$diagnostics,
-        file.path(validation_output_dir,
-                  paste0("diagnostics_strata_", year_target, "_",
-                         input_name, ".csv"))
+        validation_output_path(
+          strata_output_dir,
+          paste0("strata_diagnostics_", year_target, "_", input_name, ".csv")
+        )
       )
     }
   }
@@ -768,12 +1295,24 @@ validate_fire_maps <- function(input_shapefile,
 
   if (metrics_type %in% c("all", "pixel")) {
     all_metrics <- data.table::rbindlist(metrics_list, fill = TRUE)
-    data.table::fwrite(all_metrics, file.path(validation_output_dir, paste0("metrics_summary_", year_target, ".csv")))
+    data.table::fwrite(
+      all_metrics,
+      validation_output_path(
+        summary_output_dir,
+        paste0("pixel_metrics_global_", year_target, ".csv")
+      )
+    )
   }
 
   if (metrics_type %in% c("all", "area")) {
     all_polygon_summary <- data.table::rbindlist(polygon_summary_list, fill = TRUE)
-    data.table::fwrite(all_polygon_summary, file.path(validation_output_dir, paste0("polygon_summary_", year_target, ".csv")))
+    data.table::fwrite(
+      all_polygon_summary,
+      validation_output_path(
+        summary_output_dir,
+        paste0("fire_metrics_global_", year_target, ".csv")
+      )
+    )
   }
 
   # ---- combined Excel workbook (Block 10c, optional) ----
@@ -786,7 +1325,7 @@ validate_fire_maps <- function(input_shapefile,
       excel_name <- if (!is.null(excel_filename) && nzchar(excel_filename))
         excel_filename else
           sprintf("validation_ALL_%s_res30.xlsx", year_target)
-      excel_path <- file.path(validation_output_dir, excel_name)
+      excel_path <- validation_output_path(summary_output_dir, excel_name)
       wb <- openxlsx::createWorkbook()
       if (!is.null(all_metrics) && nrow(all_metrics) > 0L) {
         openxlsx::addWorksheet(wb, "pixel_global")
@@ -824,11 +1363,12 @@ validate_fire_maps <- function(input_shapefile,
                                   withFilter = TRUE)
       }
       cache_tag <- sprintf(
-        "y%s_res%d_dom%s_na0%s",
+        "y%s_res%d_dom%s_na0%s_%s",
         as.character(year_target),
         as.integer(round(terra::res(domain_mask)[1])),
         if (!is.null(strata_r)) "strata" else "burnable",
-        isTRUE(na_strata_as_zero)
+        isTRUE(na_strata_as_zero),
+        obs_cache_tag
       )
       run_info <- data.frame(
         year_target           = year_target,
@@ -839,6 +1379,9 @@ validate_fire_maps <- function(input_shapefile,
         threshold_completely_detected = threshold_completely_detected,
         threshold_min_detected = threshold_min_detected,
         min_area_reference_ha = if (is.null(min_area_reference_ha)) NA_real_ else min_area_reference_ha,
+        observability_used    = observability_applied,
+        ref_end_doy_col       = if (is.null(observability_raster)) NA_character_ else ref_end_doy_col,
+        ref_start_doy_col     = if (is.null(observability_raster)) NA_character_ else ref_start_doy_col,
         metrics_type          = metrics_type,
         dissolve_ref_by       = if (is.null(dissolve_ref_by))   NA_character_ else dissolve_ref_by,
         dissolve_input_by     = if (is.null(dissolve_input_by)) NA_character_ else dissolve_input_by,
@@ -858,6 +1401,7 @@ validate_fire_maps <- function(input_shapefile,
   list(
     metrics            = if (metrics_type %in% c("all", "pixel")) all_metrics else NULL,
     polygon_summary    = if (metrics_type %in% c("all", "area")) all_polygon_summary else NULL,
+    reference_observability = reference_observability,
     pixel_by_stratum   = if (length(strata_table_list))  data.table::rbindlist(strata_table_list,  fill = TRUE) else NULL,
     stratum_global     = if (length(strata_global_list)) data.table::rbindlist(strata_global_list, fill = TRUE) else NULL,
     diagnostics_strata = if (length(strata_diag_list))   data.table::rbindlist(strata_diag_list,   fill = TRUE) else NULL,

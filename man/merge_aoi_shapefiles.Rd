@@ -17,7 +17,8 @@ merge_aoi_shapefiles(
   strip_ecoregion = TRUE,
   ecoregion_field = NULL,
   drop_pattern = "(^ens|^enz|ecoreg|ecoregion|ecorreg|(^|_)eco(_|$)|cor_eco|coreco)",
-  drop_cols = NULL
+  drop_cols = NULL,
+  overwrite = FALSE
 )
 }
 \arguments{
@@ -56,6 +57,11 @@ names; matching columns are dropped when `strip_ecoregion=TRUE`.}
 
 \item{drop_cols}{Character vector or NULL. Additional explicit column
 names to drop.}
+
+\item{overwrite}{Logical. If `TRUE`, an existing `out_path` is removed
+before writing. If `FALSE` (default) and `out_path` already exists,
+the function stops with an explicit error instead of silently
+replacing the destination. P1-DET-02 contract.}
 }
 \value{
 The `out_path` (invisibly). Stops with an error if nothing is found

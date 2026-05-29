@@ -8,6 +8,11 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
+# eval = FALSE silences knitting. purl = FALSE is set per-chunk below
+# instead of globally — opts_chunk$set(purl=FALSE) is not honoured by
+# knitr::purl() because the setup chunk is extracted as text, not
+# evaluated, during the R CMD check "running R code from vignettes"
+# stage.
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>", eval = FALSE
 )
@@ -28,7 +33,7 @@ or dNBR) from per-tile inputs. Output is a single GeoTIFF per year
 that becomes the `change_index` argument to the deterministic /
 supervised configs.
 
-```{r mosaic}
+```{r mosaic, purl = FALSE}
 library(OtsuFire)
 
 mosaic_path <- change_index_mosaic(
@@ -45,7 +50,7 @@ The deterministic workflow runs Otsu segmentation per CORINE x
 ecoregion unit, grows seed-supported components, applies multi-stage
 filtering, and emits an `internal_decisions.gpkg` layer.
 
-```{r det}
+```{r det, purl = FALSE}
 det_cfg <- build_burned_mapping_config(
   change_index   = mosaic_path,
   vegetation_map = "/path/to/Corine_Masks/CLC_2018_peninsula.tif",
@@ -87,7 +92,7 @@ vegetation-class mapping and the interpretation of each parameter.
 If you need step-by-step access, the deterministic stage decomposes
 into three modular helpers:
 
-```{r det-modular}
+```{r det-modular, purl = FALSE}
 patches  <- detect_burned_patches(det_cfg)
 scored   <- score_burned_patches(det_cfg, patches)
 # scored is an sf with class_final, filter_1..3, etc.
@@ -100,7 +105,7 @@ decisions plus contextual unburned negatives, runs OOF diagnostics,
 and emits a `final_map.gpkg` whose `p_burned` field is the per-patch
 burned probability.
 
-```{r sup}
+```{r sup, purl = FALSE}
 sup_cfg <- build_supervised_burned_config(
   scenario           = "balanced",
   internal_decisions = det_run$internal_decisions_gpkg,
@@ -151,7 +156,7 @@ pipeline.
 any compatible burned-area prediction layer, including supervised
 outputs after thresholding `p_burned`.
 
-```{r validate}
+```{r validate, purl = FALSE}
 val <- validate_fire_maps(
   predicted = sup_run$final_map_gpkg,
   reference = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
@@ -163,7 +168,7 @@ val <- validate_fire_maps(
 supervised outputs of the same run and writes per-issue diagnostic
 GPKG/CSV/TXT artefacts:
 
-```{r consistency}
+```{r consistency, purl = FALSE}
 cons <- check_supervised_consistency(
   deterministic_decisions = det_run$internal_decisions_gpkg,
   final_map               = sup_run$final_map_gpkg,

@@ -96,6 +96,14 @@
     }
     return(spec$path)
   }
+  # P0-DET-02 — defensive only.
+  # After P0-DET-01, the builder rejects in-memory SpatRaster/sf/SpatVector
+  # for the path-only inputs (burnable_mask, reference_burned_map). Other
+  # inputs (change_index, vegetation_map, hotspots, previous_year_burned)
+  # may still arrive in-memory via .of_normalize_input_spec(); we keep
+  # the materialization branches but harden them with tryCatch so a write
+  # failure surfaces a meaningful error instead of a cryptic terra/sf
+  # crash deep inside the engine.
   val <- spec$value
   if (is.null(val)) {
     stop(sprintf("'%s' has neither a path nor an in-memory value.", label),
@@ -104,14 +112,30 @@
   if (inherits(val, "SpatRaster")) {
     out <- tempfile(pattern = paste0(label, "_"), tmpdir = tmpdir,
                     fileext = ".tif")
-    terra::writeRaster(val, out, overwrite = TRUE, gdal = c("COMPRESS=LZW"))
+    tryCatch(
+      terra::writeRaster(val, out, overwrite = TRUE,
+                         gdal = c("COMPRESS=LZW")),
+      error = function(e) {
+        stop(sprintf(
+          "Failed to materialize in-memory '%s' SpatRaster to '%s': %s",
+          label, out, conditionMessage(e)), call. = FALSE)
+      }
+    )
     return(out)
   }
   if (inherits(val, c("sf", "SpatVector"))) {
     out <- tempfile(pattern = paste0(label, "_"), tmpdir = tmpdir,
                     fileext = ".gpkg")
-    sf::st_write(if (inherits(val, "SpatVector")) sf::st_as_sf(val) else val,
-                 out, delete_dsn = TRUE, quiet = TRUE)
+    tryCatch(
+      sf::st_write(
+        if (inherits(val, "SpatVector")) sf::st_as_sf(val) else val,
+        out, delete_dsn = TRUE, quiet = TRUE),
+      error = function(e) {
+        stop(sprintf(
+          "Failed to materialize in-memory '%s' vector to '%s': %s",
+          label, out, conditionMessage(e)), call. = FALSE)
+      }
+    )
     return(out)
   }
   stop(sprintf("'%s' has an unsupported in-memory type.", label),
@@ -483,12 +507,19 @@
   do.call(engine$segmentation_refinement, refine_args)
 
   # ---- Stage 3: merge_aoi_shapefiles --------------------------------
+  # P1-DET-02: merge_aoi_shapefiles() previously replaced its destination
+  # silently via sf::st_write(..., delete_dsn = TRUE). The function now
+  # exposes its own `overwrite` flag (default FALSE) and refuses to
+  # clobber an existing file unless explicitly allowed; the dispatcher
+  # forwards the public-API `overwrite` so the contract is honored
+  # end-to-end.
   engine$merge_aoi_shapefiles(
     base_output_dir = refine_dir,
     pattern         = "^BA_AOI_\\d+\\.shp$",
     out_path        = refine_merged_path,
     dissolve        = FALSE,
-    verbose         = TRUE
+    verbose         = TRUE,
+    overwrite       = isTRUE(overwrite)
   )
 
   if (!file.exists(refine_merged_path)) {

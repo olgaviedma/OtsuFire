@@ -321,7 +321,7 @@ build_unburned_from_legacy_decisions <- function(
         dir.create(out_dir_audit, recursive = TRUE, showWarnings = FALSE)
         writeLines(
           c(
-            "OtsuFire 0.3.0 — Otsu legacy pool empty after sanitisation (AS06).",
+            "OtsuFire 0.3.0 -- Otsu legacy pool empty after sanitisation (AS06).",
             sprintf("Date: %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
             sprintf("Legacy patches path: %s", legacy_patches_path),
             sprintf("Internal decisions path: %s", internal_decisions_path),
@@ -604,7 +604,7 @@ build_unburned_from_legacy_pipeline <- function(
   # explicitly, so this block is skipped entirely and no getwd() call is made.
   if (is.null(data_base) || is.null(result_name) || is.null(composite_base)) {
     if (!is.null(script_base)) {
-      # script_base is known — locate PROJECT_PATHS.R without using getwd().
+      # script_base is known -- locate PROJECT_PATHS.R without using getwd().
       pp_path <- file.path(script_base, "PROJECT_PATHS.R")
       if (file.exists(pp_path)) {
         pp_env <- new.env(parent = globalenv())

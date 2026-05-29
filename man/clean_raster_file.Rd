@@ -31,8 +31,8 @@ be treated as integrity problems.}
 \item{check_finite}{Logical scalar. Whether non-finite values (`Inf`,
 `-Inf`, `NaN`) should be checked and cleaned.}
 
-\item{action}{Character scalar controlling how integrity problems are
-  handled.
+\item{action}{Character scalar controlling what to do when integrity
+  problems are found.
 
   Available options:
   \itemize{
@@ -72,11 +72,12 @@ A character scalar containing the raster path.
   aborts with `stop()`.
 }
 \description{
-Diagnose and optionally repair raster integrity problems directly on disk.
+Check a raster file for common integrity problems and, if needed,
+repair it directly on disk.
 
-This function is the file-based counterpart of [clean_raster_inmem()]. It
-loads a raster using `terra::rast()`, evaluates whether the file is
-internally consistent, and optionally rewrites the raster using standard
+This function is the file-based counterpart of [clean_raster_inmem()].
+It loads a raster with `terra::rast()`, checks whether the file is
+internally consistent, and optionally rewrites it using the standard
 OtsuFire output settings.
 
 Typical problems detected include:
@@ -86,8 +87,8 @@ Typical problems detected include:
   \item unexpected extreme negative values below the accepted lower bound.
 }
 
-The function is designed to prevent silent failures and unstable
-behaviour in large-scale automated workflows.
+The goal is to catch problems early and avoid unstable behaviour in
+larger automated workflows.
 
 When the raster is already clean, the function returns the original file
 path unchanged without modifying disk contents.
@@ -133,8 +134,8 @@ Corrupted raster metadata or invalid pixel values may silently cause:
   \item or inconsistent burned-area products.
 }
 
-This function provides a reproducible and auditable mechanism for
-validating and standardising raster integrity before analysis.
+In practice, this gives you a reproducible way to validate and
+standardise raster integrity before analysis.
 }
 \examples{
 \dontrun{

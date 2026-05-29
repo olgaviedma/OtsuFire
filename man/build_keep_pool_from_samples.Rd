@@ -45,7 +45,7 @@ An object of class \code{c("otsufire_keep_pool", "list")} with
   \code{\link[=score_burned_patches]{score_burned_patches()}}.
 }
 \description{
-Builds a reusable spectral-support \code{keep_pool} object from clean
+Build a reusable spectral-support \code{keep_pool} object from clean
 historical samples (typically produced by
 \code{\link[=collect_keep_reference_samples]{collect_keep_reference_samples()}})
 and a set of per-year change-index rasters. The returned object is
@@ -63,9 +63,9 @@ This is the second of a two-step explicit workflow:
 
 \strong{Explicit helper workflow.} This function is not called
 automatically by
-\code{\link[=score_burned_patches]{score_burned_patches()}} nor
+\code{\link[=score_burned_patches]{score_burned_patches()}} or
 \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-It remains a standalone helper; the resulting \code{keep_pool} can be
+It is a standalone helper; the resulting \code{keep_pool} can be
 passed explicitly via
 \code{score_burned_patches(..., keep_pool = ...)} or
 \code{run_deterministic_pipeline(..., keep_pool = ...)}.
@@ -76,12 +76,13 @@ supported public mode; for same-year scoring, use the native local
 fallback (\code{keep_pool = NULL}).
 }
 \details{
-\strong{V1 design (closed):} the caller supplies exact raster paths in
-\code{change_index_paths}, which must be a \emph{named} list or vector
-keyed by year (e.g. \code{list(`2010` = "...", `2011` = "...")}). There
-is no autodiscovery. This function performs \strong{no methodological
-filtering}: it assumes \code{samples} are already clean (as returned by
-\code{collect_keep_reference_samples()}).
+\strong{Current helper design.} The caller supplies exact raster paths
+in \code{change_index_paths}, which must be a \emph{named} list or
+vector keyed by year (for example
+\code{list(`2010` = "...", `2011` = "...")}). There is no
+autodiscovery. This function performs \strong{no methodological
+filtering}: it assumes \code{samples} are already clean, as returned
+by \code{collect_keep_reference_samples()}.
 
 For each year present in \code{samples}, the corresponding raster is
 opened, sample geometries are reprojected to the raster CRS if needed,

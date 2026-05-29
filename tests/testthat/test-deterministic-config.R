@@ -366,3 +366,97 @@ test_that("output routes respect run_name and year", {
   expect_match(cfg$output_routes$internal_decisions,
                "internal_decisions\\.gpkg$")
 })
+
+# ---- P0-DET-01: burnable_mask and reference_burned_map are PATH-ONLY -------
+# The deterministic engine and the shared validator both consume these two
+# inputs strictly as on-disk paths. In-memory SpatRaster/sf/SpatVector
+# objects must be rejected at the builder so the failure is loud and local
+# instead of appearing as a cryptic late error.
+
+test_that("burnable_mask: SpatRaster in-memory is rejected with parameter name", {
+  ci <- mk_tmp_tif()
+  r_in_mem <- terra::rast(ncol = 4, nrow = 4, vals = rep(c(0L, 1L), 8))
+  err <- tryCatch(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = r_in_mem, target_year = 2025L
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "burnable_mask", fixed = TRUE)
+  expect_match(err, "SpatRaster", fixed = TRUE)
+  expect_match(err, "path", fixed = TRUE)
+})
+
+test_that("burnable_mask: sf in-memory is rejected with parameter name", {
+  ci <- mk_tmp_tif()
+  poly <- sf::st_sf(
+    id = 1L,
+    geometry = sf::st_sfc(sf::st_polygon(list(rbind(c(0,0), c(1,0),
+                                                    c(1,1), c(0,1),
+                                                    c(0,0)))),
+                          crs = 3035)
+  )
+  err <- tryCatch(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = poly, target_year = 2025L
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "burnable_mask", fixed = TRUE)
+  expect_match(err, "sf", fixed = TRUE)
+  expect_match(err, "path", fixed = TRUE)
+})
+
+test_that("reference_burned_map: SpatRaster in-memory is rejected", {
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+  r_in_mem <- terra::rast(ncol = 4, nrow = 4, vals = 1:16)
+  err <- tryCatch(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm,
+      reference_burned_map = r_in_mem,
+      target_year = 2025L
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "reference_burned_map", fixed = TRUE)
+  expect_match(err, "SpatRaster", fixed = TRUE)
+  expect_match(err, "path", fixed = TRUE)
+})
+
+test_that("reference_burned_map: sf in-memory is rejected", {
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+  poly <- sf::st_sf(
+    id = 1L,
+    geometry = sf::st_sfc(sf::st_polygon(list(rbind(c(0,0), c(1,0),
+                                                    c(1,1), c(0,1),
+                                                    c(0,0)))),
+                          crs = 3035)
+  )
+  err <- tryCatch(
+    build_burned_mapping_config(
+      change_index = ci, burnable_mask = bm,
+      reference_burned_map = poly,
+      target_year = 2025L
+    ),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "reference_burned_map", fixed = TRUE)
+  expect_match(err, "sf", fixed = TRUE)
+  expect_match(err, "path", fixed = TRUE)
+})
+
+test_that("burnable_mask / reference_burned_map paths still work (smoke)", {
+  ci <- mk_tmp_tif(); bm <- mk_tmp_mask()
+  ref <- tempfile(fileext = ".gpkg")
+  file.create(ref)
+
+  cfg <- build_burned_mapping_config(
+    change_index = ci,
+    burnable_mask = bm,
+    reference_burned_map = ref,
+    target_year = 2025L
+  )
+  expect_s3_class(cfg, "otsufire_burned_mapping_config")
+  expect_identical(cfg$inputs$burnable_mask$type, "path")
+  expect_identical(cfg$inputs$reference_burned_map$type, "path")
+})

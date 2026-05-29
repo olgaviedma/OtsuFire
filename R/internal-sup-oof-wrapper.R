@@ -69,7 +69,7 @@ compute_oof_metrics_by_threshold <- function(
 #' OtsuFire 0.5.0: replaces the previous `additional_drop_cols`
 #' deny-list mechanism with the symmetric `feature_whitelist_override`
 #' / `feature_weights` API used by [train_final_model_direct()]. The
-#' OOF stage must train under the same conditions as the final model —
+#' OOF stage must train under the same conditions as the final model --
 #' otherwise OOF metrics report on a different model.
 #'
 #' @param feature_whitelist_override Character vector subset of
@@ -133,7 +133,7 @@ run_dm_oof_pipeline <- function(
       "`additional_drop_cols` / `extra_drop_cols` were removed in ",
       "OtsuFire 0.5.0. Use `feature_whitelist_override` instead. ",
       "Pass a subset of `.supervised_feature_cols`. See NEWS.md and ",
-      "the migration note in HANDOFF §N+20.",
+      "the migration note in HANDOFF Section N+20.",
       call. = FALSE
     )
   }
@@ -195,7 +195,7 @@ run_dm_oof_pipeline <- function(
   # identifiers, class column) and the active sf geometry, plus only
   # those feature columns that belong to the active supervised
   # whitelist (or their `_isNA` companions). This keeps OOF training
-  # symmetric with `train_final_model_direct()` — both consume the
+  # symmetric with `train_final_model_direct()` -- both consume the
   # same set of model features under the same override.
   apply_whitelist_filter <- function(df, keep_class = FALSE) {
     geom_col <- attr(df, "sf_column")

@@ -169,10 +169,14 @@ build_supervised_burned_config <- function(
   )
 
   # Registry path: scenario-specific under the user's output_dir/Results.
+  # `.of_resolve_registry_path()` was removed in handoff §N+5.1 when the
+  # deterministic builder dropped registry_path; the supervised side kept a
+  # stale call. Redirect to the canonical helper in utils-registry.R.
   if (is.null(burned_like_registry_path) ||
       !nzchar(burned_like_registry_path)) {
-    burned_like_registry_path <- .of_resolve_registry_path(
-      output_dir = output_dir, scenario = scenario, explicit = NULL
+    burned_like_registry_path <- .resolve_registry_path(
+      results_root = file.path(output_dir, "Results"),
+      scenario     = scenario
     )
   }
   burned_like_registry_path <- normalizePath(burned_like_registry_path,

@@ -20,8 +20,8 @@
 #' }
 #'
 #' In practice, the wrapper validates inputs, prepares the runtime
-#' context, optionally restricts the run to an AOI, and then calls the
-#' internal detection engine.
+#' context, rejects unsupported `aoi` input explicitly, and then calls
+#' the internal detection engine.
 #'
 #' Given the same inputs and parameter settings, this stage is
 #' deterministic and reproducible.

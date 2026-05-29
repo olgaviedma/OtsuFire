@@ -2,7 +2,7 @@
 % Please edit documentation in R/deterministic-config.R
 \name{build_burned_mapping_config}
 \alias{build_burned_mapping_config}
-\title{Build a deterministic burned-area mapping configuration object}
+\title{Build a configuration object for the deterministic burned-area workflow}
 \usage{
 build_burned_mapping_config(
   change_index = NULL,
@@ -31,8 +31,12 @@ used with pre-built candidates, for example direct calls to
 or land-cover stratification layer (CORINE-compatible in OtsuFire
 0.2.x).}
 
-\item{burnable_mask}{Raster, `sf` object, or path. Required binary
-burnable-area mask (`1 = burnable`, `0 = non-burnable`).}
+\item{burnable_mask}{Character. Path to a raster on disk with the
+binary burnable-area mask (`1 = burnable`, `0 = non-burnable`).
+Required. **Path-only contract (P0-DET-01, 2026-05-28):** in-memory
+`SpatRaster` / `sf` / `SpatVector` objects are rejected with an
+explicit error naming the parameter and the received class. Persist
+in-memory inputs to disk first.}
 
 \item{hotspots}{`sf` POINT layer or path. Optional hotspot layer for
 the target year.}
@@ -40,10 +44,14 @@ the target year.}
 \item{previous_year_burned}{`sf` POLYGON layer or path. Optional
 previous-year burned map used for temporal conflict assessment.}
 
-\item{reference_burned_map}{`sf` POLYGON, raster, or path. Optional
-burned reference used by
+\item{reference_burned_map}{Character. Path to a vector or raster
+reference of burned area on disk, used by
 \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-validation is requested.}
+validation is requested. Optional. **Path-only contract
+(P0-DET-01, 2026-05-28):** in-memory `sf` / `SpatRaster` /
+`SpatVector` objects are rejected with an explicit error naming
+the parameter and the received class. Persist in-memory inputs to
+disk first.}
 
 \item{target_year}{Integer scalar. Target year used for naming outputs
 and filtering temporal layers.}
@@ -158,47 +166,43 @@ Returns an S3 object of class
   should not be relied upon by downstream user code.
 }
 \description{
-Build a complete configuration object for the deterministic burned-area
-workflow.
+Create, validate, and normalize the configuration used by the
+deterministic OtsuFire workflow.
 
-This function is the main public entry point used to configure
-deterministic burned-area mapping in OtsuFire. It gathers:
+Think of this as the setup step for the deterministic pipeline. It
+gathers:
 \itemize{
   \item the spatial inputs,
-  \item the methodological parameters,
+  \item the user-facing methodological parameters,
   \item the output structure,
   \item and the technical runtime options
 }
-into a single validated configuration object that can later be passed
-to:
-\itemize{
-  \item \code{\link[=detect_burned_patches]{detect_burned_patches()}},
-  \item \code{\link[=score_burned_patches]{score_burned_patches()}},
-  \item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-}
+into one validated object that you can then pass to
+\code{\link[=detect_burned_patches]{detect_burned_patches()}},
+\code{\link[=score_burned_patches]{score_burned_patches()}}, or
+\code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
 
-The function itself does not execute segmentation, polygonization, or
-burned-area detection. It performs validation, normalization, and
-workflow preparation only.
+It does not run detection or scoring by itself. Its job is to prepare
+the workflow cleanly and fail early when required inputs or settings
+are inconsistent.
 
-The public methodological surface is intentionally restricted to three
-parameter blocks:
+The user-facing methodological controls are intentionally grouped into
+three blocks:
 \itemize{
   \item \code{detect_params},
   \item \code{refine_params},
   \item \code{scoring_params}.
 }
-Each block exposes a small set of user-facing methodological controls.
-Internal engine parameters remain fixed to validated defaults and are
-not configurable through the public API.
+This keeps the public API compact while leaving lower-level engine
+settings fixed to validated defaults.
 
-\strong{Deterministic scoring references}
+\strong{Scoring references in the deterministic workflow}
 
-The deterministic workflow is fully self-contained and does not depend
-on external burned-area registries or external burned-like archives
-during scoring.
+The deterministic workflow does not read external burned-area
+registries during scoring.
 
-Spectral-support references used during scoring are obtained either:
+Instead, the spectral-support reference used at scoring time comes
+from one of two places:
 \itemize{
   \item from an explicit \code{keep_pool} supplied to
     \code{\link[=score_burned_patches]{score_burned_patches()}} and
@@ -207,10 +211,10 @@ Spectral-support references used during scoring are obtained either:
     from high-confidence current-year candidate patches.
 }
 
-Explicit same-year \code{keep_pool} references are not a supported
-public mode; same-year scoring should use the native local fallback
-(\code{keep_pool = NULL}). These references are used internally only
-to compute spectral-support metrics during scoring.
+Explicit same-year \code{keep_pool} references are not supported in
+the public workflow. For same-year scoring, use the built-in fallback
+(\code{keep_pool = NULL}). In both cases, these references are used
+only to compute spectral-support metrics during scoring.
 }
 \details{
 \strong{Workflow structure}

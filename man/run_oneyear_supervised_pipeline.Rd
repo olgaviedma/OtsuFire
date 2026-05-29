@@ -72,7 +72,7 @@ finite and >= 0; values in (0, 1) attenuate, > 1 boost. Default
 `NULL` reproduces the canonical uniform-1.0 behaviour. Phase B
 Exp5a example: pass
 `setNames(rep(0.05, length(hs_cols)), hs_cols)` for the 13
-hotspot columns to attenuate them by 20×.}
+hotspot columns to attenuate them by 20x.}
 
 \item{reuse_upstream}{Logical. When `TRUE`, skip STEP A (pools),
 STEP B1-B2 (folds), and STEP B3 (features), and consume pre-existing
@@ -81,6 +81,13 @@ run with `01_POOLS/<year>_<scenario>_pools.gpkg`,
 `02_FOLDS/<year>_train_with_folds_<size>m.gpkg`, and
 `03_FEATURES/features_geometry.gpkg` already present. Default
 `FALSE` reproduces the historical behaviour.}
+
+\item{...}{Migration trap for removed arguments. Reserved for
+detecting calls that still pass the OtsuFire 0.4.x deny-list
+arguments `additional_drop_cols` / `extra_drop_cols`, which were
+removed in 0.5.0; such calls error with a migration message
+pointing at `feature_whitelist_override`. Any other named argument
+passed here is silently ignored.}
 }
 \value{
 A named list of class `otsufire_supervised_run` with fields:
@@ -111,9 +118,9 @@ be passed to [validate_fire_maps()] for external validation.
 \section{Phase B sampling caps and feature space}{
 
 The pass-through hooks above support the Phase B experiment matrix
-(cap_contextual ∈ {0.25, 1.0, Inf} × cap_spectral ∈ {1.0, 2.0} ×
+(cap_contextual  in  {0.25, 1.0, Inf} x cap_spectral  in  {1.0, 2.0} x
 hotspot-feature variants {All, L1, L2, None}) and the eventual mass
-re-training (10 years × 3 scenarios). All defaults reproduce the
+re-training (10 years x 3 scenarios). All defaults reproduce the
 historical behaviour byte-for-byte; a caller that does not pass
 them obtains exactly the same final model as before.
 

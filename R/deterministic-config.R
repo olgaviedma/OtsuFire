@@ -1,47 +1,43 @@
-#' @title Build a deterministic burned-area mapping configuration object
+#' @title Build a configuration object for the deterministic burned-area workflow
 #'
 #' @description
-#' Build a complete configuration object for the deterministic burned-area
-#' workflow.
+#' Create, validate, and normalize the configuration used by the
+#' deterministic OtsuFire workflow.
 #'
-#' This function is the main public entry point used to configure
-#' deterministic burned-area mapping in OtsuFire. It gathers:
+#' Think of this as the setup step for the deterministic pipeline. It
+#' gathers:
 #' \itemize{
 #'   \item the spatial inputs,
-#'   \item the methodological parameters,
+#'   \item the user-facing methodological parameters,
 #'   \item the output structure,
 #'   \item and the technical runtime options
 #' }
-#' into a single validated configuration object that can later be passed
-#' to:
-#' \itemize{
-#'   \item \code{\link[=detect_burned_patches]{detect_burned_patches()}},
-#'   \item \code{\link[=score_burned_patches]{score_burned_patches()}},
-#'   \item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-#' }
+#' into one validated object that you can then pass to
+#' \code{\link[=detect_burned_patches]{detect_burned_patches()}},
+#' \code{\link[=score_burned_patches]{score_burned_patches()}}, or
+#' \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
 #'
-#' The function itself does not execute segmentation, polygonization, or
-#' burned-area detection. It performs validation, normalization, and
-#' workflow preparation only.
+#' It does not run detection or scoring by itself. Its job is to prepare
+#' the workflow cleanly and fail early when required inputs or settings
+#' are inconsistent.
 #'
-#' The public methodological surface is intentionally restricted to three
-#' parameter blocks:
+#' The user-facing methodological controls are intentionally grouped into
+#' three blocks:
 #' \itemize{
 #'   \item \code{detect_params},
 #'   \item \code{refine_params},
 #'   \item \code{scoring_params}.
 #' }
-#' Each block exposes a small set of user-facing methodological controls.
-#' Internal engine parameters remain fixed to validated defaults and are
-#' not configurable through the public API.
+#' This keeps the public API compact while leaving lower-level engine
+#' settings fixed to validated defaults.
 #'
-#' \strong{Deterministic scoring references}
+#' \strong{Scoring references in the deterministic workflow}
 #'
-#' The deterministic workflow is fully self-contained and does not depend
-#' on external burned-area registries or external burned-like archives
-#' during scoring.
+#' The deterministic workflow does not read external burned-area
+#' registries during scoring.
 #'
-#' Spectral-support references used during scoring are obtained either:
+#' Instead, the spectral-support reference used at scoring time comes
+#' from one of two places:
 #' \itemize{
 #'   \item from an explicit \code{keep_pool} supplied to
 #'     \code{\link[=score_burned_patches]{score_burned_patches()}} and
@@ -50,10 +46,10 @@
 #'     from high-confidence current-year candidate patches.
 #' }
 #'
-#' Explicit same-year \code{keep_pool} references are not a supported
-#' public mode; same-year scoring should use the native local fallback
-#' (\code{keep_pool = NULL}). These references are used internally only
-#' to compute spectral-support metrics during scoring.
+#' Explicit same-year \code{keep_pool} references are not supported in
+#' the public workflow. For same-year scoring, use the built-in fallback
+#' (\code{keep_pool = NULL}). In both cases, these references are used
+#' only to compute spectral-support metrics during scoring.
 #'
 #' @param change_index Raster path, `terra::SpatRaster`, or `NULL`.
 #'   Annual change-index raster (e.g. RBR, dNBR, RdNBR). Required before
@@ -63,16 +59,24 @@
 #' @param vegetation_map Raster, `sf` object, or path. Optional vegetation
 #'   or land-cover stratification layer (CORINE-compatible in OtsuFire
 #'   0.2.x).
-#' @param burnable_mask Raster, `sf` object, or path. Required binary
-#'   burnable-area mask (`1 = burnable`, `0 = non-burnable`).
+#' @param burnable_mask Character. Path to a raster on disk with the
+#'   binary burnable-area mask (`1 = burnable`, `0 = non-burnable`).
+#'   Required. **Path-only contract (P0-DET-01, 2026-05-28):** in-memory
+#'   `SpatRaster` / `sf` / `SpatVector` objects are rejected with an
+#'   explicit error naming the parameter and the received class. Persist
+#'   in-memory inputs to disk first.
 #' @param hotspots `sf` POINT layer or path. Optional hotspot layer for
 #'   the target year.
 #' @param previous_year_burned `sf` POLYGON layer or path. Optional
 #'   previous-year burned map used for temporal conflict assessment.
-#' @param reference_burned_map `sf` POLYGON, raster, or path. Optional
-#'   burned reference used by
+#' @param reference_burned_map Character. Path to a vector or raster
+#'   reference of burned area on disk, used by
 #'   \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-#'   validation is requested.
+#'   validation is requested. Optional. **Path-only contract
+#'   (P0-DET-01, 2026-05-28):** in-memory `sf` / `SpatRaster` /
+#'   `SpatVector` objects are rejected with an explicit error naming
+#'   the parameter and the received class. Persist in-memory inputs to
+#'   disk first.
 #' @param target_year Integer scalar. Target year used for naming outputs
 #'   and filtering temporal layers.
 #' @param output_dir Character scalar. Root output directory. Defaults to
@@ -390,8 +394,15 @@ build_burned_mapping_config <- function(
                                             allow_null = TRUE),
     vegetation_map = .of_normalize_input_spec(vegetation_map, "vegetation_map",
                                               allow_null = TRUE),
+    # P0-DET-01: burnable_mask and reference_burned_map are PATH-ONLY in
+    # the public contract. The downstream shared validator and engine
+    # adapters assume on-disk paths persistent across the pipeline; we
+    # reject in-memory SpatRaster/sf/SpatVector inputs here so the failure
+    # is loud and localized at the builder rather than appearing as a
+    # cryptic late error during scoring/validation.
     burnable_mask = .of_normalize_input_spec(burnable_mask, "burnable_mask",
-                                              allow_null = FALSE),
+                                              allow_null = FALSE,
+                                              path_only = TRUE),
     hotspots = .of_normalize_input_spec(hotspots, "hotspots",
                                          allow_null = TRUE),
     previous_year_burned = .of_normalize_input_spec(previous_year_burned,
@@ -399,7 +410,8 @@ build_burned_mapping_config <- function(
                                                      allow_null = TRUE),
     reference_burned_map = .of_normalize_input_spec(reference_burned_map,
                                                      "reference_burned_map",
-                                                     allow_null = TRUE)
+                                                     allow_null = TRUE,
+                                                     path_only = TRUE)
   )
 
   deterministic_seed <- .of_coerce_seed(options$deterministic_seed,
@@ -737,12 +749,35 @@ print.otsufire_burned_mapping_config <- function(x, ...) {
 
 # --- internal helpers --------------------------------------------------
 
-.of_normalize_input_spec <- function(x, name, allow_null) {
+.of_normalize_input_spec <- function(x, name, allow_null, path_only = FALSE) {
   if (is.null(x)) {
     if (!allow_null) {
       stop(sprintf("'%s' is required and cannot be NULL.", name), call. = FALSE)
     }
     return(NULL)
+  }
+
+  # P0-DET-01: when path_only = TRUE the downstream pipeline assumes a
+  # persistent on-disk path (the shared validator only consumes paths).
+  # Reject in-memory objects explicitly so the failure is local to the
+  # builder rather than appearing later as a cryptic error.
+  if (isTRUE(path_only) &&
+      inherits(x, c("SpatRaster", "SpatVector", "sf"))) {
+    received_cls <- class(x)[1L]
+    stop(
+      sprintf(
+        "'%s' must be a single character path to an existing file. ",
+        name
+      ),
+      sprintf(
+        "Received an in-memory %s object. ",
+        received_cls
+      ),
+      "The deterministic pipeline (engine + shared validator) consumes ",
+      "this input strictly as a path; write the object to disk first ",
+      "and pass the file path instead.",
+      call. = FALSE
+    )
   }
 
   if (inherits(x, "SpatRaster")) {

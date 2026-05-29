@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate-fire-maps.R
 \name{validate_fire_maps}
 \alias{validate_fire_maps}
-\title{Validate burned-area maps against reference polygons}
+\title{Validate burned-area maps against independent reference fire perimeters}
 \usage{
 validate_fire_maps(
   input_shapefile,
@@ -20,6 +20,9 @@ validate_fire_maps(
   threshold_completely_detected = 90,
   threshold_min_detected = 10,
   min_area_reference_ha = NULL,
+  observability_raster = NULL,
+  ref_end_doy_col = "end_doy",
+  ref_start_doy_col = "start_doy",
   force_reprocess_ref = FALSE,
   force_reprocess_pred = FALSE,
   metrics_type = c("all", "pixel", "area"),
@@ -51,7 +54,8 @@ define the validation domain.}
 polygons to the correct fire season.}
 
 \item{validation_dir}{Character. Root output directory. A
-`VALIDATION/` subfolder is created inside it.}
+`VALIDATION/` subfolder is created inside it. Main CSV and vector
+outputs are currently written directly in that folder.}
 
 \item{binary_burnable}{Logical. If `TRUE` (default), the burnable
 raster is treated as binary and cells at or above
@@ -86,6 +90,21 @@ Default `10`.}
 \item{min_area_reference_ha}{Optional numeric. Minimum reference
 polygon area, in hectares after masking to the burnable domain, to
 retain in the analysis. Default `NULL`.}
+
+\item{observability_raster}{Optional `SpatRaster`, raster path, or
+`NULL`. When supplied, it is aligned to the validation domain and
+used to exclude reference polygons whose latest observable day of
+year does not reach the reference fire day. The current
+implementation expects a single-layer DOY raster; if a multi-layer
+raster is supplied, only the first layer is used.}
+
+\item{ref_end_doy_col}{Character. Reference attribute storing the fire
+end day of year. Used first to derive `obs_ref_doy`. Default
+`"end_doy"`.}
+
+\item{ref_start_doy_col}{Character. Reference attribute storing the
+fire start day of year. Used as fallback when `ref_end_doy_col` is
+missing for a polygon. Default `"start_doy"`.}
 
 \item{force_reprocess_ref}{Logical. If `TRUE`, rebuild the cached
 reference products even if they already exist.}
@@ -127,16 +146,19 @@ workbook with the available validation outputs. Requires the
 Defaults to `validation_ALL_<year_target>_res30.xlsx`.}
 }
 \value{
-A named list with the following elements:
+A named list containing the available validation outputs:
 \describe{
-  \item{`metrics`}{Global pixel-based metrics as a `data.table`, or
-    `NULL` when `metrics_type = "area"`.}
-  \item{`polygon_summary`}{Global polygon / area-based metrics as a
-    `data.table`, or `NULL` when `metrics_type = "pixel"`.}
-  \item{`pixel_by_stratum`}{Per-stratum pixel metrics as a
-    `data.table`, or `NULL` when `strata_raster` is not supplied.}
-  \item{`stratum_global`}{Single-row aggregate over the strata domain,
-    or `NULL` when `strata_raster` is not supplied.}
+  \item{`metrics`}{Global pixel-based metrics, or `NULL` when
+    `metrics_type = "area"`.}
+  \item{`polygon_summary`}{Global polygon- and area-based metrics, or
+    `NULL` when `metrics_type = "pixel"`.}
+  \item{`reference_observability`}{Reference-polygon observability
+    diagnostics, or `NULL` when `observability_raster = NULL`.}
+  \item{`pixel_by_stratum`}{Per-stratum pixel metrics, or `NULL` when
+    `strata_raster` is not supplied.}
+  \item{`stratum_global`}{Aggregate metrics over the stratified
+    validation domain, or `NULL` when `strata_raster` is not
+    supplied.}
   \item{`diagnostics_strata`}{Diagnostics for the stratified branch,
     or `NULL` when `strata_raster` is not supplied.}
   \item{`excel_path`}{Path to the combined Excel workbook, or `NULL`
@@ -144,138 +166,200 @@ A named list with the following elements:
 }
 }
 \description{
-Validate one or more burned-area prediction layers against an
-independent reference fire perimeter layer.
+`validate_fire_maps()` evaluates one or more burned-area prediction
+layers against an independent set of reference fire perimeters.
+It is the shared validation entry point in OtsuFire, so it can be
+used with outputs from the deterministic workflow, the supervised
+workflow, or any external burned-area map supplied as polygons.
 
-This is the workflow-independent public validation function in
-OtsuFire. It compares predicted burned polygons against reference
-polygons over the burnable domain and can compute:
-\itemize{
-  \item global pixel-based confusion-matrix metrics,
-  \item global polygon / area-based detection metrics,
-  \item optional polygon-level omission / commission summaries by
-    external class,
-  \item optional per-stratum pixel metrics from a strata raster,
-  \item an optional combined Excel workbook with the main outputs.
-}
-
-Before comparison, reference polygons are filtered to the requested
-year, clipped to the study area, masked to the burnable domain,
-optionally filtered by minimum area, and optionally dissolved by a
+The function compares predicted and reference burned areas within a
+common evaluation domain defined by the study-area mask and the
+burnable-area raster. Reference polygons are first harmonised to this
+domain by filtering them to the target year, clipping them to the
+study area, masking them to burnable land, optionally applying a
+minimum-area threshold, optionally excluding fires that were not
+temporally observable, and optionally dissolving polygons by a
 grouping field. Prediction layers are processed against the same
-evaluation domain.
+domain so that omission, commission, and agreement are evaluated
+consistently.
 
-Intermediate masked reference and prediction layers are cached on
-disk. If you change `min_area_reference_ha`, use
-`force_reprocess_ref = TRUE` to rebuild the reference cache. Use
-`force_reprocess_pred = TRUE` to rebuild the prediction cache.
+The function can compute two complementary types of validation
+output. Pixel-based metrics quantify agreement between burned and
+unburned pixels over the burnable domain using a confusion matrix.
+Polygon- and area-based metrics quantify whether known reference fires
+were detected, how much of their area was recovered, and how much
+predicted burned area overlaps the reference data. Optional branches
+can also summarise omission and commission by an external polygon
+class, compute pixel-level metrics by raster strata, and write the
+main outputs to a combined Excel workbook.
 }
 \details{
-\strong{What this function computes}
+\strong{Conceptual workflow}
 
-Depending on `metrics_type` and the optional inputs supplied, the
-function can produce global pixel metrics, global polygon / area
-metrics, polygon-level error summaries by class, pixel-level
-per-stratum metrics, and a combined Excel workbook.
+`validate_fire_maps()` follows five main steps.
 
-\strong{Global pixel-based metrics}
+First, it builds a common validation domain. The study-area boundary
+defines the spatial extent, and the burnable raster defines where
+burned/unburned comparison is meaningful. When
+`binary_burnable = TRUE`, cells with values greater than or equal to
+`burnable_threshold` are treated as burnable. When
+`binary_burnable = FALSE`, the values listed in `burnable_classes`
+define the burnable domain.
 
-When `metrics_type = "pixel"` or `"all"`, the function computes
-`TP`, `FP`, `FN`, and `TN` over the burnable domain, plus derived
-metrics such as `Precision`, `Recall`, `F1`, `IoU`, `Specificity`,
-`BalancedAccuracy`, and `ErrorRate`.
+Second, it prepares the reference layer. Reference polygons are
+filtered to `year_target`, clipped to the study area, restricted to
+the burnable domain and, if requested, filtered by
+`min_area_reference_ha`. If `observability_raster` is supplied, the
+function also removes reference polygons whose fire date falls after
+the latest observable day of year inside the polygon. This avoids
+penalising a prediction layer for missing fires that could not be
+observed by the input imagery.
 
-Results are written to
-`validation_dir/VALIDATION/metrics_summary_<year>.csv` and returned in
-`metrics`.
+Third, it prepares each prediction layer. The object supplied through
+`input_shapefile` may be a single polygon layer, an `sf` object, or a
+vector of polygon paths. Each prediction layer is processed
+independently against the same reference layer and validation domain,
+allowing several candidate maps, thresholds, or scenarios to be
+compared in a single call.
 
-\strong{Global polygon / area-based metrics}
+Fourth, it computes the requested validation metrics. When
+`metrics_type = "pixel"` or `"all"`, the function rasterises the
+reference and prediction layers over the burnable domain and computes
+the pixel-level confusion matrix: true positives, false positives,
+false negatives, and true negatives. From these counts it derives
+standard accuracy metrics including precision, recall, F1,
+intersection over union, specificity, balanced accuracy, and error
+rate. These outputs are useful for quantifying overall spatial
+agreement between predicted and reference burned pixels.
 
 When `metrics_type = "area"` or `"all"`, the function computes
-polygon-level detection and area summaries including:
+polygon- and area-based validation summaries. These outputs describe
+how many reference fires were detected, how many were completely
+detected, how many were missed, and how much reference burned area was
+recovered by the predictions. A reference polygon is counted as
+detected when its percentage overlap with the prediction is greater
+than or equal to `threshold_min_detected`. It is counted as
+completely detected when its overlap is greater than or equal to
+`threshold_completely_detected`. This makes the detection rule
+explicit and avoids treating trivial overlaps as successful detections
+unless the user chooses that behaviour.
+
+Fifth, the function writes the requested outputs into
+`validation_dir/VALIDATION/`. The main global tables are currently
+written as `metrics_summary_<year>.csv` and
+`polygon_summary_<year>.csv`. When observability filtering is used,
+the summary table is written as
+`reference_observability_<year>_<tag>.csv`. When stratified metrics
+are requested, the current file names are
+`pixel_by_stratum_<year>_<input>.csv`,
+`stratum_global_<year>_<input>.csv`, and
+`diagnostics_strata_<year>_<input>.csv`. Error layers and cached
+intermediate rasters are also written in the same `VALIDATION/`
+folder using descriptive file names.
+
+\strong{Pixel-based validation}
+
+Pixel-based validation evaluates map agreement cell by cell over the
+burnable domain. It is best suited for measuring the spatial match
+between predicted and reference burned areas, including both omission
+and commission. The main outputs are:
 \itemize{
-  \item `N_Reference_Polygons`,
-  \item `N_Completely_Detected`,
-  \item `N_Detected_Polygons`,
-  \item `N_Not_Detected`,
-  \item `Perc_Detected_Polygons`,
-  \item `Area_Reference_ha`,
-  \item `Area_Detected_ha`,
-  \item `Area_Intersection_ha`,
-  \item `Recall_Area_percent`,
-  \item `Precision_Area_percent`,
-  \item `Coverage_mean`, `Coverage_median`, `Coverage_p10`,
-    `Coverage_p90`,
-  \item `Detected_Definition`.
+  \item `TP`: pixels mapped as burned in both prediction and
+    reference,
+  \item `FP`: pixels mapped as burned in the prediction but not in the
+    reference,
+  \item `FN`: pixels mapped as burned in the reference but missed by
+    the prediction,
+  \item `TN`: pixels mapped as unburned in both prediction and
+    reference.
 }
 
-`Detected_Definition` records the rule used for
-`N_Detected_Polygons`, namely `coverage_ref >= threshold_min_detected`.
+The function then derives accuracy metrics such as `Precision`,
+`Recall`, `F1`, `IoU`, `Specificity`, `BalancedAccuracy`, and
+`ErrorRate`. These metrics are returned in `metrics` and written to
+`validation_dir/VALIDATION/metrics_summary_<year>.csv`.
 
-Results are written to
-`validation_dir/VALIDATION/polygon_summary_<year>.csv` and returned in
-`polygon_summary`.
+\strong{Polygon- and area-based validation}
 
-The default `threshold_min_detected = 10` is stricter than the
-pre-0.2.1 behaviour, which counted any non-zero overlap as detected.
-Use `threshold_min_detected = 0` to recover that older behaviour.
+Polygon- and area-based validation evaluates detection at the
+fire-event level. This branch answers questions such as: How many
+reference fires were detected? How many were missed? How much
+reference burned area was recovered? How much predicted area overlaps
+reference perimeters?
 
-\strong{Optional polygon-level omission / commission by class}
+The main outputs include `N_Reference_Polygons`,
+`N_Detected_Polygons`, `N_Completely_Detected`, `N_Not_Detected`,
+`Area_Reference_ha`, `Area_Detected_ha`, `Area_Intersection_ha`,
+`Recall_Area_percent`, `Precision_Area_percent`, and coverage
+summaries. The field `Detected_Definition` records the rule used to
+count detected polygons, namely
+`coverage_ref >= threshold_min_detected`.
 
-If both `class_shape` and `class_field` are supplied, the function
-produces polygon-level summaries of:
-\itemize{
-  \item omitted reference polygons by class,
-  \item commission polygons by class.
-}
+By default, `threshold_min_detected = 10`, meaning that at least 10%
+of a reference polygon must overlap the prediction to be counted as
+detected. This is stricter than the earlier legacy behaviour, which
+counted any non-zero overlap as detection. To recover that older
+behaviour, set `threshold_min_detected = 0`.
 
-Two CSV files are written per input:
-\itemize{
-  \item `omission_by_<class_field>_<input>.csv`,
-  \item `commission_by_<class_field>_<input>.csv`.
-}
+\strong{Temporal observability filter}
 
-This branch is polygon-based. It does not create a confusion matrix by
-class.
+When `observability_raster` is supplied, `validate_fire_maps()`
+checks whether each reference fire was observable in the imagery used
+for mapping. The function compares the fire day of year, derived from
+`ref_end_doy_col` with fallback to `ref_start_doy_col`, against the
+maximum observable day of year inside each reference polygon.
 
-\strong{Optional pixel-level per-stratum metrics}
+For each reference polygon, the function records `obs_ref_doy`,
+`obs_doy_max`, `obs_doy_margin`, `observable_flag`, and
+`observable_reason`. Non-observable reference polygons are excluded
+from the validated reference set, and the observability summary table
+is returned as `reference_observability` and written to
+`validation_dir/VALIDATION/reference_observability_<year>_<tag>.csv`.
+This is useful when the prediction map is based on annual or seasonal
+composites that may not contain valid post-fire observations for all
+reference events.
 
-If `strata_raster` is supplied, the function computes a full
-pixel-level confusion matrix within each stratum, plus derived
-metrics and diagnostic outputs. This mirrors the legacy
-stratified-validation workbook.
+\strong{Polygon-level omission and commission by class}
 
-Three CSV files are written per input:
-\itemize{
-  \item `pixel_by_stratum_<year>_<input>.csv`,
-  \item `stratum_global_<year>_<input>.csv`,
-  \item `diagnostics_strata_<year>_<input>.csv`.
-}
+If `class_shape` and `class_field` are supplied, the function
+summarises omitted reference polygons and commission polygons by an
+external polygon classification. This is useful for diagnosing
+whether errors are concentrated in particular vegetation types,
+regions, administrative units, or other user-defined classes.
 
-The algorithm uses a chunked row-wise tabulator controlled by
-`chunk_rows`. Pixels with `NA` strata are excluded from the
-per-stratum aggregation. Within the strata domain, `NA` prediction or
-reference pixels are treated according to `na_strata_as_zero`.
+This branch is polygon-based. It does not produce a pixel-level
+confusion matrix by class. For pixel-level stratified validation, use
+`strata_raster`.
 
-This branch is independent from the polygon-level `class_shape`
-branch. Both can be used in the same call.
+\strong{Pixel-level validation by strata}
 
-\strong{Combined Excel workbook}
+If `strata_raster` is supplied, the function computes a pixel-level
+confusion matrix separately within each raster stratum. This can be
+used to evaluate map performance by land-cover class, ecoregion,
+vegetation group, or any other categorical raster layer.
 
-If `write_excel = TRUE`, the function also writes a combined Excel
-workbook with the legacy sheet layout:
-\itemize{
-  \item `pixel_global`,
-  \item `pixel_by_stratum`,
-  \item `stratum_global`,
-  \item `diagnostics_strata`,
-  \item `polygon_global`,
-  \item `run_info`.
-}
+The optional `strata_lut` argument can be used to attach
+human-readable labels to stratum IDs. Pixels with missing strata are
+excluded from the stratified aggregation. Within valid strata,
+missing prediction or reference pixels are treated according to
+`na_strata_as_zero`: if `TRUE`, they are treated as unburned to match
+the legacy validator; if `FALSE`, they are dropped from the stratified
+calculation.
 
-Sheets with no data are omitted. The `run_info` sheet stores the main
-call arguments and derived cache settings needed to reproduce the
-validation run.
+\strong{Caching and reprocessing}
+
+The function caches intermediate masked reference and prediction
+layers in `validation_dir/VALIDATION/`. This avoids repeating
+expensive spatial preprocessing when the same validation setup is run
+multiple times.
+
+Use `force_reprocess_ref = TRUE` when changes to the reference-side
+settings require rebuilding the reference cache, especially after
+changing `min_area_reference_ha`, `observability_raster`,
+`dissolve_ref_by`, or the burnable-domain settings. Use
+`force_reprocess_pred = TRUE` when the prediction layer or
+prediction-side settings have changed and the cached prediction
+products should be rebuilt.
 }
 \note{
 This is the canonical v2 validation implementation. Deprecated v1
@@ -285,7 +369,8 @@ Version 0.2.1 added `Specificity`, `BalancedAccuracy`, and
 `ErrorRate` to the global and stratified pixel outputs; coverage
 summaries plus `Detected_Definition` to the polygon outputs; and the
 `threshold_min_detected`, `dissolve_ref_by`, and `dissolve_input_by`
-controls.
+controls. Version 0.5.0 adds the optional temporal observability
+filter controlled by `observability_raster`.
 }
 \examples{
 \dontrun{
@@ -300,8 +385,8 @@ validate_fire_maps(
 )
 
 # With pixel-level CORINE stratification + combined Excel workbook.
-# Produces pixel_by_stratum / stratum_global / diagnostics_strata
-# CSVs plus validation_ALL_2022_res30.xlsx with the 6 legacy sheets.
+# Produces 03_STRATA CSVs plus the optional Excel workbook in
+# 01_SUMMARY/validation_ALL_2022_res30.xlsx.
 validate_fire_maps(
   input_shapefile = "predicted_2022.gpkg",
   ref_shapefile   = "ref_polygons_2022.shp",

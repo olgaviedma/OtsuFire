@@ -25,9 +25,9 @@ train_final_model_direct <- function(
     # scale (0.81 ha cells vs ~9.72 ha patches) and derivation.
     otsu_unburned_source = c("otsu_patch_residual"),
     otsu_unburned_to_burned_ratio = 1,
-    # Exclude otsu_patch_review (ambiguous; S_PATCH_PA 0.15–0.45) and
-    # otsu_patch_keep (S_PATCH_PA 0.45–0.70, substantial burned-pixel coverage).
-    # Only otsu_patch_drop (S_PATCH_PA ≤ 0.15, easy cold) is eligible for training.
+    # Exclude otsu_patch_review (ambiguous; S_PATCH_PA 0.15-0.45) and
+    # otsu_patch_keep (S_PATCH_PA 0.45-0.70, substantial burned-pixel coverage).
+    # Only otsu_patch_drop (S_PATCH_PA <= 0.15, easy cold) is eligible for training.
     otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep"),
     sampling_seed = 999,
     group_col = "block_id",
@@ -39,7 +39,7 @@ train_final_model_direct <- function(
     # 0.5.0 (2026-05-09): subset of `.supervised_feature_cols` that
     # the model is allowed to see. NULL (default) means use the full
     # canonical whitelist. Names not in `.supervised_feature_cols`
-    # are rejected with a clear error — the canonical list is fixed
+    # are rejected with a clear error -- the canonical list is fixed
     # and this argument can only restrict it, never extend it.
     feature_whitelist_override = NULL,
     # 0.5.0 (2026-05-09): named numeric vector of per-feature weights
@@ -69,7 +69,7 @@ train_final_model_direct <- function(
       "OtsuFire 0.5.0. Use `feature_whitelist_override` instead. ",
       "Pass a subset of `.supervised_feature_cols` (e.g., the ",
       "current whitelist minus the columns you want to drop). ",
-      "See NEWS.md and the migration note in HANDOFF §N+20.",
+      "See NEWS.md and the migration note in HANDOFF Section N+20.",
       call. = FALSE
     )
   }
@@ -148,7 +148,7 @@ train_final_model_direct <- function(
       .data[["neg_type"]] %in% spectral_hard_negative_neg_types
     )
 
-  # contextual_exclusion: all other deterministic drops — geographically or
+  # contextual_exclusion: all other deterministic drops -- geographically or
   # data-quality excluded polygons (e.g. geo_excluded_hot). Capped at a low
   # ratio because these are spectrally hotter than burned, not cold.
   contextual_exclusion_pool <- L |>
@@ -159,7 +159,7 @@ train_final_model_direct <- function(
     )
 
   # random_background_sampled: low-RBR cell-scale polygons (background_cell neg_type).
-  # Spectrally cold and unambiguous. No exclusions needed — this source never
+  # Spectrally cold and unambiguous. No exclusions needed -- this source never
   # produces otsu_patch_keep neg_types.
   random_background_pool <- L |>
     dplyr::filter(
@@ -170,11 +170,11 @@ train_final_model_direct <- function(
   # otsu_unburned_sampled: Otsu current-year patch-scale unburned objects.
   # Kept separate from background_cell for independent counting, capping, and
   # model diagnostics. Both are easy-cold but differ in geometry scale and source.
-  # Only otsu_patch_drop (S_PATCH_PA ≤ 0.15) is eligible for training.
-  # otsu_patch_review (S_PATCH_PA 0.15–0.45, ambiguous) excluded by default.
-  # otsu_patch_keep (S_PATCH_PA 0.45–0.70) excluded by default.
+  # Only otsu_patch_drop (S_PATCH_PA <= 0.15) is eligible for training.
+  # otsu_patch_review (S_PATCH_PA 0.15-0.45, ambiguous) excluded by default.
+  # otsu_patch_keep (S_PATCH_PA 0.45-0.70) excluded by default.
   # In deterministic_direct mode this pool is always empty (no otsu_patch_residual
-  # rows in that pool) — no behavioral change for Mode A runs.
+  # rows in that pool) -- no behavioral change for Mode A runs.
   otsu_unburned_pool <- L |>
     dplyr::filter(
       .data[[class_col]] == "unburned",
@@ -305,7 +305,7 @@ train_final_model_direct <- function(
 
   # Whitelist assertion: every kept column must be either a member of
   # the active whitelist or a recognised `_isNA` companion. If
-  # anything else slipped through, abort loud — that means
+  # anything else slipped through, abort loud -- that means
   # `.filter_to_supervised_whitelist()` and the constant fell out of
   # sync.
   .allowed_supervised_cols <- c(

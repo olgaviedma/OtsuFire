@@ -17,7 +17,8 @@ collect_keep_reference_samples(
 }
 \arguments{
 \item{decision_paths}{Character vector of existing paths to
-deterministic decision files. Required; explicit (no autodiscovery).}
+deterministic decision files. This argument is required; the helper
+does not search for files automatically.}
 
 \item{target_year}{Optional scalar year. When supplied, polygons with
 \code{year == target_year} are excluded. This is the recommended
@@ -78,13 +79,14 @@ overlap and are for auditing, not a partition); \code{selected} counts
 polygons passing every predicate.
 }
 \description{
-Selects high-confidence historical \emph{keep}-like polygons from one
+Collect high-confidence historical \emph{keep}-like polygons from one
 or more previously written deterministic decision layers, using a
-single fixed selection rule (\code{"strict_hotspot"}). In the public
-deterministic workflow, these helpers are intended for building
-explicit \emph{external} reference pools from trusted years other than
-the target year being scored. The resulting samples are intended to
-feed
+single fixed selection rule (\code{"strict_hotspot"}).
+
+In the public deterministic workflow, this helper is meant for
+building explicit \emph{external} reference pools from trusted years
+other than the year currently being scored. The selected samples are
+intended to feed
 \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}},
 which turns them into a reusable spectral-support \code{keep_pool}.
 
@@ -97,16 +99,16 @@ This is the first of a two-step explicit workflow:
 
 \strong{Explicit helper workflow.} Neither this function nor
 \code{build_keep_pool_from_samples()} is called automatically by the
-deterministic pipeline. They remain standalone helpers that can be
-tested and used independently; the resulting \code{keep_pool} may
-then be passed explicitly to
+deterministic pipeline. They are standalone helpers. If you choose to
+use them, the resulting \code{keep_pool} can then be passed
+explicitly to
 \code{score_burned_patches(..., keep_pool = ...)} or
 \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 }
 \details{
-\strong{V1 design (closed):} the caller supplies the exact decision
-layer paths in \code{decision_paths}. There is no autodiscovery and no
-configurable selection mode; the strict rule below is fixed.
+\strong{Current helper design.} The caller supplies the exact decision
+layer paths in \code{decision_paths}. There is no autodiscovery, and
+the selection rule described below is fixed in the public helper.
 
 \strong{Fixed \code{strict_hotspot} rule.} A polygon is selected only
 when \emph{all} of the following hold:

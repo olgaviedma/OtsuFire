@@ -43,9 +43,15 @@ test_that("T14: GPKG round-trip preserves character `class`", {
 test_that("orchestrator no longer coerces character columns to factor", {
   # The pre-0.3.0 orchestrator had multiple
   # `mutate(across(where(is.character), as.factor))` calls. None must
-  # remain.
-  src <- readLines(file.path(testthat::test_path("..", ".."),
-                              "R", "internal-sup-orchestrator.R"))
+  # remain. This guard reads the package source on disk, which only
+  # exists during `testthat::test_dir()` from the source tree; under
+  # R CMD check the installed copy has no R/ directory, so skip there.
+  testthat::skip_on_cran()
+  src_path <- file.path(testthat::test_path("..", ".."),
+                        "R", "internal-sup-orchestrator.R")
+  testthat::skip_if_not(file.exists(src_path),
+    "source file not available outside the package source tree")
+  src <- readLines(src_path)
   hits <- grep("mutate\\(across\\(where\\(is\\.character\\), as\\.factor\\)\\)",
                src)
   expect_length(hits, 0L)

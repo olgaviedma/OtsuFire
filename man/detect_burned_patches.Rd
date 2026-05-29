@@ -17,17 +17,17 @@ detect_burned_patches(
 workflow inputs, methodological parameters, output routes, and
 runtime options.}
 
-\item{aoi}{Optional AOI geometry used to spatially restrict the
-detection process. Accepted formats are an `sf` POLYGON object, a
-`terra::SpatVector`, or a valid vector path. When `NULL`, detection
-is performed over the full valid extent of the change-index raster.
-Useful for regional testing, debugging, sensitivity analyses, or
-tile-based processing.}
+\item{aoi}{NOT YET IMPLEMENTED — must be `NULL`. The parameter is
+reserved for a future release in which detection can be spatially
+restricted to an AOI. The current detection engine does not propagate
+the AOI to the underlying grow/refine stages, so a non-`NULL` value
+is rejected with an explicit error rather than silently ignored.
+Pass `aoi = NULL` (the default) to run detection over the full valid
+extent of the change-index raster.}
 
-\item{write_outputs}{Logical scalar. Whether intermediate and final
-detection products should be written to disk. Defaults to `TRUE`
-because this stage is commonly inspected visually during workflow
-development and QA/QC.}
+\item{write_outputs}{Logical scalar. Whether the detection products
+should be written to disk. Defaults to `TRUE` because this stage is
+commonly inspected visually during workflow development and QA/QC.}
 
 \item{overwrite}{Logical scalar. Whether existing outputs may be
 replaced when `write_outputs = TRUE`. Defaults to `FALSE`.}
@@ -50,21 +50,21 @@ Returns a named list containing the main detection products and
   In the current public wrapper, `grown_patches_path`,
   `refined_patches_path`, and `detection_diagnostics` are the main
   populated outputs. The object placeholders `otsu_raster`,
-  `seed_raster`, `grown_patches`, and `refined_patches` are retained
-  for contract stability and currently return `NULL`.
+  `seed_raster`, `grown_patches`, and `refined_patches` are kept for
+  contract stability and currently return `NULL`.
 
   The exact internal implementation should not be relied upon beyond
   these stable public outputs.
 }
 \description{
-Detect candidate burned patches from an annual change-index product
-using the deterministic OtsuFire workflow.
+Run the detection stage of the deterministic OtsuFire workflow on an
+annual change-index raster.
 
-This function performs the detection stage of the deterministic
-pipeline. It consumes an
+This function takes an
 [otsufire_burned_mapping_config][build_burned_mapping_config] object
-and produces the intermediate and final detection products later used
-by [score_burned_patches()].
+and produces the candidate burned-patch outputs later used by
+[score_burned_patches()].
+It is the "find candidate fires" step, not the final burned-map step.
 
 Conceptually, this stage includes:
 \enumerate{
@@ -75,12 +75,12 @@ Conceptually, this stage includes:
   \item candidate merging.
 }
 
-The function validates inputs, prepares runtime structures, and
-delegates the computational processing to the validated internal
-engine (not exported).
+In practice, the wrapper validates inputs, prepares the runtime
+context, optionally restricts the run to an AOI, and then calls the
+internal detection engine.
 
-This stage is deterministic and fully reproducible given identical
-inputs and parameter settings.
+Given the same inputs and parameter settings, this stage is
+deterministic and reproducible.
 }
 \details{
 \strong{Workflow overview}
@@ -99,9 +99,9 @@ The workflow proceeds conceptually as follows:
   \item merge overlapping or fragmented detections where appropriate.
 }
 
-The resulting outputs represent candidate burned patches only. Final
-reliability assessment and confidence scoring are performed later by
-[score_burned_patches()].
+The resulting outputs are candidate burned patches, not final burned
+decisions. Reliability assessment and final `keep` / `review` /
+`drop` assignment happen later in [score_burned_patches()].
 
 The detection stage operates exclusively on the deterministic
 candidate-generation workflow and does not perform probabilistic
@@ -130,19 +130,19 @@ that the required inputs exist on disk and runs the configured
 
 \strong{Why this stage matters}
 
-Burned-area mapping errors often originate during candidate generation
-rather than during later scoring.
+Many burned-area mapping errors start during candidate generation,
+before scoring ever begins.
 
 The deterministic detection stage is designed to:
 \itemize{
   \item maximise spatial coherence,
   \item reduce obvious false positives early,
   \item preserve low-severity burned edges where possible,
-  \item produce an auditable candidate universe for later scoring.
+  \item produce a traceable candidate universe for later scoring.
 }
 
-Separating deterministic candidate generation from later scoring
-improves interpretability, reproducibility, and workflow auditability.
+Keeping candidate generation separate from scoring makes the workflow
+easier to inspect, explain, and reproduce.
 }
 \examples{
 \dontrun{

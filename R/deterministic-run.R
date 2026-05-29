@@ -1,14 +1,12 @@
 #' Run the full deterministic burned-area pipeline for one year
 #'
 #' @description
-#' High-level public wrapper that orchestrates the complete deterministic
-#' burned-area workflow for a single target year by sequentially chaining
+#' Run detection, scoring, and optional validation for one target year
+#' using a single deterministic configuration object.
+#' Internally, the wrapper chains
 #' \code{\link[=detect_burned_patches]{detect_burned_patches()}},
-#' \code{\link[=score_burned_patches]{score_burned_patches()}}, and — when
-#' requested — the shared
-#' \code{\link[=validate_fire_maps]{validate_fire_maps()}} utility, using
-#' a single
-#' \code{\link[=build_burned_mapping_config]{otsufire_burned_mapping_config}}.
+#' \code{\link[=score_burned_patches]{score_burned_patches()}}, and, when
+#' requested, \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
 #'
 #' The pipeline implements the full unsupervised OtsuFire decision
 #' workflow, including candidate patch delineation through adaptive
@@ -23,14 +21,9 @@
 #' pipeline does not read or depend on implicit external burned-like
 #' registries.
 #'
-#' This orchestrator is new in 0.2.x and is \strong{not} a thin copy of
-#' the legacy 0.1.x `8_deterministic_bridge.R`. It consumes the new
-#' public configuration object, calls the modular public functions, and
-#' assembles a contract-shaped return object together with timing
-#' diagnostics and output routes.
-#'
-#' Contract source: `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`,
-#' `DETERMINISTIC_OUTPUTS_FINAL.csv`.
+#' It also returns timing diagnostics and the main output paths in one
+#' place, so it is a convenient entry point when you want the full
+#' workflow rather than stage-by-stage control.
 #'
 #' @details
 #' \strong{Deterministic workflow structure}
@@ -58,15 +51,16 @@
 #'     }
 #'     The outputs of these components are integrated into a final
 #'     deterministic confidence decision assigning each patch to `keep`,
-#'     `review`, or `drop`, while preserving full decision traceability.
+#'     `review`, or `drop`, while preserving a clear decision trail.
 #'
 #'     Within the current wrapper, this scoring stage can use either an
 #'     explicit \code{keep_pool} built from trusted external years or the
 #'     local same-year spectral-support fallback when \code{keep_pool} is
 #'     omitted. Explicit same-year \code{keep_pool} references are not a
 #'     supported public mode.
-#'   \item \strong{Validation stage.} When validation is enabled and a
-#'     reference burned-area layer is available,
+#'   \item \strong{Validation stage.} When validation is enabled, a
+#'     reference burned-area layer is available, and scoring produced an
+#'     on-disk decision layer that the shared validator can read,
 #'     \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
 #'     the resulting deterministic burned-area outputs against external
 #'     burned-area references.
@@ -75,7 +69,9 @@
 #' @param config An `otsufire_burned_mapping_config` object returned by
 #'   \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.
 #' @param write_outputs Logical scalar. Whether the pipeline writes its
-#'   outputs to disk. Default `TRUE`.
+#'   outputs to disk. Default `TRUE`. When `FALSE`, shared validation is
+#'   usually skipped because the validator expects an on-disk decision
+#'   layer.
 #' @param overwrite Logical scalar. Whether existing outputs from the same
 #'   run may be replaced. Default `FALSE`.
 #' @param keep_pool Optional explicit keep-like reference pool passed
@@ -104,9 +100,10 @@
 #'     \code{\link[=score_burned_patches]{score_burned_patches()}}.}
 #'   \item{`validation`}{Validation outputs returned by
 #'     \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-#'     validation is executed; otherwise `NULL`.}
+#'     validation is executed successfully; otherwise `NULL`.}
 #'   \item{`result_paths`}{Named list of important written output paths
-#'     produced during the workflow.}
+#'     produced during the workflow. Some entries may be `NA` when a
+#'     stage did not write that product.}
 #'   \item{`timing_log`}{Timing diagnostics summarising execution time
 #'     for each deterministic stage.}
 #'   \item{`config`}{The input configuration object used to run the
@@ -142,6 +139,24 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
   }
 
   do_validate <- .of_resolve_run_validation(run_validation, config)
+
+  # P1-DET-03 — early rejection.
+  # The shared validator consumes the on-disk decision layer produced by
+  # the scoring stage. With write_outputs = FALSE no such file is written,
+  # so validation cannot run; previously this resulted in
+  # ._of_run_shared_validation() returning NULL silently. Fail fast with
+  # an explicit error so the user does not believe validation succeeded.
+  if (isTRUE(do_validate) && !isTRUE(write_outputs)) {
+    stop(
+      "run_deterministic_pipeline(): the combination ",
+      "write_outputs = FALSE with run_validation = TRUE is not ",
+      "supported. The shared validator (validate_fire_maps) requires ",
+      "the on-disk decision layer produced when write_outputs = TRUE. ",
+      "Either set write_outputs = TRUE, or set run_validation = FALSE ",
+      "(or run_validation = 'auto' with no reference_burned_map).",
+      call. = FALSE
+    )
+  }
 
   timing <- list()
   record_step <- function(name, started) {
@@ -203,8 +218,11 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
     validation <- tryCatch(
       .of_run_shared_validation(scoring, config, write_outputs = write_outputs),
       error = function(e) {
+        # §N+7.5: use immediate. = TRUE so this is not buried in R's
+        # end-of-run "50 or more warnings" batch when long detection /
+        # scoring stages emit many sf/terra warnings of their own.
         warning("Shared validation failed: ", conditionMessage(e),
-                call. = FALSE)
+                call. = FALSE, immediate. = TRUE)
         NULL
       }
     )
@@ -275,7 +293,45 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
 
   ref_path <- .of_input_to_path(ref_spec, "reference_burned_map")
   burnable_path <- .of_input_to_path(burnable_spec, "burnable_mask")
-  mask_path <- .of_input_to_path(burnable_spec, "burnable_mask")
+
+  # P2-DET-01 follow-up (§N+7.5, surfaced by the 2005/balanced smoke):
+  # validate_fire_maps() expects `mask_shapefile` to be a study-area
+  # boundary POLYGON, not a raster. The original wrapper passed
+  # burnable_spec for both `burnable_path` and `mask_path`, which made
+  # sf::st_read() fail with "Cannot open ...tif" inside validation, the
+  # error got caught by the outer tryCatch and the warning was batched
+  # at end-of-run ("There were 50 or more warnings"), so the user saw
+  # validation_workbook = NA without any actionable signal. Pull the
+  # mask path from config$options$peninsula_shapefile_path; raise an
+  # explicit error when missing so the wrapper's tryCatch turns it into
+  # a visible warning (see below).
+  peninsula_path <- config$options$peninsula_shapefile_path
+  if (is.null(peninsula_path) || !nzchar(peninsula_path)) {
+    stop(
+      "Shared validation requires config$options$peninsula_shapefile_path ",
+      "(the study-area boundary polygon used by validate_fire_maps() as ",
+      "mask_shapefile). Set it via build_burned_mapping_config(options = ",
+      "list(peninsula_shapefile_path = '...')).",
+      call. = FALSE
+    )
+  }
+  if (!file.exists(peninsula_path)) {
+    stop(
+      "Shared validation: config$options$peninsula_shapefile_path does not ",
+      "exist on disk: ", peninsula_path,
+      call. = FALSE
+    )
+  }
+  mask_path <- peninsula_path
+
+  # P2-DET-01: honor the validation_workbook output route. When
+  # write_outputs = TRUE, request the Excel workbook from the shared
+  # validator and surface its real path back to the pipeline so that
+  # output_routes$validation_workbook matches an actual file on disk.
+  excel_filename <- basename(
+    config$output_routes$validation_workbook %||% ""
+  )
+  if (!nzchar(excel_filename)) excel_filename <- NULL
 
   res <- validate_fire_maps(
     input_shapefile = input_shp,
@@ -283,13 +339,18 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
     mask_shapefile  = mask_path,
     burnable_raster = burnable_path,
     year_target     = config$target_year,
-    validation_dir  = dirname(validation_dir)
+    validation_dir  = dirname(validation_dir),
+    write_excel     = isTRUE(write_outputs),
+    excel_filename  = excel_filename
   )
+
+  workbook_path <- if (!is.null(res$excel_path) && nzchar(res$excel_path))
+    res$excel_path else NA_character_
 
   list(
     metrics         = res$metrics,
     polygon_summary = res$polygon_summary,
-    workbook_path   = NA_character_
+    workbook_path   = workbook_path
   )
 }
 

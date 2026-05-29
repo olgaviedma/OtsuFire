@@ -127,3 +127,45 @@ test_that("detect_burned_patches() aborts when change_index fails validation", {
   expect_error(detect_burned_patches(cfg),
                regexp = "change_index.*dirty")
 })
+
+# ---- P1-DET-01: aoi parameter is NOT YET IMPLEMENTED -------------------
+# The engine adapters (.of_run_detection -> grow_args / refine_args) do not
+# propagate AOI; we reject any non-NULL aoi explicitly. NULL must keep
+# working through to the engine (smoke), failing later for unrelated
+# reasons in this lightweight setup.
+
+test_that("detect_burned_patches: aoi = sf object is rejected with not-implemented", {
+  ci <- mk_clean_ci(); bm <- mk_tmp_mask2()
+  cfg <- build_burned_mapping_config(
+    change_index = ci, burnable_mask = bm, target_year = 2025L
+  )
+  poly_aoi <- sf::st_sf(
+    id = 1L,
+    geometry = sf::st_sfc(sf::st_polygon(list(rbind(c(0,0), c(1,0),
+                                                    c(1,1), c(0,1),
+                                                    c(0,0)))),
+                          crs = 3035)
+  )
+  err <- tryCatch(
+    detect_burned_patches(cfg, aoi = poly_aoi),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "not yet implemented", fixed = TRUE)
+  expect_match(err, "aoi=NULL", fixed = TRUE)
+})
+
+test_that("detect_burned_patches: aoi = NULL (default) passes the aoi gate (smoke)", {
+  # We do not exercise the full engine here — just verify aoi=NULL does
+  # not raise the not-yet-implemented stop(). Detection later fails for
+  # an unrelated reason (no ecoregion_shapefile_path is provided in this
+  # lightweight setup), so we only assert the aoi gate did not fire.
+  ci <- mk_clean_ci(); bm <- mk_tmp_mask2()
+  cfg <- build_burned_mapping_config(
+    change_index = ci, burnable_mask = bm, target_year = 2025L
+  )
+  err <- tryCatch(
+    suppressMessages(detect_burned_patches(cfg, aoi = NULL)),
+    error = function(e) conditionMessage(e)
+  )
+  expect_false(grepl("not yet implemented", err, fixed = TRUE))
+})

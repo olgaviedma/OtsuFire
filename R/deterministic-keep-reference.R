@@ -52,13 +52,14 @@
 #' Collect reliable historical keep-like reference samples
 #'
 #' @description
-#' Selects high-confidence historical \emph{keep}-like polygons from one
+#' Collect high-confidence historical \emph{keep}-like polygons from one
 #' or more previously written deterministic decision layers, using a
-#' single fixed selection rule (\code{"strict_hotspot"}). In the public
-#' deterministic workflow, these helpers are intended for building
-#' explicit \emph{external} reference pools from trusted years other than
-#' the target year being scored. The resulting samples are intended to
-#' feed
+#' single fixed selection rule (\code{"strict_hotspot"}).
+#'
+#' In the public deterministic workflow, this helper is meant for
+#' building explicit \emph{external} reference pools from trusted years
+#' other than the year currently being scored. The selected samples are
+#' intended to feed
 #' \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}},
 #' which turns them into a reusable spectral-support \code{keep_pool}.
 #'
@@ -71,16 +72,16 @@
 #'
 #' \strong{Explicit helper workflow.} Neither this function nor
 #' \code{build_keep_pool_from_samples()} is called automatically by the
-#' deterministic pipeline. They remain standalone helpers that can be
-#' tested and used independently; the resulting \code{keep_pool} may
-#' then be passed explicitly to
+#' deterministic pipeline. They are standalone helpers. If you choose to
+#' use them, the resulting \code{keep_pool} can then be passed
+#' explicitly to
 #' \code{score_burned_patches(..., keep_pool = ...)} or
 #' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 #'
 #' @details
-#' \strong{V1 design (closed):} the caller supplies the exact decision
-#' layer paths in \code{decision_paths}. There is no autodiscovery and no
-#' configurable selection mode; the strict rule below is fixed.
+#' \strong{Current helper design.} The caller supplies the exact decision
+#' layer paths in \code{decision_paths}. There is no autodiscovery, and
+#' the selection rule described below is fixed in the public helper.
 #'
 #' \strong{Fixed \code{strict_hotspot} rule.} A polygon is selected only
 #' when \emph{all} of the following hold:
@@ -100,7 +101,8 @@
 #' \code{run_name}, then \code{scenario}, otherwise \code{NA_character_}.
 #'
 #' @param decision_paths Character vector of existing paths to
-#'   deterministic decision files. Required; explicit (no autodiscovery).
+#'   deterministic decision files. This argument is required; the helper
+#'   does not search for files automatically.
 #' @param target_year Optional scalar year. When supplied, polygons with
 #'   \code{year == target_year} are excluded. This is the recommended
 #'   setting when the helper is being used to build an explicit
@@ -383,7 +385,7 @@ collect_keep_reference_samples <- function(decision_paths,
 #' Build a reusable keep_pool from historical reference samples
 #'
 #' @description
-#' Builds a reusable spectral-support \code{keep_pool} object from clean
+#' Build a reusable spectral-support \code{keep_pool} object from clean
 #' historical samples (typically produced by
 #' \code{\link[=collect_keep_reference_samples]{collect_keep_reference_samples()}})
 #' and a set of per-year change-index rasters. The returned object is
@@ -401,9 +403,9 @@ collect_keep_reference_samples <- function(decision_paths,
 #'
 #' \strong{Explicit helper workflow.} This function is not called
 #' automatically by
-#' \code{\link[=score_burned_patches]{score_burned_patches()}} nor
+#' \code{\link[=score_burned_patches]{score_burned_patches()}} or
 #' \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}.
-#' It remains a standalone helper; the resulting \code{keep_pool} can be
+#' It is a standalone helper; the resulting \code{keep_pool} can be
 #' passed explicitly via
 #' \code{score_burned_patches(..., keep_pool = ...)} or
 #' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
@@ -414,12 +416,13 @@ collect_keep_reference_samples <- function(decision_paths,
 #' fallback (\code{keep_pool = NULL}).
 #'
 #' @details
-#' \strong{V1 design (closed):} the caller supplies exact raster paths in
-#' \code{change_index_paths}, which must be a \emph{named} list or vector
-#' keyed by year (e.g. \code{list(`2010` = "...", `2011` = "...")}). There
-#' is no autodiscovery. This function performs \strong{no methodological
-#' filtering}: it assumes \code{samples} are already clean (as returned by
-#' \code{collect_keep_reference_samples()}).
+#' \strong{Current helper design.} The caller supplies exact raster paths
+#' in \code{change_index_paths}, which must be a \emph{named} list or
+#' vector keyed by year (for example
+#' \code{list(`2010` = "...", `2011` = "...")}). There is no
+#' autodiscovery. This function performs \strong{no methodological
+#' filtering}: it assumes \code{samples} are already clean, as returned
+#' by \code{collect_keep_reference_samples()}.
 #'
 #' For each year present in \code{samples}, the corresponding raster is
 #' opened, sample geometries are reprojected to the raster CRS if needed,

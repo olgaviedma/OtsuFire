@@ -60,11 +60,32 @@ build_synth_validation_fixture <- function(dir) {
   ), ncol = 2, byrow = TRUE)))
   ref_sf <- sf::st_sf(
     id = 1:2,
+    year = c(2000L, 2000L),
+    end_doy = c(100, NA),
+    start_doy = c(90, 150),
     geometry = sf::st_sfc(ref1_poly, ref2_poly, crs = 3035)
   )
   ref_path <- file.path(dir, "ref.shp")
   suppressWarnings(sf::st_write(ref_sf, ref_path, quiet = TRUE,
                                  delete_dsn = TRUE))
+
+  observability_sf <- sf::st_sf(
+    obs_doy = c(120, 140),
+    geometry = sf::st_sfc(ref1_poly, ref2_poly, crs = 3035)
+  )
+  observability <- burnable
+  terra::values(observability) <- NA_real_
+  observability <- terra::rasterize(terra::vect(observability_sf), observability,
+                                    field = "obs_doy", background = NA)
+  observability_path <- file.path(dir, "observability.tif")
+  terra::writeRaster(observability, observability_path, overwrite = TRUE,
+                     datatype = "FLT4S")
+
+  observability_multiband <- c(burnable, observability)
+  names(observability_multiband) <- c("rbr", "doy")
+  observability_multiband_path <- file.path(dir, "observability_multiband.tif")
+  terra::writeRaster(observability_multiband, observability_multiband_path,
+                     overwrite = TRUE, datatype = "FLT4S")
 
   pred_poly <- sf::st_polygon(list(matrix(c(
     1,   151,
@@ -83,6 +104,8 @@ build_synth_validation_fixture <- function(dir) {
 
   list(
     burnable = burnable_path,
+    observability = observability_path,
+    observability_multiband = observability_multiband_path,
     mask     = mask_path,
     ref      = ref_path,
     pred     = pred_path
@@ -90,7 +113,8 @@ build_synth_validation_fixture <- function(dir) {
 }
 
 run_validate_synth <- function(dir, threshold_min_detected = 10,
-                                year_target = 2000L) {
+                                year_target = 2000L,
+                                observability_raster = NULL) {
   fx <- build_synth_validation_fixture(dir)
   suppressWarnings(suppressMessages(
     validate_fire_maps(
@@ -104,9 +128,18 @@ run_validate_synth <- function(dir, threshold_min_detected = 10,
       burnable_threshold     = 0.5,
       threshold_completely_detected = 90,
       threshold_min_detected = threshold_min_detected,
+      observability_raster   = observability_raster,
       metrics_type           = "all"
     )
   ))
+}
+
+validation_subdirs <- function(dir) {
+  file.path(
+    dir,
+    "VALIDATION",
+    c("01_SUMMARY", "02_OBSERVABILITY", "03_STRATA", "04_ERROR_LAYERS", "_CACHE")
+  )
 }
 
 test_that("pixel_global has Specificity, BalancedAccuracy, ErrorRate with finite values", {
@@ -136,6 +169,14 @@ test_that("pixel_global has Specificity, BalancedAccuracy, ErrorRate with finite
   expect_equal(unname(m$Specificity),     1.0, tolerance = 1e-9)
   expect_equal(unname(m$BalancedAccuracy), 0.8, tolerance = 1e-9)
   expect_equal(unname(m$ErrorRate),        0.2, tolerance = 1e-9)
+
+  expect_true(all(dir.exists(validation_subdirs(tmp))))
+  expect_true(file.exists(file.path(
+    tmp, "VALIDATION", "01_SUMMARY", "pixel_metrics_global_2000.csv"
+  )))
+  expect_true(file.exists(file.path(
+    tmp, "VALIDATION", "01_SUMMARY", "fire_metrics_global_2000.csv"
+  )))
 })
 
 test_that("polygon_global has Coverage_mean/median/p10/p90 and Detected_Definition", {
@@ -189,4 +230,424 @@ test_that("threshold_min_detected = 50 yields fewer N_Detected_Polygons than def
                "coverage_ref >= 10%")
   expect_equal(unname(res_strict$polygon_summary$Detected_Definition),
                "coverage_ref >= 50%")
+})
+
+test_that("observability filter excludes non-observable reference polygons and returns summary", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  tmp <- tempfile("of_vfm_obs_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  fx <- build_synth_validation_fixture(tmp)
+
+  expect_warning(
+    res <- suppressMessages(validate_fire_maps(
+      input_shapefile        = fx$pred,
+      ref_shapefile          = fx$ref,
+      mask_shapefile         = fx$mask,
+      burnable_raster        = fx$burnable,
+      observability_raster   = fx$observability,
+      year_target            = 2000L,
+      validation_dir         = tmp,
+      binary_burnable        = TRUE,
+      burnable_threshold     = 0.5,
+      threshold_completely_detected = 90,
+      threshold_min_detected = 10,
+      metrics_type           = "all"
+    )),
+    "Temporal observability filter excluded 1 of 2 reference polygons"
+  )
+
+  obs <- res$reference_observability
+  expect_true(!is.null(obs) && nrow(obs) == 2L)
+  expect_true(all(c("obs_ref_doy", "obs_doy_max", "obs_doy_margin",
+                    "observable_flag", "observable_reason") %in% names(obs)))
+
+  ref2 <- obs[obs$id == 2, ]
+  expect_equal(ref2$obs_ref_doy, 150)
+  expect_equal(ref2$obs_doy_max, 140)
+  expect_equal(ref2$obs_doy_margin, -10)
+  expect_false(ref2$observable_flag)
+  expect_equal(ref2$observable_reason, "obs_before_reference_doy")
+
+  expect_equal(unname(res$polygon_summary$N_Reference_Polygons), 1L)
+  expect_equal(unname(res$polygon_summary$N_Detected_Polygons), 1L)
+  expect_equal(unname(res$metrics$TP), 25)
+  expect_equal(unname(res$metrics$FP), 5)
+  expect_equal(unname(res$metrics$FN), 0)
+  expect_equal(unname(res$metrics$TN), 70)
+  expect_true(file.exists(file.path(
+    tmp, "VALIDATION", "01_SUMMARY", "pixel_metrics_global_2000.csv"
+  )))
+  expect_true(file.exists(file.path(
+    tmp, "VALIDATION", "01_SUMMARY", "fire_metrics_global_2000.csv"
+  )))
+
+  obs_csv <- list.files(
+    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
+    pattern = "^reference_fires_observability_2000_obs-[A-F0-9]{8}\\.csv$",
+    full.names = TRUE
+  )
+  expect_length(obs_csv, 1L)
+
+  obs_gpkg <- list.files(
+    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(obs_gpkg, 1L)
+
+  dropped_sf <- suppressWarnings(sf::st_read(obs_gpkg, quiet = TRUE))
+  expect_s3_class(dropped_sf, "sf")
+  expect_equal(nrow(dropped_sf), 1L)
+  expect_equal(dropped_sf$id, 2)
+  expect_true(all(c("obs_ref_doy", "obs_ref_doy_source", "obs_doy_max",
+                    "obs_doy_margin", "observable_reason") %in% names(dropped_sf)))
+  expect_false(dropped_sf$observable_flag)
+  expect_equal(dropped_sf$observable_reason, "obs_before_reference_doy")
+  expect_false(any(sf::st_is_empty(dropped_sf)))
+})
+
+test_that("observability filter uses the doy layer from a multi-band raster", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  tmp <- tempfile("of_vfm_obs_multiband_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  fx <- build_synth_validation_fixture(tmp)
+
+  expect_warning(
+    res <- suppressMessages(validate_fire_maps(
+      input_shapefile        = fx$pred,
+      ref_shapefile          = fx$ref,
+      mask_shapefile         = fx$mask,
+      burnable_raster        = fx$burnable,
+      observability_raster   = fx$observability_multiband,
+      year_target            = 2000L,
+      validation_dir         = tmp,
+      binary_burnable        = TRUE,
+      burnable_threshold     = 0.5,
+      threshold_completely_detected = 90,
+      threshold_min_detected = 10,
+      metrics_type           = "all"
+    )),
+    "Temporal observability filter excluded 1 of 2 reference polygons"
+  )
+
+  ref2 <- res$reference_observability[res$reference_observability$id == 2, ]
+  expect_equal(ref2$obs_doy_max, 140)
+  expect_equal(ref2$obs_ref_doy_source, "start_doy")
+  expect_false(ref2$observable_flag)
+  expect_equal(unname(res$polygon_summary$N_Reference_Polygons), 1L)
+})
+
+test_that("observability filter skips the excluded-polygons gpkg when all references are observable", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  tmp <- tempfile("of_vfm_obs_all_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  fx <- build_synth_validation_fixture(tmp)
+
+  observability_all <- terra::rast(fx$observability)
+  observability_all[!is.na(observability_all)] <- 200
+  observability_all_path <- file.path(tmp, "observability_all.tif")
+  terra::writeRaster(observability_all, observability_all_path, overwrite = TRUE,
+                     datatype = "FLT4S")
+
+  res <- suppressWarnings(suppressMessages(validate_fire_maps(
+    input_shapefile        = fx$pred,
+    ref_shapefile          = fx$ref,
+    mask_shapefile         = fx$mask,
+    burnable_raster        = fx$burnable,
+    observability_raster   = observability_all_path,
+    year_target            = 2000L,
+    validation_dir         = tmp,
+    binary_burnable        = TRUE,
+    burnable_threshold     = 0.5,
+    threshold_completely_detected = 90,
+    threshold_min_detected = 10,
+    metrics_type           = "all"
+  )))
+
+  expect_true(all(res$reference_observability$observable_flag))
+  obs_gpkg <- list.files(
+    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(obs_gpkg, 0L)
+})
+
+test_that("reference cache is separated by observability tag", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  tmp <- tempfile("of_vfm_obs_cache_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  fx <- build_synth_validation_fixture(tmp)
+
+  res_no_obs <- suppressMessages(suppressWarnings(
+    validate_fire_maps(
+      input_shapefile        = fx$pred,
+      ref_shapefile          = fx$ref,
+      mask_shapefile         = fx$mask,
+      burnable_raster        = fx$burnable,
+      year_target            = 2000L,
+      validation_dir         = tmp,
+      binary_burnable        = TRUE,
+      burnable_threshold     = 0.5,
+      threshold_completely_detected = 90,
+      threshold_min_detected = 10,
+      metrics_type           = "all"
+    )
+  ))
+  expect_equal(unname(res_no_obs$polygon_summary$N_Reference_Polygons), 2L)
+
+  expect_warning(
+    res_obs <- suppressMessages(validate_fire_maps(
+      input_shapefile        = fx$pred,
+      ref_shapefile          = fx$ref,
+      mask_shapefile         = fx$mask,
+      burnable_raster        = fx$burnable,
+      observability_raster   = fx$observability,
+      year_target            = 2000L,
+      validation_dir         = tmp,
+      binary_burnable        = TRUE,
+      burnable_threshold     = 0.5,
+      threshold_completely_detected = 90,
+      threshold_min_detected = 10,
+      metrics_type           = "all"
+    )),
+    "Temporal observability filter excluded 1 of 2 reference polygons"
+  )
+
+  expect_equal(unname(res_obs$polygon_summary$N_Reference_Polygons), 1L)
+  expect_true(file.exists(file.path(
+    tmp, "VALIDATION", "_CACHE", "reference_fires_processed_2000_obs-none.gpkg"
+  )))
+  obs_cache <- list.files(
+    file.path(tmp, "VALIDATION", "_CACHE"),
+    pattern = "^reference_fires_processed_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(obs_cache, 1L)
+
+  obs_not_observable <- list.files(
+    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(obs_not_observable, 1L)
+
+  unlink(obs_not_observable)
+  expect_false(file.exists(obs_not_observable))
+
+  expect_warning(
+    suppressMessages(validate_fire_maps(
+      input_shapefile        = fx$pred,
+      ref_shapefile          = fx$ref,
+      mask_shapefile         = fx$mask,
+      burnable_raster        = fx$burnable,
+      observability_raster   = fx$observability,
+      year_target            = 2000L,
+      validation_dir         = tmp,
+      binary_burnable        = TRUE,
+      burnable_threshold     = 0.5,
+      threshold_completely_detected = 90,
+      threshold_min_detected = 10,
+      metrics_type           = "all"
+    )),
+    "Temporal observability filter excluded 1 of 2 reference polygons"
+  )
+  expect_true(file.exists(obs_not_observable))
+})
+
+test_that("legacy flat outputs are moved out of the validation root", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  tmp <- tempfile("of_vfm_legacy_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  fx <- build_synth_validation_fixture(tmp)
+
+  root_dir <- file.path(tmp, "VALIDATION")
+  legacy_dir <- file.path(root_dir, "_LEGACY_FLAT_OUTPUTS")
+  dir.create(root_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(legacy_dir, recursive = TRUE, showWarnings = FALSE)
+  legacy_csv <- file.path(root_dir, "metrics_summary_2000.csv")
+  archived_csv <- file.path(legacy_dir, "metrics_summary_2000.csv")
+  legacy_csv_humanized <- file.path(root_dir, "pixel_metrics_global_2000.csv")
+  legacy_gpkg <- file.path(root_dir, "ref_polygons_not_detected_keep.gpkg")
+  writeLines("old-root", legacy_csv)
+  writeLines("already-archived", archived_csv)
+  writeLines("old-humanized-root", legacy_csv_humanized)
+  writeLines("old-gpkg", legacy_gpkg)
+
+  suppressWarnings(suppressMessages(validate_fire_maps(
+    input_shapefile        = fx$pred,
+    ref_shapefile          = fx$ref,
+    mask_shapefile         = fx$mask,
+    burnable_raster        = fx$burnable,
+    year_target            = 2000L,
+    validation_dir         = tmp,
+    binary_burnable        = TRUE,
+    burnable_threshold     = 0.5,
+    threshold_completely_detected = 90,
+    threshold_min_detected = 10,
+    metrics_type           = "all"
+  )))
+
+  expect_false(file.exists(legacy_csv))
+  expect_false(file.exists(legacy_csv_humanized))
+  expect_false(file.exists(legacy_gpkg))
+  migrated_metrics <- list.files(
+    legacy_dir,
+    pattern = "^metrics_summary_2000(?:__legacy[0-9]{2})?\\.csv$",
+    full.names = TRUE
+  )
+  expect_length(migrated_metrics, 2L)
+  expect_equal(
+    unname(sort(vapply(migrated_metrics, readLines, character(1), warn = FALSE))),
+    sort(c("already-archived", "old-root"))
+  )
+  expect_true(file.exists(file.path(
+    legacy_dir, "pixel_metrics_global_2000.csv"
+  )))
+  expect_true(file.exists(file.path(
+    legacy_dir, "ref_polygons_not_detected_keep.gpkg"
+  )))
+
+  legacy_count_before <- length(list.files(legacy_dir, full.names = TRUE))
+  suppressWarnings(suppressMessages(validate_fire_maps(
+    input_shapefile        = fx$pred,
+    ref_shapefile          = fx$ref,
+    mask_shapefile         = fx$mask,
+    burnable_raster        = fx$burnable,
+    year_target            = 2000L,
+    validation_dir         = tmp,
+    binary_burnable        = TRUE,
+    burnable_threshold     = 0.5,
+    threshold_completely_detected = 90,
+    threshold_min_detected = 10,
+    metrics_type           = "all"
+  )))
+  expect_equal(length(list.files(legacy_dir, full.names = TRUE)), legacy_count_before)
+})
+
+# §N+7.6 (2026-05-29) — surfaced by the 2005/balanced deterministic
+# smoke. The Iberian-peninsula mask carries a column called `Id` and the
+# EFFIS reference shapefile carries a column called `id`; after
+# `sf::st_intersection(ref_polygons, mask_geom)` both names landed in
+# ref_polygons unchanged, then `sf::st_write()` to the GPKG cache
+# aborted with "Field count reached: duplicate names present?" because
+# SQLite identifiers are case-insensitive. The previous F8b drop only
+# removed the `FID` column. The fix at the top of `validate_fire_maps()`
+# reduces mask_geom to its geometry column (we never consume mask
+# attributes downstream); this test pins both the body and the
+# functional behaviour.
+
+test_that("validate_fire_maps() body keeps only mask geometry (§N+7.6)", {
+  body_src <- paste(
+    deparse(body(OtsuFire::validate_fire_maps)),
+    collapse = "\n"
+  )
+  # Geometry-only narrowing must reach mask_geom.
+  expect_true(grepl(
+    "mask_geom\\s*<-\\s*mask_geom\\[\\s*,\\s*geom_col\\s*,\\s*drop\\s*=\\s*FALSE\\s*\\]",
+    body_src
+  ))
+  expect_true(grepl("attr\\(mask_geom,\\s*\"sf_column\"\\)", body_src))
+  # The narrow F8b drop ("FID" only) must be gone.
+  expect_false(grepl(
+    "!\\(names\\(mask_geom\\)\\s*%in%\\s*\"FID\"\\)",
+    body_src
+  ))
+})
+
+test_that("validate_fire_maps() handles case-insensitive id collision between mask and ref", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+  dir <- file.path(tempdir(), "validate_n76")
+  unlink(dir, recursive = TRUE)
+  dir.create(dir, recursive = TRUE)
+
+  burnable <- terra::rast(
+    nrows = 10, ncols = 10,
+    xmin = 0, xmax = 300, ymin = 0, ymax = 300,
+    crs = "EPSG:3035"
+  )
+  terra::values(burnable) <- 1
+  burnable_path <- file.path(dir, "burnable.tif")
+  terra::writeRaster(burnable, burnable_path, overwrite = TRUE,
+                     datatype = "FLT4S")
+
+  mask_poly <- sf::st_polygon(list(matrix(c(
+    0, 0, 300, 0, 300, 300, 0, 300, 0, 0
+  ), ncol = 2, byrow = TRUE)))
+  # Mask carries uppercase "Id" (mirrors Iberian_Peninsula_mask_3035.shp).
+  mask_sf <- sf::st_sf(
+    Id   = 1L,
+    PAIS = "ESP",
+    geometry = sf::st_sfc(mask_poly, crs = 3035)
+  )
+  mask_path <- file.path(dir, "mask_case.shp")
+  suppressWarnings(sf::st_write(mask_sf, mask_path, quiet = TRUE,
+                                 delete_dsn = TRUE))
+
+  ref_poly <- sf::st_polygon(list(matrix(c(
+    50, 50, 200, 50, 200, 200, 50, 200, 50, 50
+  ), ncol = 2, byrow = TRUE)))
+  # Reference carries lowercase "id" (mirrors EFFIS shapefile schema).
+  ref_sf <- sf::st_sf(
+    id        = 1L,
+    year      = 2005L,
+    end_doy   = 200,
+    start_doy = 100,
+    geometry  = sf::st_sfc(ref_poly, crs = 3035)
+  )
+  ref_path <- file.path(dir, "ref.shp")
+  suppressWarnings(sf::st_write(ref_sf, ref_path, quiet = TRUE,
+                                 delete_dsn = TRUE))
+
+  pred_poly <- ref_poly
+  pred_sf <- sf::st_sf(
+    id       = 1L,
+    geometry = sf::st_sfc(pred_poly, crs = 3035)
+  )
+  pred_path <- file.path(dir, "pred.shp")
+  suppressWarnings(sf::st_write(pred_sf, pred_path, quiet = TRUE,
+                                 delete_dsn = TRUE))
+
+  # Without the §N+7.6 fix, the cache GPKG write at
+  # `sf::st_write(ref_polygons, ref_vec_cache, ...)` aborts with
+  # "Field count reached: duplicate names present?". With the fix the
+  # call completes cleanly and the cache GPKG is written.
+  expect_no_error(
+    suppressWarnings(suppressMessages(
+      validate_fire_maps(
+        input_shapefile        = pred_path,
+        ref_shapefile          = ref_path,
+        mask_shapefile         = mask_path,
+        burnable_raster        = burnable_path,
+        year_target            = 2005L,
+        validation_dir         = dir,
+        binary_burnable        = TRUE,
+        burnable_threshold     = 0.5,
+        threshold_completely_detected = 90,
+        threshold_min_detected = 10,
+        metrics_type           = "all"
+      )
+    ))
+  )
+  # The cache GPKG must exist on disk and carry no mask-side attributes.
+  cache_dir <- file.path(dir, "VALIDATION", "_CACHE")
+  cache_gpkg <- list.files(cache_dir,
+                            pattern = "^reference_fires_processed_2005.*\\.gpkg$",
+                            full.names = TRUE)
+  expect_length(cache_gpkg, 1L)
+  cached <- sf::st_read(cache_gpkg, quiet = TRUE)
+  # The reference attributes survive; mask "Id" and "PAIS" do not.
+  expect_true("id" %in% names(cached))
+  expect_false(any(c("Id", "PAIS") %in% names(cached)))
 })

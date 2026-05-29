@@ -33,10 +33,10 @@ treated as integrity problems (and capped during cleaning).}
 \item{check_finite}{Logical scalar. Whether non-finite values (`Inf`,
 `-Inf`, `NaN`) should be checked and cleaned.}
 
-\item{action}{Character scalar controlling how detected problems are
-handled. One of `"warn_and_clean"` (emit a warning and automatically clean
-the raster), `"report_only"` (report integrity problems without modifying
-the raster), or `"fail"` (stop execution with a detailed error).}
+\item{action}{Character scalar controlling what to do when a problem is
+found. One of `"warn_and_clean"` (warn and clean automatically),
+`"report_only"` (report the problem but leave the raster unchanged),
+or `"fail"` (stop with a detailed error).}
 
 \item{verbose}{Logical scalar. If `TRUE`, informative progress messages are
 emitted, including confirmation when the raster passes all checks.}
@@ -57,9 +57,9 @@ A `SpatRaster`.
   aborts with `stop()`.
 }
 \description{
-Diagnose and optionally repair common raster integrity problems before
-running segmentation, mosaicking, thresholding, or feature-extraction
-workflows.
+Check an in-memory raster for common integrity problems and, if you
+choose, repair them before running segmentation, mosaicking,
+thresholding, or feature-extraction workflows.
 
 The function inspects an in-memory `SpatRaster` and evaluates whether it is
 internally consistent according to three validation rules commonly required
@@ -79,8 +79,8 @@ Depending on the selected `action`, the function can:
   \item or stop execution with a detailed error.
 }
 
-This function is primarily intended as a defensive preprocessing safeguard
-before downstream operations such as segmentation, compositing,
+This function is mainly a defensive preprocessing check before
+downstream operations such as segmentation, compositing,
 polygonization, or polygon-level feature extraction.
 
 For file-based workflows, see [clean_raster_file()].
@@ -125,8 +125,8 @@ Common consequences include:
     products.
 }
 
-This function provides a reproducible and auditable mechanism to
-standardise raster integrity before analysis.
+In practice, this gives you a reproducible way to standardise raster
+integrity before analysis.
 }
 \examples{
 \dontrun{

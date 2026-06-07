@@ -155,20 +155,35 @@ build_unburned_from_deterministic_decisions <- function(
   # NULL we fall back to EXACTLY the historical convention path below, so
   # behaviour is byte-identical when nothing is passed.
   burnable_mask_path = NULL,
+  # Gate 1B PIECE 3 (2026-06-07): the IMMEDIATE change-index raster (severity
+  # mosaic) used to sample the random burnable background is now a wired cfg
+  # route. The caller (supervised-pools.R) threads cfg$inputs$change_index here.
+  # NULL falls back to EXACTLY the historical MinMin convention path, so passing
+  # nothing is byte-identical. This removes the last convention reconstruction of
+  # the change_index in the unburned stack.
+  severity_raster_path = NULL,
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
 
   corine_year <- get_corine_year_unb(target_year)
-  one_year_tif <- file.path(
-    composite_base, result_name,
-    paste0("MinMin_", target_year, "_mosaic_res90m.tif")
-  )
-  if (!file.exists(one_year_tif)) {
-    one_year_tif <- file.path(
-      composite_base, "Min_Min",
+  # Gate 1B PIECE 3: consume the immediate change-index from cfg
+  # (severity_raster_path); convention fallback only when none was supplied.
+  one_year_tif <- if (!is.null(severity_raster_path) &&
+                      nzchar(severity_raster_path)) {
+    severity_raster_path
+  } else {
+    cand <- file.path(
+      composite_base, result_name,
       paste0("MinMin_", target_year, "_mosaic_res90m.tif")
     )
+    if (!file.exists(cand)) {
+      cand <- file.path(
+        composite_base, "Min_Min",
+        paste0("MinMin_", target_year, "_mosaic_res90m.tif")
+      )
+    }
+    cand
   }
 
   if (is.null(burnable_mask_path) || !nzchar(burnable_mask_path)) {

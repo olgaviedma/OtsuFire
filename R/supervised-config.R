@@ -27,6 +27,17 @@
 #'   RUN input (§N+25): when supplied it is CONSUMED by the orchestrator as
 #'   the `rbr_aw` feature layer; when `NULL` it defaults to the convention
 #'   path `<composite_base>/Autumn/mean_mean_<target_year>_mosaic.tif`.
+#'   Gate 1B PIECE 3 (2026-06-07): the canonical name for this route is
+#'   `delayed_change_index_path`; `delayed_change_index` is its historical alias.
+#' @param immediate_change_index_path,delayed_change_index_path Gate 1B PIECE 3
+#'   (2026-06-07) canonical names for the two change-index ROUTES.
+#'   `immediate_change_index_path` is the canonical name of the REQUIRED immediate
+#'   change index (alias of `change_index`); `delayed_change_index_path` is the
+#'   canonical name of the OPTIONAL delayed change index (alias of
+#'   `delayed_change_index`). Supply EITHER the canonical name OR its alias for a
+#'   route; supplying both is allowed only if identical, otherwise a conflict
+#'   ERRORS. Both resolve onto the single `cfg$inputs$change_index` /
+#'   `cfg$inputs$delayed_change_index` field (one source of truth per route).
 #' @param hotspots sf POINT layer or path. Optional hotspot layer for the
 #'   target year.
 #' @param reference_burned_map sf POLYGON / raster / path. Optional external
@@ -158,6 +169,18 @@ build_supervised_burned_config <- function(
     internal_decisions,
     change_index,
     delayed_change_index = NULL,
+    # Gate 1B PIECE 3 (2026-06-07): canonical immediate/delayed change-index
+    # ROUTES. `immediate_change_index_path` is the canonical name for the
+    # required immediate change index; it is an alias of `change_index` (the
+    # historical name, kept for back-compat AND shared with the deterministic
+    # phase). `delayed_change_index_path` is the canonical name for the optional
+    # delayed (autumn-winter) change index; alias of `delayed_change_index`.
+    # Supplying BOTH forms of a route is allowed only if they are identical;
+    # a genuine conflict ERRORS (never silently ignored). Internally both
+    # resolve onto the single cfg$inputs$change_index / $delayed_change_index
+    # fields, so there is ONE source of truth per route.
+    immediate_change_index_path = NULL,
+    delayed_change_index_path   = NULL,
     hotspots = NULL,
     reference_burned_map = NULL,
     target_year,
@@ -219,8 +242,48 @@ build_supervised_burned_config <- function(
   if (missing(internal_decisions) || is.null(internal_decisions)) {
     stop("'internal_decisions' is required.", call. = FALSE)
   }
-  if (missing(change_index) || is.null(change_index)) {
-    stop("'change_index' is required.", call. = FALSE)
+
+  # ---- Gate 1B PIECE 3: resolve the canonical change-index ROUTES -----------
+  # Each route has a canonical name (immediate/delayed_change_index_path) and a
+  # historical alias (change_index / delayed_change_index). Resolve each to a
+  # single value: if only one form is given, use it; if BOTH are given they must
+  # be identical (a genuine conflict ERRORS - never silently ignored). The
+  # resolved value flows into the single cfg$inputs field for that route.
+  .resolve_route <- function(canonical, alias, canonical_nm, alias_nm,
+                             alias_missing) {
+    has_canon <- !is.null(canonical)
+    has_alias <- !alias_missing && !is.null(alias)
+    if (has_canon && has_alias) {
+      if (!identical(canonical, alias)) {
+        stop("Conflicting change-index routes: '", canonical_nm,
+             "' and its alias '", alias_nm, "' were both supplied with ",
+             "different values. Pass only one (they name the same input).",
+             call. = FALSE)
+      }
+      return(canonical)
+    }
+    if (has_canon) return(canonical)
+    if (has_alias) return(alias)
+    NULL
+  }
+  # immediate: canonical = immediate_change_index_path, alias = change_index (req)
+  change_index <- .resolve_route(
+    canonical = immediate_change_index_path,
+    alias     = if (missing(change_index)) NULL else change_index,
+    canonical_nm = "immediate_change_index_path", alias_nm = "change_index",
+    alias_missing = missing(change_index)
+  )
+  # delayed: canonical = delayed_change_index_path, alias = delayed_change_index
+  delayed_change_index <- .resolve_route(
+    canonical = delayed_change_index_path,
+    alias     = delayed_change_index,
+    canonical_nm = "delayed_change_index_path", alias_nm = "delayed_change_index",
+    alias_missing = FALSE
+  )
+
+  if (is.null(change_index)) {
+    stop("'change_index' (a.k.a. 'immediate_change_index_path') is required.",
+         call. = FALSE)
   }
 
   if (!is.character(run_name) || length(run_name) != 1L || !nzchar(run_name)) {

@@ -9,6 +9,8 @@ build_supervised_burned_config(
   internal_decisions,
   change_index,
   delayed_change_index = NULL,
+  immediate_change_index_path = NULL,
+  delayed_change_index_path = NULL,
   hotspots = NULL,
   reference_burned_map = NULL,
   target_year,
@@ -61,7 +63,19 @@ in-memory spec, so existing scripts stay byte-identical.}
 (autumn-winter) change-index raster for persistence-style features.
 RUN input (§N+25): when supplied it is CONSUMED by the orchestrator as
 the `rbr_aw` feature layer; when `NULL` it defaults to the convention
-path `<composite_base>/Autumn/mean_mean_<target_year>_mosaic.tif`.}
+path `<composite_base>/Autumn/mean_mean_<target_year>_mosaic.tif`.
+Gate 1B PIECE 3 (2026-06-07): the canonical name for this route is
+`delayed_change_index_path`; `delayed_change_index` is its historical alias.}
+
+\item{immediate_change_index_path, delayed_change_index_path}{Gate 1B PIECE 3
+(2026-06-07) canonical names for the two change-index ROUTES.
+`immediate_change_index_path` is the canonical name of the REQUIRED immediate
+change index (alias of `change_index`); `delayed_change_index_path` is the
+canonical name of the OPTIONAL delayed change index (alias of
+`delayed_change_index`). Supply EITHER the canonical name OR its alias for a
+route; supplying both is allowed only if identical, otherwise a conflict
+ERRORS. Both resolve onto the single `cfg$inputs$change_index` /
+`cfg$inputs$delayed_change_index` field (one source of truth per route).}
 
 \item{hotspots}{sf POINT layer or path. Optional hotspot layer for the
 target year.}

@@ -684,6 +684,14 @@ build_unburned_from_legacy_pipeline <- function(
   burnable_mask_path = NULL,
   corine_raster_path = NULL,
   peninsula_shapefile = NULL,
+  # Gate 1B PIECE 2 (2026-06-07): the ecoregion border is now a CONFIGURABLE
+  # input path (cfg$inputs$ecoregion_shapefile, threaded by supervised-pools.R)
+  # instead of an unconditional data_base/Ecoregion/ecoregiones_olson.shp
+  # hardcode. NULL falls back to EXACTLY that historical convention path, so
+  # passing nothing is byte-identical. NOTE: PIECE 2 only makes the PATH
+  # configurable; the ecoregion Otsu BRANCH itself (otsu_mode ecoregion /
+  # corine_ecoregion) is removed later in PIECE 4 — do not remove it here.
+  ecoregion_shapefile_path = NULL,
   # D4a (2026-06-05): forwarded to build_unburned_from_legacy_decisions().
   # FALSE (default) errors when the Otsu legacy pool is empty after
   # sanitisation instead of silently degrading to deterministic_direct
@@ -766,7 +774,14 @@ build_unburned_from_legacy_pipeline <- function(
   if (is.null(peninsula_shapefile) || !nzchar(peninsula_shapefile)) {
     peninsula_shapefile <- file.path(data_base, "Borders", "Iberian_peninsula.shp")
   }
-  ecoregion_shapefile <- file.path(data_base, "Ecoregion", "ecoregiones_olson.shp")
+  # Gate 1B PIECE 2: consume the ecoregion border from the configurable path;
+  # fall back to the historical convention path only when none was supplied.
+  ecoregion_shapefile <- if (!is.null(ecoregion_shapefile_path) &&
+                             nzchar(ecoregion_shapefile_path)) {
+    ecoregion_shapefile_path
+  } else {
+    file.path(data_base, "Ecoregion", "ecoregiones_olson.shp")
+  }
   # The deterministic decisions GPKG is the user-supplied path, period. No
   # convention reconstruction. The caller (orchestrator) always threads the
   # user path down; require it here.

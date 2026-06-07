@@ -172,6 +172,8 @@ build_supervised_training_pools <- function(config,
   cfg_burnable_mask_path  <- .cfg_input_path("burnable_mask")
   cfg_corine_raster_path  <- .cfg_input_path("corine_raster")
   cfg_peninsula_shapefile <- .cfg_input_path("peninsula_shapefile")
+  # Gate 1B PIECE 2: ecoregion border path from cfg (legacy Otsu ecoregion modes).
+  cfg_ecoregion_shapefile <- .cfg_input_path("ecoregion_shapefile")
 
   # one_year_tif: the MAIN change-index raster, used here as the severity raster
   # for the legacy Otsu builder. It is the REQUIRED, validated cfg$inputs$change_index
@@ -529,6 +531,8 @@ build_supervised_training_pools <- function(config,
       burnable_mask_path       = cfg_burnable_mask_path,
       corine_raster_path       = cfg_corine_raster_path,
       peninsula_shapefile      = cfg_peninsula_shapefile,
+      # Gate 1B PIECE 2: ecoregion border path from cfg (NULL -> convention).
+      ecoregion_shapefile_path = cfg_ecoregion_shapefile,
       legacy_code_dir          = UNB_LEGACY_CODE_DIR,
       python_exe               = python_exe,
       gdal_polygonize_script   = gdal_polygonize_script,

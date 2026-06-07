@@ -146,9 +146,8 @@ of legacy scripts and no namespace mutation are performed.
 If you want explicit access to the supervised sub-stages,
 `build_supervised_training_pools()`, `make_spatial_folds()`,
 `extract_supervised_features()`, `run_oof_diagnostics()`,
-`train_final_burned_model()`, `score_supervised_burned_map()`, and
-`update_burned_like_registry()` each cover one stage of the
-pipeline.
+`train_final_burned_model()`, and `score_supervised_burned_map()`
+each cover one stage of the pipeline.
 
 ## 4. Validation and consistency
 

@@ -19,8 +19,6 @@ flowchart LR
   C --> D["internal_decisions.gpkg"]
   D --> E["One-year supervised + OOF diagnostics"]
   E --> F["final_map_full and final_map"]
-  E --> G["Scenario-specific burned-like registry"]
-  G -. "Transfer support" .-> H["Historical application"]
   E -. "Separate validation concept" .-> I["LOYO"]
 ```
 

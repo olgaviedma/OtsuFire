@@ -901,9 +901,13 @@ scoring_internal_burned_area <- function(
 
     # Align columns to avoid rbind issues (e.g., median columns exist only in keep/review)
     miss_d <- setdiff(names(keep2), names(dropped2))
-    if (length(miss_d) > 0) for (nm in miss_d) dropped2[[nm]] <- NA
+    if (length(miss_d) > 0) {
+      for (nm in miss_d) dropped2[[nm]] <- rep(NA, nrow(dropped2))
+    }
     miss_k <- setdiff(names(dropped2), names(keep2))
-    if (length(miss_k) > 0) for (nm in miss_k) keep2[[nm]] <- NA
+    if (length(miss_k) > 0) {
+      for (nm in miss_k) keep2[[nm]] <- rep(NA, nrow(keep2))
+    }
 
     keep2 <- keep2[, names(dropped2), drop = FALSE]
     stage2_flagged_clean <- rbind(dropped2, keep2)
@@ -1312,9 +1316,13 @@ scoring_reference_burned_area <- function(
     kept2    <- ref_kept_erased
 
     miss_d <- setdiff(names(kept2), names(dropped2))
-    if (length(miss_d) > 0) for (nm in miss_d) dropped2[[nm]] <- NA
+    if (length(miss_d) > 0) {
+      for (nm in miss_d) dropped2[[nm]] <- rep(NA, nrow(dropped2))
+    }
     miss_k <- setdiff(names(dropped2), names(kept2))
-    if (length(miss_k) > 0) for (nm in miss_k) kept2[[nm]] <- NA
+    if (length(miss_k) > 0) {
+      for (nm in miss_k) kept2[[nm]] <- rep(NA, nrow(kept2))
+    }
 
     kept2 <- kept2[, names(dropped2), drop = FALSE]
     ref_flagged_clean <- rbind(dropped2, kept2)

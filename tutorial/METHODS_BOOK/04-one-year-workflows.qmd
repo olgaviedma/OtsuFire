@@ -76,11 +76,7 @@ The most important object to inspect after this run is `internal_decisions.gpkg`
 sup_cfg <- build_supervised_burned_config(
   target_year = 2025,
   scenario = "balanced",
-  scripts_root = "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS",
-  result_name = "Min_Min",
-  options = list(
-    negative_pool_policy = "deterministic_direct"
-  )
+  result_name = "Min_Min"
 )
 
 sup_run <- run_oneyear_supervised_pipeline(
@@ -89,7 +85,7 @@ sup_run <- run_oneyear_supervised_pipeline(
 )
 ```
 
-Use `negative_pool_policy = "deterministic_direct"` when the goal is benchmarking, reproducibility testing, or package-vs-standalone comparison. This forces the canonical baseline unburned strategy. For standard production runs, omit the override and use `all_sources` (the operational default), which applies the Phase 2A four-bucket unburned taxonomy.
+The unburned-pool strategy is no longer configurable. `all_sources` is the only mode and is applied implicitly, using the Phase 2A four-bucket unburned taxonomy. The former `negative_pool_policy` option and its `deterministic_direct` baseline strategy were removed on 2026-06-05; passing `negative_pool_policy = "all_sources"` is accepted as a no-op, but any other value now errors.
 
 ::: {.callout-note}
 The current supervised bridge stores several custom path overrides in its configuration object, but the delegated runtime still relies mainly on the standard project layout when it actually runs. In other words, the bridge is usable, but it is still a bridge rather than a fully path-agnostic package workflow.
@@ -159,8 +155,7 @@ The current folder conventions are part of the workflow and should be understood
 The handoff provides clear guidance for fair comparisons.
 
 - Deterministic comparisons must use the same frozen registry snapshot and the same explicit `deterministic_seed`.
-- Supervised comparisons should freeze the deterministic input layer and the registry snapshot and should force `negative_pool_policy = "deterministic_direct"` (the `deterministic_direct` baseline strategy).
-- The MASTER workflow should not be used as a neutral comparison baseline for supervised benchmarking because it uses the `all_sources` operational strategy rather than the canonical baseline.
+- Supervised comparisons should freeze the deterministic input layer. The unburned-pool strategy is no longer a comparison variable: every run uses `all_sources` implicitly (the former `deterministic_direct` baseline strategy was removed on 2026-06-05).
 
 ::: {.callout-warning}
 LOYO is not part of the current one-year workflow tutorial. The old `YEAR_OOF_PIPELINE.R` entry point is archived, and the replacement multiyear workflow still needs dedicated documentation.

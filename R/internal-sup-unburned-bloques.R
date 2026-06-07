@@ -438,11 +438,18 @@ coverage_by_patch_raster <- function(
     message("  - Procesando referencia: ", rk_name, " (capa ", k, "/", n_refs, ")")
     
     ref_k <- ref_stack[[k]]
-    
+
     # Normalizar a 0/1 (NA -> 0, cualquier valor != 0 -> 1)
-    ref_clean <- ref_k
-    ref_clean[is.na(ref_clean)] <- 0
-    ref_clean[ref_clean != 0]   <- 1
+    # AS11 (0.5.0): the former in-place form
+    #   ref_clean <- ref_k
+    #   ref_clean[is.na(ref_clean)] <- 0
+    #   ref_clean[ref_clean != 0]   <- 1
+    # mutated the caller's SpatRaster, because `ref_clean <- ref_k` binds a new
+    # handle to the SAME underlying terra object (terra is reference-semantics),
+    # so the `[<-` writes leaked back into `ref_stack`/`ref_raster`. terra::ifel
+    # returns a NEW raster and never touches `ref_k`, so the caller's raster is
+    # left untouched. Values are identical: NA -> 0, any non-zero -> 1.
+    ref_clean <- terra::ifel(is.na(ref_k) | ref_k == 0, 0, 1)
     
     ref_vals_all <- as.vector(ref_clean[])
     ref_vals     <- ref_vals_all[valid]  # solo donde hay patch_id

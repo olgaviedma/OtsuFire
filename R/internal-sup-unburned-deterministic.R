@@ -149,6 +149,12 @@ build_unburned_from_deterministic_decisions <- function(
   random_patch_size_cells = 3,
   overwrite_output = TRUE,
   out_gpkg = NULL,
+  internal_decisions_path = NULL,
+  # §N+25 (2026-06-05): the burnable mask is now a wired RUN input. The caller
+  # (supervised-pools.R) threads config$inputs$burnable_mask down here. When
+  # NULL we fall back to EXACTLY the historical convention path below, so
+  # behaviour is byte-identical when nothing is passed.
+  burnable_mask_path = NULL,
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
@@ -165,17 +171,28 @@ build_unburned_from_deterministic_decisions <- function(
     )
   }
 
-  burnable_mask_path <- file.path(
-    data_base, "Corine_Masks",
-    paste0("burneable_mask_binary_corine_", corine_year, "_ETRS89.tif")
-  )
+  if (is.null(burnable_mask_path) || !nzchar(burnable_mask_path)) {
+    burnable_mask_path <- file.path(
+      data_base, "Corine_Masks",
+      paste0("burneable_mask_binary_corine_", corine_year, "_ETRS89.tif")
+    )
+  }
 
   deterministic_dir <- file.path(
     data_base, "Results", target_year, result_name, "DETERMINISTIC", scenario_name
   )
-  internal_decisions_gpkg <- file.path(
-    deterministic_dir, "05_DECISIONS", "internal_decisions.gpkg"
-  )
+  # The deterministic decisions GPKG is the user-supplied path, period. No
+  # convention reconstruction. (deterministic_dir is still used below to
+  # derive the default UNBURNED output location only.)
+  if (is.null(internal_decisions_path) || !nzchar(internal_decisions_path)) {
+    stop(
+      "build_unburned_from_deterministic_decisions() requires ",
+      "'internal_decisions_path' (the deterministic decisions .gpkg). ",
+      "There is no convention-based fallback.",
+      call. = FALSE
+    )
+  }
+  internal_decisions_gpkg <- internal_decisions_path
   out_dir <- file.path(deterministic_dir, "UNBURNED")
   if (is.null(out_gpkg)) {
     out_gpkg <- file.path(

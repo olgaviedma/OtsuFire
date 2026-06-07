@@ -97,7 +97,7 @@ The supervised workflow reads `05_DECISIONS/internal_decisions.gpkg` as its cano
 
 - deterministic `keep` polygons become the starting burned pool,
 - deterministic `review` polygons become the main ambiguous scoring pool,
-- deterministic `drop` polygons contribute to the canonical baseline negative pool under `deterministic_direct`.
+- deterministic `drop` polygons contribute to the negative pool (the contextual-exclusion and spectral-hard-negative buckets of the `all_sources` taxonomy).
 
 For that reason, the deterministic stage is both an operational annual product and the structural foundation of the supervised stage.
 

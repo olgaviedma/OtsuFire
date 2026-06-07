@@ -119,8 +119,19 @@ process_otsu_rasters_ <- function(
     burnable_mask = NULL       # terra::SpatRaster 0/1
 ) {
   
+  # AS07 (0.5.0): planar geometry. This function relies on s2 = FALSE for its
+  # st_make_valid / st_intersection work. The historical top-level
+  # `sf::sf_use_s2(FALSE)` in R/*.R is DEAD in installed-package mode (top-level
+  # R/ expressions run at build time, not at library() load time), so the
+  # setting only took effect under pkgload::load_all(). Scope it locally and
+  # restore the caller's previous value on exit so the planar setting is
+  # guaranteed in BOTH modes without permanently contaminating the session.
+  old_s2 <- sf::sf_use_s2()
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  suppressMessages(sf::sf_use_s2(FALSE))
+
   output_format <- match.arg(output_format, choices = c("shp", "geojson"))
-  
+
   if (missing(output_dir) || is.null(output_dir)) stop("'output_dir' must be provided.")
   if (missing(python_exe) || is.null(python_exe)) stop("'python_exe' must be provided.")
   if (missing(gdal_polygonize_script) || is.null(gdal_polygonize_script)) stop("'gdal_polygonize_script' must be provided.")

@@ -90,3 +90,105 @@ test_that("AS03: dispatcher exposes UNB_LEGACY_RANDOM_SEED + 3 max_s_patch caps"
   expect_equal(b$UNB_LEGACY_REVIEW_MAX_S_PATCH, 0.40)
   expect_equal(b$UNB_LEGACY_KEEP_MAX_S_PATCH, 0.65)
 })
+
+# --- B2 (2026-06-05) -------------------------------------------------
+# Plumb the previously-pinned UNB_* / UNB_LEGACY_* shared negative-pool
+# params and the supervised run prefixes from config$options into the
+# dispatcher bindings, defaulting to the orchestrator's hardcoded values.
+test_that("B2: dispatcher binding defaults match the orchestrator hardcoded values", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  ci <- mk_tmp_tif_tp()
+  id <- mk_tmp_gpkg_tp()
+  cfg <- build_supervised_burned_config(
+    scenario = "balanced",
+    internal_decisions = id,
+    change_index = ci,
+    target_year = 2025,
+    output_dir = tempdir()
+    # no options -> every key must fall back to its historical default
+  )
+  fn <- get(".of_supervised_engine_bindings", envir = asNamespace("OtsuFire"))
+  b <- fn(cfg)
+
+  # shared deterministic-decision negative params
+  expect_equal(b$UNB_EXCL_BUFFER_M, 500)
+  expect_equal(b$UNB_N_RANDOM_CELLS, 1500)
+  expect_equal(b$UNB_RANDOM_RBR_Q, 0.50)
+  expect_equal(b$UNB_RANDOM_SEED, 42)
+  expect_equal(b$UNB_RANDOM_PATCH_SIZE_CELLS, 3)
+
+  # supervised run prefixes
+  expect_identical(b$prefix_oof_base, "patch")
+  expect_identical(b$prefix_base, "patch_certified")
+
+  # remaining legacy Otsu params
+  expect_equal(b$UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE, 0)
+  expect_equal(b$UNB_LEGACY_MIN_PIXELS, 8)
+  expect_equal(b$UNB_LEGACY_BUFFERS_M, 90)
+  expect_equal(b$UNB_LEGACY_CORE_THR, 0.60)
+  expect_equal(b$UNB_LEGACY_ALPHA_BOOST, 0.25)
+  expect_equal(b$UNB_LEGACY_MIN_BASE_BOOST, 0.35)
+  expect_equal(b$UNB_LEGACY_DIST_POWER, 1)
+  expect_equal(b$UNB_LEGACY_KEEP_HI, 0.45)
+  expect_equal(b$UNB_LEGACY_DROP_LO, 0.15)
+  expect_equal(b$UNB_LEGACY_EXCL_BUFFER_M, 0)
+  expect_equal(b$UNB_LEGACY_MIN_AREA_HA, 0)
+})
+
+test_that("B2: config$options overrides reach the dispatcher bindings", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  ci <- mk_tmp_tif_tp()
+  id <- mk_tmp_gpkg_tp()
+  cfg <- build_supervised_burned_config(
+    scenario = "balanced",
+    internal_decisions = id,
+    change_index = ci,
+    target_year = 2025,
+    output_dir = tempdir(),
+    options = list(
+      unb_excl_buffer_m           = 750,
+      unb_n_random_cells          = 2000L,
+      unb_random_rbr_q            = 0.60,
+      unb_random_seed             = 7L,
+      unb_random_patch_size_cells = 5L,
+      prefix_oof_base             = "patchX",
+      prefix_base                 = "patchX_certified",
+      legacy_min_otsu_threshold_value = 1,
+      legacy_min_pixels           = 12L,
+      legacy_buffers_m            = 120,
+      legacy_core_thr             = 0.70,
+      legacy_alpha_boost          = 0.30,
+      legacy_min_base_boost       = 0.40,
+      legacy_dist_power           = 2,
+      legacy_keep_hi              = 0.50,
+      legacy_drop_lo              = 0.20,
+      legacy_excl_buffer_m        = 30,
+      legacy_min_area_ha          = 5
+    )
+  )
+  fn <- get(".of_supervised_engine_bindings", envir = asNamespace("OtsuFire"))
+  b <- fn(cfg)
+
+  expect_equal(b$UNB_EXCL_BUFFER_M, 750)
+  expect_equal(b$UNB_N_RANDOM_CELLS, 2000L)
+  expect_equal(b$UNB_RANDOM_RBR_Q, 0.60)
+  expect_equal(b$UNB_RANDOM_SEED, 7L)
+  expect_equal(b$UNB_RANDOM_PATCH_SIZE_CELLS, 5L)
+  expect_identical(b$prefix_oof_base, "patchX")
+  expect_identical(b$prefix_base, "patchX_certified")
+  expect_equal(b$UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE, 1)
+  expect_equal(b$UNB_LEGACY_MIN_PIXELS, 12L)
+  expect_equal(b$UNB_LEGACY_BUFFERS_M, 120)
+  expect_equal(b$UNB_LEGACY_CORE_THR, 0.70)
+  expect_equal(b$UNB_LEGACY_ALPHA_BOOST, 0.30)
+  expect_equal(b$UNB_LEGACY_MIN_BASE_BOOST, 0.40)
+  expect_equal(b$UNB_LEGACY_DIST_POWER, 2)
+  expect_equal(b$UNB_LEGACY_KEEP_HI, 0.50)
+  expect_equal(b$UNB_LEGACY_DROP_LO, 0.20)
+  expect_equal(b$UNB_LEGACY_EXCL_BUFFER_M, 30)
+  expect_equal(b$UNB_LEGACY_MIN_AREA_HA, 5)
+})

@@ -661,7 +661,13 @@
     save_outputs = isTRUE(write_outputs),
     out_dir = phase1_dir,
     prefix = paste0("BA_", config$target_year, "_", config$run_name),
-    driver = "GPKG", overwrite = TRUE, quiet = TRUE,
+    # B2 (2026-06-05): honor the user's overwrite flag at the intermediate
+    # scoring writer (previously hardcoded TRUE, clobbering existing
+    # intermediates even when overwrite = FALSE). The engine maps this onto
+    # `delete_dsn = overwrite`, so overwrite = FALSE refuses to clobber an
+    # existing GPKG instead of silently replacing it. overwrite = TRUE is
+    # byte-identical to the previous behaviour.
+    driver = "GPKG", overwrite = isTRUE(overwrite), quiet = TRUE,
     save_splits = FALSE, suppress_sf_warnings = TRUE
   )
   stage2_over <- config$options$stage2_overrides
@@ -686,9 +692,14 @@
   #   1. caller-supplied keep_pool -> use it;
   #   2. otherwise NULL -> Stage 5b builds the pool locally from the
   #      current year (local fallback, still intact).
+  score_stage2_keep_review <- stage2_keep_review
+  if (!is.null(stage2_clean) && inherits(stage2_clean, "sf") && nrow(stage2_clean) > 0L) {
+    score_stage2_keep_review <- stage2_clean
+  }
+
   # ---- Stage 5b: score_rbr_keep_classes (internal) ------------------
   rbr_args_internal <- list(
-    polys_sf = stage2_keep_review,
+    polys_sf = score_stage2_keep_review,
     rbr_rast = rbr_rast,
     out_dir  = phase2_dir,
     prefix   = paste0("internal_", config$target_year, "_",
@@ -705,7 +716,9 @@
     fill_na_corine = TRUE, fill_na_corine_value = 0,
     chunk_size = 500, verbose = TRUE,
     save_outputs = isTRUE(write_outputs),
-    driver = "GPKG", overwrite = TRUE, quiet = TRUE,
+    # B2 (2026-06-05): honor overwrite at the internal RBR scoring writer
+    # (was hardcoded TRUE). overwrite = TRUE reproduces prior behaviour.
+    driver = "GPKG", overwrite = isTRUE(overwrite), quiet = TRUE,
     save_splits = FALSE, arcgis_fix = TRUE, output_epsg = 3035,
     random_seed = as.integer(config$deterministic_seed) + 2000L
   )
@@ -730,7 +743,9 @@
                            config$run_name, "_p10_p5"),
         keep_pool = res_internal_rbr$keep_pool,
         save_outputs = isTRUE(write_outputs),
-        driver = "GPKG", overwrite = TRUE, quiet = TRUE,
+        # B2 (2026-06-05): honor overwrite at the external/reference RBR
+        # scoring writer (was hardcoded TRUE).
+        driver = "GPKG", overwrite = isTRUE(overwrite), quiet = TRUE,
         random_seed = as.integer(config$deterministic_seed) + 3000L
       ),
       error = function(e) {
@@ -779,7 +794,12 @@
       out_dir = dirname(target),
       gpkg_name = basename(target),
       layer_name = "internal_decisions",
-      overwrite = TRUE, quiet = TRUE,
+      # B2 (2026-06-05): forward the user's flag. The explicit guard above
+      # already refuses to clobber when overwrite = FALSE (and unlinks the
+      # prior file when TRUE), so this is byte-identical to the prior
+      # hardcoded TRUE for both flag values; passing the flag keeps the
+      # writer consistent with the other scoring writers.
+      overwrite = isTRUE(overwrite), quiet = TRUE,
       arcgis_fix = TRUE, output_epsg = 3035
     )
   }
@@ -805,12 +825,24 @@
     if (isTRUE(write_outputs) && !is.null(reference_decisions_sf) &&
         nrow(reference_decisions_sf) > 0L) {
       target <- config$output_routes$reference_decisions
+      dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
+      # B2 (2026-06-05): mirror the internal_decisions no-clobber guard so the
+      # reference decisions writer honors overwrite consistently. overwrite =
+      # TRUE unlinks + rewrites exactly as before; overwrite = FALSE refuses
+      # to clobber an existing file.
+      if (file.exists(target)) {
+        if (!isTRUE(overwrite)) {
+          stop("reference_decisions already exists and overwrite = FALSE: ",
+               target, call. = FALSE)
+        }
+        try(unlink(target, force = TRUE), silent = TRUE)
+      }
       reference_decisions_path <- engine$write_canonical_decision_output(
         sf_obj = reference_decisions_sf,
         out_dir = dirname(target),
         gpkg_name = basename(target),
         layer_name = "reference_decisions",
-        overwrite = TRUE, quiet = TRUE,
+        overwrite = isTRUE(overwrite), quiet = TRUE,
         arcgis_fix = TRUE, output_epsg = 3035
       )
     }

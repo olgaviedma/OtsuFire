@@ -33,7 +33,7 @@ The handoff and current code support the following status summary.
 | Deterministic standalone runtime | Canonical annual runtime |
 | Deterministic package bridge | Validated against standalone when using the same frozen registry and explicit `deterministic_seed` |
 | Supervised standalone runtime | Canonical annual runtime |
-| Supervised package bridge | Validated against standalone (2026-04-16) under frozen deterministic inputs and `deterministic_direct` strategy; exact match across 1002 polygons |
+| Supervised package bridge | Validated against standalone (2026-04-16) under frozen deterministic inputs; exact match across 1002 polygons (that historical validation used the since-removed `deterministic_direct` strategy; `all_sources` is now the only mode) |
 | `validate_fire_maps()` | Public workflow-independent validation utility shared by deterministic validation and compatible post-threshold supervised outputs |
 | `MASTER_FIRE_MAPPING_PIPELINE.R` | Useful convenience orchestrator, but not a neutral benchmark for supervised defaults |
 
@@ -42,7 +42,7 @@ The handoff and current code support the following status summary.
 Two project-state details are especially important for interpretation.
 
 - Scenario-specific registries now live under `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`. The old shared `_REGISTRIES` path is legacy fallback, not the preferred current design.
-- The active supervised runtime supports two unburned-pool strategies. `deterministic_direct` is the canonical baseline used for benchmarking and equivalence validation. `all_sources` is the operational default used in production runs, implementing a four-bucket unburned taxonomy with independent capacity caps (Phase 2A, closed 2026-04-17). A registry-based positive-pool augmentation design (`historical_registry_augment`) was fully specified and then rejected on 2026-04-17; it is not an active or pending feature.
+- The active supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly: a four-bucket unburned taxonomy with independent capacity caps (Phase 2A, closed 2026-04-17). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05. A registry-based positive-pool augmentation design (`historical_registry_augment`) was fully specified and then rejected on 2026-04-17; it is not an active or pending feature.
 
 ## Canonical Inputs And Outputs
 
@@ -52,7 +52,7 @@ The main stages, inputs, and outputs supported by the current sources are summar
 |---|---|---|---|
 | Change-index mosaic | Annual raster tiles, AOI mask, naming pattern, output directory | Annual masked mosaic GeoTIFF plus run diagnostics | Common raster base for deterministic and supervised stages |
 | Deterministic stage | Annual mosaic, CORINE and burnable support, ecoregions, hotspots when available, previous-year burned reference when available, optional registry keep pool | `internal_decisions.gpkg`, optional `reference_decisions.gpkg`, validation workbook, timing log | Canonical annual polygon universe and first decision layer |
-| One-year supervised stage | `internal_decisions`, main change index, delayed change index when available, terrain and land-cover support layers, hotspots when available, scenario-specific registry path | Pools, folds, features, OOF diagnostics, final model, `final_map_full`, `final_map`, burned-like registry products | Probability-based annual refinement and multiyear registry maintenance |
+| One-year supervised stage | `internal_decisions`, main change index, delayed change index when available, terrain and land-cover support layers, hotspots when available | Pools, folds, features, OOF diagnostics, final model, `final_map_full`, `final_map` | Probability-based annual refinement |
 
 ## Reproducibility Conventions
 

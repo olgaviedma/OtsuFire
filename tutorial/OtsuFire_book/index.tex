@@ -1,0 +1,1256 @@
+% Options for packages loaded elsewhere
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+  british,
+  a4paper,
+]{scrbook}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{5}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+% Make \paragraph and \subparagraph free-standing
+\makeatletter
+\ifx\paragraph\undefined\else
+  \let\oldparagraph\paragraph
+  \renewcommand{\paragraph}{
+    \@ifstar
+      \xxxParagraphStar
+      \xxxParagraphNoStar
+  }
+  \newcommand{\xxxParagraphStar}[1]{\oldparagraph*{#1}\mbox{}}
+  \newcommand{\xxxParagraphNoStar}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+  \let\oldsubparagraph\subparagraph
+  \renewcommand{\subparagraph}{
+    \@ifstar
+      \xxxSubParagraphStar
+      \xxxSubParagraphNoStar
+  }
+  \newcommand{\xxxSubParagraphStar}[1]{\oldsubparagraph*{#1}\mbox{}}
+  \newcommand{\xxxSubParagraphNoStar}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+\makeatother
+
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{241,243,245}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{#1}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.40,0.45,0.13}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\BuiltInTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{#1}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.13,0.47,0.30}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{#1}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{\textit{#1}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\ExtensionTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{#1}}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.28,0.35,0.67}{#1}}
+\newcommand{\ImportTok}[1]{\textcolor[rgb]{0.00,0.46,0.62}{#1}}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{#1}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{#1}}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.68,0.00,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{\textcolor[rgb]{0.00,0.23,0.31}{#1}}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.13,0.47,0.30}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.13,0.47,0.30}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.07,0.07,0.07}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.13,0.47,0.30}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.37,0.37,0.37}{\textit{#1}}}
+
+\usepackage{longtable,booktabs,array}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+
+
+
+\ifLuaTeX
+\usepackage[bidi=basic,shorthands=off]{babel}
+\else
+\usepackage[bidi=default,shorthands=off]{babel}
+\fi
+\ifLuaTeX
+  \usepackage{selnolig} % disable illegal ligatures
+\fi
+
+
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+
+
+ 
+
+
+\makeatletter
+\@ifpackageloaded{tcolorbox}{}{\usepackage[skins,breakable]{tcolorbox}}
+\@ifpackageloaded{fontawesome5}{}{\usepackage{fontawesome5}}
+\definecolor{quarto-callout-color}{HTML}{909090}
+\definecolor{quarto-callout-note-color}{HTML}{0758E5}
+\definecolor{quarto-callout-important-color}{HTML}{CC1914}
+\definecolor{quarto-callout-warning-color}{HTML}{EB9113}
+\definecolor{quarto-callout-tip-color}{HTML}{00A047}
+\definecolor{quarto-callout-caution-color}{HTML}{FC5300}
+\definecolor{quarto-callout-color-frame}{HTML}{acacac}
+\definecolor{quarto-callout-note-color-frame}{HTML}{4582ec}
+\definecolor{quarto-callout-important-color-frame}{HTML}{d9534f}
+\definecolor{quarto-callout-warning-color-frame}{HTML}{f0ad4e}
+\definecolor{quarto-callout-tip-color-frame}{HTML}{02b875}
+\definecolor{quarto-callout-caution-color-frame}{HTML}{fd7e14}
+\makeatother
+\makeatletter
+\@ifpackageloaded{bookmark}{}{\usepackage{bookmark}}
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\AtBeginDocument{%
+\ifdefined\contentsname
+  \renewcommand*\contentsname{Table of contents}
+\else
+  \newcommand\contentsname{Table of contents}
+\fi
+\ifdefined\listfigurename
+  \renewcommand*\listfigurename{List of Figures}
+\else
+  \newcommand\listfigurename{List of Figures}
+\fi
+\ifdefined\listtablename
+  \renewcommand*\listtablename{List of Tables}
+\else
+  \newcommand\listtablename{List of Tables}
+\fi
+\ifdefined\figurename
+  \renewcommand*\figurename{Figure}
+\else
+  \newcommand\figurename{Figure}
+\fi
+\ifdefined\tablename
+  \renewcommand*\tablename{Table}
+\else
+  \newcommand\tablename{Table}
+\fi
+}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\floatstyle{ruled}
+\@ifundefined{c@chapter}{\newfloat{codelisting}{h}{lop}}{\newfloat{codelisting}{h}{lop}[chapter]}
+\floatname{codelisting}{Listing}
+\newcommand*\listoflistings{\listof{codelisting}{List of Listings}}
+\makeatother
+\makeatletter
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={OtsuFire: an R tutorial},
+  pdfauthor={Natalia Quintero, Olga Viedma, Jose Manuel Moreno},
+  pdflang={en-GB},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+
+\title{OtsuFire: an R tutorial}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{Annual burned-area mapping with an interpretable two-stage
+framework}
+\author{Natalia Quintero, Olga Viedma, Jose Manuel Moreno}
+\date{2026-06-01}
+\begin{document}
+\frontmatter
+\maketitle
+
+\renewcommand*\contentsname{Table of contents}
+{
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+
+\mainmatter
+\bookmarksetup{startatroot}
+
+\chapter*{Welcome}\label{welcome}
+\addcontentsline{toc}{chapter}{Welcome}
+
+\markboth{Welcome}{Welcome}
+
+This is a tutorial for the \textbf{OtsuFire} R package: an open-source
+framework for annual burned-area mapping from medium-resolution optical
+imagery, built around a hybrid, intrinsically interpretable design.
+
+The tutorial is organised as a progressive walkthrough of the framework.
+The first chapter describes OtsuFire conceptually: what it is, what gap
+it fills, how the workflow is organised in two stages, and what input
+information it relies on. The following chapters then open up the
+accompanying R package, illustrating each stage of the framework with
+worked examples that the reader can run on their own data.
+
+The book is written as a living document. Chapters are added and revised
+as the tutorial grows, so its structure reflects the current state of
+the OtsuFire framework rather than a fixed reference.
+
+\begin{tcolorbox}[enhanced jigsaw, arc=.35mm, bottomrule=.15mm, bottomtitle=1mm, breakable, colback=white, colbacktitle=quarto-callout-note-color!10!white, colframe=quarto-callout-note-color-frame, coltitle=black, left=2mm, leftrule=.75mm, opacityback=0, opacitybacktitle=0.6, rightrule=.15mm, title=\textcolor{quarto-callout-note-color}{\faInfo}\hspace{0.5em}{Note}, titlerule=0mm, toprule=.15mm, toptitle=1mm]
+
+The package is distributed through CRAN as \texttt{OtsuFire}.
+Installation instructions and the first worked example are provided in
+the \emph{How to use the OtsuFire package} chapter.
+
+\end{tcolorbox}
+
+\bookmarksetup{startatroot}
+
+\chapter{OtsuFire}\label{otsufire}
+
+\section{Introduction}\label{introduction}
+
+This tutorial introduces the OtsuFire framework through the accompanying
+R package of the same name. The package provides a reference
+implementation of the framework, and the tutorial uses it as a practical
+entry point: each conceptual step of the workflow is explained alongside
+the package function that realises it, so that users learn the method
+and the tool together.
+
+OtsuFire targets annual burned-area mapping from medium-resolution
+optical imagery in settings where externally compiled training labels
+are sparse, inconsistent or unavailable. Its design priority is
+interpretability. Every candidate burned patch produced by the workflow
+carries the chain of decisions that led to its classification, which
+allows users to trace, audit and reproduce each mapping outcome. The
+framework is therefore positioned within the family of intrinsically
+interpretable GeoAI approaches, in which interpretability is built into
+the mapping architecture rather than added afterwards through post-hoc
+explanations.
+
+The following sections describe the framework conceptually and summarise
+the input information it relies on. The remainder of the tutorial then
+opens up the package step by step, illustrating how each component of
+the framework is configured and executed in practice.
+
+\section{OtsuFire}\label{otsufire-1}
+
+OtsuFire is a hybrid, two-stage framework for annual burned-area
+mapping. It is built on the premise that burned-area cartography
+benefits from combining an unsupervised stage with a transparent
+rule-based core with a supervised stage layer, rather than from either
+approach in isolation. The rule-based core delineates a candidate-patch
+universe from spectral-change information using Otsu thresholding and
+explicit spatial rules. The supervised stage, when applied, refines this
+candidate universe by assigning a burned probability to each patch using
+a supervised classifier trained on labels derived from the rule-based
+core itself.
+
+The two stages are hierarchical rather than interchangeable. The
+unsupervised phase produces the candidate universe and the auditable
+evidence supporting each polygon-level decision. The supervised phase
+operates on that same universe, re-ranking patches according to their
+probability of being burned, but never redefining the set of candidates.
+As a result, the supervised layer remains dependent on, and constrained
+by, the spatial decisions of the unsupervised stage. This separation
+allows the framework to combine the traceability of explicit rules with
+the discriminative power of supervised learning, without inheriting the
+full dependence of conventional supervised pipelines on externally
+compiled training data.
+
+The framework was developed and calibrated for the Iberian Peninsula
+using the Relativised Burn Ratio (RBR) as the primary spectral-change
+index, but its architecture is index-agnostic and transferable.
+Application to other regions, sensors or spectral-change metrics
+requires recalibration of vegetation stratum-specific thresholds, growth
+parameters and lower bounds, but does not require changes to the
+structure of the workflow.
+
+\subsection{Unsupervised stage}\label{unsupervised-stage}
+
+The unsupervised stage transforms an annual spectral-change composite
+into an auditable layer of candidate burned patches, each assigned to
+one of three classes that summarise the strength of the evidence
+supporting it.
+
+The stage begins with stratified Otsu thresholding. The RBR distribution
+is partitioned into strata defined by the intersection of vegetation
+classes and ecoregions, so that thresholds reflect the local background
+reflectance, land cover and fire effects rather than a global histogram.
+For each stratum, Otsu's method selects the threshold that maximises
+between-class variance in the change-index distribution, and this
+stratum-specific threshold is then constrained by global and
+class-specific lower bounds to prevent over-permissive detection in
+spectrally noisy strata.
+
+Pixels above the resulting seed threshold are treated as high-confidence
+burned seeds and are subsequently expanded into contiguous patches
+through region growing under a more permissive class-specific growth
+threshold. Patches are retained only when they contain a minimum number
+of seed pixels, which ensures that every mapped patch is anchored to a
+robust spectral core and limits the influence of isolated false
+positives. The result is an initial raster of seed-grown candidate
+patches.
+
+Each candidate patch is then evaluated by a sequence of rule-based
+filters. The first filter assesses internal support, including seed
+evidence, minimum patch plausibility, dominance of burnable land-cover
+classes and the absence of excessive missing or non-burnable cover. The
+second filter evaluates external corroboration using active-fire
+hotspots when reliable hotspot detections are available for the target
+year; when they are not, this filter is recorded as not applied, so that
+pre-hotspot years are not penalised for the absence of an input that
+does not exist for them. The third filter assesses spectral consistency
+by comparing each candidate patch against a burned-like reference
+distribution derived from high-confidence patches. Together, these
+filters integrate into a canonical unsupervised decision layer that
+assigns every patch to one of three classes: \textbf{keep}, indicating
+high-confidence burned candidates with strong internal or external
+support; \textbf{drop}, indicating likely unburned areas or false
+positives; and \textbf{review}, indicating ambiguous cases often
+associated with haze, shadows, drought-stressed herbaceous systems,
+land-water adjacency effects or other persistent spectral confounders.
+
+All filter outcomes, support metrics and stratification metadata are
+stored as polygon-level attributes. The full decision path of every
+filter is logged at the patch level, so that the reasons behind each
+keep, drop or review assignment can be reconstructed afterwards. This is
+what makes the rule-based unsupervised phase auditable: the
+candidate-patch layer is not only a map but also a record of the spatial
+reasoning that produced it.
+
+\subsection{Supervised phase}\label{supervised-phase}
+
+The supervised phase refines the candidate-patch universe produced by
+the unsupervised phase by assigning a burned probability to each patch.
+Its purpose is to reduce residual omission and commission errors in
+spectrally ambiguous settings without redefining the candidate universe
+and without depending on externally compiled training labels.
+
+Training pools are derived directly from the unsupervised output.
+High-confidence keep patches form the burned training pool, while the
+unburned training pool is assembled from complementary negative
+evidence: drop patches rejected by the rule-based filters, random
+background samples drawn from burnable areas subject to exclusion
+buffers around keep patches and previously burned areas, and
+lower-confidence Otsu-derived candidates. The contribution of each
+source is capped relative to the burned pool to prevent class imbalance
+from biasing the classifier. Review patches are withheld from training,
+since they represent the cases for which unsupervised evidence is
+ambiguous, and are scored only at inference time.
+
+Patch-level predictors are aggregated from pixel-level information
+within each candidate patch. They include spectral summaries derived
+from the immediate and, where applicable, delayed change-index
+composites; contextual descriptors capturing vegetation composition,
+ecoregion membership, elevation and slope; and active-fire variables
+describing the presence, intensity and spatial configuration of hotspot
+detections when these are available. Day-of-year metrics associated with
+the selected change-index observations are included as temporal
+predictors.
+
+The supervised classifier is implemented as a gradient-boosted tree
+model (XGBoost) and trained under spatial block cross-validation to
+mitigate spatial autocorrelation between training and validation splits.
+The framework supports three complementary modelling variants. The
+\textbf{one-year} variant trains and evaluates within the same calendar
+year and provides the operational within-year baseline. The
+\textbf{out-of-fold} variant uses spatial cross-validation within a
+single year to produce predictions for which each patch has been scored
+by a model that did not see it during training. The
+\textbf{leave-one-year-out} variant trains on the remaining years and
+predicts on the held-out year, providing the strict cross-year transfer
+estimate.
+
+Because the unsupervised phase has already filtered out most non-burned
+candidates, the supervised stage operates on a pre-curated universe in
+which the majority of patches are already plausible burned candidates.
+Predicted probabilities therefore tend to concentrate close to one, with
+the operational decision threshold also lying closer to one than to the
+conventional 0.5 cut-off. The supervised stage in OtsuFire is
+accordingly best understood as a re-ranker over a pre-curated candidate
+set rather than as an independent burned-area classifier.
+
+\section{Inputs}\label{inputs}
+
+OtsuFire derives patch-level information from six conceptual input
+groups that jointly support the unsupervised filters and the supervised
+predictors. These groups are summarised below; their formal definition,
+sources and detailed variable lists are provided in the Supplementary
+Material of the OtsuFire paper.
+
+\textbf{Immediate change-index composites} are derived from
+medium-resolution optical imagery (Landsat for earlier years and
+Sentinel-2 from 2018 onwards), restricted to the summer fire season (1
+June to 30 September). For each target year, pre- and post-fire
+composites are obtained by selecting the minimum NBR observation within
+predefined temporal windows, and RBR is computed from these temporally
+matched composites as the primary measure of spectral change. The
+framework is index-agnostic; RBR is used as the calibration reference
+for the implementation described here.
+
+\textbf{Delayed change-index composites} are derived from autumn-winter
+observations following the target fire season. They capture persistence
+of the spectral change beyond the immediate post-fire period and help to
+separate true burned areas from transient signals such as crop
+harvesting or seasonal drying.
+
+\textbf{Land-cover information} is taken from CORINE Land Cover
+products, reclassified into eleven ecologically relevant classes. These
+classes underpin three workflow components: the burnable mask that
+constrains both candidate generation and validation, the vegetation
+strata used in combination with ecoregions to stratify Otsu
+thresholding, and the categorical vegetation predictors used in the
+supervised phase. Ecoregions are derived from the WWF Terrestrial
+Ecoregions of the World and are intersected with the vegetation classes
+to define ecologically homogeneous units for stratification.
+
+\textbf{Topographic information} comprises elevation and slope derived
+from a 30-metre digital elevation model. Topography is used as a set of
+continuous predictors in the supervised phase, where it helps account
+for systematic variations in illumination, moisture availability and
+vegetation structure, but it is not used to stratify the unsupervised
+phase.
+
+\textbf{Active-fire information} is obtained from satellite hotspot
+detections, available reliably from 1995 onwards. Hotspot variables
+describe temporal availability, spatial presence, intensity statistics
+and contextual signals at the patch level, and play two complementary
+roles in the workflow. In the unsupervised phase, they contribute to the
+external corroboration filter, providing additional evidence for
+candidate patches intersected by, or located near, retained detections.
+In the supervised phase, they enter as patch-level predictors alongside
+spectral, contextual and temporal variables. Because hotspot
+availability varies across the historical period, a
+temporal-availability flag is used to distinguish years with reliable
+detections from periods predating the products, allowing the workflow to
+remain applicable to the full historical time series.
+
+\textbf{Day-of-year metrics} summarise the acquisition dates of the
+observations selected for the immediate and delayed change-index
+composites. They are included as temporal predictors in the supervised
+phase.
+
+\textbf{Reference burned-area perimeters} from official national,
+regional and pan-European sources (EFFIS) are used exclusively for
+validation. They are treated as independent external benchmarks rather
+than as training labels, and are filtered to the summer fire season and
+to burnable land-cover classes to ensure comparability with the mapped
+outputs.
+
+\bookmarksetup{startatroot}
+
+\chapter{How to use the OtsuFire
+package}\label{how-to-use-the-otsufire-package}
+
+\section{Introduction: installing and loading the
+package}\label{introduction-installing-and-loading-the-package}
+
+OtsuFire is distributed through the Comprehensive R Archive Network
+(CRAN) and can be installed in the same way as any other R package. The
+recommended workflow is to install it once from the official source,
+attach it at the start of each session, and then call its functions
+directly.
+
+To install the package, run the following inside an R session connected
+to the internet:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{install.packages}\NormalTok{(}\StringTok{"OtsuFire"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+This command pulls the latest released version from CRAN, together with
+its mandatory dependencies, and places the package in the default user
+library. Once installed, the package is loaded for use with:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{library}\NormalTok{(OtsuFire)}
+\end{Highlighting}
+\end{Shaded}
+
+Two ancillary R packages are used throughout the tutorial alongside
+OtsuFire. The \texttt{sf} package provides vector data handling, while
+\texttt{terra} provides raster handling. Both are loaded explicitly at
+the top of each worked example:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{library}\NormalTok{(sf)}
+\FunctionTok{library}\NormalTok{(terra)}
+\end{Highlighting}
+\end{Shaded}
+
+Some processing steps in the unsupervised workflow delegate raster and
+vector operations to external GDAL utilities (\texttt{gdal\_polygonize},
+\texttt{gdalwarp}, \texttt{ogr2ogr}) and to a Python interpreter. These
+tools must be available on the host system; OtsuFire is then told where
+to find them through configuration paths set later in this tutorial.
+
+Once OtsuFire is installed and loaded, the package is ready to use. The
+next sections illustrate its workflow through worked examples, starting
+with the unsupervised stage.
+
+\section{Unsupervised stage}\label{unsupervised-stage-1}
+
+The unsupervised stage of OtsuFire converts an annual spectral-change
+composite into an auditable layer of candidate burned patches. It is
+composed of three operational steps: building a configuration object
+that bundles inputs and parameters, detecting candidate patches through
+stratified Otsu thresholding and seed-and-grow segmentation, and scoring
+those candidates through rule-based filtering into the canonical keep /
+review / drop decision layer.
+
+The behaviour of the stage depends on the data available for the target
+year. In particular, the second rule-based filter relies on active-fire
+hotspot detections, which are only available from 1995 onwards. The
+tutorial therefore separates two cases: years with active hotspot
+support, where the full rule-based system can be applied, and earlier
+years, for which the workflow records the hotspot filter as not applied
+rather than as failed. The first case is illustrated below; earlier
+years will be covered in a later subsection.
+
+\subsection{Year with active hotspot
+support}\label{year-with-active-hotspot-support}
+
+This worked example runs the unsupervised stage for a target year in
+which active-fire hotspot detections are available. The example uses
+\textbf{2025} as the target year and the \textbf{balanced} detection
+preset, but the same script applies to any year from 1995 onwards by
+changing the two user settings at the top of the user-settings block.
+
+The example is presented here as a self-contained draft. Subsequent
+revisions of this chapter will execute it block by block and discuss the
+intermediate outputs in detail.
+
+\subsubsection{Package load}\label{package-load}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{suppressPackageStartupMessages}\NormalTok{(\{}
+  \FunctionTok{library}\NormalTok{(OtsuFire)}
+  \FunctionTok{library}\NormalTok{(sf)}
+  \FunctionTok{library}\NormalTok{(terra)}
+\NormalTok{\})}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{User settings}\label{user-settings}
+
+Choose one target year and one detection preset. Everything below is
+derived from these two values.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{base\_dir }\OtherTok{\textless{}{-}} \StringTok{"C:/00\_NATALIA\_DOCTORADO/00\_FIRE\_MAPPING"}
+
+\NormalTok{target\_year }\OtherTok{\textless{}{-}} \DecValTok{2025}\NormalTok{L}
+
+\NormalTok{selected\_preset }\OtherTok{\textless{}{-}} \StringTok{"balanced"}
+
+\CommentTok{\# Typical options:}
+\CommentTok{\#   "permissive"}
+\CommentTok{\#   "balanced"}
+\CommentTok{\#   "conservative"}
+\CommentTok{\#   "very\_conservative"}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Tool paths}\label{tool-paths}
+
+These paths are needed because the unsupervised workflow delegates some
+raster and vector operations to external GDAL / Python tools.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{python\_exe }\OtherTok{\textless{}{-}} \StringTok{"C:/Users/Olga.Viedma/AppData/Local/Anaconda3/python.exe"}
+\NormalTok{gdal\_polygonize\_script }\OtherTok{\textless{}{-}} \StringTok{"C:/Users/Olga.Viedma/AppData/Local/Anaconda3/Scripts/gdal\_polygonize.py"}
+\NormalTok{gdalwarp\_path }\OtherTok{\textless{}{-}} \StringTok{"C:/Users/Olga.Viedma/AppData/Local/Anaconda3/Library/bin/gdalwarp.exe"}
+\NormalTok{ogr2ogr\_exe }\OtherTok{\textless{}{-}} \StringTok{"C:/Users/Olga.Viedma/AppData/Local/Anaconda3/Library/bin/ogr2ogr.exe"}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Derived year settings}\label{derived-year-settings}
+
+CORINE land-cover maps are not available every year. This block maps the
+target fire year to the corresponding CORINE reference year used by the
+workflow.
+
+Rule:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{target\_year\ \textless{}\ 2000} → CORINE 1990
+\item
+  \texttt{2000–2005} → CORINE 2000
+\item
+  \texttt{2006–2011} → CORINE 2006
+\item
+  \texttt{2012–2017} → CORINE 2012
+\item
+  \texttt{2018\ onwards} → CORINE 2018
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{corine\_year }\OtherTok{\textless{}{-}} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{2000}\NormalTok{) \{}
+  \DecValTok{1990}
+\NormalTok{\} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{2006}\NormalTok{) \{}
+  \DecValTok{2000}
+\NormalTok{\} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{2012}\NormalTok{) \{}
+  \DecValTok{2006}
+\NormalTok{\} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{2018}\NormalTok{) \{}
+  \DecValTok{2012}
+\NormalTok{\} }\ControlFlowTok{else}\NormalTok{ \{}
+  \DecValTok{2018}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Input paths}\label{input-paths}
+
+These are the spatial inputs consumed by the unsupervised workflow.
+
+Some paths depend on \texttt{target\_year} (\texttt{change\_index},
+\texttt{reference\_burned\_map}, \texttt{previous\_year\_burned},
+\texttt{hotspots}). Others depend on \texttt{corine\_year}
+(\texttt{vegetation\_map}, \texttt{burnable\_mask}).
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{change\_index }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Imagery/Composites\_90m/Min\_Min"}\NormalTok{,}
+  \FunctionTok{paste0}\NormalTok{(}\StringTok{"MinMin\_"}\NormalTok{, target\_year, }\StringTok{"\_mosaic\_res90m.tif"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{vegetation\_map }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Corine\_Masks"}\NormalTok{,}
+  \FunctionTok{paste0}\NormalTok{(}\StringTok{"CLC\_"}\NormalTok{, corine\_year, }\StringTok{"\_peninsula.tif"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{burnable\_mask }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Corine\_Masks"}\NormalTok{,}
+  \FunctionTok{paste0}\NormalTok{(}
+    \StringTok{"burneable\_mask\_binary\_corine"}\NormalTok{,}
+    \FunctionTok{substr}\NormalTok{(corine\_year, }\DecValTok{3}\NormalTok{, }\DecValTok{4}\NormalTok{),}
+    \StringTok{"\_wgs84.tif"}
+\NormalTok{  )}
+\NormalTok{)}
+
+\NormalTok{reference\_burned\_map }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Fires/Validation\_fires\_burneable\_verano"}\NormalTok{,}
+  \FunctionTok{paste0}\NormalTok{(}\StringTok{"Effis\_CA\_"}\NormalTok{, target\_year, }\StringTok{"\_maskKeep\_summer.shp"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{previous\_year\_burned }\OtherTok{\textless{}{-}} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textgreater{}} \DecValTok{1985}\NormalTok{) \{}
+  \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{    base\_dir,}
+    \StringTok{"1\_DATA/Fires/Validation\_fires"}\NormalTok{,}
+    \FunctionTok{paste0}\NormalTok{(}\StringTok{"Effis\_CA\_"}\NormalTok{, target\_year }\SpecialCharTok{{-}} \DecValTok{1}\NormalTok{, }\StringTok{".shp"}\NormalTok{)}
+\NormalTok{  )}
+\NormalTok{\} }\ControlFlowTok{else}\NormalTok{ \{}
+  \ConstantTok{NULL}
+\NormalTok{\}}
+
+\NormalTok{hotspots }\OtherTok{\textless{}{-}} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{1995}\NormalTok{) \{}
+  \ConstantTok{NULL}
+\NormalTok{\} }\ControlFlowTok{else}\NormalTok{ \{}
+  \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{    base\_dir,}
+    \StringTok{"1\_DATA/Hotspots"}\NormalTok{,}
+    \FunctionTok{paste0}\NormalTok{(}\StringTok{"hotspots\_iberia\_"}\NormalTok{, target\_year, }\StringTok{".geojson"}\NormalTok{)}
+\NormalTok{  )}
+\NormalTok{\}}
+
+\NormalTok{ecoregion\_shapefile\_path }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Ecoregion/ecoregiones\_olson.shp"}
+\NormalTok{)}
+
+\NormalTok{peninsula\_shapefile\_path }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Borders/Iberian\_Peninsula.shp"}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Quick input check}\label{quick-input-check}
+
+This check verifies that the expected files exist before the workflow
+starts. Optional inputs (\texttt{previous\_year\_burned} may be NULL for
+1985, \texttt{hotspots} is NULL for pre-hotspot years) are excluded from
+the failure condition.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{paths\_to\_check }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{(}
+  \AttributeTok{change\_index =}\NormalTok{ change\_index,}
+  \AttributeTok{vegetation\_map =}\NormalTok{ vegetation\_map,}
+  \AttributeTok{burnable\_mask =}\NormalTok{ burnable\_mask,}
+  \AttributeTok{reference\_burned\_map =}\NormalTok{ reference\_burned\_map,}
+  \AttributeTok{previous\_year\_burned =}\NormalTok{ previous\_year\_burned,}
+  \AttributeTok{hotspots =}\NormalTok{ hotspots,}
+  \AttributeTok{ecoregion\_shapefile\_path =}\NormalTok{ ecoregion\_shapefile\_path,}
+  \AttributeTok{peninsula\_shapefile\_path =}\NormalTok{ peninsula\_shapefile\_path}
+\NormalTok{)}
+
+\NormalTok{input\_check }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(}
+  \AttributeTok{input =} \FunctionTok{names}\NormalTok{(paths\_to\_check),}
+  \AttributeTok{path =} \FunctionTok{vapply}\NormalTok{(}
+\NormalTok{    paths\_to\_check,}
+    \ControlFlowTok{function}\NormalTok{(x) }\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{is.null}\NormalTok{(x)) }\ConstantTok{NA\_character\_} \ControlFlowTok{else}\NormalTok{ x,}
+    \FunctionTok{character}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\NormalTok{  ),}
+  \AttributeTok{exists =} \FunctionTok{vapply}\NormalTok{(}
+\NormalTok{    paths\_to\_check,}
+    \ControlFlowTok{function}\NormalTok{(x) }\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{is.null}\NormalTok{(x)) }\ConstantTok{NA} \ControlFlowTok{else} \FunctionTok{file.exists}\NormalTok{(x),}
+    \FunctionTok{logical}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\NormalTok{  )}
+\NormalTok{)}
+
+\NormalTok{input\_check}
+
+\NormalTok{required\_inputs }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}
+  \StringTok{"change\_index"}\NormalTok{,}
+  \StringTok{"vegetation\_map"}\NormalTok{,}
+  \StringTok{"burnable\_mask"}\NormalTok{,}
+  \StringTok{"reference\_burned\_map"}\NormalTok{,}
+  \StringTok{"ecoregion\_shapefile\_path"}\NormalTok{,}
+  \StringTok{"peninsula\_shapefile\_path"}
+\NormalTok{)}
+
+\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{any}\NormalTok{(}\SpecialCharTok{!}\NormalTok{input\_check}\SpecialCharTok{$}\NormalTok{exists[input\_check}\SpecialCharTok{$}\NormalTok{input }\SpecialCharTok{\%in\%}\NormalTok{ required\_inputs])) \{}
+  \FunctionTok{stop}\NormalTok{(}\StringTok{"Some required input files are missing. Check input\_check."}\NormalTok{)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Detection presets}\label{detection-presets}
+
+These are the main detection knobs.
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{seed\_threshold} --- minimum change value needed to create a
+  burned seed pixel. Higher values mean fewer seeds and more
+  conservative detection.
+\item
+  \texttt{growth\_delta} --- amount by which the grow threshold is
+  relaxed relative to the seed threshold. Higher values mean easier
+  patch expansion.
+\item
+  \texttt{minimum\_growth\_threshold} --- absolute floor below which
+  region growing is not allowed to go. Higher values mean tighter, more
+  conservative patch growth.
+\item
+  \texttt{minimum\_seed\_pixels} --- minimum number of seed pixels
+  needed to keep a candidate component. Higher values remove small
+  isolated detections.
+\item
+  \texttt{*\_by\_vegetation} --- per-class overrides for the global
+  values above, used when one global value is too coarse and vegetation
+  types need different behaviour.
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{preset\_params }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{(}
+
+  \AttributeTok{permissive =} \FunctionTok{list}\NormalTok{(}
+    \AttributeTok{expected =} \StringTok{"Highest sensitivity. More candidate burned patches, but higher commission risk."}\NormalTok{,}
+    \AttributeTok{detect\_params =} \FunctionTok{list}\NormalTok{(}
+      \AttributeTok{seed\_threshold =} \DecValTok{300}\NormalTok{,}
+      \AttributeTok{growth\_delta =} \DecValTok{100}\NormalTok{,}
+      \AttributeTok{minimum\_growth\_threshold =} \DecValTok{200}\NormalTok{,}
+      \AttributeTok{minimum\_seed\_pixels =} \DecValTok{20}\NormalTok{L,}
+      \AttributeTok{seed\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{300}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{350}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{500}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{440}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{650}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{450}
+\NormalTok{      ),}
+      \AttributeTok{growth\_delta\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{100}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{50}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{100}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{120}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{100}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{100}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{100}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{10}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{15}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{15}
+\NormalTok{      ),}
+      \AttributeTok{minimum\_growth\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{200}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{300}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{250}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{210}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{220}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{220}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{220}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{380}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{550}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{380}
+\NormalTok{      )}
+\NormalTok{    )}
+\NormalTok{  ),}
+
+  \AttributeTok{balanced =} \FunctionTok{list}\NormalTok{(}
+    \AttributeTok{expected =} \StringTok{"Default operational compromise between omission and commission."}\NormalTok{,}
+    \AttributeTok{detect\_params =} \FunctionTok{list}\NormalTok{(}
+      \AttributeTok{seed\_threshold =} \DecValTok{310}\NormalTok{,}
+      \AttributeTok{growth\_delta =} \DecValTok{90}\NormalTok{,}
+      \AttributeTok{minimum\_growth\_threshold =} \DecValTok{240}\NormalTok{,}
+      \AttributeTok{minimum\_seed\_pixels =} \DecValTok{30}\NormalTok{L,}
+      \AttributeTok{seed\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{350}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{420}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{380}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{320}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{320}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{320}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{320}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{500}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{470}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{670}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{480}
+\NormalTok{      ),}
+      \AttributeTok{growth\_delta\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{70}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{20}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{40}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{100}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{85}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{85}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{85}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{10}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{10}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{10}
+\NormalTok{      ),}
+      \AttributeTok{minimum\_growth\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{280}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{360}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{300}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{230}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{240}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{240}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{240}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{560}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{400}
+\NormalTok{      )}
+\NormalTok{    )}
+\NormalTok{  ),}
+
+  \AttributeTok{conservative =} \FunctionTok{list}\NormalTok{(}
+    \AttributeTok{expected =} \StringTok{"More restrictive. Reduces false positives and over{-}expansion, with increased omission risk."}\NormalTok{,}
+    \AttributeTok{detect\_params =} \FunctionTok{list}\NormalTok{(}
+      \AttributeTok{seed\_threshold =} \DecValTok{400}\NormalTok{,}
+      \AttributeTok{growth\_delta =} \DecValTok{50}\NormalTok{,}
+      \AttributeTok{minimum\_growth\_threshold =} \DecValTok{320}\NormalTok{,}
+      \AttributeTok{minimum\_seed\_pixels =} \DecValTok{50}\NormalTok{L,}
+      \AttributeTok{seed\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{470}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{400}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{520}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{500}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{700}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{520}
+\NormalTok{      ),}
+      \AttributeTok{growth\_delta\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{50}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{10}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{20}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{60}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{50}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{50}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{50}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{5}
+\NormalTok{      ),}
+      \AttributeTok{minimum\_growth\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{330}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{370}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{330}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{330}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{330}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{330}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{450}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{580}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{430}
+\NormalTok{      )}
+\NormalTok{    )}
+\NormalTok{  ),}
+
+  \AttributeTok{very\_conservative =} \FunctionTok{list}\NormalTok{(}
+    \AttributeTok{expected =} \FunctionTok{paste}\NormalTok{(}
+      \StringTok{"Intermediate anti{-}banding preset for problematic historical years."}\NormalTok{,}
+      \StringTok{"Designed to suppress Landsat banding artefacts while preserving"}\NormalTok{,}
+      \StringTok{"medium and large real burned patches."}
+\NormalTok{    ),}
+    \AttributeTok{detect\_params =} \FunctionTok{list}\NormalTok{(}
+      \AttributeTok{seed\_threshold =} \DecValTok{430}\NormalTok{,}
+      \AttributeTok{growth\_delta =} \DecValTok{40}\NormalTok{,}
+      \AttributeTok{minimum\_growth\_threshold =} \DecValTok{350}\NormalTok{,}
+      \AttributeTok{minimum\_seed\_pixels =} \DecValTok{70}\NormalTok{L,}
+      \AttributeTok{seed\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{480}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{450}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{430}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{430}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{540}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{520}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{720}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{540}
+\NormalTok{      ),}
+      \AttributeTok{growth\_delta\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{40}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{10}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{20}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{45}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{40}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{40}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{40}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{5}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{5}
+\NormalTok{      ),}
+      \AttributeTok{minimum\_growth\_threshold\_by\_vegetation =} \FunctionTok{c}\NormalTok{(}
+        \StringTok{"1"} \OtherTok{=} \DecValTok{360}\NormalTok{, }\StringTok{"2"} \OtherTok{=} \DecValTok{400}\NormalTok{, }\StringTok{"3"} \OtherTok{=} \DecValTok{370}\NormalTok{, }\StringTok{"4"} \OtherTok{=} \DecValTok{360}\NormalTok{, }\StringTok{"5"} \OtherTok{=} \DecValTok{360}\NormalTok{,}
+        \StringTok{"6"} \OtherTok{=} \DecValTok{360}\NormalTok{, }\StringTok{"7"} \OtherTok{=} \DecValTok{360}\NormalTok{, }\StringTok{"8"} \OtherTok{=} \DecValTok{470}\NormalTok{, }\StringTok{"9"} \OtherTok{=} \DecValTok{450}\NormalTok{, }\StringTok{"10"} \OtherTok{=} \DecValTok{600}\NormalTok{, }\StringTok{"11"} \OtherTok{=} \DecValTok{450}
+\NormalTok{      )}
+\NormalTok{    )}
+\NormalTok{  )}
+\NormalTok{)}
+
+\ControlFlowTok{if}\NormalTok{ (}\SpecialCharTok{!}\NormalTok{selected\_preset }\SpecialCharTok{\%in\%} \FunctionTok{names}\NormalTok{(preset\_params)) \{}
+  \FunctionTok{stop}\NormalTok{(}
+    \StringTok{"selected\_preset must be one of: "}\NormalTok{,}
+    \FunctionTok{paste}\NormalTok{(}\FunctionTok{names}\NormalTok{(preset\_params), }\AttributeTok{collapse =} \StringTok{", "}\NormalTok{)}
+\NormalTok{  )}
+\NormalTok{\}}
+
+\NormalTok{preset\_params[[selected\_preset]]}\SpecialCharTok{$}\NormalTok{expected}
+\NormalTok{preset\_params[[selected\_preset]]}\SpecialCharTok{$}\NormalTok{detect\_params}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Refinement parameters}\label{refinement-parameters}
+
+These are the current package defaults written explicitly so the user
+can see them and modify them if needed.
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{aoi\_buffer\_m} --- buffer used around AOI boundaries during
+  refinement to reduce edge artefacts.
+\item
+  \texttt{omission\_buffer\_m} --- reserved cleanup buffer for
+  omission-side adjustments. Zero means no extra omission buffer.
+\item
+  \texttt{minimum\_detected\_area\_m2} --- minimum polygon area kept
+  after refinement. Very permissive by default.
+\item
+  \texttt{merge\_overlaps} --- if TRUE, overlapping refined polygons are
+  merged.
+\item
+  \texttt{merge\_overlaps\_buffer\_m} --- optional buffer before overlap
+  merging. Zero means merge only direct overlaps.
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{refine\_params }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{(}
+  \AttributeTok{aoi\_buffer\_m =} \DecValTok{5000}\NormalTok{,}
+  \AttributeTok{omission\_buffer\_m =} \DecValTok{0}\NormalTok{,}
+  \AttributeTok{minimum\_detected\_area\_m2 =} \DecValTok{10}\NormalTok{,}
+  \AttributeTok{merge\_overlaps =} \ConstantTok{TRUE}\NormalTok{,}
+  \AttributeTok{merge\_overlaps\_buffer\_m =} \DecValTok{0}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Scoring parameters}\label{scoring-parameters}
+
+These parameters belong to the deterministic scoring stage itself.
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{support\_buffer\_m} --- buffer used when checking local
+  contextual support around candidate patches.
+\item
+  \texttt{previous\_fire\_exclusion\_buffer\_m} --- buffer around
+  previous-year burns used to detect temporal conflicts.
+\item
+  \texttt{previous\_fire\_cleanup\_buffer\_m} --- cleanup buffer used
+  after overlap removal with previous-year burns.
+\item
+  \texttt{minimum\_remaining\_area\_m2} --- minimum area a patch must
+  retain after temporal cleanup.
+\item
+  \texttt{reference\_buffer\_m} --- buffer used when comparing against
+  support-reference areas in scoring.
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{scoring\_params }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{(}
+  \AttributeTok{support\_buffer\_m =} \DecValTok{0}\NormalTok{,}
+  \AttributeTok{previous\_fire\_exclusion\_buffer\_m =} \DecValTok{90}\NormalTok{,}
+  \AttributeTok{previous\_fire\_cleanup\_buffer\_m =} \DecValTok{90}\NormalTok{,}
+  \AttributeTok{minimum\_remaining\_area\_m2 =} \DecValTok{20000}\NormalTok{,}
+  \AttributeTok{reference\_buffer\_m =} \DecValTok{90}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Output paths}\label{output-paths}
+
+\texttt{output\_dir} must be the root results folder only. The package
+itself appends
+\texttt{\textless{}target\_year\textgreater{}/DETERMINISTIC/\textless{}run\_name\textgreater{}},
+so neither \texttt{target\_year} nor \texttt{DETERMINISTIC} should be
+added manually.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{output\_dir }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Results"}
+\NormalTok{)}
+
+\NormalTok{run\_name }\OtherTok{\textless{}{-}} \FunctionTok{paste0}\NormalTok{(target\_year, }\StringTok{"\_"}\NormalTok{, selected\_preset)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Step 1. Build the unsupervised
+configuration}\label{step-1.-build-the-unsupervised-configuration}
+
+At this stage the workflow is only being prepared. Nothing is detected
+or scored yet. This is the right moment to inspect the selected preset,
+the parameter groups and the input paths.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{cfg }\OtherTok{\textless{}{-}} \FunctionTok{build\_burned\_mapping\_config}\NormalTok{(}
+  \AttributeTok{change\_index =}\NormalTok{ change\_index,}
+  \AttributeTok{vegetation\_map =}\NormalTok{ vegetation\_map,}
+  \AttributeTok{burnable\_mask =}\NormalTok{ burnable\_mask,}
+  \AttributeTok{hotspots =}\NormalTok{ hotspots,}
+  \AttributeTok{previous\_year\_burned =}\NormalTok{ previous\_year\_burned,}
+  \AttributeTok{reference\_burned\_map =}\NormalTok{ reference\_burned\_map,}
+  \AttributeTok{target\_year =}\NormalTok{ target\_year,}
+  \AttributeTok{output\_dir =}\NormalTok{ output\_dir,}
+  \AttributeTok{run\_name =}\NormalTok{ run\_name,}
+  \AttributeTok{detect\_params =}\NormalTok{ preset\_params[[selected\_preset]]}\SpecialCharTok{$}\NormalTok{detect\_params,}
+  \AttributeTok{refine\_params =}\NormalTok{ refine\_params,}
+  \AttributeTok{scoring\_params =}\NormalTok{ scoring\_params,}
+  \AttributeTok{options =} \FunctionTok{list}\NormalTok{(}
+    \AttributeTok{ecoregion\_shapefile\_path =}\NormalTok{ ecoregion\_shapefile\_path,}
+    \AttributeTok{peninsula\_shapefile\_path =}\NormalTok{ peninsula\_shapefile\_path,}
+    \AttributeTok{change\_index\_validation =} \FunctionTok{list}\NormalTok{(}
+      \AttributeTok{expected\_nodata =} \SpecialCharTok{{-}}\DecValTok{9999}\NormalTok{,}
+      \AttributeTok{lower\_cap =} \SpecialCharTok{{-}}\DecValTok{1000}\NormalTok{,}
+      \AttributeTok{cap\_below =} \ConstantTok{TRUE}\NormalTok{,}
+      \AttributeTok{check\_finite =} \ConstantTok{TRUE}
+\NormalTok{    )}
+\NormalTok{  )}
+\NormalTok{)}
+
+\NormalTok{cfg}\SpecialCharTok{$}\NormalTok{tool\_paths}\SpecialCharTok{$}\NormalTok{python\_exe }\OtherTok{\textless{}{-}}\NormalTok{ python\_exe}
+\NormalTok{cfg}\SpecialCharTok{$}\NormalTok{tool\_paths}\SpecialCharTok{$}\NormalTok{gdal\_polygonize\_script }\OtherTok{\textless{}{-}}\NormalTok{ gdal\_polygonize\_script}
+\NormalTok{cfg}\SpecialCharTok{$}\NormalTok{tool\_paths}\SpecialCharTok{$}\NormalTok{gdalwarp\_path }\OtherTok{\textless{}{-}}\NormalTok{ gdalwarp\_path}
+\NormalTok{cfg}\SpecialCharTok{$}\NormalTok{tool\_paths}\SpecialCharTok{$}\NormalTok{ogr2ogr\_exe }\OtherTok{\textless{}{-}}\NormalTok{ ogr2ogr\_exe}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Step 2. Detect candidate burned
+patches}\label{step-2.-detect-candidate-burned-patches}
+
+Detection uses the chosen preset. The preset controls how easily burned
+seed pixels are created, how far candidate patches can grow, and how
+much behaviour differs by vegetation / land-cover class.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{det }\OtherTok{\textless{}{-}} \FunctionTok{detect\_burned\_patches}\NormalTok{(}
+  \AttributeTok{config =}\NormalTok{ cfg,}
+  \AttributeTok{write\_outputs =} \ConstantTok{TRUE}\NormalTok{,}
+  \AttributeTok{overwrite =} \ConstantTok{TRUE}
+\NormalTok{)}
+
+\NormalTok{grown\_candidates\_path }\OtherTok{\textless{}{-}}\NormalTok{ det}\SpecialCharTok{$}\NormalTok{grown\_patches\_path}
+\NormalTok{refined\_candidates\_path }\OtherTok{\textless{}{-}}\NormalTok{ det}\SpecialCharTok{$}\NormalTok{refined\_patches\_path}
+
+\FunctionTok{stopifnot}\NormalTok{(}\FunctionTok{file.exists}\NormalTok{(grown\_candidates\_path))}
+\FunctionTok{stopifnot}\NormalTok{(}\FunctionTok{file.exists}\NormalTok{(refined\_candidates\_path))}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Step 3. Same-year
+scoring}\label{step-3.-same-year-scoring}
+
+This is the native deterministic scoring behaviour. Setting
+\texttt{keep\_pool\ =\ NULL} tells the package to use its built-in
+same-year local fallback.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{scored }\OtherTok{\textless{}{-}} \FunctionTok{score\_burned\_patches}\NormalTok{(}
+  \AttributeTok{burned\_candidates =}\NormalTok{ refined\_candidates\_path,}
+  \AttributeTok{config =}\NormalTok{ cfg,}
+  \AttributeTok{keep\_pool =} \ConstantTok{NULL}\NormalTok{,}
+  \AttributeTok{write\_outputs =} \ConstantTok{TRUE}\NormalTok{,}
+  \AttributeTok{overwrite =} \ConstantTok{TRUE}
+\NormalTok{)}
+
+\NormalTok{scored}\SpecialCharTok{$}\NormalTok{internal\_decisions\_path}
+\NormalTok{scored}\SpecialCharTok{$}\NormalTok{keep\_pool\_summary}
+
+\FunctionTok{table}\NormalTok{(scored}\SpecialCharTok{$}\NormalTok{internal\_decisions}\SpecialCharTok{$}\NormalTok{class\_final, }\AttributeTok{useNA =} \StringTok{"ifany"}\NormalTok{)}
+\FunctionTok{table}\NormalTok{(scored}\SpecialCharTok{$}\NormalTok{internal\_decisions}\SpecialCharTok{$}\NormalTok{filter\_3, }\AttributeTok{useNA =} \StringTok{"ifany"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{Validation}\label{validation}
+
+The keep polygons from the scored output can be compared against an
+external reference burned-area dataset using
+\texttt{validate\_fire\_maps()}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{validation\_dir }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(cfg}\SpecialCharTok{$}\NormalTok{output\_routes}\SpecialCharTok{$}\NormalTok{base, }\StringTok{"VALIDATION\_KEEP\_ONLY"}\NormalTok{)}
+\FunctionTok{dir.create}\NormalTok{(validation\_dir, }\AttributeTok{recursive =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{showWarnings =} \ConstantTok{FALSE}\NormalTok{)}
+
+\NormalTok{keep\_path }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(validation\_dir, }\StringTok{"keep\_only.gpkg"}\NormalTok{)}
+
+\NormalTok{keep\_only }\OtherTok{\textless{}{-}}\NormalTok{ scored}\SpecialCharTok{$}\NormalTok{internal\_decisions[}
+\NormalTok{  scored}\SpecialCharTok{$}\NormalTok{internal\_decisions}\SpecialCharTok{$}\NormalTok{class\_final }\SpecialCharTok{==} \StringTok{"keep"}\NormalTok{,}
+\NormalTok{]}
+
+\NormalTok{keep\_only }\OtherTok{\textless{}{-}}\NormalTok{ sf}\SpecialCharTok{::}\FunctionTok{st\_zm}\NormalTok{(keep\_only, }\AttributeTok{drop =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{what =} \StringTok{"ZM"}\NormalTok{)}
+\NormalTok{keep\_only }\OtherTok{\textless{}{-}}\NormalTok{ sf}\SpecialCharTok{::}\FunctionTok{st\_make\_valid}\NormalTok{(keep\_only)}
+\NormalTok{keep\_only }\OtherTok{\textless{}{-}}\NormalTok{ keep\_only[}\SpecialCharTok{!}\NormalTok{sf}\SpecialCharTok{::}\FunctionTok{st\_is\_empty}\NormalTok{(keep\_only), , drop }\OtherTok{=} \ConstantTok{FALSE}\NormalTok{]}
+
+\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{nrow}\NormalTok{(keep\_only) }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) \{}
+  \FunctionTok{stop}\NormalTok{(}\StringTok{"No polygons with class\_final == \textquotesingle{}keep\textquotesingle{} were found. Validation cannot continue."}\NormalTok{)}
+\NormalTok{\}}
+
+\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{file.exists}\NormalTok{(keep\_path)) }\FunctionTok{unlink}\NormalTok{(keep\_path, }\AttributeTok{force =} \ConstantTok{TRUE}\NormalTok{)}
+
+\NormalTok{sf}\SpecialCharTok{::}\FunctionTok{st\_write}\NormalTok{(}
+\NormalTok{  keep\_only,}
+\NormalTok{  keep\_path,}
+  \AttributeTok{layer =} \StringTok{"keep\_only"}\NormalTok{,}
+  \AttributeTok{quiet =} \ConstantTok{TRUE}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{validation\_mask\_path }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  validation\_dir,}
+  \StringTok{"support"}\NormalTok{,}
+  \StringTok{"validation\_mask\_geometry\_only.gpkg"}
+\NormalTok{)}
+
+\FunctionTok{dir.create}\NormalTok{(}\FunctionTok{dirname}\NormalTok{(validation\_mask\_path), }\AttributeTok{recursive =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{showWarnings =} \ConstantTok{FALSE}\NormalTok{)}
+
+\NormalTok{validation\_mask\_shapefile }\OtherTok{\textless{}{-}} \ControlFlowTok{if}\NormalTok{ (target\_year }\SpecialCharTok{\textless{}} \DecValTok{2000}\NormalTok{) \{}
+  \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{    base\_dir,}
+    \StringTok{"1\_DATA/Mask\_StudyArea"}\NormalTok{,}
+    \FunctionTok{paste0}\NormalTok{(}\StringTok{"mask\_3035\_"}\NormalTok{, target\_year, }\StringTok{".shp"}\NormalTok{)}
+\NormalTok{  )}
+\NormalTok{\} }\ControlFlowTok{else}\NormalTok{ \{}
+  \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{    base\_dir,}
+    \StringTok{"1\_DATA/Mask\_StudyArea"}\NormalTok{,}
+    \StringTok{"mask\_Peninsula\_3035.shp"}
+\NormalTok{  )}
+\NormalTok{\}}
+
+\NormalTok{mask\_sf }\OtherTok{\textless{}{-}}\NormalTok{ sf}\SpecialCharTok{::}\FunctionTok{st\_read}\NormalTok{(validation\_mask\_shapefile, }\AttributeTok{quiet =} \ConstantTok{TRUE}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+\NormalTok{  sf}\SpecialCharTok{::}\FunctionTok{st\_zm}\NormalTok{(}\AttributeTok{drop =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{what =} \StringTok{"ZM"}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+\NormalTok{  sf}\SpecialCharTok{::}\FunctionTok{st\_make\_valid}\NormalTok{()}
+
+\NormalTok{mask\_sf }\OtherTok{\textless{}{-}}\NormalTok{ mask\_sf[}\SpecialCharTok{!}\NormalTok{sf}\SpecialCharTok{::}\FunctionTok{st\_is\_empty}\NormalTok{(mask\_sf), }\DecValTok{0}\NormalTok{, drop }\OtherTok{=} \ConstantTok{FALSE}\NormalTok{]}
+\NormalTok{mask\_sf}\SpecialCharTok{$}\NormalTok{mask\_id }\OtherTok{\textless{}{-}} \FunctionTok{seq\_len}\NormalTok{(}\FunctionTok{nrow}\NormalTok{(mask\_sf))}
+
+\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{nrow}\NormalTok{(mask\_sf) }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) \{}
+  \FunctionTok{stop}\NormalTok{(}\StringTok{"The validation mask is empty after geometry cleaning."}\NormalTok{)}
+\NormalTok{\}}
+
+\ControlFlowTok{if}\NormalTok{ (}\FunctionTok{file.exists}\NormalTok{(validation\_mask\_path)) }\FunctionTok{unlink}\NormalTok{(validation\_mask\_path, }\AttributeTok{force =} \ConstantTok{TRUE}\NormalTok{)}
+
+\NormalTok{sf}\SpecialCharTok{::}\FunctionTok{st\_write}\NormalTok{(}
+\NormalTok{  mask\_sf,}
+\NormalTok{  validation\_mask\_path,}
+  \AttributeTok{layer =} \StringTok{"mask"}\NormalTok{,}
+  \AttributeTok{quiet =} \ConstantTok{TRUE}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{strata\_raster }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Corine\_Masks/STRATA"}\NormalTok{,}
+  \FunctionTok{paste0}\NormalTok{(}\StringTok{"strata\_CLC\_"}\NormalTok{, corine\_year, }\StringTok{"\_res30.tif"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{strata\_lut }\OtherTok{\textless{}{-}} \FunctionTok{file.path}\NormalTok{(}
+\NormalTok{  base\_dir,}
+  \StringTok{"1\_DATA/Corine\_Masks/LUT/lut\_full\_strata8\_v1.csv"}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{val }\OtherTok{\textless{}{-}} \FunctionTok{validate\_fire\_maps}\NormalTok{(}
+  \AttributeTok{input\_shapefile =}\NormalTok{ keep\_path,}
+  \AttributeTok{ref\_shapefile =}\NormalTok{ reference\_burned\_map,}
+  \AttributeTok{mask\_shapefile =}\NormalTok{ validation\_mask\_path,}
+  \AttributeTok{burnable\_raster =}\NormalTok{ burnable\_mask,}
+  \AttributeTok{year\_target =}\NormalTok{ target\_year,}
+  \AttributeTok{validation\_dir =}\NormalTok{ validation\_dir,}
+  \AttributeTok{force\_reprocess\_ref =} \ConstantTok{FALSE}\NormalTok{,}
+  \AttributeTok{force\_reprocess\_pred =} \ConstantTok{FALSE}\NormalTok{,}
+  \AttributeTok{metrics\_type =} \StringTok{"all"}\NormalTok{,}
+  \AttributeTok{dissolve\_ref\_by =} \StringTok{"id"}\NormalTok{,}
+  \AttributeTok{dissolve\_input\_by =} \ConstantTok{NULL}\NormalTok{,}
+  \AttributeTok{strata\_raster =}\NormalTok{ strata\_raster,}
+  \AttributeTok{strata\_lut =}\NormalTok{ strata\_lut,}
+  \AttributeTok{observability\_raster =}\NormalTok{ change\_index,}
+  \AttributeTok{ref\_end\_doy\_col =} \StringTok{"end\_doy"}\NormalTok{,}
+  \AttributeTok{ref\_start\_doy\_col =} \StringTok{"start\_doy"}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{tcolorbox}[enhanced jigsaw, arc=.35mm, bottomrule=.15mm, bottomtitle=1mm, breakable, colback=white, colbacktitle=quarto-callout-note-color!10!white, colframe=quarto-callout-note-color-frame, coltitle=black, left=2mm, leftrule=.75mm, opacityback=0, opacitybacktitle=0.6, rightrule=.15mm, title=\textcolor{quarto-callout-note-color}{\faInfo}\hspace{0.5em}{Note}, titlerule=0mm, toprule=.15mm, toptitle=1mm]
+
+This subsection is currently a draft. Later revisions will execute these
+steps interactively and discuss the intermediate outputs.
+
+\end{tcolorbox}
+
+
+\backmatter
+
+
+\end{document}

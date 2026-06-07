@@ -49,21 +49,27 @@
 #'   * `block_id`, `fold_rep1`, `fold_rep2` are NOT features — they are
 #'     fold-assignment metadata consumed by the OOF wrapper. They must
 #'     survive in the GPKG but must NOT enter the model matrix.
-#'   * No ecoregion features (`eco_*`) in this build. The current
-#'     production config (`use_ecoregions = FALSE`) does not produce
-#'     them. A future build that enables them must add them to this
-#'     whitelist explicitly.
-#'   * Hotspot block (13 columns): the `hotspot_available`,
-#'     `hs_support_present`, `hs_no_support_when_available` and
-#'     `hs_only_buffer_support` flags are integers; their `_isNA`
-#'     companions are typically degenerate (no NAs) and the matrix
-#'     builder skips them. The non-flag hotspot columns
+#'   * No ecoregion features (`eco_*`) in this build. Ecoregions were
+#'     removed entirely from the supervised phase on 2026-06-05; they
+#'     belong to the deterministic delineation stage only.
+#'   * Hotspot block (13 columns): `hotspot_available` is a real
+#'     structural flag (0 = no MODIS hotspot data for this year, 1 =
+#'     available) and is ALWAYS observed (never NA). When the year has
+#'     no hotspot data (`hotspot_available == 0`), the features
+#'     extractor's `out_nodata()` emits NA (not -9999, fixed in B5,
+#'     2026-06-06) for every MEASURED hotspot quantity
 #'     (`hs_in_poly`, `hs_in_buffer`, `hs_used_n`, `hs_min_dist_m`,
-#'     `hs_frp_sum`, `hs_frp_max`, `hs_conf_mean`, `hs_hiConf_n`) DO
-#'     get `_isNA` companions when the upstream year has no MODIS
-#'     hotspot data available (`hotspot_available == 0` in the
-#'     features extractor); those companions encode "no hotspots data
-#'     available" as a real signal.
+#'     `hs_frp_sum`, `hs_frp_max`, `hs_conf_mean`, `hs_hiConf_n`) and
+#'     for the support-existence flags `hs_support_present` and
+#'     `hs_only_buffer_support` (undefined without data). Those NAs are
+#'     turned into `<col>_isNA = 1` companions by the matrix builder
+#'     and the value is imputed to the column median, so "no hotspots
+#'     data available" is encoded as a real signal and a model trained
+#'     on hotspot-years follows its learned missing direction when
+#'     applied to a hotspot-less year. `hs_no_support_when_available`
+#'     stays 0 when `hotspot_available == 0` (its semantics are
+#'     conditioned on availability), so its `_isNA` companion is
+#'     degenerate and the builder skips it.
 #'   * `hs_any` is a binary helper feature synthesised in
 #'     `internal-sup-create-matrix.R` from `hs_used_n > 0`. It is
 #'     included in the whitelist for historical parity with prior

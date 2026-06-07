@@ -122,6 +122,34 @@
 #'   bucket caps the FINAL model uses to the outer-train negatives of each fold;
 #'   `"full"` uses all outer-train rows. Ignored on the legacy path.
 #'
+#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
+#' The methodological / training-control arguments of this function (the four
+#' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
+#' `oof_*` / `final_*` training knobs, `training_protocol`, `oof_sampling`) are
+#' DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
+#' methodological parameter is [build_supervised_burned_config()]
+#' (`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
+#' truth). The shims are resolved ONLY at this public boundary and the resolved
+#' scalars are what flow downstream.
+#'
+#' Behaviour of a non-`NULL` function-level override:
+#' \itemize{
+#'   \item over a CANONICAL DEFAULT field -> the override is applied and a
+#'     deprecation warning of stable class `"otsufire_deprecated_param"` is
+#'     emitted, naming the parameter and pointing at the builder;
+#'   \item over an EXPLICIT builder-user value that DIFFERS -> a hard error
+#'     (two explicit, incompatible sources are never silently reconciled);
+#'   \item equal to the cfg value -> applied silently.
+#' }
+#' Each resolution is recorded (cfg value / requested override / resolved value /
+#' provenance label) on `cfg$resolved_params_provenance` and in the returned run
+#' object's `resolved_params_provenance` field.
+#'
+#' REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
+#' future minor version. Migrate callers to
+#' `build_supervised_burned_config(<param>=...)`; the warning-free canonical
+#' path is the builder.
+#'
 #' @section Gate 1B (2026-06-07) cfg single source of truth:
 #' The supervised methodological / training-control parameters now live in
 #' exactly ONE place: the cfg object built by
@@ -256,37 +284,53 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
          paste(names(.dots), collapse = ", "), call. = FALSE)
   }
 
-  # Gate 1B: resolve every methodological param from cfg, honouring explicit
-  # non-NULL overrides (override precedence: explicit arg > cfg). The cfg always
-  # carries fully-resolved + validated train_control / model_params, so the
-  # default (all-NULL) path reads exactly the canonical values with no literal
-  # numbers duplicated in this function.
+  # Gate 1B + Precision 1: resolve every methodological param from cfg at THIS
+  # public boundary ONLY. The CANONICAL way to set these is
+  # build_supervised_burned_config(); the function-level arguments are
+  # DEPRECATED COMPATIBILITY SHIMS. .of_resolve_methodological_shim() folds each
+  # override into the resolved value here and (a) errors on a conflict with an
+  # explicit builder-user value, (b) warns (class "otsufire_deprecated_param")
+  # when an override supersedes a canonical default, (c) records a provenance
+  # row. Downstream (dispatcher / orchestrator / OOF / FINAL / engines) consume
+  # ONLY the resolved scalars below, never the raw arg + cfg in parallel.
   .tc <- config$train_control
   if (is.null(.tc) || !is.list(.tc)) {
     stop("'config' has no resolved train_control; rebuild it with ",
          "build_supervised_burned_config().", call. = FALSE)
   }
-  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
-  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
-  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
-  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
-  feature_whitelist_override             <- feature_whitelist_override             %||% .tc$feature_whitelist_override
-  feature_weights                        <- feature_weights                        %||% .tc$feature_weights
-  oof_nrounds_max                        <- oof_nrounds_max                        %||% .tc$nrounds_max
-  oof_early_stop                         <- oof_early_stop                         %||% .tc$early_stop
-  oof_seed_base                          <- oof_seed_base                          %||% .tc$seeds$oof_seed_base
-  final_sampling_seed                    <- final_sampling_seed                    %||% .tc$seeds$final_sampling_seed
-  final_seed                             <- final_seed                             %||% .tc$seeds$final_seed
-  final_val_frac                         <- final_val_frac                         %||% .tc$val_frac
-  final_group_col                        <- final_group_col                        %||% .tc$group_col
-  final_nrounds_max                      <- final_nrounds_max                      %||% .tc$nrounds_max
-  final_early_stopping_rounds            <- final_early_stopping_rounds            %||% .tc$early_stop
-  final_impute_numeric                   <- final_impute_numeric                   %||% .tc$impute_numeric
-  final_impute_factor_missing            <- final_impute_factor_missing            %||% .tc$impute_factor_missing
-  training_protocol                      <- training_protocol                      %||% .tc$training_protocol
-  oof_sampling                           <- oof_sampling                           %||% .tc$oof_sampling
+  .prov  <- config$resolved_params_provenance$train_control %||% list()
+  .rec   <- .of_new_shim_record()
+  .shim  <- function(override, cfg_value, param, arg_name = param) {
+    .of_resolve_methodological_shim(
+      override = override, cfg_value = cfg_value, param = param,
+      arg_name = arg_name, cfg_provenance = .prov[[param]] %||% "default",
+      record = .rec)
+  }
+  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
+  spectral_hard_negative_to_burned_ratio <- .shim(spectral_hard_negative_to_burned_ratio, .tc$caps$spectral,   "cap_spectral",   "spectral_hard_negative_to_burned_ratio")
+  random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
+  otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
+  feature_whitelist_override             <- .shim(feature_whitelist_override,             .tc$feature_whitelist_override, "feature_whitelist_override", "feature_whitelist_override")
+  feature_weights                        <- .shim(feature_weights,                        .tc$feature_weights, "feature_weights", "feature_weights")
+  oof_nrounds_max                        <- .shim(oof_nrounds_max,                        .tc$nrounds_max,     "nrounds_max",    "oof_nrounds_max")
+  oof_early_stop                         <- .shim(oof_early_stop,                          .tc$early_stop,      "early_stop",     "oof_early_stop")
+  oof_seed_base                          <- .shim(oof_seed_base,                          .tc$seeds$oof_seed_base,       "oof_seed_base",       "oof_seed_base")
+  final_sampling_seed                    <- .shim(final_sampling_seed,                    .tc$seeds$final_sampling_seed, "final_sampling_seed", "final_sampling_seed")
+  final_seed                             <- .shim(final_seed,                             .tc$seeds$final_seed,          "final_seed",          "final_seed")
+  final_val_frac                         <- .shim(final_val_frac,                         .tc$val_frac,        "val_frac",       "final_val_frac")
+  final_group_col                        <- .shim(final_group_col,                        .tc$group_col,       "group_col",      "final_group_col")
+  final_nrounds_max                      <- .shim(final_nrounds_max,                      .tc$nrounds_max,     "nrounds_max",    "final_nrounds_max")
+  final_early_stopping_rounds            <- .shim(final_early_stopping_rounds,            .tc$early_stop,      "early_stop",     "final_early_stopping_rounds")
+  final_impute_numeric                   <- .shim(final_impute_numeric,                   .tc$impute_numeric,  "impute_numeric", "final_impute_numeric")
+  final_impute_factor_missing            <- .shim(final_impute_factor_missing,            .tc$impute_factor_missing, "impute_factor_missing", "final_impute_factor_missing")
+  training_protocol                      <- .shim(training_protocol,                      .tc$training_protocol, "training_protocol", "training_protocol")
+  oof_sampling                           <- .shim(oof_sampling,                           .tc$oof_sampling,    "oof_sampling",   "oof_sampling")
   training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
+  # Precision 1 condition 6: the resolved-params provenance record (cfg value /
+  # requested override / resolved value / provenance label per methodological
+  # field). Attached to the run summary the pipeline emits below.
+  .resolved_params_provenance <- .of_shim_record_to_df(.rec)
   if (!is.logical(run_consistency) || length(run_consistency) != 1L) {
     stop("'run_consistency' must be TRUE or FALSE.", call. = FALSE)
   }
@@ -343,7 +387,16 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
                                      # B1 (2026-06-07): forward the protocol
                                      # toggle + OOF sampling mode.
                                      training_protocol                      = training_protocol,
-                                     oof_sampling                           = oof_sampling)
+                                     oof_sampling                           = oof_sampling,
+                                     # Precision 2 (2026-06-07): the spectral cap
+                                     # RESOLVED at this boundary (cfg value with
+                                     # any override folded in). The package-level
+                                     # parity guard in the orchestrator asserts
+                                     # the value reaching BOTH OOF and FINAL
+                                     # equals this, failing fast on a silent
+                                     # reversion (e.g. a residual default
+                                     # returning the cap to 1.0).
+                                     spectral_cap_resolved                  = spectral_hard_negative_to_burned_ratio)
   elapsed <- as.numeric(Sys.time() - t0, units = "secs")
 
   legacy <- res$legacy_run_summary %||% list()
@@ -392,6 +445,11 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
       consistency_summary_csv = consistency_out$summary_csv %||% NA_character_,
       consistency_summary_txt = consistency_out$summary_txt %||% NA_character_,
       elapsed_sec             = elapsed,
+      # Precision 1 condition 6: resolved-params provenance written into the
+      # run-level artifact the pipeline emits (cfg value / requested override /
+      # resolved value / provenance label per methodological field). Also
+      # carried on cfg$resolved_params_provenance (builder-time field flags).
+      resolved_params_provenance = .resolved_params_provenance,
       legacy_run_summary      = legacy,
       legacy_consistency_summary = consistency_out
     ),

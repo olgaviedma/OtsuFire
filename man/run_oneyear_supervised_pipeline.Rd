@@ -8,26 +8,26 @@ run_oneyear_supervised_pipeline(
   config,
   run_consistency = TRUE,
   overwrite = FALSE,
-  contextual_exclusion_to_burned_ratio = 0.25,
-  spectral_hard_negative_to_burned_ratio = 1,
-  random_to_burned_ratio = 1,
-  otsu_unburned_to_burned_ratio = 1,
+  contextual_exclusion_to_burned_ratio = NULL,
+  spectral_hard_negative_to_burned_ratio = NULL,
+  random_to_burned_ratio = NULL,
+  otsu_unburned_to_burned_ratio = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
   reuse_upstream = FALSE,
-  oof_nrounds_max = 4000,
-  oof_early_stop = 80,
-  oof_seed_base = 42,
-  final_sampling_seed = 42,
-  final_seed = 42,
-  final_val_frac = 0.15,
-  final_group_col = "block_id",
-  final_nrounds_max = 4000,
-  final_early_stopping_rounds = 80,
-  final_impute_numeric = "median",
-  final_impute_factor_missing = "MISSING",
-  training_protocol = c("legacy", "nested_refit"),
-  oof_sampling = c("capped", "full"),
+  oof_nrounds_max = NULL,
+  oof_early_stop = NULL,
+  oof_seed_base = NULL,
+  final_sampling_seed = NULL,
+  final_seed = NULL,
+  final_val_frac = NULL,
+  final_group_col = NULL,
+  final_nrounds_max = NULL,
+  final_early_stopping_rounds = NULL,
+  final_impute_numeric = NULL,
+  final_impute_factor_missing = NULL,
+  training_protocol = NULL,
+  oof_sampling = NULL,
   ...
 )
 }
@@ -190,6 +190,51 @@ NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
 Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
 be passed to [validate_fire_maps()] for external validation.
 }
+\section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
+
+The methodological / training-control arguments of this function (the four
+`*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
+`oof_*` / `final_*` training knobs, `training_protocol`, `oof_sampling`) are
+DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
+methodological parameter is [build_supervised_burned_config()]
+(`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
+truth). The shims are resolved ONLY at this public boundary and the resolved
+scalars are what flow downstream.
+
+Behaviour of a non-`NULL` function-level override:
+\itemize{
+  \item over a CANONICAL DEFAULT field -> the override is applied and a
+    deprecation warning of stable class `"otsufire_deprecated_param"` is
+    emitted, naming the parameter and pointing at the builder;
+  \item over an EXPLICIT builder-user value that DIFFERS -> a hard error
+    (two explicit, incompatible sources are never silently reconciled);
+  \item equal to the cfg value -> applied silently.
+}
+Each resolution is recorded (cfg value / requested override / resolved value /
+provenance label) on `cfg$resolved_params_provenance` and in the returned run
+object's `resolved_params_provenance` field.
+
+REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
+future minor version. Migrate callers to
+`build_supervised_burned_config(<param>=...)`; the warning-free canonical
+path is the builder.
+}
+
+\section{Gate 1B (2026-06-07) cfg single source of truth}{
+
+The supervised methodological / training-control parameters now live in
+exactly ONE place: the cfg object built by
+[build_supervised_burned_config()] (`cfg$model_params` and
+`cfg$train_control`). Every methodological argument of this function (the
+four `*_to_burned_ratio` caps, `feature_whitelist_override`,
+`feature_weights`, the `oof_*` / `final_*` training knobs, `training_protocol`
+and `oof_sampling`) now DEFAULTS TO `NULL`, meaning "use the value resolved on
+the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
+explicit argument > cfg) and is written through to BOTH the OOF and FINAL
+stages identically. The canonical numeric defaults are no longer duplicated in
+this function; change them once, at the builder, and the whole chain follows.
+}
+
 \section{D1 training knobs (2026-06-05) + FRENTE 1 unification}{
 
 The `oof_*` and `final_*` arguments expose the OOF and final-model training

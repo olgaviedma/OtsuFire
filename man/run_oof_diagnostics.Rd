@@ -12,23 +12,25 @@ run_oof_diagnostics(
   params = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
-  nrounds_max = 4000,
-  early_stop = 80,
-  seed_base = 42,
-  training_protocol = c("legacy", "nested_refit"),
-  oof_sampling = c("capped", "full"),
-  contextual_exclusion_to_burned_ratio = 0.25,
-  spectral_hard_negative_to_burned_ratio = 1,
-  random_to_burned_ratio = 1,
-  otsu_unburned_to_burned_ratio = 1,
-  val_frac = 0.15,
-  impute_numeric = "median",
-  impute_factor_missing = "MISSING",
+  nrounds_max = NULL,
+  early_stop = NULL,
+  seed_base = NULL,
+  training_protocol = NULL,
+  oof_sampling = NULL,
+  contextual_exclusion_to_burned_ratio = NULL,
+  spectral_hard_negative_to_burned_ratio = NULL,
+  random_to_burned_ratio = NULL,
+  otsu_unburned_to_burned_ratio = NULL,
+  val_frac = NULL,
+  impute_numeric = NULL,
+  impute_factor_missing = NULL,
+  group_col = NULL,
   out_dir = NULL,
   matrix_dir = NULL,
   labelled_gpkg = NULL,
   labelled_layer = "train_with_folds",
-  overwrite = TRUE
+  overwrite = TRUE,
+  .internal_resolved = FALSE
 )
 }
 \arguments{
@@ -100,6 +102,13 @@ imputation rule used by the nested-refit core.}
 \item{impute_factor_missing}{Character. Sentinel level for missing
 factor/character values in the nested-refit core. Default `"MISSING"`.}
 
+\item{group_col}{Character or `NULL`. Grouping column for the grouped
+block-CV used by the OOF engine. `NULL` (default) means "read from
+`cfg$train_control$group_col`" (single source of truth, canonical
+`"block_id"`); a non-NULL value overrides cfg for standalone use. This is
+the SAME knob the FINAL stage sources from `cfg$train_control$group_col`,
+so OOF and FINAL never diverge.}
+
 \item{out_dir}{Character or `NULL`. Output folder for the `05_OOF` outputs.
 Defaults to `config$output_routes$oof_dir`.}
 
@@ -166,6 +175,20 @@ training labels.
 and per-feature weights as the final model (KB1/KB2 symmetry); this is why
 both knobs are part of the signature.
 }
+\section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
+
+The methodological / training-control arguments here (`nrounds_max`,
+`early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
+`feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
+`group_col`, `training_protocol`, `oof_sampling`) are DEPRECATED COMPATIBILITY
+SHIMS. Set these in [build_supervised_burned_config()] instead
+(`cfg$train_control`, the single source of truth). A non-`NULL` override of a
+canonical-default field emits a deprecation warning of class
+`"otsufire_deprecated_param"`; an override conflicting with an EXPLICIT
+builder-user value errors. REMOVAL PLAN: deprecated now (warn) -> removed in a
+future minor version; the canonical path is the builder.
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(

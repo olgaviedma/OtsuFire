@@ -308,10 +308,14 @@ test_that("train_final_burned_model validates inputs", {
                                         config = list()),
     regexp = "config"
   )
+  # Precision 1 (2026-06-07): -1 is a DEPRECATED function-level override (warns
+  # via "otsufire_deprecated_param") AND an invalid value (errors). Suppress the
+  # deprecation warning so only the validation error is asserted here.
   expect_error(
-    OtsuFire:::train_final_burned_model(train_features = mk_tmp_gpkg_m(),
-                                        config = cfg,
-                                        contextual_exclusion_to_burned_ratio = -1),
+    suppressWarnings(
+      OtsuFire:::train_final_burned_model(
+        train_features = mk_tmp_gpkg_m(), config = cfg,
+        contextual_exclusion_to_burned_ratio = -1)),
     regexp = "contextual_exclusion_to_burned_ratio"
   )
   expect_error(

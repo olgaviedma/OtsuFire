@@ -184,17 +184,30 @@ test_that("D1 FINAL override reaches train_final_model_direct", {
     change_index = ci, target_year = 2025L
   )
 
-  train_final_burned_model(
-    train_features = tf_gpkg,
-    config = cfg,
-    out_dir = tempfile(),
-    nrounds_max = 1234,
-    seed = 7,
-    val_frac = 0.42,
-    group_col = "poly_id",
-    early_stopping_rounds = 11,
-    sampling_seed = 13
+  # Precision 1 (2026-06-07): these are DEPRECATED function-level shims; using
+  # them is expected to emit "otsufire_deprecated_param" deprecation warnings
+  # (one per overridden field) while STILL propagating. Muffle+count them so the
+  # suite's incidental-warning total stays clean, assert at least one fired, then
+  # confirm the values reached the engine.
+  .ndep <- 0L
+  withCallingHandlers(
+    train_final_burned_model(
+      train_features = tf_gpkg,
+      config = cfg,
+      out_dir = tempfile(),
+      nrounds_max = 1234,
+      seed = 7,
+      val_frac = 0.42,
+      group_col = "poly_id",
+      early_stopping_rounds = 11,
+      sampling_seed = 13
+    ),
+    otsufire_deprecated_param = function(w) {
+      .ndep <<- .ndep + 1L
+      invokeRestart("muffleWarning")
+    }
   )
+  expect_gt(.ndep, 0L)
 
   expect_equal(captured$nrounds_max, 1234)
   expect_equal(captured$seed, 7)
@@ -239,15 +252,25 @@ test_that("D1 OOF override reaches run_dm_oof_pipeline", {
     change_index = ci, target_year = 2025L
   )
 
-  run_oof_diagnostics(
-    train_features = tf,
-    scoring_features = tf,
-    config = cfg,
-    out_dir = tempfile(), matrix_dir = tempfile(),
-    nrounds_max = 321,
-    early_stop = 9,
-    seed_base = 1234
+  # Precision 1 (2026-06-07): DEPRECATED function-level shims -> muffle+count the
+  # "otsufire_deprecated_param" warnings while asserting propagation.
+  .ndep <- 0L
+  withCallingHandlers(
+    run_oof_diagnostics(
+      train_features = tf,
+      scoring_features = tf,
+      config = cfg,
+      out_dir = tempfile(), matrix_dir = tempfile(),
+      nrounds_max = 321,
+      early_stop = 9,
+      seed_base = 1234
+    ),
+    otsufire_deprecated_param = function(w) {
+      .ndep <<- .ndep + 1L
+      invokeRestart("muffleWarning")
+    }
   )
+  expect_gt(.ndep, 0L)
 
   expect_equal(captured$nrounds_max, 321)
   expect_equal(captured$early_stop, 9)

@@ -8,25 +8,26 @@ train_final_burned_model(
   train_features,
   config,
   oof_agg = NULL,
-  contextual_exclusion_to_burned_ratio = 0.25,
-  spectral_hard_negative_to_burned_ratio = 1,
-  random_to_burned_ratio = 1,
-  otsu_unburned_to_burned_ratio = 1,
+  contextual_exclusion_to_burned_ratio = NULL,
+  spectral_hard_negative_to_burned_ratio = NULL,
+  random_to_burned_ratio = NULL,
+  otsu_unburned_to_burned_ratio = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
-  sampling_seed = 42,
-  seed = 42,
-  val_frac = 0.15,
-  group_col = "block_id",
-  nrounds_max = 4000,
-  early_stopping_rounds = 80,
-  impute_numeric = "median",
-  impute_factor_missing = "MISSING",
-  training_protocol = c("legacy", "nested_refit"),
+  sampling_seed = NULL,
+  seed = NULL,
+  val_frac = NULL,
+  group_col = NULL,
+  nrounds_max = NULL,
+  early_stopping_rounds = NULL,
+  impute_numeric = NULL,
+  impute_factor_missing = NULL,
+  training_protocol = NULL,
   labelled_layer = "train_features",
   out_dir = NULL,
   overwrite = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  .internal_resolved = FALSE
 )
 }
 \arguments{
@@ -161,6 +162,20 @@ change the fitted model. The engine derives the
 `_oof_metrics_summary.txt` / `_oof_best_thresholds.csv` paths from the
 `oof_agg` path by name substitution, exactly as before.
 }
+\section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
+
+The methodological / training-control arguments here (the four
+`*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`,
+`sampling_seed`, `seed`, `val_frac`, `group_col`, `nrounds_max`,
+`early_stopping_rounds`, `impute_*`, `training_protocol`) are DEPRECATED
+COMPATIBILITY SHIMS. Set these in [build_supervised_burned_config()] instead
+(`cfg$train_control` / `cfg$model_params`, the single source of truth). A
+non-`NULL` override of a canonical-default field emits a deprecation warning
+of class `"otsufire_deprecated_param"`; an override conflicting with an
+EXPLICIT builder-user value errors. REMOVAL PLAN: deprecated now (warn) ->
+removed in a future minor version; the canonical path is the builder.
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(

@@ -243,11 +243,13 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
     .cfg_input_path <- function(name) .of_sup_input_path(config, name)
 
     corine_year         <- sfkit$get_corine_year(target_year)
-    topo_path           <- file.path(data_base, "Topography",
-                                     "elevation_slope.tif")
-    corine_raster_path  <- file.path(data_base, "Corine_Masks",
-                                     paste0("CLC_", corine_year,
-                                            "_peninsula.tif"))
+    # Gate 1B PIECE 2: feature-support paths consumed from cfg$inputs;
+    # convention fallback only when the cfg carries no explicit path.
+    topo_path           <- .cfg_input_path("topo") %||%
+      file.path(data_base, "Topography", "elevation_slope.tif")
+    corine_raster_path  <- .cfg_input_path("corine_raster") %||%
+      file.path(data_base, "Corine_Masks",
+                paste0("CLC_", corine_year, "_peninsula.tif"))
     # change_index: the REQUIRED, validated cfg$inputs$change_index field,
     # CONSUMED from cfg (not reconstructed by filename convention). Convention
     # is the fallback only for an in-memory / pathless change_index spec.

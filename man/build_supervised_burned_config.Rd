@@ -19,6 +19,7 @@ build_supervised_burned_config(
   topo = NULL,
   corine_raster = NULL,
   burnable_mask = NULL,
+  ecoregion_shapefile = NULL,
   nrounds_max = NULL,
   early_stop = NULL,
   oof_seed_base = NULL,
@@ -104,6 +105,15 @@ for the target year's CORINE epoch. RUN input (§N+25): consumed by both
 all_sources unburned builders. When `NULL` it defaults to the convention
 path
 `<data_base>/Corine_Masks/burneable_mask_binary_corine_<corine_year>_ETRS89.tif`.}
+
+\item{ecoregion_shapefile}{sf / SpatVector / path. Optional ecoregion border
+polygon (Olson ecoregions). RUN input. Gate 1B PIECE 2 (2026-06-07):
+consumed by the legacy unburned Otsu builder ONLY in the `ecoregion` /
+`corine_ecoregion` modes (the default mode is `burnable_only`, which never
+reads it). Previously a `<data_base>/Ecoregion/ecoregiones_olson.shp`
+hardcode inside the builder; now a configurable cfg input. When `NULL` it
+defaults to that convention path. NOTE: PIECE 2 only makes the path
+configurable; the ecoregion Otsu branch is removed later in PIECE 4.}
 
 \item{nrounds_max, early_stop}{Integer or `NULL`. XGBoost max boosting rounds
 and early-stopping patience. `NULL` uses the canonical defaults

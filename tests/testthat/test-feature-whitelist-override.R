@@ -80,6 +80,15 @@ run_train_smoke <- function(gpkg, override = NULL,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1,
     otsu_unburned_to_burned_ratio = 1,
+    # Gate 1B (2026-06-07): the engine now requires the resolved methodological
+    # args (no defaults). Supply the canonical values it used to default to.
+    sampling_seed              = 42,
+    seed                       = 42,
+    val_frac                   = 0.15,
+    group_col                  = "block_id",
+    impute_numeric             = "median",
+    impute_factor_missing      = "MISSING",
+    model_params_base          = OtsuFire:::.of_canonical_model_params(),
     feature_whitelist_override = override
   )))
   list(res = res, out_dir = out_dir)

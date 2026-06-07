@@ -22,54 +22,73 @@ ns <- asNamespace("OtsuFire")
 .CANON_SEED       <- 42
 
 # --------------------------------------------------------------------------
-# (a) D1 defaults == UNIFIED CANONICAL values at every layer.
+# (a) Gate 1B (2026-06-07): cfg is now the SINGLE SOURCE OF TRUTH. The public
+#     functions default their methodological knobs to NULL ("read from cfg")
+#     and the internal-pure engines carry NO methodological defaults at all
+#     (the args are REQUIRED). So the canonical values live ONLY in
+#     build_supervised_burned_config() (.of_canonical_train_control /
+#     .of_canonical_model_params), which is what these tests now assert.
 # --------------------------------------------------------------------------
-test_that("FRENTE 1: OOF defaults on run_oof_diagnostics match the engine AND are canonical", {
-  f_pub <- formals(get("run_oof_diagnostics", envir = ns))
-  f_eng <- formals(get("run_dm_oof_pipeline", envir = ns))
-  expect_identical(eval(f_pub$nrounds_max), eval(f_eng$nrounds_max))  # 4000
-  expect_identical(eval(f_pub$early_stop),  eval(f_eng$early_stop))   # 80
-  expect_identical(eval(f_pub$seed_base),   eval(f_eng$seed_base))    # 42
-  expect_equal(eval(f_pub$nrounds_max), .CANON_NROUNDS)
-  expect_equal(eval(f_pub$early_stop),  .CANON_EARLY_STOP)
-  expect_equal(eval(f_pub$seed_base),   .CANON_SEED)
+.canon_tc <- get(".of_canonical_train_control", envir = ns)()
+
+test_that("Gate 1B: canonical train_control holds the UNIFIED canonical values", {
+  expect_equal(.canon_tc$nrounds_max, .CANON_NROUNDS)
+  expect_equal(.canon_tc$early_stop,  .CANON_EARLY_STOP)
+  expect_equal(.canon_tc$seeds$oof_seed_base,       .CANON_SEED)
+  expect_equal(.canon_tc$seeds$final_sampling_seed, .CANON_SEED)
+  expect_equal(.canon_tc$seeds$final_seed,          .CANON_SEED)
+  expect_equal(.canon_tc$val_frac, 0.15)
+  expect_equal(.canon_tc$group_col, "block_id")
+  expect_equal(.canon_tc$impute_numeric, "median")
+  expect_equal(.canon_tc$impute_factor_missing, "MISSING")
+  expect_equal(.canon_tc$caps$contextual, 0.25)
+  expect_equal(.canon_tc$caps$spectral, 1.0)
+  expect_equal(.canon_tc$caps$random, 1.0)
+  expect_equal(.canon_tc$caps$otsu, 1.0)
+  expect_equal(.canon_tc$training_protocol, "legacy")
+  expect_equal(.canon_tc$oof_sampling, "capped")
 })
 
-test_that("FRENTE 1: FINAL defaults on train_final_burned_model match the engine AND are canonical", {
-  f_pub <- formals(get("train_final_burned_model", envir = ns))
-  f_eng <- formals(get("train_final_model_direct", envir = ns))
-  expect_identical(eval(f_pub$sampling_seed),         eval(f_eng$sampling_seed))         # 42
-  expect_identical(eval(f_pub$seed),                  eval(f_eng$seed))                  # 42
-  expect_identical(eval(f_pub$val_frac),              eval(f_eng$val_frac))              # 0.15
-  expect_identical(eval(f_pub$group_col),             eval(f_eng$group_col))             # block_id
-  expect_identical(eval(f_pub$nrounds_max),           eval(f_eng$nrounds_max))           # 4000
-  expect_identical(eval(f_pub$early_stopping_rounds), eval(f_eng$early_stopping_rounds)) # 80
-  expect_identical(eval(f_pub$impute_factor_missing), eval(f_eng$impute_factor_missing)) # MISSING
-  # FRENTE 1: FINAL seeds were unified to the OOF canonical seed (42).
-  expect_equal(eval(f_pub$sampling_seed), .CANON_SEED)
-  expect_equal(eval(f_pub$seed),          .CANON_SEED)
-  expect_equal(eval(f_pub$nrounds_max),   .CANON_NROUNDS)
-  expect_equal(eval(f_pub$early_stopping_rounds), .CANON_EARLY_STOP)
-  # impute_numeric: engine default is a c("median","zero") choice vector;
-  # the public wrapper pins the first (current) value "median".
-  expect_equal(eval(f_pub$impute_numeric), "median")
-  expect_equal(eval(f_eng$impute_numeric)[1], "median")
-})
-
-test_that("FRENTE 1: OOF and FINAL training-control defaults are NOW UNIFIED", {
+test_that("Gate 1B: public methodological knobs default to NULL (= read from cfg)", {
   f_oof   <- formals(get("run_oof_diagnostics", envir = ns))
   f_final <- formals(get("train_final_burned_model", envir = ns))
-  # Flipped from the pre-FRENTE-1 "NOT unified" assertions: the OOF/FINAL
-  # asymmetry was removed. The two stages now share identical training controls.
-  expect_identical(eval(f_oof$nrounds_max), eval(f_final$nrounds_max)) # 4000 == 4000
-  expect_identical(eval(f_oof$early_stop),  eval(f_final$early_stopping_rounds)) # 80 == 80
-  expect_identical(eval(f_oof$seed_base),   eval(f_final$seed))        # 42 == 42
+  f_run   <- formals(get("run_oneyear_supervised_pipeline", envir = ns))
+  for (nm in c("nrounds_max", "early_stop", "seed_base")) {
+    expect_null(f_oof[[nm]])
+  }
+  for (nm in c("sampling_seed", "seed", "val_frac", "group_col", "nrounds_max",
+               "early_stopping_rounds", "impute_numeric", "impute_factor_missing")) {
+    expect_null(f_final[[nm]])
+  }
+  for (nm in c("oof_nrounds_max", "oof_early_stop", "oof_seed_base",
+               "final_sampling_seed", "final_seed", "final_val_frac",
+               "final_group_col", "final_nrounds_max", "final_early_stopping_rounds")) {
+    expect_null(f_run[[nm]])
+  }
+})
+
+test_that("Gate 1B: internal-pure engines carry NO methodological defaults (required args)", {
+  f_eng_final <- formals(get("train_final_model_direct", envir = ns))
+  f_eng_oof   <- formals(get("run_dm_oof_pipeline", envir = ns))
+  # A required formal has an empty symbol as its "default".
+  is_required <- function(x) is.symbol(x) && !nzchar(as.character(x))
+  for (nm in c("nrounds_max", "early_stopping_rounds", "sampling_seed", "seed",
+               "val_frac", "group_col", "impute_numeric", "impute_factor_missing",
+               "model_params_base")) {
+    expect_true(is_required(f_eng_final[[nm]]),
+                info = paste("train_final_model_direct$", nm, "should be required"))
+  }
+  for (nm in c("nrounds_max", "early_stop", "seed_base")) {
+    expect_true(is_required(f_eng_oof[[nm]]),
+                info = paste("run_dm_oof_pipeline$", nm, "should be required"))
+  }
 })
 
 test_that("FRENTE 1: OOF and FINAL params=NULL resolve to the SAME canonical block (modulo scale_pos_weight)", {
-  # Both inline sites call .of_canonical_xgb_params(); assert the builder is
-  # the single source of truth and that the two sites produce identical lists
-  # apart from scale_pos_weight, which each computes from its own labels.
+  # Both inline sites build from cfg$model_params (sourced from
+  # .of_canonical_model_params()); assert the canonical builder is the single
+  # source of truth and that the two sites produce identical lists apart from
+  # scale_pos_weight, which each computes from its own labels.
   build <- get(".of_canonical_xgb_params", envir = ns)
   p_oof   <- build(scale_pos_weight = 3.0)   # pretend OOF training labels
   p_final <- build(scale_pos_weight = 7.0)   # pretend FINAL training labels
@@ -93,19 +112,28 @@ test_that("FRENTE 1: OOF and FINAL params=NULL resolve to the SAME canonical blo
   expect_equal(p_final$scale_pos_weight, 7.0)
 })
 
-test_that("FRENTE 1: top-level entry-point exposes the OOF + FINAL knobs with canonical defaults", {
+test_that("Gate 1B: top-level entry-point knobs default to NULL and a default cfg resolves to canonical", {
+  # Gate 1B: the public entry no longer carries literal canonical defaults; the
+  # knobs default to NULL ("read from cfg"). The canonical VALUES are resolved by
+  # build_supervised_burned_config() into cfg$train_control, asserted here.
   f <- formals(get("run_oneyear_supervised_pipeline", envir = ns))
-  expect_equal(eval(f$oof_nrounds_max), .CANON_NROUNDS)
-  expect_equal(eval(f$oof_early_stop), .CANON_EARLY_STOP)
-  expect_equal(eval(f$oof_seed_base), .CANON_SEED)
-  expect_equal(eval(f$final_sampling_seed), .CANON_SEED)
-  expect_equal(eval(f$final_seed), .CANON_SEED)
-  expect_equal(eval(f$final_val_frac), 0.15)
-  expect_equal(eval(f$final_group_col), "block_id")
-  expect_equal(eval(f$final_nrounds_max), .CANON_NROUNDS)
-  expect_equal(eval(f$final_early_stopping_rounds), .CANON_EARLY_STOP)
-  expect_equal(eval(f$final_impute_numeric), "median")
-  expect_equal(eval(f$final_impute_factor_missing), "MISSING")
+  for (nm in c("oof_nrounds_max", "oof_early_stop", "oof_seed_base",
+               "final_sampling_seed", "final_seed", "final_val_frac",
+               "final_group_col", "final_nrounds_max",
+               "final_early_stopping_rounds", "final_impute_numeric",
+               "final_impute_factor_missing")) {
+    expect_null(f[[nm]])
+  }
+  tc <- .canon_tc
+  expect_equal(tc$nrounds_max, .CANON_NROUNDS)
+  expect_equal(tc$early_stop, .CANON_EARLY_STOP)
+  expect_equal(tc$seeds$oof_seed_base, .CANON_SEED)
+  expect_equal(tc$seeds$final_sampling_seed, .CANON_SEED)
+  expect_equal(tc$seeds$final_seed, .CANON_SEED)
+  expect_equal(tc$val_frac, 0.15)
+  expect_equal(tc$group_col, "block_id")
+  expect_equal(tc$impute_numeric, "median")
+  expect_equal(tc$impute_factor_missing, "MISSING")
 })
 
 # --------------------------------------------------------------------------

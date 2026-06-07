@@ -22,13 +22,13 @@ run_oof_xgb <- function(
     XL_mat, y, labelled_df,
     fold_cols = c("fold_rep1","fold_rep2"),
     params,
-    # FRENTE 1 (2026-06-05): training controls UNIFIED with the FINAL stage.
-    # nrounds_max 3000 -> 4000, early_stop 75 -> 80 (FINAL already 4000 / 80).
-    # seed_base 42 is the canonical seed (FINAL seeds were moved 999 -> 42 to
-    # match). All remain user-overridable.
-    nrounds_max = 4000,
-    early_stop = 80,
-    seed_base = 42,
+    # Gate 1B (2026-06-07): nrounds_max / early_stop / seed_base are REQUIRED
+    # resolved args with NO methodological defaults. Single source of truth =
+    # cfg$train_control, threaded down by run_dm_oof_pipeline(). A dropped arg
+    # ERRORS in the guard block below.
+    nrounds_max,
+    early_stop,
+    seed_base,
     out_dir = NULL,
     prefix = "oof",
     verbose = 0,
@@ -54,9 +54,11 @@ run_oof_xgb <- function(
     model_cols = NULL,
     class_col = "class",
     group_col = "block_id",
-    val_frac = 0.15,
-    impute_numeric = "median",
-    impute_factor_missing = "MISSING",
+    # Gate 1B (2026-06-07): val_frac / impute_* are REQUIRED resolved args with
+    # NO methodological defaults (single source of truth = cfg$train_control).
+    val_frac,
+    impute_numeric,
+    impute_factor_missing,
     feature_weights = NULL,
     # B1: bucket cap ratios. REQUIRED on the nested path (no defaults) so a
     # dropped argument cannot silently revert a bucket to ratio 1.0.
@@ -73,8 +75,28 @@ run_oof_xgb <- function(
 ) {
   if (!requireNamespace("xgboost", quietly = TRUE)) stop("Instala xgboost")
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Instala dplyr")
+  # Gate 1B (2026-06-07): required-arg guard. nrounds_max / early_stop /
+  # seed_base drive BOTH paths, so they are always required (no silent
+  # defaults; single source = cfg$train_control).
+  for (.nm in c("nrounds_max", "early_stop", "seed_base")) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("run_oof_xgb(): required resolved arg '", .nm,
+           "' is missing (no methodological default; threaded from ",
+           "cfg$train_control via run_dm_oof_pipeline()).", call. = FALSE)
+    }
+  }
   training_protocol <- match.arg(training_protocol)
   oof_sampling <- match.arg(oof_sampling)
+  # val_frac / impute_* are consumed ONLY on the nested_refit path (the per-fold
+  # leakage-free core); required there, mirroring the cap-ratio pattern below.
+  if (identical(training_protocol, "nested_refit")) {
+    for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
+      if (eval(call("missing", as.name(.nm)))) {
+        stop("run_oof_xgb(nested_refit): required resolved arg '", .nm,
+             "' is missing (no methodological default).", call. = FALSE)
+      }
+    }
+  }
 
   stopifnot("fire_uid" %in% names(labelled_df), "class" %in% names(labelled_df))
 

@@ -73,6 +73,14 @@ run_train_with_weights <- function(gpkg, weights = NULL, override = NULL,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio                 = 1,
     otsu_unburned_to_burned_ratio          = 1,
+    # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
+    sampling_seed              = 42,
+    seed                       = 42,
+    val_frac                   = 0.15,
+    group_col                  = "block_id",
+    impute_numeric             = "median",
+    impute_factor_missing      = "MISSING",
+    model_params_base          = OtsuFire:::.of_canonical_model_params(),
     feature_weights            = weights,
     feature_whitelist_override = override
   )
@@ -192,6 +200,13 @@ test_that("unknown weight names trigger warning + are dropped silently", {
       spectral_hard_negative_to_burned_ratio = 1,
       random_to_burned_ratio                 = 1,
       otsu_unburned_to_burned_ratio          = 1,
+      sampling_seed              = 42,
+      seed                       = 42,
+      val_frac                   = 0.15,
+      group_col                  = "block_id",
+      impute_numeric             = "median",
+      impute_factor_missing      = "MISSING",
+      model_params_base          = OtsuFire:::.of_canonical_model_params(),
       feature_weights            = weights
     )),
     regexp = "this_does_not_exist"
@@ -238,6 +253,13 @@ test_that("weights for override-removed features warn + drop", {
       spectral_hard_negative_to_burned_ratio = 1,
       random_to_burned_ratio                 = 1,
       otsu_unburned_to_burned_ratio          = 1,
+      sampling_seed              = 42,
+      seed                       = 42,
+      val_frac                   = 0.15,
+      group_col                  = "block_id",
+      impute_numeric             = "median",
+      impute_factor_missing      = "MISSING",
+      model_params_base          = OtsuFire:::.of_canonical_model_params(),
       feature_whitelist_override = override,
       feature_weights            = weights
     )),

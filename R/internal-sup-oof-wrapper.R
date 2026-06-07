@@ -88,11 +88,13 @@ run_dm_oof_pipeline <- function(
     result_dir,
     target_year = 2022,
     fold_cols   = c("fold_rep1", "fold_rep2"),
-    # FRENTE 1 (2026-06-05): training controls UNIFIED with the FINAL stage.
-    # nrounds_max 3000 -> 4000, early_stop 75 -> 80. seed_base 42 canonical.
-    nrounds_max = 4000,
-    early_stop  = 80,
-    seed_base   = 42,
+    # Gate 1B (2026-06-07): nrounds_max / early_stop / seed_base are REQUIRED
+    # resolved args with NO methodological defaults (mirroring the 4 caps below).
+    # The single source of truth is cfg$train_control, threaded by
+    # run_oof_diagnostics(). A dropped arg ERRORS in the guard block below.
+    nrounds_max,
+    early_stop,
+    seed_base,
     verbose     = 1,
     out_dir_oof = file.path(result_dir, "05_OOF"),
     prefix      = paste0(target_year, "_patch"),
@@ -139,10 +141,12 @@ run_dm_oof_pipeline <- function(
     spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio,
     otsu_unburned_to_burned_ratio,
-    # B1: FINAL train/val split controls forwarded to the per-fold core.
-    val_frac = 0.15,
-    impute_numeric = "median",
-    impute_factor_missing = "MISSING",
+    # Gate 1B (2026-06-07): FINAL train/val split + imputation controls are
+    # REQUIRED resolved args with NO methodological defaults. Single source of
+    # truth = cfg$train_control, threaded by run_oof_diagnostics().
+    val_frac,
+    impute_numeric,
+    impute_factor_missing,
     ...
 ) {
   training_protocol <- match.arg(training_protocol)
@@ -186,6 +190,30 @@ run_dm_oof_pipeline <- function(
   if (length(.dots) > 0L) {
     stop("Unused arguments passed to run_dm_oof_pipeline(): ",
          paste(names(.dots), collapse = ", "), call. = FALSE)
+  }
+
+  # Gate 1B: required-arg guard. nrounds_max / early_stop / seed_base drive BOTH
+  # paths, so they are always required (no silent methodological defaults; the
+  # single source of truth is cfg$train_control, threaded by run_oof_diagnostics()).
+  # Placed AFTER the `...` migration check so a stale additional_drop_cols call
+  # still reports the migration message first.
+  for (.nm in c("nrounds_max", "early_stop", "seed_base")) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("run_dm_oof_pipeline(): required resolved arg '", .nm,
+           "' is missing (no methodological default; threaded from ",
+           "cfg$train_control via run_oof_diagnostics()).", call. = FALSE)
+    }
+  }
+  # Gate 1B: val_frac / impute_* are consumed ONLY on the nested_refit path
+  # (forwarded to the per-fold leakage-free core); required there, mirroring the
+  # cap-ratio pattern.
+  if (identical(training_protocol, "nested_refit")) {
+    for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
+      if (eval(call("missing", as.name(.nm)))) {
+        stop("run_dm_oof_pipeline(nested_refit): required resolved arg '", .nm,
+             "' is missing (no methodological default).", call. = FALSE)
+      }
+    }
   }
 
   dir.create(save_dir_dm, recursive = TRUE, showWarnings = FALSE)
@@ -373,11 +401,14 @@ run_dm_oof_pipeline <- function(
     prepared_labelled = if (!is.null(dm_defer)) dm_defer$prepared_labelled else NULL,
     model_cols        = if (!is.null(dm_defer)) dm_defer$model_cols else NULL,
     group_col         = "block_id",
-    val_frac          = val_frac,
-    impute_numeric    = impute_numeric,
-    impute_factor_missing = impute_factor_missing,
     feature_weights   = feature_weights
   )
+  # Gate 1B: val_frac / impute_* are used by run_oof_xgb only on the nested path
+  # and are required there; forward them only when supplied (avoids evaluating a
+  # missing formal on the legacy path, mirroring the cap-ratio forwarding below).
+  if (!missing(val_frac))              oof_args$val_frac <- val_frac
+  if (!missing(impute_numeric))        oof_args$impute_numeric <- impute_numeric
+  if (!missing(impute_factor_missing)) oof_args$impute_factor_missing <- impute_factor_missing
   if (!missing(contextual_exclusion_to_burned_ratio)) {
     oof_args$contextual_exclusion_to_burned_ratio <- contextual_exclusion_to_burned_ratio
   }

@@ -129,34 +129,29 @@ train_final_burned_model <- function(
     train_features,
     config,
     oof_agg = NULL,
-    contextual_exclusion_to_burned_ratio   = 0.25,
-    spectral_hard_negative_to_burned_ratio = 1.0,
-    random_to_burned_ratio                 = 1.0,
-    otsu_unburned_to_burned_ratio          = 1.0,
+    # Gate 1B (2026-06-07): all methodological knobs DEFAULT TO NULL = "read
+    # from cfg$train_control / cfg$model_params" (single source of truth). A
+    # non-NULL value overrides cfg for standalone use. No literal methodological
+    # numbers live here.
+    contextual_exclusion_to_burned_ratio   = NULL,
+    spectral_hard_negative_to_burned_ratio = NULL,
+    random_to_burned_ratio                 = NULL,
+    otsu_unburned_to_burned_ratio          = NULL,
     feature_whitelist_override = NULL,
     feature_weights = NULL,
-    # 2026-06-05 (D1 expose): FINAL-model training knobs.
-    # FRENTE 1 (2026-06-05): seeds UNIFIED with the OOF stage canonical
-    # seed_base 42 (were 999 / 999). RESULT-AFFECTING; Natalia signed off.
-    # All remain user-overridable.
-    sampling_seed = 42,
-    seed = 42,
-    val_frac = 0.15,
-    group_col = "block_id",
-    nrounds_max = 4000,
-    early_stopping_rounds = 80,
-    impute_numeric = "median",
-    impute_factor_missing = "MISSING",
-    # B1 (2026-06-07): training protocol toggle forwarded to
-    # train_final_model_direct(). "legacy" (default) reproduces the historical
-    # FINAL model byte-for-byte; "nested_refit" routes through the shared
-    # leakage-free core. Opt-in only.
-    training_protocol = c("legacy", "nested_refit"),
+    sampling_seed = NULL,
+    seed = NULL,
+    val_frac = NULL,
+    group_col = NULL,
+    nrounds_max = NULL,
+    early_stopping_rounds = NULL,
+    impute_numeric = NULL,
+    impute_factor_missing = NULL,
+    training_protocol = NULL,
     labelled_layer = "train_features",
     out_dir = NULL,
     overwrite = TRUE,
     verbose = TRUE) {
-  training_protocol <- match.arg(training_protocol)
   # ---------------------------------------------------------------------------
   # 0) Validation
   # ---------------------------------------------------------------------------
@@ -174,6 +169,28 @@ train_final_burned_model <- function(
     stop("'config' must be created by build_supervised_burned_config().",
          call. = FALSE)
   }
+  # Gate 1B: resolve methodological params from cfg (explicit arg > cfg).
+  .tc <- config$train_control
+  if (is.null(.tc) || !is.list(.tc)) {
+    stop("'config' has no resolved train_control; rebuild it with ",
+         "build_supervised_burned_config().", call. = FALSE)
+  }
+  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
+  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
+  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
+  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
+  feature_whitelist_override <- feature_whitelist_override %||% .tc$feature_whitelist_override
+  feature_weights            <- feature_weights            %||% .tc$feature_weights
+  sampling_seed         <- sampling_seed         %||% .tc$seeds$final_sampling_seed
+  seed                  <- seed                  %||% .tc$seeds$final_seed
+  val_frac              <- val_frac              %||% .tc$val_frac
+  group_col             <- group_col             %||% .tc$group_col
+  nrounds_max           <- nrounds_max           %||% .tc$nrounds_max
+  early_stopping_rounds <- early_stopping_rounds %||% .tc$early_stop
+  impute_numeric        <- impute_numeric        %||% .tc$impute_numeric
+  impute_factor_missing <- impute_factor_missing %||% .tc$impute_factor_missing
+  training_protocol     <- training_protocol     %||% .tc$training_protocol
+  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   if (!is.null(oof_agg) &&
       !(is.character(oof_agg) && length(oof_agg) == 1L)) {
     stop("'oof_agg' must be NULL or a single CSV path.", call. = FALSE)
@@ -268,7 +285,12 @@ train_final_burned_model <- function(
     early_stopping_rounds                  = early_stopping_rounds,
     impute_numeric                         = impute_numeric,
     impute_factor_missing                  = impute_factor_missing,
-    training_protocol                      = training_protocol
+    training_protocol                      = training_protocol,
+    # Gate 1B (2026-06-07): hand cfg$model_params (the single source of truth,
+    # WITHOUT scale_pos_weight) to the engine, which merges the site-specific
+    # spw computed from its own training split. The engine no longer carries
+    # its own methodological xgb defaults.
+    model_params_base                      = config$model_params
   )
 
   # ---------------------------------------------------------------------------

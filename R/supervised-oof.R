@@ -139,42 +139,30 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 config,
                                 fold_cols = c("fold_rep1", "fold_rep2"),
                                 params = NULL,
+                                # Gate 1B (2026-06-07): all methodological knobs
+                                # DEFAULT TO NULL = "read from cfg$train_control /
+                                # cfg$model_params" (single source of truth). A
+                                # non-NULL value overrides cfg for standalone use.
+                                # No literal methodological numbers live here.
                                 feature_whitelist_override = NULL,
                                 feature_weights = NULL,
-                                # 2026-06-05 (D1 expose): OOF training knobs.
-                                # FRENTE 1 (2026-06-05): defaults UNIFIED with the
-                                # FINAL stage (train_final_burned_model) -- the
-                                # former OOF/FINAL asymmetry was deliberately
-                                # removed (Natalia signed off). Canonical values:
-                                # nrounds_max 4000 (was 3000), early_stop 80 (was
-                                # 75), seed_base 42 (FINAL seeds moved 999 -> 42).
-                                # All remain user-overridable.
-                                nrounds_max = 4000,
-                                early_stop = 80,
-                                seed_base = 42,
-                                # B1 (2026-06-07): protocol toggle + per-fold
-                                # sampling mode + the 4 cap ratios, forwarded to
-                                # run_dm_oof_pipeline. "legacy" (default) keeps
-                                # the OOF stage byte-identical. The caps default
-                                # to the SAME documented values FINAL uses so the
-                                # public entry forwards identical variables to
-                                # OOF and FINAL.
-                                training_protocol = c("legacy", "nested_refit"),
-                                oof_sampling = c("capped", "full"),
-                                contextual_exclusion_to_burned_ratio   = 0.25,
-                                spectral_hard_negative_to_burned_ratio = 1.0,
-                                random_to_burned_ratio                 = 1.0,
-                                otsu_unburned_to_burned_ratio          = 1.0,
-                                val_frac = 0.15,
-                                impute_numeric = "median",
-                                impute_factor_missing = "MISSING",
+                                nrounds_max = NULL,
+                                early_stop = NULL,
+                                seed_base = NULL,
+                                training_protocol = NULL,
+                                oof_sampling = NULL,
+                                contextual_exclusion_to_burned_ratio   = NULL,
+                                spectral_hard_negative_to_burned_ratio = NULL,
+                                random_to_burned_ratio                 = NULL,
+                                otsu_unburned_to_burned_ratio          = NULL,
+                                val_frac = NULL,
+                                impute_numeric = NULL,
+                                impute_factor_missing = NULL,
                                 out_dir = NULL,
                                 matrix_dir = NULL,
                                 labelled_gpkg = NULL,
                                 labelled_layer = "train_with_folds",
                                 overwrite = TRUE) {
-  training_protocol <- match.arg(training_protocol)
-  oof_sampling <- match.arg(oof_sampling)
   # ---------------------------------------------------------------------------
   # 0) Validation
   # ---------------------------------------------------------------------------
@@ -189,6 +177,28 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     stop("'config' must be created by build_supervised_burned_config().",
          call. = FALSE)
   }
+  # Gate 1B: resolve methodological params from cfg (explicit arg > cfg).
+  .tc <- config$train_control
+  if (is.null(.tc) || !is.list(.tc)) {
+    stop("'config' has no resolved train_control; rebuild it with ",
+         "build_supervised_burned_config().", call. = FALSE)
+  }
+  nrounds_max <- nrounds_max %||% .tc$nrounds_max
+  early_stop  <- early_stop  %||% .tc$early_stop
+  seed_base   <- seed_base   %||% .tc$seeds$oof_seed_base
+  feature_whitelist_override <- feature_whitelist_override %||% .tc$feature_whitelist_override
+  feature_weights            <- feature_weights            %||% .tc$feature_weights
+  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
+  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
+  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
+  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
+  val_frac              <- val_frac              %||% .tc$val_frac
+  impute_numeric        <- impute_numeric        %||% .tc$impute_numeric
+  impute_factor_missing <- impute_factor_missing %||% .tc$impute_factor_missing
+  training_protocol <- training_protocol %||% .tc$training_protocol
+  oof_sampling      <- oof_sampling      %||% .tc$oof_sampling
+  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
+  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   if (!is.character(fold_cols) || length(fold_cols) < 1L) {
     stop("'fold_cols' must be a non-empty character vector.", call. = FALSE)
   }
@@ -273,11 +283,12 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     n_neg <- sum(labelled$class == "unburned", na.rm = TRUE)
     spw   <- if (n_pos > 0) n_neg / n_pos else 1
 
-    # FRENTE 1 (2026-06-05): build the params from the SINGLE canonical
-    # source of truth shared with the FINAL stage
-    # (train_final_model_direct), so OOF and FINAL can never diverge. Only
-    # scale_pos_weight is site-specific (computed here from the OOF labels).
-    params <- .of_canonical_xgb_params(scale_pos_weight = spw)
+    # Gate 1B (2026-06-07): build the xgb params from cfg$model_params (the
+    # SINGLE SOURCE OF TRUTH), then merge the site-specific scale_pos_weight
+    # (computed here from the OOF labels). cfg$model_params is itself sourced
+    # from .of_canonical_model_params(), so OOF and FINAL can never diverge.
+    params <- config$model_params
+    params[["scale_pos_weight"]] <- spw
   }
 
   # ---------------------------------------------------------------------------

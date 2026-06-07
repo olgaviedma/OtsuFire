@@ -142,11 +142,18 @@
 #' @param training_protocol,oof_sampling Character or `NULL`. Training protocol
 #'   (`"legacy"` / `"nested_refit"`) and OOF per-fold negative sampling mode
 #'   (`"capped"` / `"full"`). `NULL` uses `"legacy"` / `"capped"`.
-#' @param model_params Named list or `NULL`. Optional override of the canonical
-#'   XGBoost hyperparameter block stored in `cfg$model_params` (the canonical
-#'   block MINUS `scale_pos_weight`, which is computed at train time). Supplying
-#'   it merges your fields onto the canonical block; `scale_pos_weight` is
-#'   rejected here.
+#' @param model_params Named list or `NULL`. Optional PARTIAL override of the
+#'   canonical XGBoost hyperparameter block stored in `cfg$model_params` (the
+#'   canonical block MINUS `scale_pos_weight`, which is computed at train time).
+#'   Supplying it merges your fields onto the canonical block field-by-field
+#'   (e.g. `model_params = list(eta = 0.03)` changes only `eta` and leaves
+#'   `max_depth`, `subsample`, ... canonical); `scale_pos_weight` is rejected
+#'   here. Because the merge is per-field, provenance is recorded PER FIELD on
+#'   `cfg$resolved_params_provenance$model_params`: each xgb field carries its
+#'   canonical value, the requested value (`NA` when not supplied), the resolved
+#'   value, and provenance (`"user"` when that specific field was supplied, else
+#'   `"default"`). This mirrors `cfg$train_control` provenance and lets a
+#'   downstream manifest render a per-field model_params provenance table.
 #'
 #' @section Gate 1B (2026-06-07) cfg single source of truth:
 #' `cfg$model_params` (the methodological XGBoost block, without
@@ -448,7 +455,17 @@ build_supervised_burned_config <- function(
   # Capture whether model_params was explicitly supplied BEFORE it is folded
   # onto the canonical block (provenance "user" vs "default").
   .model_params_user_set <- !is.null(model_params)
+  .model_params_requested <- model_params
   model_params <- .of_resolve_supervised_model_params(model_params)
+  # Gate 1B (2026-06-07): PER-FIELD provenance for cfg$model_params. The builder
+  # accepts a PARTIAL override list and folds it onto the canonical block (see
+  # .of_resolve_supervised_model_params), so provenance MUST be recorded per xgb
+  # field exactly like train_control: each field carries its canonical value, the
+  # requested value (NA when the field was not in the partial override), the
+  # resolved value, and provenance ("user" when that specific field was supplied,
+  # "default" otherwise). scale_pos_weight is intentionally absent (site-specific,
+  # rejected by the resolver, never a cfg$model_params field).
+  mp_provenance <- .of_model_params_provenance(.model_params_requested)
   train_control <- .of_resolve_supervised_train_control(
     nrounds_max                = nrounds_max,
     early_stop                 = early_stop,
@@ -528,7 +545,16 @@ build_supervised_burned_config <- function(
     # this into a full requested/resolved record at run time; the static builder
     # record below is the authoritative "was this field user-set?" source the
     # conflict-error logic relies on.
-    resolved_params_provenance = list(train_control = tc_provenance),
+    #   - $train_control: a flat per-field "user"/"default" map (consumed by the
+    #     .of_resolve_methodological_shim path at the public boundary). It also
+    #     carries a single block-level $model_params flag for back-compat.
+    #   - $model_params: a PER-FIELD record (canonical / requested / resolved /
+    #     provenance per xgb field) because the builder folds a PARTIAL override
+    #     onto the canonical block. This mirrors the train_control shim record and
+    #     is what a downstream manifest renders as the model_params provenance
+    #     table.
+    resolved_params_provenance = list(train_control = tc_provenance,
+                                      model_params  = mp_provenance),
     tool_paths               = tool_paths,
     options                  = options
   )
@@ -591,6 +617,56 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
   }
   for (nm in names(model_params)) base[[nm]] <- model_params[[nm]]
   base
+}
+
+#' Per-field provenance for cfg$model_params (Gate 1B).
+#'
+#' The builder folds a PARTIAL `model_params` override onto the canonical xgb
+#' block (`.of_canonical_model_params()`), so each xgb field's provenance is
+#' tracked INDIVIDUALLY, exactly like `cfg$train_control`. For every canonical
+#' field this returns a one-row-per-field record with:
+#'   - `canonical`: the canonical default value (formatted one-line);
+#'   - `requested`: the value the caller supplied for THIS field, or `NA` when
+#'     the field was absent from the partial override;
+#'   - `resolved`: the value actually stored in `cfg$model_params` (requested
+#'     when supplied, else canonical);
+#'   - `provenance`: `"user"` when this specific field was supplied, else
+#'     `"default"`.
+#' `scale_pos_weight` is intentionally NOT a field here: it is site-specific
+#' (computed at train time) and is rejected by
+#' `.of_resolve_supervised_model_params()`, so it is never a `cfg$model_params`
+#' field. A user override containing only fields NOT in the canonical block would
+#' already have failed downstream merge expectations; such extra fields are
+#' surfaced here as additional rows with `canonical = NA` so the record stays a
+#' faithful audit of what was requested.
+#'
+#' @param requested The raw `model_params` argument as passed to the builder
+#'   (NULL = no override, else a named list of the partial fields), BEFORE it is
+#'   folded onto the canonical block.
+#' @return A named list keyed by xgb field; each element is a list with
+#'   `canonical`, `requested`, `resolved`, `provenance`. The all-default case
+#'   marks every field `"default"` with `requested = NA`.
+#' @keywords internal
+#' @noRd
+.of_model_params_provenance <- function(requested) {
+  canon <- .of_canonical_model_params()
+  req   <- if (is.null(requested)) list() else requested
+  # Union of canonical fields and any (atypical) extra requested fields, in a
+  # stable order: canonical fields first (canonical block order), then extras.
+  fields <- c(names(canon), setdiff(names(req), names(canon)))
+  out <- list()
+  for (nm in fields) {
+    in_req      <- nm %in% names(req)
+    canon_val   <- if (nm %in% names(canon)) canon[[nm]] else NULL
+    resolved_val <- if (in_req) req[[nm]] else canon_val
+    out[[nm]] <- list(
+      canonical  = if (is.null(canon_val)) NA_character_ else .of_shim_fmt(canon_val),
+      requested  = if (in_req) .of_shim_fmt(req[[nm]]) else NA_character_,
+      resolved   = if (is.null(resolved_val)) NA_character_ else .of_shim_fmt(resolved_val),
+      provenance = if (in_req) "user" else "default"
+    )
+  }
+  out
 }
 
 #' Resolve + validate cfg$train_control (Gate 1B).

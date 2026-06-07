@@ -420,3 +420,117 @@ test_that("Gate 1B: builder validates the resolved-param overrides", {
   expect_error(mk_ss_cfg(model_params = list(scale_pos_weight = 3)),
                regexp = "scale_pos_weight")
 })
+
+# ---------------------------------------------------------------------------
+# (6) Gate 1B (2026-06-07): PER-FIELD provenance for cfg$model_params.
+#     The builder folds a PARTIAL model_params override onto the canonical block,
+#     so provenance is tracked PER xgb field (canonical / requested / resolved /
+#     provenance), mirroring train_control. A partial override of eta marks ONLY
+#     eta "user"; every other field stays "default" and canonical.
+# ---------------------------------------------------------------------------
+test_that("Gate 1B: a PARTIAL model_params override yields per-field provenance (eta=user, rest default)", {
+  cfg <- mk_ss_cfg(model_params = list(eta = 0.03))
+
+  # The resolved block keeps eta = 0.03 and every other field canonical.
+  canon <- get(".of_canonical_model_params", envir = ns)()
+  expect_equal(cfg$model_params$eta, 0.03)
+  for (nm in setdiff(names(canon), "eta")) {
+    expect_identical(cfg$model_params[[nm]], canon[[nm]],
+                     info = paste("field", nm, "must stay canonical"))
+  }
+
+  # Per-field provenance structure mirrors train_control: keyed by xgb field,
+  # each a list(canonical, requested, resolved, provenance).
+  mp <- cfg$resolved_params_provenance$model_params
+  expect_type(mp, "list")
+  expect_true(all(names(canon) %in% names(mp)))
+  expect_false("scale_pos_weight" %in% names(mp))  # site-specific, excluded.
+
+  # eta = user, with requested 0.03 and resolved 0.03; canonical recorded.
+  expect_equal(mp$eta$provenance, "user")
+  expect_equal(mp$eta$requested, "0.03")
+  expect_equal(mp$eta$resolved, "0.03")
+  expect_equal(mp$eta$canonical, "0.05")
+
+  # Every OTHER field: default, requested = NA, resolved == canonical.
+  for (nm in setdiff(names(canon), "eta")) {
+    expect_equal(mp[[nm]]$provenance, "default",
+                 info = paste("field", nm))
+    expect_true(is.na(mp[[nm]]$requested), info = paste("field", nm))
+    expect_equal(mp[[nm]]$resolved, mp[[nm]]$canonical,
+                 info = paste("field", nm))
+  }
+})
+
+test_that("Gate 1B: the all-default model_params case marks EVERY field 'default'", {
+  cfg <- mk_ss_cfg()  # no model_params override.
+  mp <- cfg$resolved_params_provenance$model_params
+  canon <- get(".of_canonical_model_params", envir = ns)()
+  expect_setequal(names(mp), names(canon))
+  for (nm in names(mp)) {
+    expect_equal(mp[[nm]]$provenance, "default", info = paste("field", nm))
+    expect_true(is.na(mp[[nm]]$requested), info = paste("field", nm))
+    expect_equal(mp[[nm]]$resolved, mp[[nm]]$canonical, info = paste("field", nm))
+  }
+})
+
+test_that("Gate 1B: a multi-field partial override tags exactly the supplied fields 'user'", {
+  cfg <- mk_ss_cfg(model_params = list(eta = 0.03, max_depth = 8))
+  mp <- cfg$resolved_params_provenance$model_params
+  canon <- get(".of_canonical_model_params", envir = ns)()
+
+  expect_equal(mp$eta$provenance, "user")
+  expect_equal(mp$max_depth$provenance, "user")
+  expect_equal(mp$max_depth$requested, "8")
+  expect_equal(cfg$model_params$max_depth, 8)
+  # subsample and the rest stay default.
+  for (nm in setdiff(names(canon), c("eta", "max_depth"))) {
+    expect_equal(mp[[nm]]$provenance, "default", info = paste("field", nm))
+  }
+})
+
+test_that("Gate 1B: a PARTIAL model_params override (eta=0.03) reaches BOTH OOF and FINAL with the rest canonical", {
+  skip_if_not_installed("sf")
+  testthat::skip_if(!exists("local_mocked_bindings",
+                            where = asNamespace("testthat")))
+  cfg <- mk_ss_cfg(model_params = list(eta = 0.03))
+  canon <- get(".of_canonical_model_params", envir = ns)()
+
+  cap_oof   <- capture_oof_args(cfg, mk_oof_train_feats())
+  cap_final <- capture_final_args(cfg, mk_final_train_gpkg())
+
+  # OOF: cfg$model_params + computed spw. eta = 0.03, rest canonical.
+  oof_block <- cap_oof$params
+  expect_equal(oof_block$eta, 0.03)
+  for (nm in setdiff(names(canon), "eta")) {
+    expect_identical(oof_block[[nm]], canon[[nm]], info = paste("OOF field", nm))
+  }
+  # FINAL: model_params_base == cfg$model_params (no spw at this boundary).
+  expect_identical(cap_final$model_params_base, cfg$model_params)
+  expect_equal(cap_final$model_params_base$eta, 0.03)
+  for (nm in setdiff(names(canon), "eta")) {
+    expect_identical(cap_final$model_params_base[[nm]], canon[[nm]],
+                     info = paste("FINAL field", nm))
+  }
+})
+
+test_that("Gate 1B: the run-summary surfaces the per-field model_params provenance table", {
+  cfg <- mk_ss_cfg(model_params = list(eta = 0.03))
+  # The render helper flattens cfg$resolved_params_provenance$model_params into
+  # the per-field table a downstream manifest documents.
+  df <- get(".of_model_params_provenance_to_df", envir = ns)(
+    cfg$resolved_params_provenance$model_params)
+  expect_s3_class(df, "data.frame")
+  expect_setequal(names(df),
+                  c("param", "canonical", "requested", "resolved", "provenance"))
+  eta_row <- df[df$param == "eta", , drop = FALSE]
+  expect_equal(nrow(eta_row), 1L)
+  expect_equal(eta_row$provenance, "user")
+  expect_equal(eta_row$requested, "0.03")
+  expect_equal(eta_row$resolved, "0.03")
+  expect_equal(eta_row$canonical, "0.05")
+  # max_depth is a default row with NA requested.
+  md_row <- df[df$param == "max_depth", , drop = FALSE]
+  expect_equal(md_row$provenance, "default")
+  expect_true(is.na(md_row$requested))
+})

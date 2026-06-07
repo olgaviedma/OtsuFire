@@ -143,7 +143,10 @@
 #' }
 #' Each resolution is recorded (cfg value / requested override / resolved value /
 #' provenance label) on `cfg$resolved_params_provenance` and in the returned run
-#' object's `resolved_params_provenance` field.
+#' object's `resolved_params_provenance` field. The PER-FIELD `cfg$model_params`
+#' provenance (the builder folds a PARTIAL xgb override onto the canonical block,
+#' so each xgb field carries canonical / requested / resolved / provenance) is
+#' surfaced separately on the run object's `model_params_provenance` field.
 #'
 #' REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
 #' future minor version. Migrate callers to
@@ -217,8 +220,9 @@
 #'   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
 #'   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
 #'   `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
-#'   `consistency_*`, `legacy_run_summary`,
-#'   `legacy_consistency_summary`.
+#'   `consistency_*`, `resolved_params_provenance`,
+#'   `model_params_provenance` (per-field cfg$model_params provenance table),
+#'   `legacy_run_summary`, `legacy_consistency_summary`.
 #'
 #' @family workflow
 #' @export
@@ -331,6 +335,13 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
   # requested override / resolved value / provenance label per methodological
   # field). Attached to the run summary the pipeline emits below.
   .resolved_params_provenance <- .of_shim_record_to_df(.rec)
+  # Gate 1B (2026-06-07): the PER-FIELD cfg$model_params provenance (canonical /
+  # requested / resolved / provenance per xgb field). The builder folds a PARTIAL
+  # model_params override onto the canonical block, so this is tracked per field
+  # exactly like train_control. Surfaced on the run object so a downstream
+  # manifest can render the model_params provenance table.
+  .model_params_provenance <- .of_model_params_provenance_to_df(
+    config$resolved_params_provenance$model_params)
   if (!is.logical(run_consistency) || length(run_consistency) != 1L) {
     stop("'run_consistency' must be TRUE or FALSE.", call. = FALSE)
   }
@@ -450,6 +461,11 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
       # resolved value / provenance label per methodological field). Also
       # carried on cfg$resolved_params_provenance (builder-time field flags).
       resolved_params_provenance = .resolved_params_provenance,
+      # Gate 1B (2026-06-07): per-field cfg$model_params provenance table
+      # (param / canonical / requested / resolved / provenance), e.g. a partial
+      # build_supervised_burned_config(model_params = list(eta = 0.03)) yields
+      # eta=user (requested 0.03) and every other xgb field default.
+      model_params_provenance = .model_params_provenance,
       legacy_run_summary      = legacy,
       legacy_consistency_summary = consistency_out
     ),

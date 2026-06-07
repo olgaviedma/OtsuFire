@@ -120,6 +120,18 @@
 #'       `labeled_oof_summary_gpkg`, `design_bundle_rds` — written paths.
 #'   }
 #'
+#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
+#' The methodological / training-control arguments here (`nrounds_max`,
+#' `early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
+#' `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
+#' `group_col`, `training_protocol`, `oof_sampling`) are DEPRECATED COMPATIBILITY
+#' SHIMS. Set these in [build_supervised_burned_config()] instead
+#' (`cfg$train_control`, the single source of truth). A non-`NULL` override of a
+#' canonical-default field emits a deprecation warning of class
+#' `"otsufire_deprecated_param"`; an override conflicting with an EXPLICIT
+#' builder-user value errors. REMOVAL PLAN: deprecated now (warn) -> removed in a
+#' future minor version; the canonical path is the builder.
+#'
 #' @family workflow
 #' @export
 #'
@@ -169,7 +181,17 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 matrix_dir = NULL,
                                 labelled_gpkg = NULL,
                                 labelled_layer = "train_with_folds",
-                                overwrite = TRUE) {
+                                overwrite = TRUE,
+                                # Precision 1 (2026-06-07): internal sentinel set
+                                # TRUE by the orchestrator, which already resolved
+                                # the methodological shims at the
+                                # run_oneyear_supervised_pipeline() boundary
+                                # (warning + conflict-error + provenance happen
+                                # ONCE there). When TRUE this standalone boundary
+                                # skips re-warning so the orchestrated path does
+                                # not double-warn. Direct callers leave it FALSE
+                                # and get the full deprecated-shim treatment.
+                                .internal_resolved = FALSE) {
   # ---------------------------------------------------------------------------
   # 0) Validation
   # ---------------------------------------------------------------------------
@@ -184,32 +206,51 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     stop("'config' must be created by build_supervised_burned_config().",
          call. = FALSE)
   }
-  # Gate 1B: resolve methodological params from cfg (explicit arg > cfg).
+  # Gate 1B + Precision 1: resolve methodological params from cfg at this public
+  # boundary. The CANONICAL path is build_supervised_burned_config(); the
+  # function-level args here are DEPRECATED COMPATIBILITY SHIMS. Each override is
+  # folded via .of_resolve_methodological_shim() (conflict-error vs an explicit
+  # builder-user value; deprecation warning of class "otsufire_deprecated_param"
+  # over a canonical default; provenance recording). When invoked by the
+  # orchestrator (.internal_resolved=TRUE) the shims were ALREADY resolved at the
+  # run_oneyear_supervised_pipeline() boundary, so we use the plain cfg-precedence
+  # %||% to avoid a second warning for the same override.
   .tc <- config$train_control
   if (is.null(.tc) || !is.list(.tc)) {
     stop("'config' has no resolved train_control; rebuild it with ",
          "build_supervised_burned_config().", call. = FALSE)
   }
-  nrounds_max <- nrounds_max %||% .tc$nrounds_max
-  early_stop  <- early_stop  %||% .tc$early_stop
-  seed_base   <- seed_base   %||% .tc$seeds$oof_seed_base
-  feature_whitelist_override <- feature_whitelist_override %||% .tc$feature_whitelist_override
-  feature_weights            <- feature_weights            %||% .tc$feature_weights
-  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
-  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
-  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
-  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
-  val_frac              <- val_frac              %||% .tc$val_frac
-  impute_numeric        <- impute_numeric        %||% .tc$impute_numeric
-  impute_factor_missing <- impute_factor_missing %||% .tc$impute_factor_missing
+  if (isTRUE(.internal_resolved)) {
+    .shim <- function(override, cfg_value, param, arg_name = param) override %||% cfg_value
+  } else {
+    .prov <- config$resolved_params_provenance$train_control %||% list()
+    .shim <- function(override, cfg_value, param, arg_name = param) {
+      .of_resolve_methodological_shim(
+        override = override, cfg_value = cfg_value, param = param,
+        arg_name = arg_name, cfg_provenance = .prov[[param]] %||% "default",
+        record = NULL)
+    }
+  }
+  nrounds_max <- .shim(nrounds_max, .tc$nrounds_max, "nrounds_max")
+  early_stop  <- .shim(early_stop,  .tc$early_stop,  "early_stop")
+  seed_base   <- .shim(seed_base,   .tc$seeds$oof_seed_base, "oof_seed_base", "seed_base")
+  feature_whitelist_override <- .shim(feature_whitelist_override, .tc$feature_whitelist_override, "feature_whitelist_override")
+  feature_weights            <- .shim(feature_weights,            .tc$feature_weights, "feature_weights")
+  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
+  spectral_hard_negative_to_burned_ratio <- .shim(spectral_hard_negative_to_burned_ratio, .tc$caps$spectral,   "cap_spectral",   "spectral_hard_negative_to_burned_ratio")
+  random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
+  otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
+  val_frac              <- .shim(val_frac,              .tc$val_frac,        "val_frac")
+  impute_numeric        <- .shim(impute_numeric,        .tc$impute_numeric,  "impute_numeric")
+  impute_factor_missing <- .shim(impute_factor_missing, .tc$impute_factor_missing, "impute_factor_missing")
   # Gate 1B (2026-06-07): group_col is sourced from cfg$train_control the SAME
   # way as val_frac / impute_* etc. so OOF's grouped block-CV column matches
   # the FINAL stage's group_col (single source of truth). Previously OOF used a
   # hardcoded "block_id" literal in run_dm_oof_pipeline(); that literal is
   # removed and group_col is now threaded from here.
-  group_col             <- group_col             %||% .tc$group_col
-  training_protocol <- training_protocol %||% .tc$training_protocol
-  oof_sampling      <- oof_sampling      %||% .tc$oof_sampling
+  group_col             <- .shim(group_col,            .tc$group_col,       "group_col")
+  training_protocol <- .shim(training_protocol, .tc$training_protocol, "training_protocol")
+  oof_sampling      <- .shim(oof_sampling,      .tc$oof_sampling,      "oof_sampling")
   training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   if (!is.character(fold_cols) || length(fold_cols) < 1L) {

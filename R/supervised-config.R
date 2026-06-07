@@ -353,6 +353,9 @@ build_supervised_burned_config <- function(
   # places they are defined); user-supplied builder args override them and are
   # validated here. Every downstream stage reads cfg$model_params /
   # cfg$train_control, so the 5-layer default duplication is eliminated.
+  # Capture whether model_params was explicitly supplied BEFORE it is folded
+  # onto the canonical block (provenance "user" vs "default").
+  .model_params_user_set <- !is.null(model_params)
   model_params <- .of_resolve_supervised_model_params(model_params)
   train_control <- .of_resolve_supervised_train_control(
     nrounds_max                = nrounds_max,
@@ -372,6 +375,37 @@ build_supervised_burned_config <- function(
     feature_weights            = feature_weights,
     training_protocol          = training_protocol,
     oof_sampling               = oof_sampling
+  )
+
+  # ---- Gate 1B / Precision 1 (2026-06-07): provenance of each methodological
+  # train_control field. Tagged "user" when the caller explicitly supplied the
+  # corresponding builder argument (non-NULL), "default" when the canonical
+  # default was used. The public-boundary shim resolver
+  # (.of_resolve_methodological_shim) consults this to (a) ERROR when a
+  # function-level override conflicts with an EXPLICIT user value, and (b) emit a
+  # deprecation warning when a function-level override is applied over a
+  # canonical default. The provenance record is exposed on the cfg AND written
+  # into the run-level summary the pipeline emits.
+  tc_provenance <- list(
+    nrounds_max           = if (is.null(nrounds_max))           "default" else "user",
+    early_stop            = if (is.null(early_stop))            "default" else "user",
+    oof_seed_base         = if (is.null(oof_seed_base))         "default" else "user",
+    final_sampling_seed   = if (is.null(final_sampling_seed))   "default" else "user",
+    final_seed            = if (is.null(final_seed))            "default" else "user",
+    val_frac              = if (is.null(val_frac))              "default" else "user",
+    group_col             = if (is.null(group_col))             "default" else "user",
+    impute_numeric        = if (is.null(impute_numeric))        "default" else "user",
+    impute_factor_missing = if (is.null(impute_factor_missing)) "default" else "user",
+    cap_contextual        = if (is.null(cap_contextual))        "default" else "user",
+    cap_spectral          = if (is.null(cap_spectral))          "default" else "user",
+    cap_random            = if (is.null(cap_random))            "default" else "user",
+    cap_otsu              = if (is.null(cap_otsu))              "default" else "user",
+    feature_whitelist_override =
+      if (is.null(feature_whitelist_override)) "default" else "user",
+    feature_weights       = if (is.null(feature_weights))       "default" else "user",
+    training_protocol     = if (is.null(training_protocol))     "default" else "user",
+    oof_sampling          = if (is.null(oof_sampling))          "default" else "user",
+    model_params          = if (.model_params_user_set)         "user"    else "default"
   )
 
   # §N+27 RESOLVED (2026-06-05): the supervised burned-like registry was an
@@ -397,6 +431,12 @@ build_supervised_burned_config <- function(
     # single source of truth read by every supervised stage.
     model_params             = model_params,
     train_control            = train_control,
+    # Gate 1B / Precision 1: per-field provenance ("default" canonical vs "user"
+    # explicitly set in the builder). The public-boundary shim resolver enriches
+    # this into a full requested/resolved record at run time; the static builder
+    # record below is the authoritative "was this field user-set?" source the
+    # conflict-error logic relies on.
+    resolved_params_provenance = list(train_control = tc_provenance),
     tool_paths               = tool_paths,
     options                  = options
   )

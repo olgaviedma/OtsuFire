@@ -109,6 +109,18 @@
 #'       `training_ok_gpkg` — written paths.
 #'   }
 #'
+#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
+#' The methodological / training-control arguments here (the four
+#' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`,
+#' `sampling_seed`, `seed`, `val_frac`, `group_col`, `nrounds_max`,
+#' `early_stopping_rounds`, `impute_*`, `training_protocol`) are DEPRECATED
+#' COMPATIBILITY SHIMS. Set these in [build_supervised_burned_config()] instead
+#' (`cfg$train_control` / `cfg$model_params`, the single source of truth). A
+#' non-`NULL` override of a canonical-default field emits a deprecation warning
+#' of class `"otsufire_deprecated_param"`; an override conflicting with an
+#' EXPLICIT builder-user value errors. REMOVAL PLAN: deprecated now (warn) ->
+#' removed in a future minor version; the canonical path is the builder.
+#'
 #' @family workflow
 #' @export
 #'
@@ -151,7 +163,13 @@ train_final_burned_model <- function(
     labelled_layer = "train_features",
     out_dir = NULL,
     overwrite = TRUE,
-    verbose = TRUE) {
+    verbose = TRUE,
+    # Precision 1 (2026-06-07): internal sentinel set TRUE by the orchestrator,
+    # which already resolved the deprecated methodological shims at the
+    # run_oneyear_supervised_pipeline() boundary. When TRUE this standalone
+    # boundary skips re-warning (avoids double-warning on the orchestrated path).
+    # Direct callers leave it FALSE and get the full deprecated-shim treatment.
+    .internal_resolved = FALSE) {
   # ---------------------------------------------------------------------------
   # 0) Validation
   # ---------------------------------------------------------------------------
@@ -169,27 +187,46 @@ train_final_burned_model <- function(
     stop("'config' must be created by build_supervised_burned_config().",
          call. = FALSE)
   }
-  # Gate 1B: resolve methodological params from cfg (explicit arg > cfg).
+  # Gate 1B + Precision 1: resolve methodological params from cfg at this public
+  # boundary. The CANONICAL path is build_supervised_burned_config(); the
+  # function-level args here are DEPRECATED COMPATIBILITY SHIMS. Each override is
+  # folded via .of_resolve_methodological_shim() (conflict-error vs an explicit
+  # builder-user value; deprecation warning of class "otsufire_deprecated_param"
+  # over a canonical default). When invoked by the orchestrator
+  # (.internal_resolved=TRUE) the shims were ALREADY resolved at the
+  # run_oneyear_supervised_pipeline() boundary, so we use the plain
+  # cfg-precedence %||% to avoid a second warning for the same override.
   .tc <- config$train_control
   if (is.null(.tc) || !is.list(.tc)) {
     stop("'config' has no resolved train_control; rebuild it with ",
          "build_supervised_burned_config().", call. = FALSE)
   }
-  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
-  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
-  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
-  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
-  feature_whitelist_override <- feature_whitelist_override %||% .tc$feature_whitelist_override
-  feature_weights            <- feature_weights            %||% .tc$feature_weights
-  sampling_seed         <- sampling_seed         %||% .tc$seeds$final_sampling_seed
-  seed                  <- seed                  %||% .tc$seeds$final_seed
-  val_frac              <- val_frac              %||% .tc$val_frac
-  group_col             <- group_col             %||% .tc$group_col
-  nrounds_max           <- nrounds_max           %||% .tc$nrounds_max
-  early_stopping_rounds <- early_stopping_rounds %||% .tc$early_stop
-  impute_numeric        <- impute_numeric        %||% .tc$impute_numeric
-  impute_factor_missing <- impute_factor_missing %||% .tc$impute_factor_missing
-  training_protocol     <- training_protocol     %||% .tc$training_protocol
+  if (isTRUE(.internal_resolved)) {
+    .shim <- function(override, cfg_value, param, arg_name = param) override %||% cfg_value
+  } else {
+    .prov <- config$resolved_params_provenance$train_control %||% list()
+    .shim <- function(override, cfg_value, param, arg_name = param) {
+      .of_resolve_methodological_shim(
+        override = override, cfg_value = cfg_value, param = param,
+        arg_name = arg_name, cfg_provenance = .prov[[param]] %||% "default",
+        record = NULL)
+    }
+  }
+  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
+  spectral_hard_negative_to_burned_ratio <- .shim(spectral_hard_negative_to_burned_ratio, .tc$caps$spectral,   "cap_spectral",   "spectral_hard_negative_to_burned_ratio")
+  random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
+  otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
+  feature_whitelist_override <- .shim(feature_whitelist_override, .tc$feature_whitelist_override, "feature_whitelist_override")
+  feature_weights            <- .shim(feature_weights,            .tc$feature_weights, "feature_weights")
+  sampling_seed         <- .shim(sampling_seed,         .tc$seeds$final_sampling_seed, "final_sampling_seed", "sampling_seed")
+  seed                  <- .shim(seed,                  .tc$seeds$final_seed,          "final_seed",          "seed")
+  val_frac              <- .shim(val_frac,              .tc$val_frac,        "val_frac")
+  group_col             <- .shim(group_col,            .tc$group_col,       "group_col")
+  nrounds_max           <- .shim(nrounds_max,           .tc$nrounds_max,     "nrounds_max")
+  early_stopping_rounds <- .shim(early_stopping_rounds, .tc$early_stop,      "early_stop", "early_stopping_rounds")
+  impute_numeric        <- .shim(impute_numeric,        .tc$impute_numeric,  "impute_numeric")
+  impute_factor_missing <- .shim(impute_factor_missing, .tc$impute_factor_missing, "impute_factor_missing")
+  training_protocol     <- .shim(training_protocol,     .tc$training_protocol, "training_protocol")
   training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   if (!is.null(oof_agg) &&
       !(is.character(oof_agg) && length(oof_agg) == 1L)) {

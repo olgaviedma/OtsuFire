@@ -19,6 +19,24 @@ build_supervised_burned_config(
   topo = NULL,
   corine_raster = NULL,
   burnable_mask = NULL,
+  nrounds_max = NULL,
+  early_stop = NULL,
+  oof_seed_base = NULL,
+  final_sampling_seed = NULL,
+  final_seed = NULL,
+  val_frac = NULL,
+  group_col = NULL,
+  impute_numeric = NULL,
+  impute_factor_missing = NULL,
+  cap_contextual = NULL,
+  cap_spectral = NULL,
+  cap_random = NULL,
+  cap_otsu = NULL,
+  feature_whitelist_override = NULL,
+  feature_weights = NULL,
+  training_protocol = NULL,
+  oof_sampling = NULL,
+  model_params = NULL,
   options = list()
 )
 }
@@ -81,6 +99,44 @@ all_sources unburned builders. When `NULL` it defaults to the convention
 path
 `<data_base>/Corine_Masks/burneable_mask_binary_corine_<corine_year>_ETRS89.tif`.}
 
+\item{nrounds_max, early_stop}{Integer or `NULL`. XGBoost max boosting rounds
+and early-stopping patience. `NULL` uses the canonical defaults
+(`4000` / `80`). Stored in `cfg$train_control`.}
+
+\item{oof_seed_base, final_sampling_seed, final_seed}{Integer or `NULL`. The
+three distinct RNG seeds (OOF block-CV; FINAL negative-pool sampling; FINAL
+train/val split + xgboost). `NULL` uses the canonical `42` for each. Stored
+in `cfg$train_control$seeds`.}
+
+\item{val_frac}{Numeric in (0, 1) or `NULL`. FINAL / nested-refit inner
+validation fraction. `NULL` uses `0.15`.}
+
+\item{group_col}{Character or `NULL`. Grouping column for the grouped
+train/val split. `NULL` uses `"block_id"`.}
+
+\item{impute_numeric, impute_factor_missing}{Character or `NULL`. Numeric
+imputation rule (`"median"` / `"zero"`) and the missing-factor sentinel.
+`NULL` uses `"median"` / `"MISSING"`.}
+
+\item{cap_contextual, cap_spectral, cap_random, cap_otsu}{Numeric `>= 0`
+(`Inf` disables) or `NULL`. The four negative-bucket caps as a multiple of
+`n_burned`. `NULL` uses `0.25` / `1.0` / `1.0` / `1.0`. Stored in
+`cfg$train_control$caps`.}
+
+\item{feature_whitelist_override, feature_weights}{Optional subset of
+`.supervised_feature_cols` and a named numeric per-feature weight vector,
+or `NULL`. Stored in `cfg$train_control` and consumed by BOTH OOF and FINAL.}
+
+\item{training_protocol, oof_sampling}{Character or `NULL`. Training protocol
+(`"legacy"` / `"nested_refit"`) and OOF per-fold negative sampling mode
+(`"capped"` / `"full"`). `NULL` uses `"legacy"` / `"capped"`.}
+
+\item{model_params}{Named list or `NULL`. Optional override of the canonical
+XGBoost hyperparameter block stored in `cfg$model_params` (the canonical
+block MINUS `scale_pos_weight`, which is computed at train time). Supplying
+it merges your fields onto the canonical block; `scale_pos_weight` is
+rejected here.}
+
 \item{options}{Named list of advanced options. Recognized keys include
   `legacy_*`, `currentyear_*`, `unb_verbose`, `result_name`,
   `data_base`, plus overrides forwarded to the engine. The
@@ -133,6 +189,20 @@ class `otsufire_supervised_burned_config`.
 Contract source: `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`,
 `SUPERVISED_ONEYEAR_INPUTS_FINAL.csv`, `SUPERVISED_ONEYEAR_OUTPUTS_ROUTES.csv`.
 }
+\section{Gate 1B (2026-06-07) cfg single source of truth}{
+
+`cfg$model_params` (the methodological XGBoost block, without
+`scale_pos_weight`) and `cfg$train_control` (caps, seeds, nrounds/early-stop,
+val_frac, group_col, imputation rules, whitelist/weights, protocol toggles)
+are the SINGLE SOURCE OF TRUTH for the supervised methodological parameters.
+The canonical defaults live ONLY in `.of_canonical_model_params()` /
+`.of_canonical_train_control()`; the builder arguments above let a user
+override them. Every downstream stage ([run_oneyear_supervised_pipeline()],
+[run_oof_diagnostics()], [train_final_burned_model()] and the internal
+engines) reads these resolved cfg sections rather than carrying its own
+defaults.
+}
+
 \seealso{
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

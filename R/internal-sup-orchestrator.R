@@ -335,6 +335,10 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     final_impute_factor_missing,
                                     training_protocol,
                                     oof_sampling,
+                                    # Precision 2 (2026-06-07): spectral cap
+                                    # resolved at the public boundary, used by the
+                                    # package-level parity guard before modeling.
+                                    spectral_cap_resolved                  = NULL,
                                     internal_decisions_path                = NULL,
                                     engine_bindings                        = NULL,
                                     config                                 = NULL) {
@@ -892,7 +896,28 @@ run_supervised_pipeline <- function(target_year, scenario,
   
   # ============================== 9) MODELING ============================
   if (isTRUE(DO_MODEL)) {
-    
+
+    # Precision 2 (2026-06-07): PACKAGE-LEVEL spectral-cap parity guard. The
+    # orchestrator forwards a SINGLE resolved spectral cap
+    # (spectral_hard_negative_to_burned_ratio) to BOTH the OOF stage (below) and
+    # the FINAL stage. Before any model is fit, assert that this value matches
+    # the cap resolved at the public boundary (spectral_cap_resolved) AND the cap
+    # carried on the cfg. This fails fast on a silent reversion (e.g. a residual
+    # default quietly returning the cap to 1.0 on the capped training path). The
+    # reference is the boundary-resolved value when available (it already folds
+    # in any deliberate function-level override), else the cfg cap.
+    .cfg_spectral_cap <- tryCatch(config$train_control$caps$spectral,
+                                  error = function(e) NULL)
+    .spectral_ref <- spectral_cap_resolved %||% .cfg_spectral_cap %||%
+      spectral_hard_negative_to_burned_ratio
+    .of_assert_spectral_cap_parity(
+      oof_spectral   = spectral_hard_negative_to_burned_ratio,
+      final_spectral = spectral_hard_negative_to_burned_ratio,
+      cfg_spectral   = .spectral_ref
+    )
+    msg(sprintf("[guard] spectral-cap parity OK: OOF=FINAL=%s (resolved).",
+                format(spectral_hard_negative_to_burned_ratio, trim = TRUE)))
+
     msg("STEP C0 - Read features_geometry.gpkg (03_FEATURES)")
     gpkg_features <- file.path(dirs$`03_FEATURES`, "features_geometry.gpkg")
     stopifnot(file.exists(gpkg_features))
@@ -978,6 +1003,9 @@ run_supervised_pipeline <- function(target_year, scenario,
         labelled_gpkg    = train_with_folds_gpkg,
         labelled_layer   = "train_with_folds",
         overwrite        = overwrite,
+        # Precision 1 (2026-06-07): shims already resolved at the public
+        # boundary; suppress a second deprecation warning here.
+        .internal_resolved = TRUE,
         # B1 (2026-06-07): protocol + per-fold sampling + the SAME 4 cap ratios
         # forwarded to FINAL (so OOF and FINAL see identical caps).
         training_protocol = training_protocol,
@@ -988,7 +1016,12 @@ run_supervised_pipeline <- function(target_year, scenario,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         val_frac          = final_val_frac,
         impute_numeric    = final_impute_numeric,
-        impute_factor_missing = final_impute_factor_missing
+        impute_factor_missing = final_impute_factor_missing,
+        # Precision 1 (2026-06-07): the deprecated methodological shims were
+        # already resolved (warned/conflict-checked/recorded) at the
+        # run_oneyear_supervised_pipeline() boundary; the values forwarded here
+        # are the resolved scalars, so suppress a second deprecation warning.
+        .internal_resolved = TRUE
       )
       # Preserve the historical `pipe1` shape consumed below
       # (pipe1$files), and keep the inner wrapper object available.

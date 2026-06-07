@@ -689,8 +689,62 @@ process_otsu_rasters_grow <- function(
     sm <- smooth_histogram_fun(h$counts)
     sm[is.na(sm)] <- 0
 
-    thr_scaled <- otsu_threshold_smoothed_fun(sm, h$mids)
+    # ROBUSTNESS GUARD (AOI_001 "valor ausente donde TRUE/FALSE es necesario" fix):
+    # OtsuSeg::otsu_threshold_smoothed() loops over histogram bins and evaluates
+    # `if (between_class_variance > max_variance)`. If ANY bin centre (mids) or
+    # smoothed count is non-finite (Inf/NaN) at a non-empty bin, the intermediate
+    # variance becomes NaN and that bare `if` aborts the whole AOI with
+    # "missing value where TRUE/FALSE needed". This is exactly how the single giant
+    # degenerate AOI tile crashed while all other AOIs succeeded. We cannot edit the
+    # Suggests-only OtsuSeg package, so we (a) coerce the inputs to finite values
+    # before the call, and (b) wrap the call so any residual non-finite/error result
+    # degrades to a graceful Otsu failure instead of aborting. Failed Otsu is already
+    # handled downstream (global fallback / unit skip), so this is fail-safe and does
+    # NOT change results for healthy AOIs (their inputs are already finite).
+    mids <- h$mids
+    bad_mids <- !is.finite(mids)
+    if (any(bad_mids)) {
+      # Drop non-finite bins from both the counts and the centres so the loop in
+      # otsu_threshold_smoothed() only sees finite, paired values.
+      mids <- mids[!bad_mids]
+      sm   <- sm[!bad_mids]
+    }
+    sm[!is.finite(sm)] <- 0
+
+    if (length(mids) < 2L || sum(sm) <= 0) {
+      return(list(ok = FALSE, thr_real = NA_real_, thr_scaled = NA_real_,
+                  n_used = length(vals),
+                  n_input = n_input, n_finite = n_finite,
+                  n_range_drop = n_range_drop, n_trim_drop = n_trim_drop,
+                  min_val = min_val, max_val = max_val,
+                  note = "degenerate_histogram"))
+    }
+
+    thr_scaled <- tryCatch(
+      otsu_threshold_smoothed_fun(sm, mids),
+      error = function(e) NA_real_
+    )
+    thr_scaled <- suppressWarnings(as.numeric(thr_scaled)[1])
+
+    if (!is.finite(thr_scaled)) {
+      return(list(ok = FALSE, thr_real = NA_real_, thr_scaled = NA_real_,
+                  n_used = length(vals),
+                  n_input = n_input, n_finite = n_finite,
+                  n_range_drop = n_range_drop, n_trim_drop = n_trim_drop,
+                  min_val = min_val, max_val = max_val,
+                  note = "otsu_nonfinite_threshold"))
+    }
+
     thr_real <- (thr_scaled / 255) * rng + min_val
+
+    if (!is.finite(thr_real)) {
+      return(list(ok = FALSE, thr_real = NA_real_, thr_scaled = as.numeric(thr_scaled),
+                  n_used = length(vals),
+                  n_input = n_input, n_finite = n_finite,
+                  n_range_drop = n_range_drop, n_trim_drop = n_trim_drop,
+                  min_val = min_val, max_val = max_val,
+                  note = "otsu_nonfinite_thr_real"))
+    }
 
     list(ok = TRUE, thr_real = as.numeric(thr_real), thr_scaled = as.numeric(thr_scaled),
          n_used = length(vals),
@@ -1044,7 +1098,7 @@ process_otsu_rasters_grow <- function(
   if (!inherits(eco_n, "try-error") && !inherits(cor_n, "try-error") && is.finite(eco_n) && is.finite(cor_n) && cor_n > 0) {
     cov <- 100 * (eco_n / cor_n)
     message(sprintf("[ECOREG] raster coverage over CORINE = %.2f%%", cov))
-    if (cov < 95) {
+    if (is.finite(cov) && cov < 95) {
       warning(sprintf(
         "Low ecoregion coverage (%.2f%%). If full coverage is expected, check CRS, clipping, filtering, geometry validity. Consider ecoregion_touches=TRUE and avoid unintended clipping.",
         cov
@@ -1354,12 +1408,16 @@ process_otsu_rasters_grow <- function(
       lb_applied <- FALSE
       floor_applied <- FALSE
 
-      if (is.finite(lb_final) && thr_seed < lb_final) {
+      # NA-safe lower-bound / floor application: require finite thr_seed on the
+      # left of each comparison so a degenerate non-finite seed cannot turn the
+      # condition into NA (which would abort the AOI). Healthy units have finite
+      # thr_seed here, so behaviour is unchanged for them.
+      if (is.finite(thr_seed) && is.finite(lb_final) && thr_seed < lb_final) {
         thr_seed <- lb_final
         lb_applied <- TRUE
       }
 
-      if (!is.null(floor_local) && is.finite(floor_local) && thr_seed < floor_local) {
+      if (is.finite(thr_seed) && !is.null(floor_local) && is.finite(floor_local) && thr_seed < floor_local) {
         thr_seed <- floor_local
         floor_applied <- TRUE
       }
@@ -1381,7 +1439,7 @@ process_otsu_rasters_grow <- function(
       grow_clamped <- FALSE
       grow_floor_applied <- FALSE
 
-      if (!is.null(grow_floor_local) && thr_grow < grow_floor_local) {
+      if (is.finite(thr_grow) && !is.null(grow_floor_local) && thr_grow < grow_floor_local) {
         thr_grow <- grow_floor_local
         grow_clamped <- TRUE
         grow_floor_applied <- TRUE

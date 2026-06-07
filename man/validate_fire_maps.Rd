@@ -412,7 +412,6 @@ validate_fire_maps(
 
 Other modular: 
 \code{\link{check_supervised_consistency}()},
-\code{\link{detect_burned_patches}()},
-\code{\link{update_burned_like_registry}()}
+\code{\link{detect_burned_patches}()}
 }
 \concept{modular}

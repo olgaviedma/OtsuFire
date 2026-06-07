@@ -15,6 +15,19 @@ run_oneyear_supervised_pipeline(
   feature_whitelist_override = NULL,
   feature_weights = NULL,
   reuse_upstream = FALSE,
+  oof_nrounds_max = 4000,
+  oof_early_stop = 80,
+  oof_seed_base = 42,
+  final_sampling_seed = 42,
+  final_seed = 42,
+  final_val_frac = 0.15,
+  final_group_col = "block_id",
+  final_nrounds_max = 4000,
+  final_early_stopping_rounds = 80,
+  final_impute_numeric = "median",
+  final_impute_factor_missing = "MISSING",
+  training_protocol = c("legacy", "nested_refit"),
+  oof_sampling = c("capped", "full"),
   ...
 )
 }
@@ -25,7 +38,13 @@ run_oneyear_supervised_pipeline(
 \item{run_consistency}{Logical. Whether to execute the
 deterministic-vs-supervised consistency block.}
 
-\item{overwrite}{Logical. Forwarded to the engine.}
+\item{overwrite}{Logical. Default `TRUE` regenerates/clobbers stage
+outputs (historical behaviour). When `FALSE`, the engine forwards
+the flag to the unburned builder and the OOF / final-model wrappers,
+which skip or reuse existing on-disk stage outputs instead of
+overwriting them. (Before 2026-06-05 this flag was cosmetic: it was
+validated but never threaded, and the engine always behaved as if
+`overwrite = TRUE`.)}
 
 \item{contextual_exclusion_to_burned_ratio}{Numeric. Cap on the
 contextual-exclusion negative pool (deterministic-drop polygons whose
@@ -82,27 +101,83 @@ run with `01_POOLS/<year>_<scenario>_pools.gpkg`,
 `03_FEATURES/features_geometry.gpkg` already present. Default
 `FALSE` reproduces the historical behaviour.}
 
+\item{oof_nrounds_max}{Integer. Maximum xgboost boosting rounds for the OOF
+per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
+FINAL-model default (was `3000`). Threaded to [run_oof_diagnostics()].}
+
+\item{oof_early_stop}{Integer. xgboost early-stopping patience for the OOF
+per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
+(was `75`).}
+
+\item{oof_seed_base}{Integer. Base RNG seed for the repeated block-CV OOF
+runs. Default `42`. The canonical seed shared with the FINAL stage.}
+
+\item{final_sampling_seed}{Integer. RNG seed for the FINAL-model
+negative-pool sampling. Default `42`. FRENTE 1: UNIFIED with the OOF
+canonical seed (was `999`). Threaded to [train_final_burned_model()].}
+
+\item{final_seed}{Integer. RNG seed for the FINAL-model train/val split and
+xgboost training. Default `42`. FRENTE 1: UNIFIED with the OOF canonical
+seed (was `999`).}
+
+\item{final_val_frac}{Numeric in (0, 1). Validation fraction for the
+FINAL-model train/val split. Default `0.15`.}
+
+\item{final_group_col}{Character or `NULL`. Grouping column for the
+FINAL-model grouped train/val split. Default `"block_id"`.}
+
+\item{final_nrounds_max}{Integer. Maximum xgboost boosting rounds for the
+FINAL model. Default `4000`. FRENTE 1 (2026-06-05): now UNIFIED with
+`oof_nrounds_max`.}
+
+\item{final_early_stopping_rounds}{Integer. xgboost early-stopping patience
+for the FINAL model. Default `80`. FRENTE 1: now UNIFIED with
+`oof_early_stop`.}
+
+\item{final_impute_numeric}{Character. Numeric-imputation rule for the
+FINAL model: `"median"` (default) or `"zero"`.}
+
+\item{final_impute_factor_missing}{Character. Sentinel level for missing
+factor/character values in the FINAL model. Default `"MISSING"`.}
+
+\item{training_protocol}{Character. Supervised training protocol, one of
+`"legacy"` (default) or `"nested_refit"`. `"legacy"` reproduces the
+historical OOF + FINAL behaviour byte-for-byte. `"nested_refit"` opts into
+the leakage-free protocol (B1, 2026-06-07) used IDENTICALLY by the OOF and
+FINAL stages via one shared internal core: medians and `scale_pos_weight`
+are fit on the training rows only, an inner validation split is the sole
+early-stopping set, and a fresh model is refit on all training rows at the
+selected `best_iteration` before deployment. Opt-in; the production default
+is unchanged.}
+
+\item{oof_sampling}{Character. OOF per-fold negative sampling mode, one of
+`"capped"` (default) or `"full"`. Only active under
+`training_protocol = "nested_refit"`: `"capped"` applies the SAME four
+bucket caps the FINAL model uses to the outer-train negatives of each fold;
+`"full"` uses all outer-train rows. Ignored on the legacy path.}
+
 \item{...}{Migration trap for removed arguments. Reserved for
 detecting calls that still pass the OtsuFire 0.4.x deny-list
 arguments `additional_drop_cols` / `extra_drop_cols`, which were
 removed in 0.5.0; such calls error with a migration message
 pointing at `feature_whitelist_override`. Any other named argument
-passed here is silently ignored.}
+passed here is also rejected with an "Unused arguments" error
+(never silently ignored).}
 }
 \value{
 A named list of class `otsufire_supervised_run` with fields:
   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
   `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
-  `burned_like_registry_path`, `consistency_*`, `legacy_run_summary`,
+  `consistency_*`, `legacy_run_summary`,
   `legacy_consistency_summary`.
 }
 \description{
 Top-level one-year supervised orchestrator defined by
 `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`. Chains pool
 generation, spatial folds, feature extraction, OOF diagnostics, final
-model training, scoring, scenario-specific registry update, and
-optional consistency checks for a single target year and scenario.
+model training, scoring, and optional consistency checks for a single
+target year and scenario.
 
 Delegates the heavy numerical chain to the validated supervised engine
 (`run_supervised_pipeline()` inside `03_PATCH_LEVEL_PIPELINE_2.R`) via
@@ -115,6 +190,23 @@ NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
 Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
 be passed to [validate_fire_maps()] for external validation.
 }
+\section{D1 training knobs (2026-06-05) + FRENTE 1 unification}{
+
+The `oof_*` and `final_*` arguments expose the OOF and final-model training
+hyperparameters that were previously hardcoded at the engine defaults. They
+remain fully user-overridable. FRENTE 1 (2026-06-05) UNIFIED the OOF and
+FINAL hyperparameters to a single CANONICAL set: the XGBoost params block
+(objective/eval_metric/eta/max_depth/min_child_weight/subsample/
+colsample_bytree/gamma/lambda/alpha) now comes from one source of truth
+[.of_canonical_xgb_params()] used by BOTH stages, and the training controls
+were aligned (`oof_nrounds_max` 3000 -> 4000, `oof_early_stop` 75 -> 80,
+`final_sampling_seed`/`final_seed` 999 -> 42 to match `oof_seed_base`). This
+is RESULT-AFFECTING (the FINAL model changes vs the historical baseline) and
+was signed off by Natalia; it is first evaluated in the 2017 run. Only
+`scale_pos_weight` differs between the two stages, because each computes it
+from its own training labels.
+}
+
 \section{Phase B sampling caps and feature space}{
 
 The pass-through hooks above support the Phase B experiment matrix
@@ -150,7 +242,13 @@ RAM available; the package was developed on a 64 GB machine.
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},
+\code{\link{build_supervised_training_pools}()},
 \code{\link{change_index_mosaic}()},
-\code{\link{run_deterministic_pipeline}()}
+\code{\link{extract_supervised_features}()},
+\code{\link{make_spatial_folds}()},
+\code{\link{run_deterministic_pipeline}()},
+\code{\link{run_oof_diagnostics}()},
+\code{\link{score_supervised_burned_map}()},
+\code{\link{train_final_burned_model}()}
 }
 \concept{workflow}

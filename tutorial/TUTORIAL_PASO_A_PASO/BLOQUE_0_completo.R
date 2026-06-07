@@ -31,9 +31,10 @@
 #
 # Cross-references:
 #   §N+25: 13 paths de inputs - solo 4 entran via cfg$inputs en 0.5.0.
-#   §N+26: politica negative_pool_policy - redundancia a simplificar.
+#   §N+26: politica negative_pool_policy - ELIMINADA del paquete el
+#          2026-06-05; all_sources es ahora el unico modo (implicito).
 #   §N+27: campo burned_like_registry_path - linea de investigacion
-#          abortada, eliminar en refactor.
+#          abortada, ELIMINADA del paquete el 2026-06-05.
 #   §N+28: 21 constantes hardcoded en orchestrator - decidir cuales
 #          exponer post-refactor.
 #
@@ -243,14 +244,13 @@ MASK_SHP <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.shp")
 
 # --- 5.1) Politica de muestreo de negativos (1) -----------------------------
 
-# Define que fuentes de negativos entran al training pool.
-# Valores soportados:
-#   "all_sources"          - 3 fuentes: deterministic drops + random
-#                            background + Otsu unburned patches.
-#                            Es el modo OPERACIONAL del Baseline canonico.
-#   "deterministic_direct" - 2 fuentes: solo drops + random. Sin Otsu.
-#                            Modo de validacion interna del paquete.
-#                            DEBUG: HANDOFF §N+26 - eliminar en refactor.
+# Fuentes de negativos que entran al training pool.
+# NOTA (2026-06-05): la policy de negativos ya NO es configurable; el
+# paquete usa SIEMPRE all_sources (el unico modo, implicito). El antiguo
+# "deterministic_direct" fue eliminado. Esta constante local se conserva
+# solo como documentacion; no se pasa al config builder.
+#   all_sources - 4 fuentes: internal_keep_qc (burned) + deterministic
+#                 drops + random background + Otsu unburned patches.
 NEGATIVE_POOL_POLICY <- "all_sources"
 
 
@@ -265,8 +265,7 @@ MIN_BURNED_POOL_N <- 5L
 
 # --- 5.3) Reproducibilidad: seeds aleatorios (2) ----------------------------
 
-# Seed del muestreo random_burnable_background (rama deterministic_direct
-# y rama all_sources Part 1).
+# Seed del muestreo random_burnable_background (all_sources Part 1).
 RANDOM_SEED <- 42L
 
 # Seed del muestreo Otsu unburned (rama all_sources Part 2).
@@ -429,9 +428,9 @@ cat("\n[3] CONSTANTES METODOLOGICAS\n")
 
 cat("\n  3.1 Politica de muestreo de negativos\n")
 cat("    NEGATIVE_POOL_POLICY              :", NEGATIVE_POOL_POLICY, "\n")
-cat("    : combina 3 fuentes de negativos en el training pool:\n")
-cat("      deterministic_drops + random_background + Otsu_patches.\n")
-cat("      La alternativa 'deterministic_direct' usa solo las 2 primeras.\n")
+cat("    : siempre all_sources (unico modo, implicito desde 2026-06-05).\n")
+cat("      Combina 4 fuentes: internal_keep_qc (burned) + deterministic\n")
+cat("      drops + random_background + Otsu_patches.\n")
 
 cat("\n  3.2 Guard de tamaño minimo del pool burned\n")
 cat("    MIN_BURNED_POOL_N                 :", MIN_BURNED_POOL_N, "\n")

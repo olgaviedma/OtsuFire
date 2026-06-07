@@ -23,7 +23,7 @@
 #' [build_supervised_training_pools()], [make_spatial_folds()],
 #' [extract_supervised_features()], [run_oof_diagnostics()],
 #' [train_final_burned_model()], [score_supervised_burned_map()],
-#' [update_burned_like_registry()], [check_supervised_consistency()].
+#' [check_supervised_consistency()].
 #'
 #' @docType package
 #' @name OtsuFire-package

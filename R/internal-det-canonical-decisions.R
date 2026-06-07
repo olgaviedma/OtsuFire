@@ -138,6 +138,25 @@
     as.data.frame()
 }
 
+.collapse_geometry_by_id <- function(x, id_col = "source_poly_id") {
+  stopifnot(inherits(x, "sf"))
+  x <- .ensure_source_poly_id(x, id_col = id_col)
+  if (!nrow(x)) {
+    return(x[, c(id_col, attr(x, "sf_column")), drop = FALSE])
+  }
+
+  x[, c(id_col, attr(x, "sf_column")), drop = FALSE] |>
+    dplyr::group_by(.data[[id_col]]) |>
+    dplyr::summarise(.groups = "drop")
+}
+
+.empty_multipolygon_sfc <- function(n, crs) {
+  sf::st_sfc(
+    lapply(seq_len(n), function(i) sf::st_multipolygon()),
+    crs = crs
+  )
+}
+
 .prepare_reference_support <- function(internal_flagged) {
   if (is.null(internal_flagged) || !inherits(internal_flagged, "sf") || !nrow(internal_flagged)) {
     return(NULL)
@@ -460,6 +479,24 @@ build_internal_decisions <- function(
     }
   } else {
     base$preyear_overlap_frac <- NA_real_
+  }
+
+  if (!is.null(internal_clean) && inherits(internal_clean, "sf")) {
+    clean_geom <- .collapse_geometry_by_id(internal_clean)
+    geom_idx <- match(base$source_poly_id, clean_geom$source_poly_id)
+    has_clean_geom <- !is.na(geom_idx)
+    geom_out <- sf::st_geometry(base)
+    if (any(has_clean_geom)) {
+      geom_out[has_clean_geom] <- sf::st_geometry(clean_geom)[geom_idx[has_clean_geom]]
+    }
+    removed_idx <- which(base$flag_internal %in% c("keep", "review") & !has_clean_geom)
+    if (length(removed_idx)) {
+      geom_out[removed_idx] <- .empty_multipolygon_sfc(
+        length(removed_idx),
+        sf::st_crs(base)
+      )
+    }
+    sf::st_geometry(base) <- geom_out
   }
 
   if (!is.null(internal_rbr) && inherits(internal_rbr, "sf")) {

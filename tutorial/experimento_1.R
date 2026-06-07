@@ -59,7 +59,6 @@ cfg <- OtsuFire::build_supervised_burned_config(
   internal_decisions = INTERNAL_DECISIONS,
   change_index = CHANGE_INDEX,
   hotspots = HOTSPOTS,
-  burned_like_registry_path = NULL,
   target_year = YEAR,
   output_dir = RESULTS_BASE,
   run_name = RESULT_NAME,
@@ -67,7 +66,7 @@ cfg <- OtsuFire::build_supervised_burned_config(
     data_base = DATA_BASE,
     composite_base = COMPOSITE_BASE,
     result_name = RESULT_NAME,
-    negative_pool_policy = "all_sources",
+    # negative-pool policy is always all_sources now (implicit; only mode)
     legacy_otsu_mode = "burnable_only",
     legacy_otsu_threshold = 0,
     legacy_reference_otsu_threshold = 100,

@@ -29,10 +29,14 @@ train_final_model_direct <- function(
     # otsu_patch_keep (S_PATCH_PA 0.45-0.70, substantial burned-pixel coverage).
     # Only otsu_patch_drop (S_PATCH_PA <= 0.15, easy cold) is eligible for training.
     otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep"),
-    sampling_seed = 999,
+    # FRENTE 1 (2026-06-05): seeds UNIFIED with the OOF stage (seed_base 42).
+    # Were 999 (sampling_seed) and 999 (seed); now both default to 42 to match
+    # the OOF seed_base. RESULT-AFFECTING (changes the RNG stream of the
+    # negative-pool sampling and the train/val split). User-overridable.
+    sampling_seed = 42,
     group_col = "block_id",
     val_frac = 0.15,
-    seed = 999,
+    seed = 42,
     params = NULL,
     nrounds_max = 4000,
     early_stopping_rounds = 80,
@@ -50,6 +54,14 @@ train_final_model_direct <- function(
     feature_weights = NULL,
     impute_numeric = c("median", "zero"),
     impute_factor_missing = "MISSING",
+    # B1 (2026-06-07): training protocol toggle. "legacy" (default) keeps the
+    # EXACT historical behaviour byte-identical (impute over all L_ok, group
+    # split, ONE xgb.train with early stopping on dval, deploy the tr_idx-only
+    # model). "nested_refit" routes through the shared leakage-free core
+    # (.of_nested_refit_fit): medians fit on the inner-train only, inner-val is
+    # the only early-stopping set, then a fresh model is REFIT on ALL of L_ok at
+    # best_iteration and deployed with the refit medians. Opt-in only.
+    training_protocol = c("legacy", "nested_refit"),
     out_dir = NULL,
     prefix = "2022_patch_certified_v2",
     overwrite = TRUE,
@@ -57,6 +69,7 @@ train_final_model_direct <- function(
     ...
 ) {
   impute_numeric <- match.arg(impute_numeric)
+  training_protocol <- match.arg(training_protocol)
 
   # 0.5.0 hard removal: `extra_drop_cols` / `additional_drop_cols`
   # are no longer accepted. Catch them via `...` so old callers get
@@ -319,6 +332,12 @@ train_final_model_direct <- function(
          paste(forbidden, collapse = ", "))
   }
 
+  # B1 (2026-06-07): nested_refit audit record (NULL for legacy). Populated in
+  # the nested branch; written alongside the model artifacts below.
+  nested_audit <- NULL
+
+  if (identical(training_protocol, "legacy")) {
+  # ---- LEGACY path (byte-identical to the historical behaviour) ----
   X_df <- L_df[, feat_cols, drop = FALSE]
   for (nm in names(X_df)) {
     if (is.factor(X_df[[nm]])) X_df[[nm]] <- as.character(X_df[[nm]])
@@ -427,19 +446,16 @@ train_final_model_direct <- function(
 
   if (is.null(params)) {
     spw <- sum(y[tr_idx] == 0) / max(1, sum(y[tr_idx] == 1))
-    params <- list(
-      booster = "gbtree",
-      objective = "binary:logistic",
-      eval_metric = "logloss",
-      eta = 0.05,
-      max_depth = 6,
-      min_child_weight = 1,
-      subsample = 0.8,
-      colsample_bytree = 0.8,
-      lambda = 1,
-      alpha = 0,
-      scale_pos_weight = spw
-    )
+    # FRENTE 1 (2026-06-05): build the params from the SINGLE canonical
+    # source of truth shared with the OOF stage (run_oof_diagnostics), so
+    # FINAL and OOF can never diverge. Only scale_pos_weight is site-specific
+    # (computed here from this fit's training-split labels). This UNIFIES the
+    # FINAL block to the canonical set: vs the historical FINAL defaults this
+    # changes eval_metric "logloss" -> c("logloss","aucpr") (logloss FIRST so
+    # it still drives early stopping; aucpr visible only), max_depth 6 -> 5,
+    # min_child_weight 1 -> 5, colsample_bytree 0.8 -> 0.75. RESULT-AFFECTING
+    # and intentional (Natalia signed off); first evaluated in the 2017 run.
+    params <- .of_canonical_xgb_params(scale_pos_weight = spw)
   }
 
   set.seed(seed)
@@ -452,9 +468,106 @@ train_final_model_direct <- function(
     verbose = if (isTRUE(verbose)) 1 else 0
   )
 
+  } else {
+  # ---- NESTED_REFIT path (B1, 2026-06-07) ----
+  # L_ok is already CAPPED above (the bucket caps applied to the negative pool
+  # are the SAME ones the legacy path uses). Hand the un-imputed training frame
+  # to the SHARED core so FINAL and OOF cannot diverge. The core:
+  #   - inner-splits L_ok (group split by group_col, val_frac) under `seed`,
+  #   - fits medians ONLY on the inner-train, early-stops on the inner-val only,
+  #   - REFITS a fresh model on ALL of L_ok at best_iteration (no watchlist),
+  #   - returns the refit model + refit medians (the deployed recipe).
+  L_df_nested <- L_df
+  fit <- .of_nested_refit_fit(
+    train_df              = L_df_nested,
+    feature_cols          = feat_cols,
+    label_col             = class_col,
+    group_col             = group_col,
+    block_col             = group_col,
+    val_frac              = val_frac,
+    params_fn             = .of_canonical_xgb_params,
+    sampling_seed         = sampling_seed,
+    fold_seed             = seed,
+    feature_weights       = feature_weights,
+    nrounds_max           = nrounds_max,
+    early_stopping_rounds = early_stopping_rounds,
+    impute_numeric        = impute_numeric,
+    impute_factor_missing = impute_factor_missing,
+    verbose               = verbose
+  )
+  model <- fit$model
+  # Deploy the REFIT recipe. `numeric_medians` excludes degenerate (all-NA in
+  # train) columns -> the scoring path leaves those cells NA (xgboost missing),
+  # exactly matching how the refit model was trained.
+  numeric_medians <- fit$medians[!vapply(fit$medians,
+                                          function(z) is.null(z) || is.na(z),
+                                          logical(1))]
+  # `X` exists only so colnames(X) (-> recipe$cols$x_cols) and ncol(X) (-> meta)
+  # reflect the DEPLOYED refit design matrix. y is unchanged (defined above).
+  X <- matrix(0, nrow = nrow(L_ok), ncol = length(fit$x_cols),
+              dimnames = list(NULL, fit$x_cols))
+  tr_idx     <- fit$inner_split$tr_idx
+  val_idx    <- fit$inner_split$val_idx
+  split_mode <- paste0("nested_refit_", fit$inner_split$mode)
+  spw <- fit$spw_refit
+  params <- .of_canonical_xgb_params(scale_pos_weight = spw)
+  # best_iteration is carried via the audit + recipe$training below; mimic the
+  # xgboost field so model$best_iteration reads consistently downstream.
+  if (is.null(model$best_iteration)) model$best_iteration <- fit$best_iteration
+  feature_weights_applied <- if (!is.null(feature_weights)) {
+    fw_vector <- rep(1.0, length(fit$x_cols))
+    names(fw_vector) <- fit$x_cols
+    in_both <- intersect(names(feature_weights), fit$x_cols)
+    if (length(in_both) > 0L) fw_vector[in_both] <- as.numeric(feature_weights[in_both])
+    list(
+      requested = as.list(feature_weights),
+      applied = as.list(fw_vector[fw_vector != 1.0]),
+      unknown_dropped = setdiff(names(feature_weights), fit$x_cols)
+    )
+  } else {
+    list()
+  }
+  nested_audit <- fit$audit
+  nested_audit$stage  <- "FINAL"
+  nested_audit$prefix <- prefix
+  # Per-bucket available / cap / selected (caps applied upstream to L_ok).
+  nested_audit$n_burned                   <- nrow(burned_pool)
+  nested_audit$contextual_available       <- nrow(contextual_exclusion_pool)
+  nested_audit$contextual_cap             <- target_contextual
+  nested_audit$contextual_selected        <- nrow(sampled_contextual)
+  nested_audit$spectral_available         <- nrow(spectral_hard_negative_pool)
+  nested_audit$spectral_cap               <- target_spectral
+  nested_audit$spectral_selected          <- nrow(sampled_spectral)
+  nested_audit$random_bg_available        <- nrow(random_background_pool)
+  nested_audit$random_bg_cap              <- target_random_bg
+  nested_audit$random_bg_selected         <- nrow(sampled_random_bg)
+  nested_audit$otsu_available             <- nrow(otsu_unburned_pool)
+  nested_audit$otsu_cap                   <- target_otsu
+  nested_audit$otsu_selected              <- nrow(sampled_otsu)
+  nested_audit$outer_test_capped          <- FALSE  # no outer test in FINAL
+  nested_audit$outer_test_used_for_fit    <- FALSE
+  }
+
   files <- list()
   if (!is.null(out_dir)) {
     dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+    # 2026-06-06 (partial-write overwrite fix): the GPKG already honored
+    # `overwrite` (the file.remove below is gated on isTRUE(overwrite)); the
+    # CSV/RDS/TXT sidecars used to clobber unconditionally, so with
+    # overwrite=FALSE the GPKG was protected but the sidecars were not. The
+    # `.write_if_allowed()` helper makes every sidecar honor `overwrite` the
+    # SAME way: when overwrite=TRUE it writes exactly as before
+    # (byte-identical); when overwrite=FALSE and the target already exists the
+    # write is skipped instead of clobbering. The expr is only forced when the
+    # write is actually performed.
+    .write_if_allowed <- function(path, expr) {
+      if (isTRUE(overwrite) || !file.exists(path)) {
+        force(expr)
+      } else {
+        msg("overwrite=FALSE and file exists; skipping write: %s", path)
+      }
+      invisible(NULL)
+    }
     gpkg_ok <- file.path(out_dir, paste0(prefix, "_training_ok.gpkg"))
     csv_ok <- file.path(out_dir, paste0(prefix, "_training_ok.csv"))
     rds_mod <- file.path(out_dir, paste0(prefix, "_final_model.rds"))
@@ -465,13 +578,30 @@ train_final_model_direct <- function(
     txt_summary <- file.path(out_dir, paste0(prefix, "_model_summary.txt"))
 
     if (isTRUE(overwrite) && file.exists(gpkg_ok)) file.remove(gpkg_ok)
-    sf::st_write(L_ok, gpkg_ok, layer = "training_ok", quiet = TRUE)
-    utils::write.csv(sf::st_drop_geometry(L_ok), csv_ok, row.names = FALSE)
-    saveRDS(model, rds_mod)
-    saveRDS(list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode), rds_spl)
+    .write_if_allowed(gpkg_ok,
+      sf::st_write(L_ok, gpkg_ok, layer = "training_ok", quiet = TRUE))
+    .write_if_allowed(csv_ok,
+      utils::write.csv(sf::st_drop_geometry(L_ok), csv_ok, row.names = FALSE))
+    .write_if_allowed(rds_mod, saveRDS(model, rds_mod))
+    .write_if_allowed(rds_spl,
+      saveRDS(list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode), rds_spl))
 
+    # B1 (2026-06-07): emit the per-model nested-refit audit CSV. Only written
+    # under training_protocol == "nested_refit" (nested_audit non-NULL), so the
+    # legacy path writes no new artifact and stays byte-identical.
+    if (!is.null(nested_audit)) {
+      csv_audit <- file.path(out_dir, paste0(prefix, "_nested_refit_audit.csv"))
+      .write_if_allowed(csv_audit,
+        utils::write.csv(nested_audit, csv_audit, row.names = FALSE))
+    }
+
+    # B6 (2026-06-06): the `created_at = Sys.time()` field was dropped from the
+    # recipe so the persisted `_recipe.rds`, `_meta.txt` and
+    # `_model_summary.txt` artifacts are byte-reproducible across re-runs. It
+    # was metadata only -- nothing in the scoring path reads recipe$created_at
+    # (scoring uses recipe$impute / recipe$training); the only former readers
+    # were the two TXT lines below, also removed.
     recipe <- list(
-      created_at = as.character(Sys.time()),
       inputs = list(labelled_gpkg = labelled_gpkg, labelled_layer = labelled_layer),
       selection = list(
         selection_mode = "direct_pool_sampling",
@@ -511,7 +641,14 @@ train_final_model_direct <- function(
         seed = seed,
         nrounds_max = nrounds_max,
         early_stopping_rounds = early_stopping_rounds,
-        best_iteration = model$best_iteration %||% NA_integer_
+        best_iteration = model$best_iteration %||% NA_integer_,
+        # B1 (2026-06-07): protocol provenance. For legacy these are
+        # NA/identical to the historical recipe; for nested_refit they record
+        # both scale_pos_weight values (selection vs refit) so a downstream
+        # audit can confirm the refit model was deployed.
+        training_protocol = training_protocol,
+        spw_selection = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_selection,
+        spw_refit = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_refit
       ),
       params = params,
       # 0.5.0: record what was applied so reproducibility audits can
@@ -520,14 +657,15 @@ train_final_model_direct <- function(
       feature_whitelist_override = feature_whitelist_override,
       feature_weights = feature_weights_applied
     )
-    saveRDS(recipe, rds_rec)
+    .write_if_allowed(rds_rec, saveRDS(recipe, rds_rec))
 
     imp_tbl <- tryCatch(
       xgboost::xgb.importance(model = model, feature_names = recipe$cols$x_cols),
       error = function(e) NULL
     )
     if (is.data.frame(imp_tbl) && nrow(imp_tbl)) {
-      utils::write.csv(imp_tbl, csv_imp, row.names = FALSE)
+      .write_if_allowed(csv_imp,
+        utils::write.csv(imp_tbl, csv_imp, row.names = FALSE))
     }
 
     oof_summary_path <- NULL
@@ -586,9 +724,8 @@ train_final_model_direct <- function(
       )
     }
 
-    writeLines(c(
+    .write_if_allowed(txt_meta, writeLines(c(
       paste0("prefix: ", prefix),
-      paste0("created_at: ", recipe$created_at),
       paste0("labelled_gpkg: ", labelled_gpkg),
       paste0("labelled_layer: ", labelled_layer),
       paste0("selection_mode: direct_pool_sampling"),
@@ -612,11 +749,10 @@ train_final_model_direct <- function(
       paste0("best_iteration: ", recipe$training$best_iteration),
       whitelist_override_lines,
       feature_weights_lines
-    ), txt_meta)
+    ), txt_meta))
 
     summary_lines <- c(
       paste0("prefix: ", prefix),
-      paste0("created_at: ", recipe$created_at),
       paste0("labelled_gpkg: ", labelled_gpkg),
       paste0("labelled_layer: ", labelled_layer),
       "",
@@ -687,7 +823,7 @@ train_final_model_direct <- function(
       paste0("oof_summary_txt: ", oof_summary_path %||% NA_character_),
       paste0("oof_best_thresholds_csv: ", oof_best_thresholds_path %||% NA_character_)
     )
-    writeLines(summary_lines, txt_summary)
+    .write_if_allowed(txt_summary, writeLines(summary_lines, txt_summary))
 
     files <- list(
       training_ok_gpkg = gpkg_ok,
@@ -699,6 +835,10 @@ train_final_model_direct <- function(
       feature_importance_csv = csv_imp,
       model_summary_txt = txt_summary
     )
+    if (!is.null(nested_audit)) {
+      files$nested_refit_audit_csv <-
+        file.path(out_dir, paste0(prefix, "_nested_refit_audit.csv"))
+    }
   }
 
   invisible(list(
@@ -708,6 +848,8 @@ train_final_model_direct <- function(
     x_cols = colnames(X),
     split = list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode),
     params = params,
+    # B1 (2026-06-07): NULL for legacy; one-row data.frame for nested_refit.
+    nested_refit_audit = nested_audit,
     files = files
   ))
 }

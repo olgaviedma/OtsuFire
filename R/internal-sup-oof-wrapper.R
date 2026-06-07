@@ -88,13 +88,19 @@ run_dm_oof_pipeline <- function(
     result_dir,
     target_year = 2022,
     fold_cols   = c("fold_rep1", "fold_rep2"),
-    nrounds_max = 3000,
-    early_stop  = 75,
+    # FRENTE 1 (2026-06-05): training controls UNIFIED with the FINAL stage.
+    # nrounds_max 3000 -> 4000, early_stop 75 -> 80. seed_base 42 canonical.
+    nrounds_max = 4000,
+    early_stop  = 80,
     seed_base   = 42,
     verbose     = 1,
     out_dir_oof = file.path(result_dir, "05_OOF"),
     prefix      = paste0(target_year, "_patch"),
-    id_cols     = c("fire_uid", "class", "source", "poly_id", "block_id", "fold_rep1", "fold_rep2"),
+    # B1 (2026-06-07): `neg_type` added to the OOF id_cols so per-fold negative
+    # bucketing (which keys off source + neg_type, exactly like FINAL) can run.
+    # `neg_type` is still a NON-feature column (in id_cols) so it never enters
+    # the design matrix; adding it here only preserves it for bucketing.
+    id_cols     = c("fire_uid", "class", "source", "neg_type", "poly_id", "block_id", "fold_rep1", "fold_rep2"),
     # 0.4.0 (Agent H): `drop_regex` is DEPRECATED in the OOF stage.
     # The OOF wrapper now applies a whitelist filter against
     # `.supervised_feature_cols` (+ `_isNA` companions) to
@@ -103,7 +109,9 @@ run_dm_oof_pipeline <- function(
     # backward-compatibility; non-default values emit a one-time
     # message and are otherwise ignored.
     drop_regex  = character(0),
-    cat_cols    = c("eco_major"),
+    # 2026-06-05: ecoregions removed from supervised phase; no
+    # categorical predictors remain.
+    cat_cols    = character(0),
     hs_n_col    = "hs_used_n",
     hs_conf_col = "hs_conf_mean",
     hs_frp_col  = "hs_frp_max",
@@ -117,8 +125,46 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
+    # B1 (2026-06-07): protocol toggle + per-fold sampling mode. "legacy"
+    # (default) reproduces the historical OOF byte-for-byte; "nested_refit"
+    # routes each outer fold through the shared leakage-free core. oof_sampling
+    # only matters on the nested path ("capped" applies the FINAL bucket caps to
+    # the outer-train negatives; "full" uses all outer-train rows).
+    training_protocol = c("legacy", "nested_refit"),
+    oof_sampling = c("capped", "full"),
+    # B1: the 4 cap ratios are REQUIRED formals (no defaults) so a dropped
+    # argument cannot silently revert a bucket to ratio 1.0. They are forwarded
+    # to run_oof_xgb on the nested path; ignored (but still required) otherwise.
+    contextual_exclusion_to_burned_ratio,
+    spectral_hard_negative_to_burned_ratio,
+    random_to_burned_ratio,
+    otsu_unburned_to_burned_ratio,
+    # B1: FINAL train/val split controls forwarded to the per-fold core.
+    val_frac = 0.15,
+    impute_numeric = "median",
+    impute_factor_missing = "MISSING",
     ...
 ) {
+  training_protocol <- match.arg(training_protocol)
+  oof_sampling <- match.arg(oof_sampling)
+  # B1: the 4 cap ratios are formals WITHOUT defaults. On the nested_refit path
+  # they are REQUIRED: a dropped argument ERRORS here (so the OOF chain can
+  # never silently revert a bucket to ratio 1.0). On the legacy path they are
+  # never used, so omitting them is fine and the legacy behaviour is unchanged.
+  if (identical(training_protocol, "nested_refit")) {
+    if (missing(contextual_exclusion_to_burned_ratio)) {
+      stop("run_dm_oof_pipeline(nested_refit): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
+    }
+    if (missing(spectral_hard_negative_to_burned_ratio)) {
+      stop("run_dm_oof_pipeline(nested_refit): required cap 'spectral_hard_negative_to_burned_ratio' is missing.", call. = FALSE)
+    }
+    if (missing(random_to_burned_ratio)) {
+      stop("run_dm_oof_pipeline(nested_refit): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
+    }
+    if (missing(otsu_unburned_to_burned_ratio)) {
+      stop("run_dm_oof_pipeline(nested_refit): required cap 'otsu_unburned_to_burned_ratio' is missing.", call. = FALSE)
+    }
+  }
   if (!exists("build_design_matrix_patches")) stop("No encuentro build_design_matrix_patches() cargada en el entorno.")
   if (!exists("run_oof_xgb")) stop("No encuentro run_oof_xgb() cargada en el entorno.")
 
@@ -144,6 +190,24 @@ run_dm_oof_pipeline <- function(
 
   dir.create(save_dir_dm, recursive = TRUE, showWarnings = FALSE)
   dir.create(out_dir_oof, recursive = TRUE, showWarnings = FALSE)
+
+  # 2026-06-06 (partial-write overwrite fix): the OOF stage's overwrite gate is
+  # the design-matrix bundle (build_design_matrix_patches() stops when the RDS
+  # exists and overwrite=FALSE) and the labeled_oof_summary GPKG (removed only
+  # when it exists). The OOF metric CSV/TXT/long sidecars used to clobber
+  # unconditionally. `.write_if_allowed()` makes every OOF sidecar honor
+  # `overwrite` the SAME way: overwrite=TRUE writes exactly as before
+  # (byte-identical); overwrite=FALSE skips the write when the target exists.
+  .write_if_allowed <- function(path, expr) {
+    if (isTRUE(overwrite) || !file.exists(path)) {
+      force(expr)
+    } else {
+      message(sprintf(
+        "run_dm_oof_pipeline(): overwrite=FALSE and file exists; skipping write: %s",
+        path))
+    }
+    invisible(NULL)
+  }
 
   # 0.4.0 deprecation: warn if caller supplies a non-default drop_regex.
   if (length(drop_regex) > 0L) {
@@ -230,6 +294,30 @@ run_dm_oof_pipeline <- function(
     overwrite   = overwrite
   )
 
+  # B1 (2026-06-07): for the nested_refit protocol, ALSO build a deferred-impute
+  # version (same hotspot rules, _isNA companions, factor handling, but NO
+  # median imputation and NO global matrix) so run_oof_xgb can fit medians per
+  # outer fold (B1b leakage fix). The saved `dm` bundle above is unchanged
+  # (still globally imputed) so the downstream final-model stage and any bundle
+  # consumers are unaffected.
+  dm_defer <- NULL
+  if (identical(training_protocol, "nested_refit")) {
+    dm_defer <- build_design_matrix_patches(
+      labelled    = labelled,
+      burned_like = burned_like,
+      id_cols     = id_cols,
+      drop_regex  = drop_regex,
+      cat_cols    = cat_cols,
+      hs_n_col    = hs_n_col,
+      hs_conf_col = hs_conf_col,
+      hs_frp_col  = hs_frp_col,
+      median_from = median_from,
+      defer_impute = TRUE,
+      save_dir    = NULL,
+      verbose     = FALSE
+    )
+  }
+
   # 0.5.0: build the per-fold feature_weights vector aligned to the
   # design matrix that `build_design_matrix_patches` actually
   # produced. Names not present after the whitelist filter are
@@ -261,7 +349,11 @@ run_dm_oof_pipeline <- function(
     )
   }
 
-  oof <- run_oof_xgb(
+  # B1: build the run_oof_xgb argument list. The cap ratios are forwarded ONLY
+  # when supplied (they have no defaults); on the legacy path they are unused,
+  # so forwarding a missing cap (which would trigger R's "argument missing"
+  # error on evaluation) is avoided.
+  oof_args <- list(
     XL_mat      = dm$XL_mat,
     y           = dm$y,
     labelled_df = labelled_df,
@@ -273,8 +365,32 @@ run_dm_oof_pipeline <- function(
     out_dir     = out_dir_oof,
     prefix      = prefix,
     verbose     = verbose,
-    feature_weights_vector = feature_weights_vector
+    feature_weights_vector = feature_weights_vector,
+    overwrite   = overwrite,
+    # B1 (2026-06-07): protocol + per-fold knobs.
+    training_protocol = training_protocol,
+    oof_sampling      = oof_sampling,
+    prepared_labelled = if (!is.null(dm_defer)) dm_defer$prepared_labelled else NULL,
+    model_cols        = if (!is.null(dm_defer)) dm_defer$model_cols else NULL,
+    group_col         = "block_id",
+    val_frac          = val_frac,
+    impute_numeric    = impute_numeric,
+    impute_factor_missing = impute_factor_missing,
+    feature_weights   = feature_weights
   )
+  if (!missing(contextual_exclusion_to_burned_ratio)) {
+    oof_args$contextual_exclusion_to_burned_ratio <- contextual_exclusion_to_burned_ratio
+  }
+  if (!missing(spectral_hard_negative_to_burned_ratio)) {
+    oof_args$spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio
+  }
+  if (!missing(random_to_burned_ratio)) {
+    oof_args$random_to_burned_ratio <- random_to_burned_ratio
+  }
+  if (!missing(otsu_unburned_to_burned_ratio)) {
+    oof_args$otsu_unburned_to_burned_ratio <- otsu_unburned_to_burned_ratio
+  }
+  oof <- do.call(run_oof_xgb, oof_args)
 
   oof_agg_path <- file.path(out_dir_oof, paste0(prefix, "_oof_agg.csv"))
   oof_long_path <- file.path(out_dir_oof, paste0(prefix, "_oof_long.csv"))
@@ -284,7 +400,8 @@ run_dm_oof_pipeline <- function(
   oof_best_thresholds_path <- file.path(out_dir_oof, paste0(prefix, "_oof_best_thresholds.csv"))
 
   oof_metrics <- compute_oof_metrics_by_threshold(oof$oof_agg)
-  utils::write.csv(oof_metrics, oof_metrics_path, row.names = FALSE)
+  .write_if_allowed(oof_metrics_path,
+    utils::write.csv(oof_metrics, oof_metrics_path, row.names = FALSE))
 
   # Bug 9 (0.3.0): when an OOF metric column is degenerate (all NA),
   # `which.max()` returns integer(0), which produces a 0-row subset
@@ -320,8 +437,10 @@ run_dm_oof_pipeline <- function(
   recommended <- best_bal
 
   best_thresholds <- data.frame(
+    # B6 (2026-06-06): the `created_at = Sys.time()` column was removed from
+    # this checksummed CSV artifact so re-runs are byte-reproducible. It was
+    # metadata only (nothing in the package or scoring path reads it).
     prefix = prefix,
-    created_at = as.character(Sys.time()),
     n_oof_rows = nrow(oof$oof_agg),
     burned_rows = sum(as.character(oof$oof_agg$class) == "burned", na.rm = TRUE),
     unburned_rows = sum(as.character(oof$oof_agg$class) == "unburned", na.rm = TRUE),
@@ -354,7 +473,8 @@ run_dm_oof_pipeline <- function(
     best_f1_balanced_accuracy = best_f1$balanced_accuracy,
     stringsAsFactors = FALSE
   )
-  utils::write.csv(best_thresholds, oof_best_thresholds_path, row.names = FALSE)
+  .write_if_allowed(oof_best_thresholds_path,
+    utils::write.csv(best_thresholds, oof_best_thresholds_path, row.names = FALSE))
 
   # 0.5.0: record whether feature_whitelist_override / feature_weights
   # were applied at the OOF stage, for parity with the final-model
@@ -398,8 +518,9 @@ run_dm_oof_pipeline <- function(
   }
 
   summary_lines <- c(
+    # B6 (2026-06-06): the `created_at: Sys.time()` line was removed from this
+    # checksummed TXT summary so re-runs are byte-reproducible (metadata only).
     paste0("prefix: ", prefix),
-    paste0("created_at: ", as.character(Sys.time())),
     paste0("n_oof_rows: ", nrow(oof$oof_agg)),
     paste0("burned_rows: ", sum(as.character(oof$oof_agg$class) == "burned", na.rm = TRUE)),
     paste0("unburned_rows: ", sum(as.character(oof$oof_agg$class) == "unburned", na.rm = TRUE)),
@@ -443,7 +564,8 @@ run_dm_oof_pipeline <- function(
     paste0("specificity: ", signif(best_f1$specificity, 6)),
     paste0("balanced_accuracy: ", signif(best_f1$balanced_accuracy, 6))
   )
-  writeLines(summary_lines, con = oof_metrics_summary_path)
+  .write_if_allowed(oof_metrics_summary_path,
+    writeLines(summary_lines, con = oof_metrics_summary_path))
 
   if (!is.null(labelled_gpkg) && file.exists(labelled_gpkg)) {
     L_sf <- sf::read_sf(labelled_gpkg, layer = labelled_layer, quiet = TRUE)
@@ -451,8 +573,10 @@ run_dm_oof_pipeline <- function(
       L_sf$fire_uid <- as.character(L_sf$fire_uid)
       oof$oof_agg$fire_uid <- as.character(oof$oof_agg$fire_uid)
       oof_sf <- dplyr::left_join(L_sf, oof$oof_agg, by = c("fire_uid", "class"))
-      if (file.exists(labeled_oof_summary_gpkg)) file.remove(labeled_oof_summary_gpkg)
-      sf::st_write(oof_sf, labeled_oof_summary_gpkg, layer = "labeled_oof_summary", quiet = TRUE)
+      .write_if_allowed(labeled_oof_summary_gpkg, {
+        if (file.exists(labeled_oof_summary_gpkg)) file.remove(labeled_oof_summary_gpkg)
+        sf::st_write(oof_sf, labeled_oof_summary_gpkg, layer = "labeled_oof_summary", quiet = TRUE)
+      })
     }
   }
 

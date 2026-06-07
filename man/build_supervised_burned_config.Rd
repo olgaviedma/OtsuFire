@@ -11,11 +11,14 @@ build_supervised_burned_config(
   delayed_change_index = NULL,
   hotspots = NULL,
   reference_burned_map = NULL,
-  burned_like_registry_path = NULL,
   target_year,
   output_dir = tempdir(),
   run_name = "supervised_burned_map",
   min_burned_pool_n = 5L,
+  peninsula_shapefile = NULL,
+  topo = NULL,
+  corine_raster = NULL,
+  burnable_mask = NULL,
   options = list()
 )
 }
@@ -30,7 +33,10 @@ decision layer produced for the same year and scenario. Required.}
 raster. Required.}
 
 \item{delayed_change_index}{SpatRaster or raster path. Optional delayed
-change-index raster for persistence-style features.}
+(autumn-winter) change-index raster for persistence-style features.
+RUN input (§N+25): when supplied it is CONSUMED by the orchestrator as
+the `rbr_aw` feature layer; when `NULL` it defaults to the convention
+path `<composite_base>/Autumn/mean_mean_<target_year>_mosaic.tif`.}
 
 \item{hotspots}{sf POINT layer or path. Optional hotspot layer for the
 target year.}
@@ -38,10 +44,6 @@ target year.}
 \item{reference_burned_map}{sf POLYGON / raster / path. Optional external
 burned reference used by `validate_fire_maps()` on thresholded
 supervised outputs.}
-
-\item{burned_like_registry_path}{Character. Path to the scenario-specific
-multiyear burned-like training registry GPKG. If `NULL`, defaults to
-`<output_dir>/Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`.}
 
 \item{target_year}{Integer scalar. Target year. Required.}
 
@@ -55,12 +57,68 @@ Defaults to `"supervised_burned_map"`.}
 before training when fewer than this many keep-class polygons remain
 after QA. Default `5L` (HANDOFF Section 51).}
 
+\item{peninsula_shapefile}{sf / SpatVector / path. Optional Iberian
+peninsula border polygon. RUN input (§N+25): consumed by the legacy
+unburned Otsu builder only when `options$legacy_otsu_mode` crops CORINE
+to the peninsula (modes `"corine"` / `"corine_ecoregion"`). When `NULL`
+it defaults to the convention path
+`<data_base>/Borders/Iberian_peninsula.shp`.}
+
+\item{topo}{SpatRaster / path. Optional two-band topography raster
+(band1 = DEM, band2 = slope). RUN input (§N+25). When `NULL` it defaults
+to the convention path `<data_base>/Topography/elevation_slope.tif`. The
+DEM and slope live in a single file by convention, so they are exposed as
+one `topo` input rather than two separate paths.}
+
+\item{corine_raster}{SpatRaster / path. Optional CORINE land-cover raster
+for the target year's CORINE epoch. RUN input (§N+25). When `NULL` it
+defaults to the convention path
+`<data_base>/Corine_Masks/CLC_<corine_year>_peninsula.tif`.}
+
+\item{burnable_mask}{SpatRaster / path. Optional binary burnable-area mask
+for the target year's CORINE epoch. RUN input (§N+25): consumed by both
+all_sources unburned builders. When `NULL` it defaults to the convention
+path
+`<data_base>/Corine_Masks/burneable_mask_binary_corine_<corine_year>_ETRS89.tif`.}
+
 \item{options}{Named list of advanced options. Recognized keys include
-`engine_root`, `supervised_engine_root`, `negative_pool_policy`
-(`"all_sources"` | `"deterministic_direct"`),
-`registry_prob_threshold`, `registry_top_fraction`,
-`legacy_*`, `currentyear_*`, `unb_verbose`, `result_name`,
-`scripts_root`, `data_base`, plus overrides forwarded to the engine.}
+  `legacy_*`, `currentyear_*`, `unb_verbose`, `result_name`,
+  `data_base`, plus overrides forwarded to the engine. The
+  `negative_pool_policy` / `otsu_unburned_generation` keys were removed in
+  §N+26 (2026-06-05): the negative-pool policy is always `"all_sources"` and
+  is no longer user-settable. Passing `negative_pool_policy = "all_sources"`
+  is accepted as a no-op; any other stale value (including
+  `"deterministic_direct"`) raises a clear error (guarded, never silently
+  ignored). The returned cfg still carries `negative_pool_policy =
+  "all_sources"` as an informational constant. The
+  `engine_root`, `supervised_engine_root` and `scripts_root` keys were
+  removed on 2026-06-05 (the engine is now fully in-package).
+  B2 (2026-06-05) additionally exposes the shared deterministic-decision
+  negative-pool knobs `unb_excl_buffer_m` (500), `unb_n_random_cells`
+  (1500), `unb_random_rbr_q` (0.50), `unb_random_seed` (42),
+  `unb_random_patch_size_cells` (3); the supervised run-prefix names
+  `prefix_oof_base` (`"patch"`) and `prefix_base` (`"patch_certified"`);
+  and the remaining legacy Otsu knobs `legacy_min_otsu_threshold_value`
+  (0), `legacy_min_pixels` (8), `legacy_buffers_m` (90), `legacy_core_thr`
+  (0.60), `legacy_alpha_boost` (0.25), `legacy_min_base_boost` (0.35),
+  `legacy_dist_power` (1), `legacy_keep_hi` (0.45), `legacy_drop_lo`
+  (0.15), `legacy_excl_buffer_m` (0), `legacy_min_area_ha` (0). Every
+  default matches the value previously hardcoded in the orchestrator, so
+  passing nothing reproduces the historical run byte-for-byte.
+
+  Methodologically significant keys (HANDOFF §N+28 "Tier 1" — the
+  validity-affecting knobs worth recording for reproducibility and the
+  natural ablation candidates): the current-year temporal-adjustment
+  thresholds `currentyear_preyear_overlap_thr` (0.70, previous-year
+  overlap gate), `currentyear_hotspot_density_thr` (0.001, hotspot-density
+  gate) and `currentyear_temporal_penalty_floor` (0.10, temporal-penalty
+  floor); the negative-pool seeds `unb_random_seed` (42) and
+  `legacy_random_seed` (42, the legacy Otsu sampler seed — set BOTH for
+  full reproducibility from the cfg alone); and the Otsu confidence
+  thresholds `legacy_keep_hi` (0.45) / `legacy_drop_lo` (0.15). The
+  seventh Tier-1 knob, the sparse-year guard `min_burned_pool_n`, is the
+  top-level `min_burned_pool_n` argument (documented above), NOT an
+  `options` key — kept top-level by design for discoverability.}
 }
 \value{
 S3 object of class `otsufire_supervised_burned_config`.
@@ -68,8 +126,8 @@ S3 object of class `otsufire_supervised_burned_config`.
 \description{
 Public entry point of the one-year supervised workflow. Collects the
 deterministic decision layer, raster support layers, optional hotspot and
-reference inputs, scenario-driven negative-pool policy, output location,
-and advanced options into a single normalized configuration object of
+reference inputs, output location, and advanced options into a single
+normalized configuration object of
 class `otsufire_supervised_burned_config`.
 
 Contract source: `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`,
@@ -78,8 +136,14 @@ Contract source: `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`,
 \seealso{
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
+\code{\link{build_supervised_training_pools}()},
 \code{\link{change_index_mosaic}()},
+\code{\link{extract_supervised_features}()},
+\code{\link{make_spatial_folds}()},
 \code{\link{run_deterministic_pipeline}()},
-\code{\link{run_oneyear_supervised_pipeline}()}
+\code{\link{run_oneyear_supervised_pipeline}()},
+\code{\link{run_oof_diagnostics}()},
+\code{\link{score_supervised_burned_map}()},
+\code{\link{train_final_burned_model}()}
 }
 \concept{workflow}

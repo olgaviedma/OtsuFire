@@ -301,6 +301,35 @@ score_burnedlike_and_export_final_map <- function(
     model_df$row_id__ <- row_id
     rownames(model_df) <- as.character(row_id)
 
+    # ===================================================================
+    # B1 BLOCKER (registered 2026-06-07) — DO NOT switch the PRODUCTION
+    # default to nested_refit on hotspot-less / pre-MODIS years until this
+    # site is fixed.
+    #
+    # This scoring matrix is built with sparse.model.matrix(na.action = na.pass)
+    # and only the columns present in recipe$impute$numeric_medians are imputed
+    # (prep_X_df above). A column that was DEGENERATE at training time (all-NA
+    # across the whole training pool, e.g. every hs_* feature on a hotspot-less
+    # / pre-MODIS year) has NO entry in numeric_medians, so its NA cells are left
+    # NA here. sparse.model.matrix then DROPS any row that still carries an NA in
+    # such a column (the `kept_rows` realignment below silently discards them),
+    # whereas the deployed nested_refit model was trained expecting that column
+    # as xgboost-missing (xgb.DMatrix(missing = NA)). Result: rows would be lost
+    # at scoring instead of scored with the feature treated as missing.
+    #
+    # The legacy FINAL path never hits this (it fabricates a 0 for non-finite
+    # medians, so no column is ever fully NA at scoring). nested_refit does NOT
+    # fabricate, so this site is the one remaining blocker for using it in
+    # production on years that yield a fully-degenerate feature.
+    #
+    # FIX (deferred, self-contained): switch this score-matrix builder to the
+    # SAME NA-preserving path the nested core uses --
+    #   .of_nested_build_matrix(X_df_imp, ref_cols = recipe$cols$x_cols) +
+    #   xgboost::xgb.DMatrix(M, missing = NA)
+    # which preserves all-NA-feature rows as xgboost-missing instead of dropping
+    # them. Scoring logic is intentionally LEFT UNCHANGED here to preserve
+    # legacy byte-identity (see HANDOFF 2026-06-07). Mirrored in the handoff.
+    # ===================================================================
     form <- stats::as.formula("~ . - 1")
     mf <- stats::model.frame(form, data = model_df,
                               na.action = stats::na.pass)
@@ -420,20 +449,57 @@ score_burnedlike_and_export_final_map <- function(
     invisible(TRUE)
   }
 
-  if (overwrite) safe_remove_dataset(scored_gpkg)
-  if (overwrite) safe_remove_dataset(final_gpkg)
+  # 2026-06-06 (partial-write overwrite fix): the GPKG datasets honor
+  # `overwrite` (safe_remove_dataset + delete_dsn = overwrite), but the
+  # `_final_map_counts.csv` / `_burned_like_scored_counts.csv` sidecars used to
+  # clobber unconditionally. `.write_if_allowed()` makes them honor `overwrite`
+  # the SAME way: overwrite=TRUE writes exactly as before (byte-identical);
+  # overwrite=FALSE skips the write when the target already exists.
+  .write_if_allowed <- function(path, expr) {
+    if (isTRUE(overwrite) || !file.exists(path)) {
+      force(expr)
+    } else {
+      msg("overwrite=FALSE and file exists; skipping write: %s", path)
+    }
+    invisible(NULL)
+  }
 
-  sf::st_write(final_map_full, scored_gpkg, layer = "deterministic_scored", delete_dsn = overwrite, quiet = TRUE)
-  sf::st_write(final_map_full, final_gpkg, layer = "deterministic_scored", delete_dsn = overwrite, quiet = TRUE)
-  sf::st_write(final_map_full, final_gpkg, layer = "final_map_full", append = TRUE, quiet = TRUE)
-  sf::st_write(final_map, final_gpkg, layer = "final_map", append = TRUE, quiet = TRUE)
+  # 2026-06-06 (B2 final-map overwrite fix): the GPKG writes used to run
+  # unconditionally, so with overwrite=FALSE on a re-run the `final_gpkg`
+  # layers were re-written with append=TRUE onto pre-existing populated
+  # layers -> DUPLICATE polygons / schema-append error. Mirror the per-file
+  # `.write_if_allowed()` reuse pattern used for the CSV sidecars (and in
+  # train_final/oof): when overwrite=TRUE behave exactly as before
+  # (safe_remove_dataset + write, byte-identical); when overwrite=FALSE and
+  # the GPKG already exists, skip the write entirely and reuse it. The
+  # multi-layer `final_gpkg` is gated as a unit so append=TRUE can only ever
+  # land on a freshly-created (empty) file.
+  .write_gpkg_if_allowed <- function(path, write_fn) {
+    if (isTRUE(overwrite) || !file.exists(path)) {
+      if (isTRUE(overwrite)) safe_remove_dataset(path)
+      force(write_fn())
+    } else {
+      msg("overwrite=FALSE and file exists; skipping write: %s", path)
+    }
+    invisible(NULL)
+  }
+
+  .write_gpkg_if_allowed(scored_gpkg, function() {
+    sf::st_write(final_map_full, scored_gpkg, layer = "deterministic_scored", delete_dsn = overwrite, quiet = TRUE)
+  })
+  .write_gpkg_if_allowed(final_gpkg, function() {
+    sf::st_write(final_map_full, final_gpkg, layer = "deterministic_scored", delete_dsn = overwrite, quiet = TRUE)
+    sf::st_write(final_map_full, final_gpkg, layer = "final_map_full", append = TRUE, quiet = TRUE)
+    sf::st_write(final_map, final_gpkg, layer = "final_map", append = TRUE, quiet = TRUE)
+  })
 
   tab_counts <- final_map |>
     sf::st_drop_geometry() |>
     dplyr::mutate(has_oof = !is.na(.data[["p_burned_oof"]])) |>
     dplyr::count(source_set, class_input, has_oof, name = "n") |>
     dplyr::arrange(source_set, class_input)
-  utils::write.csv(tab_counts, counts_csv, row.names = FALSE)
+  .write_if_allowed(counts_csv,
+    utils::write.csv(tab_counts, counts_csv, row.names = FALSE))
 
   burned_like_gpkg <- NULL
   burned_like_counts_csv <- NULL
@@ -449,8 +515,9 @@ score_burnedlike_and_export_final_map <- function(
       paste0(tools::file_path_sans_ext(burnedlike_basename), "_counts.csv")
     )
 
-    if (overwrite) safe_remove_dataset(burned_like_gpkg)
-    sf::st_write(burned_like_sf, burned_like_gpkg, layer = burnedlike_layer, delete_dsn = overwrite, quiet = TRUE)
+    .write_gpkg_if_allowed(burned_like_gpkg, function() {
+      sf::st_write(burned_like_sf, burned_like_gpkg, layer = burnedlike_layer, delete_dsn = overwrite, quiet = TRUE)
+    })
 
     tab_bl <- burned_like_sf |>
       sf::st_drop_geometry() |>
@@ -460,7 +527,8 @@ score_burnedlike_and_export_final_map <- function(
         p_burned_median = suppressWarnings(stats::median(.data[["p_burned"]], na.rm = TRUE)),
         p_burned_max = suppressWarnings(max(.data[["p_burned"]], na.rm = TRUE))
       )
-    utils::write.csv(tab_bl, burned_like_counts_csv, row.names = FALSE)
+    .write_if_allowed(burned_like_counts_csv,
+      utils::write.csv(tab_bl, burned_like_counts_csv, row.names = FALSE))
   }
 
   msg("Final map rows: total=%d | deterministic=%d",

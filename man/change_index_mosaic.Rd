@@ -80,7 +80,13 @@ objects follow `MOSAIC_OUTPUTS_FINAL.csv`.
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},
+\code{\link{build_supervised_training_pools}()},
+\code{\link{extract_supervised_features}()},
+\code{\link{make_spatial_folds}()},
 \code{\link{run_deterministic_pipeline}()},
-\code{\link{run_oneyear_supervised_pipeline}()}
+\code{\link{run_oneyear_supervised_pipeline}()},
+\code{\link{run_oof_diagnostics}()},
+\code{\link{score_supervised_burned_map}()},
+\code{\link{train_final_burned_model}()}
 }
 \concept{workflow}

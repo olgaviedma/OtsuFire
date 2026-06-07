@@ -1,6 +1,13 @@
 # Block 7: top-level library() calls removed. Packages resolved via
 # DESCRIPTION Imports.
-sf::sf_use_s2(FALSE)
+# AS07 (0.5.0): the former top-level `sf::sf_use_s2(FALSE)` was removed. It was
+# DEAD in installed-package (library(OtsuFire)) mode -- top-level expressions in
+# R/*.R run at build time, not at load time, so the planar setting only took
+# effect under pkgload::load_all(). The setting is now scoped (with on.exit
+# restore) inside the legacy-stack functions that actually need planar geometry:
+# process_otsu_rasters_(), build_unburned_from_legacy_pipeline(),
+# build_unburned_from_legacy_decisions(), build_unburned_from_legacy_patches()
+# (run_scenarios() already did so at internal-sup-unburned-bloques.R).
 
 sanitize_unb_legacy <- function(x) {
   x <- sf::st_make_valid(x)
@@ -58,34 +65,50 @@ read_vector_unb_legacy <- function(path, layer = NULL) {
   }
 }
 
-# F3 fix: scalar-safe; also returns y when x is a scalar NA (not just NULL)
-
-find_project_paths_file_unb_legacy <- function(start = getwd()) {
-  cur <- normalizePath(start, winslash = "/", mustWork = FALSE)
-  repeat {
-    cand <- file.path(cur, "PROJECT_PATHS.R")
-    if (file.exists(cand)) return(cand)
-    parent <- dirname(cur)
-    if (identical(parent, cur)) break
-    cur <- parent
-  }
-  NULL
-}
-
-get_default_fire_mapping_paths_unb_legacy <- function(start = getwd()) {
-  pp <- find_project_paths_file_unb_legacy(start = start)
-  if (is.null(pp)) return(NULL)
-  env <- new.env(parent = globalenv())
-  sys.source(pp, envir = env)
-  if (!exists("get_fire_mapping_paths", envir = env, mode = "function")) return(NULL)
-  env$get_fire_mapping_paths(start = start)
-}
+# BUG 3 Phase 1a (2026-06-05): removed the dead PROJECT_PATHS.R discovery
+# helpers `find_project_paths_file_unb_legacy()` and
+# `get_default_fire_mapping_paths_unb_legacy()`. They only fed the
+# getwd()-walk + sys.source fallback in build_unburned_from_legacy_pipeline(),
+# which is now a fail-fast stop() because the dispatcher always supplies
+# data_base / result_name / composite_base explicitly.
 
 resolve_first_existing_path_unb_legacy <- function(...) {
   candidates <- unlist(list(...), use.names = FALSE)
   candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
   hit <- candidates[file.exists(candidates)]
   if (length(hit)) normalizePath(hit[1], winslash = "/", mustWork = TRUE) else NULL
+}
+
+# AS02 (0.5.0): build a deterministic, human-readable fingerprint of all
+# decision-affecting legacy parameters. The cached intermediate outputs
+# (OTSU raster, patches, coverage, decisions) only encode a handful of params
+# in their filenames; this fingerprint covers the rest so `reuse_existing`
+# cannot silently serve stale results when a non-filename param changed.
+# Base R only (no `digest` in Imports): sorted key=value text plus a small
+# rolling checksum so the stored token is compact and order-stable.
+legacy_param_fingerprint_unb_legacy <- function(params) {
+  flat <- vapply(params, function(v) {
+    if (is.null(v)) return("NULL")
+    v <- unlist(v, use.names = TRUE)
+    if (!is.null(names(v)) && any(nzchar(names(v)))) {
+      v <- v[order(names(v))]
+      paste(sprintf("%s=%s", names(v), format(v, trim = TRUE, scientific = FALSE)),
+            collapse = ",")
+    } else {
+      paste(format(v, trim = TRUE, scientific = FALSE), collapse = ",")
+    }
+  }, character(1))
+  kv <- sprintf("%s=%s", names(params), flat)
+  kv <- kv[order(names(params))]
+  body <- paste(kv, collapse = "\n")
+  # Simple deterministic checksum over the UTF-8 bytes (rolling mod prime).
+  # Use double arithmetic (not 32-bit integer) to avoid overflow: every
+  # intermediate `chk * 31 + b` stays < 31 * (1e9+7) + 255 ~ 3.1e10, which is
+  # exactly representable as a double, so the modulo result is deterministic.
+  bytes <- as.numeric(charToRaw(enc2utf8(body)))
+  chk <- 0
+  for (b in bytes) chk <- (chk * 31 + b) %% 1000000007
+  list(text = body, checksum = sprintf("%09d", as.integer(chk)))
 }
 
 get_corine_year_unb_legacy <- function(y) {
@@ -113,8 +136,7 @@ source_legacy_unburned_helpers <- function(
   data_base = NULL,
   result_name = "Min_Min",
   target_year = NULL,
-  scenario_name = NULL,
-  script_base = NULL  # retained for API compatibility; ignored after Block 5
+  scenario_name = NULL
 ) {
   # Block 5: the four required helpers (process_otsu_rasters_,
   # polygonize_Otsu, coverage_by_patch_raster, run_scenarios) are now
@@ -232,9 +254,23 @@ build_unburned_from_legacy_decisions <- function(
   sample_n = NULL,
   sample_props = c(drop = 0.70, review = 0.25, keep = 0.05),
   random_seed = 42,
+  # D4a (2026-06-05): when the Otsu legacy pool is empty after sanitisation,
+  # all_sources silently degraded to deterministic_direct semantics (a
+  # methodologically different negative pool). That silent degradation is now
+  # an ERROR by default. Set TRUE to opt back into the historical warn+degrade
+  # behaviour (still writes the `_LEGACY_POOL_EMPTY.txt` audit file).
+  allow_empty_otsu_pool = FALSE,
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
+
+  # AS07 (0.5.0): planar geometry for the sf ops below (st_make_valid via
+  # sanitize_unb_legacy, st_intersects / st_buffer). Scoped + restored on exit
+  # so direct callers (incl. the test suite) get the same planar behaviour the
+  # dead top-level `sf_use_s2(FALSE)` only provided under pkgload::load_all().
+  old_s2 <- sf::sf_use_s2()
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  suppressMessages(sf::sf_use_s2(FALSE))
 
   stopifnot(file.exists(legacy_patches_path))
   stopifnot(file.exists(internal_decisions_path))
@@ -253,6 +289,23 @@ build_unburned_from_legacy_decisions <- function(
       paste(miss_cols, collapse = ", "),
       call. = FALSE
     )
+  }
+
+  # AS09 (0.5.0): consolidate the fragile area-column trail to a SINGLE
+  # canonical column. The decision shapefile arrives with ESRI-truncated
+  # area duplicates (`AREA_HA`, and a `make.unique` collision `AREA_HA_1`)
+  # carried over from polygonize_Otsu() -> run_scenarios() shapefile
+  # round-trips. `ensure_area_ha_unb_legacy()` then (re)computes the
+  # authoritative lowercase `area_ha` directly from geometry, so those
+  # truncated copies are redundant. Drop them explicitly here so only
+  # `area_ha` survives. Byte-identical: the truncated copies never drove a
+  # decision (the `min_area_ha` filter, summary, and downstream training all
+  # use the geometry-derived `area_ha`; the deny lists already removed the
+  # uppercase copies before XGBoost), so removing them earlier changes no
+  # produced value -- it only removes dead duplicate columns.
+  area_dups <- intersect(c("AREA_HA", "AREA_HA_1", "area_ha"), names(legacy))
+  if (length(area_dups)) {
+    legacy <- legacy[, setdiff(names(legacy), area_dups), drop = FALSE]
   }
 
   legacy <- ensure_area_ha_unb_legacy(legacy)
@@ -303,16 +356,37 @@ build_unburned_from_legacy_decisions <- function(
   ) |>
     ensure_area_ha_unb_legacy()
 
-  # AS06 (0.3.0): if every legacy patch was excluded by the
-  # deterministic exclusion buffer, the all_sources mode silently
-  # degrades to deterministic_direct semantics. Surface that to the
-  # caller via warning() and a `_LEGACY_POOL_EMPTY.txt` audit file in
-  # the run directory so post-hoc analyses can flag affected years.
+  # AS06 (0.3.0) / D4a (2026-06-05): if every legacy patch was excluded by the
+  # deterministic exclusion buffer, the all_sources mode would silently degrade
+  # to deterministic_direct semantics (a methodologically different negative
+  # pool: no Otsu current-year patches). That silent degradation is now an
+  # ERROR by default -- the user gets a clear message instead of an unflagged
+  # change of negative-class composition. Set `allow_empty_otsu_pool = TRUE` to
+  # opt back into the historical warn+degrade behaviour, which still writes the
+  # `_LEGACY_POOL_EMPTY.txt` audit file so post-hoc analyses can flag affected
+  # years. Normal (non-degenerate) years are byte-identical either way.
   if (nrow(combined) == 0L) {
+    if (!isTRUE(allow_empty_otsu_pool)) {
+      stop(
+        paste0(
+          "Otsu legacy pool is EMPTY after sanitisation (exclude_buffer_m = ",
+          as.character(exclude_buffer_m), "): every legacy patch was removed ",
+          "by the deterministic exclusion buffer. all_sources would silently ",
+          "degrade to deterministic_direct semantics (no Otsu current-year ",
+          "patches in the negative pool), which changes the model's negative ",
+          "class. Aborting. To proceed anyway with the historical ",
+          "warn+degrade behaviour, set allow_empty_otsu_pool = TRUE (config ",
+          "option `options$allow_empty_otsu_pool`). ",
+          "Legacy patches path: ", legacy_patches_path, ". ",
+          "Internal decisions path: ", internal_decisions_path, "."
+        ),
+        call. = FALSE
+      )
+    }
     warning(
       paste0("Otsu legacy pool empty after sanitisation; all_sources ",
              "degrading to deterministic_direct semantics for this ",
-             "year/scenario."),
+             "year/scenario (allow_empty_otsu_pool = TRUE)."),
       call. = FALSE
     )
     if (!is.null(out_gpkg) && nzchar(out_gpkg)) {
@@ -327,8 +401,8 @@ build_unburned_from_legacy_decisions <- function(
             sprintf("Internal decisions path: %s", internal_decisions_path),
             sprintf("exclude_buffer_m = %s", as.character(exclude_buffer_m)),
             "",
-            "All_sources mode silently degraded to deterministic_direct ",
-            "semantics for this year/scenario."
+            "All_sources mode degraded to deterministic_direct ",
+            "semantics for this year/scenario (allow_empty_otsu_pool = TRUE)."
           ),
           file.path(out_dir_audit, "_LEGACY_POOL_EMPTY.txt")
         )
@@ -432,6 +506,14 @@ build_unburned_from_legacy_patches <- function(
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
+
+  # AS07 (0.5.0): planar geometry for the sf ops below (st_make_valid via
+  # sanitize_unb_legacy, st_intersects / st_buffer). Scoped + restored on exit
+  # so direct callers (incl. the test suite) get the same planar behaviour the
+  # dead top-level `sf_use_s2(FALSE)` only provided under pkgload::load_all().
+  old_s2 <- sf::sf_use_s2()
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  suppressMessages(sf::sf_use_s2(FALSE))
 
   stopifnot(file.exists(legacy_patches_path))
   stopifnot(file.exists(internal_decisions_path))
@@ -556,8 +638,8 @@ build_unburned_from_legacy_pipeline <- function(
   result_name = NULL,
   composite_base = NULL,
   severity_raster_path = NULL,
+  internal_decisions_path = NULL,
   legacy_code_dir = NULL,
-  script_base = NULL,  # F2 fix: passed through to source_legacy_unburned_helpers()
   otsu_mode = c("burnable_only", "corine", "ecoregion", "corine_ecoregion"),
   # AS01 (0.3.0): NULL by default. Plumbed from config$tool_paths via the
   # dispatcher. The downstream `process_otsu_rasters_()` call asserts
@@ -594,40 +676,51 @@ build_unburned_from_legacy_pipeline <- function(
   reuse_existing = TRUE,
   write_unburned = TRUE,
   out_root_dir = NULL,
+  # §N+25 (2026-06-05): burnable mask, CORINE raster and peninsula border are
+  # now wired RUN inputs. The caller (supervised-pools.R) threads
+  # config$inputs$burnable_mask / corine_raster / peninsula_shapefile here.
+  # When NULL each falls back to EXACTLY the historical convention path below,
+  # so passing nothing is byte-identical.
+  burnable_mask_path = NULL,
+  corine_raster_path = NULL,
+  peninsula_shapefile = NULL,
+  # D4a (2026-06-05): forwarded to build_unburned_from_legacy_decisions().
+  # FALSE (default) errors when the Otsu legacy pool is empty after
+  # sanitisation instead of silently degrading to deterministic_direct
+  # semantics; TRUE keeps the historical warn+degrade behaviour.
+  allow_empty_otsu_pool = FALSE,
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
   otsu_mode <- match.arg(otsu_mode)
 
-  # F2 fix (follow-up): only resolve project-path defaults when at least one
-  # argument is missing. In the normal production path all three are supplied
-  # explicitly, so this block is skipped entirely and no getwd() call is made.
+  # AS07 (0.5.0): planar geometry for the whole legacy unburned chain
+  # (process_otsu_rasters_, polygonize_Otsu, coverage_by_patch_raster,
+  # run_scenarios, and the build_unburned_from_legacy_decisions sf ops:
+  # st_make_valid / st_intersects / st_buffer). The historical top-level
+  # `sf::sf_use_s2(FALSE)` was dead in installed-package mode; scope it here
+  # (restored on exit) so behaviour matches the pkgload::load_all path in both
+  # modes without leaking the setting into the caller's session.
+  old_s2 <- sf::sf_use_s2()
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  suppressMessages(sf::sf_use_s2(FALSE))
+
+  # BUG 3 Phase 1a (2026-06-05): the production dispatcher ALWAYS supplies
+  # data_base / result_name / composite_base via the engine bindings, so the
+  # former PROJECT_PATHS.R / getwd()-walk fallback was dead. Fail fast instead
+  # of silently resolving paths from the working directory.
   if (is.null(data_base) || is.null(result_name) || is.null(composite_base)) {
-    if (!is.null(script_base)) {
-      # script_base is known -- locate PROJECT_PATHS.R without using getwd().
-      pp_path <- file.path(script_base, "PROJECT_PATHS.R")
-      if (file.exists(pp_path)) {
-        pp_env <- new.env(parent = globalenv())
-        sys.source(pp_path, envir = pp_env)
-        defaults <- if (exists("get_fire_mapping_paths", envir = pp_env, mode = "function"))
-          pp_env$get_fire_mapping_paths(start = script_base, scripts_root = script_base)
-        else NULL
-      } else {
-        defaults <- NULL
-      }
-    } else {
-      # Backward-compat fallback only: walk up from getwd() to find
-      # PROJECT_PATHS.R. Reached only when script_base is not supplied.
-      defaults <- get_default_fire_mapping_paths_unb_legacy()
-    }
-    if (is.null(data_base))      data_base      <- defaults$data_base      %||% NULL
-    if (is.null(result_name))    result_name    <- defaults$result_name    %||% "Min_Min"
-    if (is.null(composite_base)) composite_base <- defaults$composite_base %||%
-      if (!is.null(data_base)) file.path(data_base, "Imagery", "Composites_90m") else NULL
+    stop(
+      "build_unburned_from_legacy_pipeline() requires 'data_base', ",
+      "'result_name' and 'composite_base' to be supplied explicitly. ",
+      "(The legacy PROJECT_PATHS.R / getwd() fallback was removed.)",
+      call. = FALSE
+    )
   }
 
-  if (is.null(data_base) || !dir.exists(data_base)) {
-    stop("Could not resolve 'data_base'. Provide it explicitly.", call. = FALSE)
+  if (!dir.exists(data_base)) {
+    stop("Could not resolve 'data_base': directory does not exist: ",
+         data_base, call. = FALSE)
   }
 
   helper_files <- source_legacy_unburned_helpers(
@@ -635,44 +728,67 @@ build_unburned_from_legacy_pipeline <- function(
     data_base = data_base,
     result_name = result_name,
     target_year = target_year,
-    scenario_name = scenario_name,
-    script_base = script_base  # F2 fix: pass through to avoid getwd() dependency
+    scenario_name = scenario_name
   )
 
   corine_year <- get_corine_year_unb_legacy(target_year)
   reclass_matrix <- make_corine_reclass_matrix_unb_legacy()
-  one_year_tif <- resolve_first_existing_path_unb_legacy(
-    severity_raster_path,
-    file.path(composite_base, paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
-    file.path(composite_base, "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
-    file.path(composite_base, "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-    file.path(composite_base, paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-    file.path(data_base, "Imagery", "Composites_90m", "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-    file.path(data_base, "Imagery", "Composites_90m", "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif"))
-  )
-  burnable_mask_path <- file.path(
-    data_base, "Corine_Masks",
-    paste0("burneable_mask_binary_corine_", corine_year, "_ETRS89.tif")
-  )
-  corine_raster_path <- file.path(
-    data_base, "Corine_Masks",
-    paste0("CLC_", corine_year, "_peninsula.tif")
-  )
-  peninsula_shapefile <- file.path(data_base, "Borders", "Iberian_peninsula.shp")
+  # Severity mosaic resolution: prefer the EXPLICIT caller-supplied path (in
+  # production this is cfg$change_index, threaded by the orchestrator). Only
+  # fall back to convention candidates when none is supplied; the chosen
+  # source is logged below so the choice is never hidden.
+  if (!is.null(severity_raster_path) && nzchar(severity_raster_path)) {
+    one_year_tif <- severity_raster_path
+    one_year_tif_source <- "explicit (from config)"
+  } else {
+    one_year_tif <- resolve_first_existing_path_unb_legacy(
+      file.path(composite_base, paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
+      file.path(composite_base, "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
+      file.path(composite_base, "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
+      file.path(composite_base, paste0("DOY_", target_year, "_mosaic_res90m.tif")),
+      file.path(data_base, "Imagery", "Composites_90m", "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
+      file.path(data_base, "Imagery", "Composites_90m", "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif"))
+    )
+    one_year_tif_source <- "convention fallback"
+  }
+  if (is.null(burnable_mask_path) || !nzchar(burnable_mask_path)) {
+    burnable_mask_path <- file.path(
+      data_base, "Corine_Masks",
+      paste0("burneable_mask_binary_corine_", corine_year, "_ETRS89.tif")
+    )
+  }
+  if (is.null(corine_raster_path) || !nzchar(corine_raster_path)) {
+    corine_raster_path <- file.path(
+      data_base, "Corine_Masks",
+      paste0("CLC_", corine_year, "_peninsula.tif")
+    )
+  }
+  if (is.null(peninsula_shapefile) || !nzchar(peninsula_shapefile)) {
+    peninsula_shapefile <- file.path(data_base, "Borders", "Iberian_peninsula.shp")
+  }
   ecoregion_shapefile <- file.path(data_base, "Ecoregion", "ecoregiones_olson.shp")
-  internal_decisions_path <- file.path(
-    data_base, "Results", target_year, result_name,
-    "DETERMINISTIC", scenario_name, "05_DECISIONS", "internal_decisions.gpkg"
-  )
-
-  if (is.null(one_year_tif)) {
+  # The deterministic decisions GPKG is the user-supplied path, period. No
+  # convention reconstruction. The caller (orchestrator) always threads the
+  # user path down; require it here.
+  if (is.null(internal_decisions_path) || !nzchar(internal_decisions_path)) {
     stop(
-      "Could not locate severity mosaic for year ", target_year,
-      ". Check 'composite_base' or provide 'severity_raster_path' explicitly.",
+      "build_unburned_from_legacy_pipeline() requires ",
+      "'internal_decisions_path' (the deterministic decisions .gpkg). ",
+      "There is no convention-based fallback.",
       call. = FALSE
     )
   }
-  msg("Legacy unburned severity raster: %s", one_year_tif)
+
+  if (is.null(one_year_tif) || !file.exists(one_year_tif)) {
+    stop(
+      "Could not locate severity mosaic for year ", target_year,
+      " (source: ", one_year_tif_source, "). ",
+      "Provide 'severity_raster_path' explicitly or check 'composite_base'.",
+      call. = FALSE
+    )
+  }
+  one_year_tif <- normalizePath(one_year_tif, winslash = "/", mustWork = TRUE)
+  msg("Legacy unburned severity raster [%s]: %s", one_year_tif_source, one_year_tif)
   stopifnot(file.exists(burnable_mask_path))
   if (otsu_mode %in% c("corine", "corine_ecoregion")) {
     stopifnot(file.exists(corine_raster_path))
@@ -689,6 +805,10 @@ build_unburned_from_legacy_pipeline <- function(
       data_base, "Results", target_year, result_name,
       "SUPERVISED", scenario_name, "_LEGACY_UNBURNED"
     )
+    # In production the orchestrator/pools stage always supplies out_root_dir
+    # from config$output_routes; log when we fall back so it is never hidden.
+    msg("Legacy unburned out_root_dir not supplied; using convention default: %s",
+        out_root_dir)
   }
   dir.create(out_root_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -735,7 +855,68 @@ build_unburned_from_legacy_pipeline <- function(
     sprintf("%d_%s_legacy_unburned.gpkg", target_year, scenario_name)
   )
 
-  if (!isTRUE(reuse_existing) || !file.exists(otsu_raster_path) || !file.exists(ref_raster_path)) {
+  # AS02 (0.5.0): honest reuse. The cached stage filenames only encode a few
+  # of the ~25 governing parameters (target_year, otsu_mode, otsu_threshold,
+  # reference_otsu_threshold, buffers_m, core_thr). Changing any OTHER param
+  # while keeping reuse_existing = TRUE previously served STALE cached outputs
+  # silently. We now write a parameter fingerprint next to the cache and only
+  # reuse when it MATCHES; on mismatch (or when no fingerprint exists, e.g. a
+  # pre-AS02 cache) we recompute rather than reuse. For a normal production
+  # re-run with unchanged params the fingerprint matches and the reuse path is
+  # byte-identical to before.
+  fp <- legacy_param_fingerprint_unb_legacy(list(
+    target_year              = target_year,
+    scenario_name            = scenario_name,
+    otsu_mode                = otsu_mode,
+    otsu_threshold           = otsu_threshold,
+    reference_otsu_threshold = reference_otsu_threshold,
+    min_otsu_threshold_value = min_otsu_threshold_value,
+    min_pixels               = min_pixels,
+    target_epsg              = target_epsg,
+    buffers_m                = buffers_m,
+    core_thr                 = core_thr,
+    alpha_boost              = alpha_boost,
+    min_base_boost           = min_base_boost,
+    dist_power               = dist_power,
+    keep_hi                  = keep_hi,
+    drop_lo                  = drop_lo,
+    dist_mode                = dist_mode,
+    near_mode                = near_mode,
+    use_drop                 = use_drop,
+    use_review               = use_review,
+    use_keep                 = use_keep,
+    drop_max_s_patch         = drop_max_s_patch,
+    review_max_s_patch       = review_max_s_patch,
+    keep_max_s_patch         = keep_max_s_patch,
+    sample_n                 = sample_n,
+    sample_props             = sample_props,
+    exclude_buffer_m         = exclude_buffer_m,
+    min_area_ha              = min_area_ha,
+    random_seed              = random_seed,
+    one_year_tif             = one_year_tif,
+    burnable_mask_path       = burnable_mask_path,
+    corine_raster_path       = corine_raster_path,
+    peninsula_shapefile      = peninsula_shapefile,
+    internal_decisions_path  = internal_decisions_path
+  ))
+  fingerprint_path <- file.path(out_root_dir, "_LEGACY_PARAM_FINGERPRINT.txt")
+  fingerprint_token <- c(
+    "# OtsuFire legacy unburned cache fingerprint (AS02).",
+    "# reuse_existing only honoured when this file matches the current call.",
+    sprintf("CHECKSUM=%s", fp$checksum),
+    "---",
+    fp$text
+  )
+  cache_fingerprint_matches <- file.exists(fingerprint_path) &&
+    identical(readLines(fingerprint_path, warn = FALSE), fingerprint_token)
+  reuse_ok <- isTRUE(reuse_existing) && isTRUE(cache_fingerprint_matches)
+  if (isTRUE(reuse_existing) && !isTRUE(cache_fingerprint_matches)) {
+    msg(paste0("Legacy cache fingerprint %s; recomputing all stages instead ",
+               "of reusing (AS02: params changed or no fingerprint present)."),
+        if (file.exists(fingerprint_path)) "MISMATCH" else "ABSENT")
+  }
+
+  if (!isTRUE(reuse_ok) || !file.exists(otsu_raster_path) || !file.exists(ref_raster_path)) {
     msg("STEP 1 - Legacy OTSU raster [%s] | candidate ge%d | reference ge%d", otsu_mode, otsu_threshold, reference_otsu_threshold)
     process_otsu_rasters_(
       raster_path = one_year_tif,
@@ -771,7 +952,7 @@ build_unburned_from_legacy_pipeline <- function(
   stopifnot(file.exists(otsu_raster_path))
   stopifnot(file.exists(ref_raster_path))
 
-  if (!isTRUE(reuse_existing) || !file.exists(patch_path)) {
+  if (!isTRUE(reuse_ok) || !file.exists(patch_path)) {
     msg("STEP 2 - Polygonize legacy OTSU raster")
     patches_sf <- polygonize_Otsu(
       burn_raster = otsu_raster_path,
@@ -794,7 +975,7 @@ build_unburned_from_legacy_pipeline <- function(
   }
   stopifnot(file.exists(patch_path))
 
-  if (!isTRUE(reuse_existing) || !file.exists(coverage_path)) {
+  if (!isTRUE(reuse_ok) || !file.exists(coverage_path)) {
     msg("STEP 3 - Coverage by patch")
     coverage_by_patch_raster(
       patches = patch_path,
@@ -807,7 +988,7 @@ build_unburned_from_legacy_pipeline <- function(
   }
   stopifnot(file.exists(coverage_path))
 
-  if (!isTRUE(reuse_existing) || !file.exists(decision_path)) {
+  if (!isTRUE(reuse_ok) || !file.exists(decision_path)) {
     msg("STEP 4 - Legacy patch decisions")
     run_scenarios(
       patches_path = coverage_path,
@@ -836,6 +1017,19 @@ build_unburned_from_legacy_pipeline <- function(
   }
   stopifnot(file.exists(decision_path))
 
+  # AS02 (0.5.0): persist the parameter fingerprint next to the cache. On the
+  # next call, reuse is honoured only if this token still matches (see the
+  # `reuse_ok` gate above). Written unconditionally so a previously absent /
+  # mismatched fingerprint is refreshed after the stages were (re)computed.
+  if (!isTRUE(cache_fingerprint_matches)) {
+    tryCatch(
+      writeLines(fingerprint_token, fingerprint_path),
+      error = function(e)
+        warning("Could not write legacy cache fingerprint (",
+                conditionMessage(e), ")", call. = FALSE)
+    )
+  }
+
   msg("STEP 5 - Build unburned from legacy patch decisions")
   res_unb <- build_unburned_from_legacy_decisions(
     legacy_patches_path = decision_path,
@@ -852,6 +1046,7 @@ build_unburned_from_legacy_pipeline <- function(
     sample_n = sample_n,
     sample_props = sample_props,
     random_seed = random_seed,
+    allow_empty_otsu_pool = allow_empty_otsu_pool,
     verbose = verbose
   )
 

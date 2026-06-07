@@ -32,6 +32,23 @@ mk_keep_pool_summary3 <- function(years_used = NULL) {
   )
 }
 
+mk_det_square_sf <- function(df, sizes, origin_x = 0) {
+  stopifnot(nrow(df) == length(sizes))
+  geom <- lapply(seq_along(sizes), function(i) {
+    x0 <- origin_x + ((i - 1L) * 30)
+    y0 <- 0
+    s <- sizes[[i]]
+    sf::st_polygon(list(rbind(
+      c(x0, y0),
+      c(x0 + s, y0),
+      c(x0 + s, y0 + s),
+      c(x0, y0 + s),
+      c(x0, y0)
+    )))
+  })
+  sf::st_sf(df, geometry = sf::st_sfc(geom, crs = 3035))
+}
+
 test_that("score_burned_patches exists and is no longer NotYetImplemented", {
   expect_true(is.function(score_burned_patches))
   err <- tryCatch(score_burned_patches(), error = function(e) conditionMessage(e))
@@ -166,4 +183,68 @@ test_that("score_burned_patches rejects same-year explicit keep_pool before engi
                          keep_pool = mk_keep_pool_summary3(2025L)),
     regexp = "cannot include the target year"
   )
+})
+
+test_that("build_internal_decisions publishes cleaned geometry after previous-year erase", {
+  env <- asNamespace("OtsuFire")
+
+  internal_flagged <- mk_det_square_sf(
+    data.frame(
+      source_poly_id = c(1L, 2L),
+      flag_internal = c("keep", "review"),
+      why_flag = c("intersects_stage1_seed", "burnable_corine_ok"),
+      stringsAsFactors = FALSE
+    ),
+    sizes = c(10, 10)
+  )
+
+  internal_clean <- mk_det_square_sf(
+    data.frame(
+      source_poly_id = 1L,
+      flag_internal = "keep",
+      stringsAsFactors = FALSE
+    ),
+    sizes = 6
+  )
+
+  internal_rbr <- mk_det_square_sf(
+    data.frame(
+      source_poly_id = 1L,
+      area_ha = 0.0036,
+      n_pix = 4L,
+      median_rbr = 250,
+      p_above_keep_q25 = 0.8,
+      p_above_keep_ref = 0.8,
+      percentile_in_keep = 0.9,
+      conf_area = "ok",
+      conf_pix = "ok",
+      flag_rbr = "keep",
+      stringsAsFactors = FALSE
+    ),
+    sizes = 6
+  )
+
+  out <- env$build_internal_decisions(
+    internal_flagged = internal_flagged,
+    internal_clean = internal_clean,
+    internal_rbr = internal_rbr,
+    target_year = 2025L,
+    scenario_name = "test",
+    preyear_available = TRUE
+  )
+
+  expect_s3_class(out, "sf")
+  expect_equal(nrow(out), 2L)
+
+  area_out <- as.numeric(sf::st_area(out))
+  expect_equal(area_out[match(1L, out$source_poly_id)], 36, tolerance = 1e-6)
+  expect_equal(area_out[match(2L, out$source_poly_id)], 0, tolerance = 1e-6)
+
+  expect_equal(out$preyear_action[match(1L, out$source_poly_id)], "review")
+  expect_equal(out$preyear_reason[match(1L, out$source_poly_id)], "overlap_previous_year_removed")
+  expect_equal(out$preyear_action[match(2L, out$source_poly_id)], "drop")
+  expect_equal(out$preyear_reason[match(2L, out$source_poly_id)], "previous_year_conflict")
+
+  expect_equal(out$area_ha[match(1L, out$source_poly_id)], 0.0036)
+  expect_true(sf::st_is_empty(out$geometry[match(2L, out$source_poly_id)]))
 })

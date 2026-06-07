@@ -10,7 +10,7 @@ The handoff supports the following interpretation.
 - The package bridge exists and correctly sources the standalone runtime.
 - Strict package-vs-standalone supervised equivalence has been validated (2026-04-16) under frozen deterministic inputs, with exact match across 1002 polygons and zero differences in both `p_burned` and `p_burned_current_year`.
 
-Two unburned-pool strategies are available. `all_sources` is the operational default used in production runs and by the MASTER orchestrator. `deterministic_direct` is the canonical baseline used for benchmarking and reproducibility comparisons.
+The unburned-pool strategy is fixed: `all_sources` is the only mode and is applied implicitly in every run. The user choice was removed on 2026-06-05, and the former `deterministic_direct` baseline strategy no longer exists.
 
 ## Inputs And Support Layers
 
@@ -25,7 +25,6 @@ The active one-year workflow starts from deterministic outputs of the same year 
 | CORINE land-cover support | Polygon-level land-cover composition features |
 | Ecoregions | Dominant ecoregion context per polygon |
 | Hotspots when available | Optional feature support and current-year temporal filtering support |
-| `burned_like_registry_path` | Scenario-specific multiyear registry for append and transfer support |
 
 The `PAQUETE` tables describe these as canonical supervised inputs. The current bridge implementation stores several custom input overrides in the configuration object, but the delegated runtime still relies mainly on the standard project layout when the supervised pipeline actually runs. For that reason, this chapter documents both the conceptual inputs and the current implementation caveat.
 
@@ -59,10 +58,8 @@ This four-bucket architecture replaced a simpler two-source design in Phase 2A (
 - `otsu_unburned_sampled` accepts drop-only patches from the legacy Otsu pipeline. Review and keep patches are explicitly excluded to prevent contamination from spectrally ambiguous positives.
 - `random_background_sampled` provides the most reliable unambiguous negatives and is the primary fill source in all validated runs.
 
-The alternative strategy `deterministic_direct` is the canonical baseline for benchmarking. It uses a single combined pool of deterministic drop polygons plus random background without bucket routing or independent caps. It is the strategy used in package-vs-standalone equivalence validation and should be used for any fair comparison that requires controlling negative-pool composition.
-
 ::: {.callout-note}
-`otsu_unburned_generation` is a deprecated strategy name that redirects to `all_sources`. If it appears in older configs or scripts, treat it as equivalent to `all_sources`.
+The former `deterministic_direct` baseline strategy (a single combined pool of deterministic drops plus random background, without bucket routing) was removed from the package on 2026-06-05. `all_sources` is now the only mode and is applied implicitly. The deprecated `otsu_unburned_generation`/`negative_pool_policy` options were likewise removed; older configs or scripts that still set them no longer have any effect (and any value other than `all_sources` now errors).
 :::
 
 ### Validated composition

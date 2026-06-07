@@ -13,7 +13,9 @@ build_design_matrix_patches <- function(
     drop_regex = c("^fold_rep", "^block_id$", "^source$", "^class$", "^fire_uid$", "^poly_id$"),
     
     # 3) categóricas a factor + "(missing)"
-    cat_cols = c("eco_major"),
+    # 2026-06-05: ecoregions removed from supervised phase; no
+    # categorical predictors remain by default.
+    cat_cols = character(0),
     
     # 4) lógica hotspots (pon NA para desactivarla)
     hs_n_col    = "hs_used_n",
@@ -25,7 +27,17 @@ build_design_matrix_patches <- function(
     
     # 6) debug
     return_prepared_df = FALSE,
-    
+
+    # 6b) B1 (2026-06-07): defer numeric imputation. When TRUE, every step runs
+    # EXACTLY as before (hotspot rules, _isNA companions, factor handling,
+    # logical->integer) EXCEPT the per-column median imputation and the global
+    # sparse-matrix build are SKIPPED. The function returns the prepared
+    # (coerced, _isNA-flagged, but NOT median-imputed) labelled / burned_like
+    # feature data.frames and the model column set, so the nested_refit OOF path
+    # can fit medians per outer fold (B1b leakage fix). Default FALSE keeps the
+    # legacy behaviour byte-identical.
+    defer_impute = FALSE,
+
     # 7) SAVE (nuevo)
     save_dir = NULL,                 # si no es NULL -> guarda bundle
     save_prefix = "patch_dm",         # prefijo de archivos
@@ -152,12 +164,41 @@ build_design_matrix_patches <- function(
       if (!flag_nm %in% names(X_all)) X_all[[flag_nm]] <- as.integer(is.na(X_all[[nm]]))
     }
 
+    if (isTRUE(defer_impute)) {
+      # B1: do NOT impute and do NOT fabricate a median. Per-fold medians are
+      # fit later inside the nested-refit core on the outer-train rows only.
+      next
+    }
     med <- stats::median(X_all[[nm]][idx_median], na.rm = TRUE)
     if (is.na(med)) med <- 0
     medians_used[[nm]] <- med
     X_all[[nm]][is.na(X_all[[nm]])] <- med
   }
-  
+
+  # ---- 3b) B1 deferred-impute early return ----
+  # Return the prepared (coerced, _isNA-flagged, hotspot-derived, but NOT
+  # median-imputed) labelled / burned_like feature frames + the model column
+  # set, so the nested_refit OOF path can fit medians per outer fold. No global
+  # matrix is built or saved here (the per-fold core builds its own matrices).
+  if (isTRUE(defer_impute)) {
+    prepared_labelled    <- X_all[seq_len(nL), , drop = FALSE]
+    prepared_burned_like <- X_all[(nL + 1):nrow(X_all), , drop = FALSE]
+    y <- ifelse(labelled[[class_col]] == pos_lab, 1L, 0L)
+    return(list(
+      deferred             = TRUE,
+      prepared_labelled    = prepared_labelled,
+      prepared_burned_like = prepared_burned_like,
+      model_cols           = names(X_all),
+      num_cols             = num_names,
+      factor_levels        = factor_levels,
+      y                    = y,
+      id_labelled          = labelled[[id_col]],
+      id_burned_like       = burned_like[[id_col]],
+      feat_cols_used       = feat_cols,
+      n_labelled           = nL
+    ))
+  }
+
   # ---- 4) matriz sparse ----
   X_all_mat <- Matrix::sparse.model.matrix(~ . - 1, data = X_all, na.action = stats::na.pass)
   XL_mat  <- X_all_mat[seq_len(nL), , drop = FALSE]
@@ -210,8 +251,12 @@ build_design_matrix_patches <- function(
       id_labelled = id_labelled,
       id_burned_like = id_burned_like,
       prep = prep,
+      # B6 (2026-06-06): the `created = Sys.time()` field was removed from this
+      # checksummed `_design_bundle.rds` artifact so re-runs are
+      # byte-reproducible. It was metadata only (nothing reads bundle$meta$
+      # created). `R` (R.version.string) is deterministic for a fixed R and is
+      # kept for provenance.
       meta = list(
-        created = Sys.time(),
         R = R.version.string
       )
     )

@@ -2,24 +2,11 @@
 #'
 #' @description
 #' Internal supervised feature-extraction engine used by the package
-#' orchestrator. `use_ecoregions` controls whether `eco_major` is computed by
-#' spatially intersecting patches with the `ecoregions` layer.
-#'
-#' @param use_ecoregions Logical scalar. Whether to compute the `eco_major`
-#'   ecoregion attribute for each patch via spatial intersection with the
-#'   `ecoregions` layer. Default `FALSE`. When `FALSE`, the `eco_major` column
-#'   is not added to the output features table and `ecoregions` may be `NULL`.
-#'   When `TRUE`, `ecoregions` becomes REQUIRED.
-#' @param ecoregions sf polygon layer. Required only when
-#'   `use_ecoregions = TRUE`; otherwise ignored. Default `NULL`.
-#' @param eco_id_col Character scalar naming the ecoregion identifier column
-#'   inside `ecoregions`. Required only when `use_ecoregions = TRUE`;
-#'   otherwise ignored. Default `"eco_id"`.
+#' orchestrator.
 #'
 #' @details
-#'   Default behaviour changed in version 0.2.2: ecoregions are no longer
-#'   extracted by default. To reproduce previous behaviour, pass
-#'   `use_ecoregions = TRUE` explicitly.
+#'   Ecoregions belong exclusively to the deterministic delineation phase
+#'   and are not part of the supervised feature set (2026-06-05).
 #' @keywords internal
 #' @noRd
 extract_features <- function(
@@ -45,11 +32,7 @@ extract_features <- function(
     dem        = NULL,     # REQUIRED if build_features=TRUE
     slope      = NULL,     # REQUIRED if build_features=TRUE
     corine_r   = NULL,     # REQUIRED if build_features=TRUE (categorical)
-    
-    # Ecoregions (sf polygons)
-    ecoregions = NULL,     # optional unless use_ecoregions=TRUE
-    eco_id_col = "eco_id",
-    
+
     # Hotspots (sf points)
     hotspots   = NULL,     # optional sf POINTS
     frp_col    = "FRP",
@@ -68,8 +51,7 @@ extract_features <- function(
     use_aw  = TRUE,
     use_nbr = FALSE,
     use_hotspots = TRUE,
-    use_ecoregions = FALSE,
-    
+
     # --- Hotspots by year logic ---
     year_target = NULL,            # e.g., 2022
     hs_year_min_available = 2000,
@@ -435,38 +417,6 @@ extract_features <- function(
     tibble(!!id_col := all_ids) %>% dplyr::left_join(df_out, by = id_col)
   }
   
-  ecoregion_major <- function(polys) {
-    polys <- safe_make_valid(polys)
-    polys2 <- drop_empty_sf(polys)
-    all_ids <- unique(as.character(polys[[id_col]]))
-    
-    if (nrow(polys2) == 0) {
-      return(tibble(!!id_col := all_ids, eco_major = factor(NA_character_)))
-    }
-    
-    eco <- safe_make_valid(ecoregions)
-    if (sf::st_crs(polys2) != sf::st_crs(eco)) eco <- sf::st_transform(eco, sf::st_crs(polys2))
-    
-    inter <- suppressWarnings(sf::st_intersection(
-      polys2 %>% dplyr::select(dplyr::all_of(id_col)),
-      eco    %>% dplyr::select(dplyr::all_of(eco_id_col))
-    ))
-    
-    if (nrow(inter) == 0) {
-      return(tibble(!!id_col := all_ids, eco_major = factor(NA_character_)))
-    }
-    
-    inter <- inter %>% dplyr::mutate(a = as.numeric(sf::st_area(.))) %>% sf::st_drop_geometry()
-    
-    major <- inter %>%
-      dplyr::group_by(.data[[id_col]]) %>%
-      dplyr::summarise(eco_major = as.character(.data[[eco_id_col]][which.max(a)]), .groups="drop")
-    
-    tibble(!!id_col := all_ids) %>%
-      dplyr::left_join(major, by = id_col) %>%
-      dplyr::mutate(eco_major = factor(eco_major))
-  }
-  
   hotspot_features <- function(polys) {
     polys <- safe_make_valid(polys)
     polys2 <- drop_empty_sf(polys)
@@ -477,21 +427,47 @@ extract_features <- function(
     if (is.null(yy) && year_col %in% names(polys)) yy <- as_int_safe(polys[[year_col]][1])
     
     out_nodata <- function() {
+      # B5 (2026-06-06): for years/polygons with NO hotspot data (use_hotspots
+      # FALSE, year < hs_year_min_available, or hotspots NULL), the MEASURED
+      # hotspot quantities are genuinely UNKNOWN, not zero and not -9999. We
+      # emit NA_real_ so the design-matrix builder (internal-sup-create-matrix.R)
+      # flags them via `<col>_isNA = 1` and imputes them to the column median.
+      # This is the documented "impute + flag" path and lets a model trained on
+      # hotspot-years follow the learned missing/default direction when applied
+      # to a hotspot-less year (historical / LOYO application) instead of
+      # ingesting -9999 as a real extreme number.
+      #
+      # Per-column decision (guiding principle: a MEASURED hotspot quantity with
+      # no data -> NA so it is flagged + imputed; a STRUCTURAL availability flag
+      # that is legitimately 0 when no data -> kept 0L):
+      #   * hotspot_available = 0L          KEPT  : real flag "no hotspot data
+      #                                             this year"; the model uses it.
+      #   * hs_in_poly / hs_in_buffer / hs_used_n / hs_min_dist_m /
+      #     hs_frp_sum / hs_frp_max / hs_conf_mean / hs_hiConf_n  -> NA_real_
+      #                                     : measured counts/distances/FRP/conf,
+      #                                       unknown without data.
+      #   * hs_no_support_when_available = 0L  KEPT : its semantics are
+      #     conditioned on availability ("...when available"); with
+      #     hotspot_available == 0 it is correctly 0 (not "no support when
+      #     available"), consistent with the per-polygon computation below.
+      #   * hs_support_present / hs_only_buffer_support -> NA_real_ : these encode
+      #     whether hotspot support exists / is buffer-only, which is undefined
+      #     (unknown) when there is no hotspot data at all.
       base_ids %>%
         dplyr::transmute(
           !!id_col,
           hotspot_available = 0L,
-          hs_in_poly   = hs_missing_value,
-          hs_in_buffer = hs_missing_value,
-          hs_used_n    = hs_missing_value,
-          hs_min_dist_m = hs_missing_value,
-          hs_frp_sum   = hs_missing_value,
-          hs_frp_max   = hs_missing_value,
-          hs_conf_mean = hs_missing_value,
-          hs_hiConf_n  = hs_missing_value,
-          hs_support_present = 0L,
+          hs_in_poly   = NA_real_,
+          hs_in_buffer = NA_real_,
+          hs_used_n    = NA_real_,
+          hs_min_dist_m = NA_real_,
+          hs_frp_sum   = NA_real_,
+          hs_frp_max   = NA_real_,
+          hs_conf_mean = NA_real_,
+          hs_hiConf_n  = NA_real_,
+          hs_support_present = NA_real_,
           hs_no_support_when_available = 0L,
-          hs_only_buffer_support = 0L
+          hs_only_buffer_support = NA_real_
         )
     }
     out_available_empty <- function() {
@@ -646,16 +622,9 @@ extract_features <- function(
     stop("PATCH MODE: id_col has duplicates in unlabeled.")
   }
 
-  if (!is.logical(use_ecoregions) || length(use_ecoregions) != 1L || is.na(use_ecoregions)) {
-    stop("use_ecoregions must be TRUE or FALSE.")
-  }
-  
   if (build_features) {
     if (is.null(rbr_summer) || is.null(dem) || is.null(slope) || is.null(corine_r)) {
       stop("build_features=TRUE requires rbr_summer, dem, slope, corine_r.")
-    }
-    if (isTRUE(use_ecoregions) && is.null(ecoregions)) {
-      stop("build_features=TRUE with use_ecoregions=TRUE requires ecoregions.")
     }
     if (is.null(cor_groups) || !is.list(cor_groups) || is.null(names(cor_groups))) {
       stop("Please provide cor_groups as a NAMED list.")
@@ -667,9 +636,6 @@ extract_features <- function(
   # ---------------------------
   train_folds <- to_crs_safe_sf(train_folds, crs_sf, "train_folds")
   unlabeled   <- to_crs_safe_sf(unlabeled,   crs_sf, "unlabeled")
-  if (isTRUE(use_ecoregions) && !is.null(ecoregions)) {
-    ecoregions <- to_crs_safe_sf(ecoregions, crs_sf, "ecoregions")
-  }
   if (!is.null(hotspots)) hotspots <- to_crs_safe_sf(hotspots, crs_sf, "hotspots")
   
   # infer year_target once
@@ -745,11 +711,6 @@ extract_features <- function(
       dplyr::left_join(zonal_numeric_stats(train_folds, rbr_summer, prefix = "rbr"), by = id_col) %>%
       dplyr::left_join(corine_group_fractions(train_folds, cor_groups), by = id_col)
 
-    if (isTRUE(use_ecoregions)) {
-      train_feat_tbl <- train_feat_tbl %>%
-        dplyr::left_join(ecoregion_major(train_folds), by = id_col)
-    }
-
     train_feat_tbl <- train_feat_tbl %>%
       dplyr::left_join(zonal_numeric_stats(train_folds, dem,   prefix = "elev",  compute_sd = TRUE), by = id_col) %>%
       dplyr::left_join(zonal_numeric_stats(train_folds, slope, prefix = "slope", compute_sd = TRUE), by = id_col)
@@ -780,11 +741,6 @@ extract_features <- function(
     unl_feat_tbl <- tibble(!!id_col := as.character(unlabeled[[id_col]])) %>%
       dplyr::left_join(zonal_numeric_stats(unlabeled, rbr_summer, prefix = "rbr"), by = id_col) %>%
       dplyr::left_join(corine_group_fractions(unlabeled, cor_groups), by = id_col)
-
-    if (isTRUE(use_ecoregions)) {
-      unl_feat_tbl <- unl_feat_tbl %>%
-        dplyr::left_join(ecoregion_major(unlabeled), by = id_col)
-    }
 
     unl_feat_tbl <- unl_feat_tbl %>%
       dplyr::left_join(zonal_numeric_stats(unlabeled, dem,   prefix = "elev",  compute_sd = TRUE), by = id_col) %>%

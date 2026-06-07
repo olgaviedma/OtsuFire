@@ -365,8 +365,9 @@ cat("\nDirectorio de outputs del tutorial:\n  ", TUTORIAL_RESULT_DIR, "\n")
 #   $ run_name                  - chr "Min_Min"      (nombre del run)
 #   $ output_dir                - chr ".../Results"  (raiz de outputs)
 #   $ output_routes             - List of 19         (paths derivados)
-#   $ burned_like_registry_path - chr "..."          (registro multianual)
-#   $ negative_pool_policy      - chr "all_sources"  (policy de negativos)
+#   (NOTA: burned_like_registry_path y negative_pool_policy fueron
+#    eliminados del paquete el 2026-06-05; el registro burned-like ya no
+#    existe y la policy de negativos es siempre all_sources, implicita.)
 #   $ min_burned_pool_n         - int 5              (guard minimo positivos)
 #   $ engine_root               - NULL               (legacy, no usado)
 #   $ supervised_engine_root    - NULL               (legacy, no usado)
@@ -417,10 +418,10 @@ cat("\nDirectorio de outputs del tutorial:\n  ", TUTORIAL_RESULT_DIR, "\n")
 #
 # DECISIONES METODOLOGICAS PARA BASELINE
 # --------------------------------------
-#   - negative_pool_policy = "all_sources"
+#   - Pool de negativos (siempre all_sources, implicito; ya no es opcion)
 #       Usa los 4 sub-pools: internal_keep_qc (burned), deterministic_drop_hard,
-#       random_burnable_background, otsu_patch_residual. La alternativa
-#       "deterministic_direct" salta el otsu_patch_residual.
+#       random_burnable_background, otsu_patch_residual. (La antigua
+#       alternativa "deterministic_direct" fue eliminada el 2026-06-05.)
 #
 #   - legacy_otsu_mode = "burnable_only"
 #       El Otsu solo se aplica sobre pixeles que la mascara Corine considera
@@ -457,7 +458,6 @@ cfg <- build_supervised_burned_config(
   change_index              = CHANGE_INDEX,        # mosaico summer (RBR + DOY)
   delayed_change_index      = RBR_AUTUMN,          # autumn-winter (cosmetico, §N+25)
   hotspots                  = HOTSPOTS,
-  burned_like_registry_path = NULL,
   target_year               = YEAR,
   output_dir                = RESULTS,
   run_name                  = RESULT_NAME,
@@ -465,7 +465,7 @@ cfg <- build_supervised_burned_config(
     data_base                       = DATA_BASE,
     composite_base                  = COMPOSITE,
     result_name                     = RESULT_NAME,
-    negative_pool_policy            = "all_sources",
+    # negative-pool policy is always all_sources now (implicit; only mode)
     legacy_otsu_mode                = "burnable_only",
     legacy_otsu_threshold           = 0,
     legacy_reference_otsu_threshold = 100,
@@ -546,7 +546,7 @@ str(cfg$options, max.level = 1)
 #                                       USADO para construir el path autumn
 #                                       y el mosaico summer (§N+25)
 #   $ result_name                    : "Min_Min"
-#   $ negative_pool_policy           : "all_sources"
+#   (negative_pool_policy fue eliminado; all_sources es siempre implicito)
 #   $ legacy_otsu_mode               : "burnable_only"
 #   $ legacy_otsu_threshold          : 0
 #   $ legacy_reference_otsu_threshold: 100
@@ -840,7 +840,7 @@ cat(sprintf("Sanity check: n_burned=%d >= 5 OK\n", n_burned))
 #   Luego combina las dos partes en unburned_final_raw.
 #
 # DECISIONES METODOLOGICAS
-#   negative_pool_policy = "all_sources" (los 3 sub-pools combinados)
+#   pool de negativos: siempre all_sources, implicito (los sub-pools combinados)
 #   exclude_buffer_m: separa negativos de positivos
 #   n_random_cells: cuantos puntos random extraer
 #   random_rbr_q: percentil maximo de RBR para considerar "fondo"
@@ -922,7 +922,6 @@ res_otsu <- OtsuFire:::build_unburned_from_legacy_pipeline(
   composite_base           = COMPOSITE,
   severity_raster_path     = CHANGE_INDEX,
   legacy_code_dir          = NULL,
-  script_base              = NULL,
   python_exe               = cfg$tool_paths$python_exe,
   gdal_polygonize_script   = cfg$tool_paths$gdal_polygonize_script,
   gdalwarp_path            = cfg$tool_paths$gdalwarp_path,
@@ -1195,9 +1194,6 @@ feat <- OtsuFire:::extract_features(
   slope      = slope_r,
   corine_r   = corine_r,
 
-  ecoregions = NULL,
-  eco_id_col = "EnZ_name",
-
   hotspots   = hotspots_sf,
   frp_col    = "frp",
   conf_col   = "confidence",
@@ -1219,7 +1215,6 @@ feat <- OtsuFire:::extract_features(
   use_aw         = TRUE,
   use_nbr        = FALSE,
   use_hotspots   = use_hotspots_flag,
-  use_ecoregions = FALSE,
 
   max_cells_in_memory       = NULL,
   return_features           = TRUE,
@@ -1392,7 +1387,7 @@ pipe1 <- OtsuFire:::run_dm_oof_pipeline(
 
   id_cols     = c("fire_uid", "class", "source", "poly_id",
                   "block_id", "fold_rep1", "fold_rep2"),
-  cat_cols    = c("eco_major"),
+  cat_cols    = character(0),
   hs_n_col    = "hs_used_n",
   hs_conf_col = "hs_conf_mean",
   hs_frp_col  = "hs_frp_max",

@@ -1,4 +1,6 @@
-# Phase B (block 3): 16 implemented, 0 stubbed.
+# Phase B (block 3): 15 implemented, 0 stubbed.
+# §N+27 (2026-06-05): update_burned_like_registry removed (abandoned
+# supervised burned-like registry research line). Count dropped 16 -> 15.
 
 implemented <- c(
   "change_index_mosaic", "validate_fire_maps",
@@ -7,11 +9,11 @@ implemented <- c(
   "build_supervised_burned_config", "build_supervised_training_pools",
   "make_spatial_folds", "extract_supervised_features",
   "run_oof_diagnostics", "train_final_burned_model",
-  "score_supervised_burned_map", "update_burned_like_registry",
+  "score_supervised_burned_map",
   "check_supervised_consistency", "run_oneyear_supervised_pipeline"
 )
 
-test_that("Phase B-3: all 16 public names exist in the namespace", {
+test_that("Phase B-3: all 15 public names exist in the namespace", {
   for (nm in implemented) {
     expect_true(
       exists(nm, where = asNamespace("OtsuFire"), inherits = FALSE),

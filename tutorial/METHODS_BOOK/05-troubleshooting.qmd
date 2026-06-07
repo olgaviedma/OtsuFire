@@ -9,7 +9,7 @@ Before debugging a specific stage, confirm five basics.
 1. The same `target_year`, `scenario`, and `result_name` are being used across all annual stages.
 2. The deterministic and supervised stages are reading the same annual mosaic family.
 3. The registry path corresponds to the intended scenario folder under `Results/<SCENARIO_UPPER>/`.
-4. The unburned-pool strategy is known in advance: `deterministic_direct` for benchmarking and equivalence testing, `all_sources` for standard operational runs.
+4. The unburned-pool strategy is no longer configurable in the package: every run uses `all_sources` implicitly (the former `deterministic_direct` mode was removed on 2026-06-05).
 5. Support rasters used by supervised feature extraction match the geometry of the main annual change-index raster.
 
 ## Symptom Matrix
@@ -24,7 +24,7 @@ Before debugging a specific stage, confirm five basics.
 | Supervised run aborts because the burned pool is empty | The deterministic stage did not leave enough `keep` polygons after QA | `05_DECISIONS/internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
 | Supervised run aborts because the review pool is empty | The deterministic stage did not leave an ambiguous annual set for supervised scoring | `internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
 | Feature extraction stops on raster geometry mismatch | DEM, slope, delayed change, or CORINE layers are not aligned to the main annual mosaic | The raster-geometry checks that run before `extract_features()` and the main annual mosaic used as template |
-| Package and standalone supervised results do not match | Deterministic inputs were not frozen, registry state differed, or the compared runs used different unburned-pool strategies | Frozen `internal_decisions`, registry snapshot, and whether `deterministic_direct` was forced in the bridge |
+| Package and standalone supervised results do not match | Deterministic inputs were not frozen, or the standalone script used a different unburned-pool strategy than the package (the package now always uses `all_sources`) | Frozen `internal_decisions`, and the unburned-pool strategy on the standalone side (the package side is fixed at `all_sources`) |
 | Registry update appears to write to the wrong place | The workflow is falling back to the legacy shared registry instead of the intended scenario-specific registry | `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg` versus `Results/_REGISTRIES/RBR_TRAINING_REGISTRY.gpkg` |
 | MASTER and standalone supervised results differ | This is expected when MASTER uses `all_sources` and the standalone script defaults to `deterministic_direct` | `SUP_UNB_STRATEGY` in `MASTER_FIRE_MAPPING_PIPELINE.R` and `UNB_STRATEGY` in `03_PATCH_LEVEL_PIPELINE_2.R` |
 | `all_sources` run fails with "Names must be unique: geometry at locations 23 and 55" | sf objects with different column counts were passed to `dplyr::bind_rows()`; fixed in Phase 2A by the `.bind_sf_safe()` helper | `03_PATCH_LEVEL_PIPELINE_2.R` STEP A4 `all_sources` branch; confirm `.bind_sf_safe()` is defined and called for the `det_final_raw` + `otsu_raw` combine |
@@ -57,7 +57,7 @@ Some issues are known and should be treated as documentation boundaries rather t
 4. ~~`validate_fire_maps.Rd` documents a v1 signature; run `devtools::document()` to regenerate from current source~~ **RESOLVED (2026-04-22, F6)** — `devtools::document()` was run; all Rd pages regenerated from current source. No further action needed unless new exports are added.
 
 ::: {.callout-note}
-Supervised package-vs-standalone equivalence has been validated (2026-04-16) under frozen deterministic inputs for 2025/balanced (`deterministic_direct` strategy, exact match across 1002 polygons). For reproducibility comparisons, always force `UNB_STRATEGY = "deterministic_direct"` in the standalone script and pass `negative_pool_policy = "deterministic_direct"` through the bridge config.
+Supervised package-vs-standalone equivalence was validated (2026-04-16) under frozen deterministic inputs for 2025/balanced (exact match across 1002 polygons). That historical validation used the `deterministic_direct` strategy, which was removed from the package on 2026-06-05: the package now always uses `all_sources` (the only mode), and `negative_pool_policy` is no longer a bridge option. To reproduce a comparison against the package today, the standalone script must be set to `all_sources`.
 :::
 
 ::: {.callout-note}

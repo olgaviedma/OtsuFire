@@ -44,6 +44,46 @@ test_that("T11: cfg$output_routes folder names match runtime convention", {
   expect_match(cfg$output_routes$final_model_rds, "07_FINAL_MODEL_V2")
 })
 
+# --- Change 3 (2026-06-05): output location is config-driven --------
+# The config's output_routes$base (driven by output_dir + run_name) is the
+# single source of truth for WHERE supervised outputs are written. For
+# Natalia's default config (output_dir = <data_base>/Results and
+# run_name = result_name), this must resolve to the SAME path the engine
+# previously reconstructed from data_base + result_name, so outputs do NOT
+# move for the existing setup.
+test_that("output_routes$base coincides with the legacy engine reconstruction for the default config", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("terra")
+
+  ci <- mk_tmp_tif_routes()
+  id <- mk_tmp_gpkg_routes()
+
+  data_base   <- normalizePath(tempdir(), winslash = "/", mustWork = FALSE)
+  result_name <- "Min_Min"
+  target_year <- 2025L
+  scenario    <- "balanced"
+
+  cfg <- build_supervised_burned_config(
+    scenario = scenario,
+    internal_decisions = id,
+    change_index = ci,
+    target_year = target_year,
+    # Natalia's default: output_dir = <data_base>/Results, run_name = result_name
+    output_dir = file.path(data_base, "Results"),
+    run_name = result_name
+  )
+
+  legacy_reconstruction <- file.path(
+    data_base, "Results", as.character(target_year), result_name,
+    "SUPERVISED", scenario
+  )
+
+  expect_identical(
+    normalizePath(cfg$output_routes$base, winslash = "/", mustWork = FALSE),
+    normalizePath(legacy_reconstruction, winslash = "/", mustWork = FALSE)
+  )
+})
+
 test_that("config output_routes do NOT advertise the legacy folder names", {
   skip_if_not_installed("sf")
   skip_if_not_installed("terra")

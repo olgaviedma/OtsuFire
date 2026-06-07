@@ -53,7 +53,12 @@ run_oof_xgb <- function(
     prepared_labelled = NULL,
     model_cols = NULL,
     class_col = "class",
-    group_col = "block_id",
+    # Gate 1B (2026-06-07): `group_col` is a REQUIRED resolved arg with NO
+    # methodological default (single source of truth = cfg$train_control$group_col,
+    # threaded down by run_dm_oof_pipeline()). It drives the grouped block-CV on
+    # BOTH paths; a dropped arg ERRORS in the guard block below. This removes the
+    # former hardcoded "block_id" default.
+    group_col,
     # Gate 1B (2026-06-07): val_frac / impute_* are REQUIRED resolved args with
     # NO methodological defaults (single source of truth = cfg$train_control).
     val_frac,
@@ -78,7 +83,7 @@ run_oof_xgb <- function(
   # Gate 1B (2026-06-07): required-arg guard. nrounds_max / early_stop /
   # seed_base drive BOTH paths, so they are always required (no silent
   # defaults; single source = cfg$train_control).
-  for (.nm in c("nrounds_max", "early_stop", "seed_base")) {
+  for (.nm in c("nrounds_max", "early_stop", "seed_base", "group_col")) {
     if (eval(call("missing", as.name(.nm)))) {
       stop("run_oof_xgb(): required resolved arg '", .nm,
            "' is missing (no methodological default; threaded from ",

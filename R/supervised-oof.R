@@ -97,6 +97,12 @@
 #'   imputation rule used by the nested-refit core.
 #' @param impute_factor_missing Character. Sentinel level for missing
 #'   factor/character values in the nested-refit core. Default `"MISSING"`.
+#' @param group_col Character or `NULL`. Grouping column for the grouped
+#'   block-CV used by the OOF engine. `NULL` (default) means "read from
+#'   `cfg$train_control$group_col`" (single source of truth, canonical
+#'   `"block_id"`); a non-NULL value overrides cfg for standalone use. This is
+#'   the SAME knob the FINAL stage sources from `cfg$train_control$group_col`,
+#'   so OOF and FINAL never diverge.
 #' @param overwrite Logical. Forwarded to [run_dm_oof_pipeline()] (controls
 #'   whether the design-matrix bundle is recomputed/clobbered). Default `TRUE`
 #'   (historical behaviour).
@@ -158,6 +164,7 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 val_frac = NULL,
                                 impute_numeric = NULL,
                                 impute_factor_missing = NULL,
+                                group_col = NULL,
                                 out_dir = NULL,
                                 matrix_dir = NULL,
                                 labelled_gpkg = NULL,
@@ -195,6 +202,12 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   val_frac              <- val_frac              %||% .tc$val_frac
   impute_numeric        <- impute_numeric        %||% .tc$impute_numeric
   impute_factor_missing <- impute_factor_missing %||% .tc$impute_factor_missing
+  # Gate 1B (2026-06-07): group_col is sourced from cfg$train_control the SAME
+  # way as val_frac / impute_* etc. so OOF's grouped block-CV column matches
+  # the FINAL stage's group_col (single source of truth). Previously OOF used a
+  # hardcoded "block_id" literal in run_dm_oof_pipeline(); that literal is
+  # removed and group_col is now threaded from here.
+  group_col             <- group_col             %||% .tc$group_col
   training_protocol <- training_protocol %||% .tc$training_protocol
   oof_sampling      <- oof_sampling      %||% .tc$oof_sampling
   training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
@@ -343,6 +356,9 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     val_frac          = val_frac,
     impute_numeric    = impute_numeric,
     impute_factor_missing = impute_factor_missing,
+    # Gate 1B (2026-06-07): thread the cfg-sourced grouped-CV column down to the
+    # OOF engine (was a hardcoded "block_id" literal in the wrapper).
+    group_col         = group_col,
 
     labelled_gpkg  = labelled_gpkg,
     labelled_layer = labelled_layer

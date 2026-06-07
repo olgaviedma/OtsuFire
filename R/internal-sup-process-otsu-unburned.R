@@ -5,14 +5,18 @@
 #' using Otsu's thresholding or percentile clipping. The segmentation can be applied
 #' to the full raster or stratified by:
 #' - CORINE land cover classes (`corine_raster_path`)
-#' - WWF ecoregions (`ecoregion_shapefile_path`)
-#' - or the intersection of both (CORINE × Ecoregion)
+#'
+#' Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / CORINE × ecoregion
+#' stratification was removed (it was never wired into any supervised run; the
+#' canonical supervised negative-pool Otsu mode is `burnable_only`). The
+#' CORINE × ecoregion stratified Otsu lives in the DETERMINISTIC delineation
+#' stage (`process_otsu_rasters_grow()`), which is unaffected.
 #'
 #' ## Key features:
 #' - Supports Otsu thresholding after pre-filtering by minimum index values (`otsu_thresholds`) or using original values
 #' - Supports percentile-based thresholding via `trim_percentiles`
 #' - Enforces a minimum threshold (`min_otsu_threshold_value`) when Otsu yields low values
-#' - Allows stratification by CORINE, ecoregions, or their intersection
+#' - Allows stratification by CORINE land-cover classes
 #' - Enables CORINE reclassification using a custom `reclass_matrix`
 #' - Automatically computes RBR or dNBR if `nbr_pre_path` and `nbr_post_path` are provided
 #' - Outputs:
@@ -46,10 +50,6 @@
 #' @param reproject Logical. Reproject reclassified CORINE raster to EPSG:3035.
 #' @param resolution Numeric. Target resolution for reprojected CORINE raster.
 #' @param corine_classes Optional vector of reclassified CORINE classes to keep.
-#' @param ecoregion_shapefile_path Path to WWF ecoregions shapefile.
-#' @param ecoregion_field Column in ecoregion shapefile used for class labels.
-#' @param ecoregion_classes Optional. Vector of selected ecoregion class names.
-#' @param segment_by_intersection Logical. If TRUE, intersects CORINE and ecoregions.
 #' @param min_otsu_threshold_value Minimum acceptable threshold. Used if Otsu value is lower.
 #' @param python_exe Path to Python executable.
 #' @param gdal_polygonize_script Path to `gdal_polygonize.py` script.
@@ -99,10 +99,6 @@ process_otsu_rasters_ <- function(
     reproject = TRUE,
     resolution = 100,
     corine_classes = NULL,
-    ecoregion_shapefile_path = NULL,
-    ecoregion_field = NULL,
-    ecoregion_classes = NULL,
-    segment_by_intersection = FALSE,
     min_otsu_threshold_value = NULL,
     python_exe,
     gdal_polygonize_script,
@@ -227,10 +223,6 @@ process_otsu_rasters_ <- function(
     label_suffix = "",
     corine_class = NULL,
     corine_year = NULL,
-    ecoregion_name = NULL,
-    ecoregion_field = NULL,
-    cor_eco_name = NULL,
-    cor_eco_field = NULL,
     min_otsu_threshold_value = NULL,
     output_dir,
     year = NULL,
@@ -346,8 +338,6 @@ process_otsu_rasters_ <- function(
       Label = label,
       RealThreshold = as.numeric(real_threshold),
       CORINE_CLASS = if (!is.null(corine_class)) corine_class else NA,
-      ECOREGION_NAME = if (!is.null(ecoregion_name)) ecoregion_name else NA,
-      COR_ECO_LABEL = if (!is.null(cor_eco_name)) cor_eco_name else NA,
       stringsAsFactors = FALSE
     )
     
@@ -472,9 +462,7 @@ process_otsu_rasters_ <- function(
     
     # Attributes
     if (!is.null(corine_class)) polys$CORINE_CLASS <- corine_class
-    if (!is.null(ecoregion_name) && !is.null(ecoregion_field)) polys[[ecoregion_field]] <- ecoregion_name
     if (!is.null(corine_year)) polys$CORINE_YEAR <- corine_year
-    if (!is.null(cor_eco_name) && !is.null(cor_eco_field)) polys[[cor_eco_field]] <- cor_eco_name
     polys$Label <- threshold_row$Label
     
     # Figures (hist + interclass)
@@ -581,8 +569,8 @@ process_otsu_rasters_ <- function(
       
       corine_raster_reclassed <- terra::rast(out_reproj)
       
-      # Optional: vectorize CORINE (for intersection workflows)
-      if ((vectorize || segment_by_intersection) && !is.null(output_corine_vector_dir)) {
+      # Optional: vectorize CORINE
+      if (vectorize && !is.null(output_corine_vector_dir)) {
         if (!dir.exists(output_corine_vector_dir)) dir.create(output_corine_vector_dir, recursive = TRUE)
         out_shp <- file.path(output_corine_vector_dir, paste0(tools::file_path_sans_ext(out_filename), ".shp"))
         
@@ -622,117 +610,14 @@ process_otsu_rasters_ <- function(
       corine_classes <- sort(unique(vals[!is.na(vals)]))
     }
   }
-  
-  # ============================ ECOREGIONS PREP ============================
-  ecoregions_sf <- NULL
-  
-  if (!is.null(ecoregion_shapefile_path)) {
-    if (!file.exists(ecoregion_shapefile_path)) stop("Ecoregion shapefile not found: ", ecoregion_shapefile_path)
-    ecoregions_sf <- sf::st_read(ecoregion_shapefile_path, quiet = TRUE)
-    
-    if (!is.null(peninsula_shapefile)) {
-      peninsula_sf <- sf::st_read(peninsula_shapefile, quiet = TRUE)
-      peninsula_sf <- sf::st_transform(peninsula_sf, sf::st_crs(ecoregions_sf))
-      ecoregions_sf <- sf::st_intersection(ecoregions_sf, peninsula_sf)
-    }
-    
-    if (nrow(ecoregions_sf) == 0) stop("Ecoregions shapefile has no geometries after crop.")
-    ecoregions_sf <- sf::st_make_valid(ecoregions_sf)
-    ecoregions_sf <- sf::st_transform(ecoregions_sf, 3035)
-    
-    if (is.null(ecoregion_field)) {
-      if ("EnS_name" %in% names(ecoregions_sf)) {
-        ecoregion_field <- "EnS_name"
-      } else {
-        stop("You must specify 'ecoregion_field'. Available fields: ", paste(names(ecoregions_sf), collapse = ", "))
-      }
-    }
-    if (!(ecoregion_field %in% names(ecoregions_sf))) {
-      stop(sprintf("Field '%s' not found in ecoregions. Available: %s",
-                   ecoregion_field, paste(names(ecoregions_sf), collapse = ", ")))
-    }
-    
-    if (is.null(ecoregion_classes)) {
-      ecoregion_classes <- unique(ecoregions_sf[[ecoregion_field]])
-    }
-  }
-  
-  # ===================== INTERSECTION PREP (CORINE × ECO) =====================
-  units_grouped <- NULL
-  if (isTRUE(segment_by_intersection)) {
-    
-    if (is.null(corine_raster_path) || is.null(ecoregion_shapefile_path)) {
-      stop("segment_by_intersection=TRUE requires both 'corine_raster_path' and 'ecoregion_shapefile_path'.")
-    }
-    if (is.null(corine_masked) || is.null(ecoregions_sf)) {
-      stop("Intersection prep failed: missing corine_masked/ecoregions_sf.")
-    }
-    
-    # Ensure CORINE vector exists
-    if (is.null(corine_vect)) {
-      tmp_corine <- tempfile(fileext = ".tif")
-      terra::writeRaster(corine_masked, tmp_corine, overwrite = TRUE,
-                         datatype = "INT2U", NAflag = 0, gdal = c("COMPRESS=LZW"))
-      tmp_shp <- tempfile(fileext = ".shp")
-      system(glue::glue('"{python_exe}" "{gdal_polygonize_script}" "{tmp_corine}" -f "ESRI Shapefile" "{tmp_shp}" DN'))
-      corine_vect <- sf::st_read(tmp_shp, quiet = TRUE)
-      if ("DN" %in% names(corine_vect)) names(corine_vect)[names(corine_vect) == "DN"] <- "CORINE_CLASS"
-      corine_vect <- sf::st_make_valid(corine_vect)
-      corine_vect <- sf::st_transform(corine_vect, 3035)
-      corine_vect <- corine_vect[!is.na(corine_vect$CORINE_CLASS), ]
-    }
-    
-    corine_vect$CORINE_CLASS <- as.character(corine_vect$CORINE_CLASS)
-    corine_vect$CORINE_YEAR <- corine_year
-    corine_vect$ID <- seq_len(nrow(corine_vect))
-    
-    # Rasterize ecoregions IDs on CORINE grid
-    ecoregions_sf$ECO_ID_INTERNAL <- as.numeric(as.factor(ecoregions_sf[[ecoregion_field]]))
-    ecoregions_r_full <- terra::rasterize(terra::vect(ecoregions_sf),
-                                          terra::rast(corine_masked),
-                                          field = "ECO_ID_INTERNAL")
-    ecoregions_r <- terra::mask(terra::crop(ecoregions_r_full, corine_masked), corine_masked)
-    
-    # Assign dominant ecoregion to each CORINE polygon using centroids
-    corine_centroids <- sf::st_centroid(corine_vect)
-    eco_vals <- terra::extract(ecoregions_r, terra::vect(corine_centroids), ID = FALSE)
-    eco_vals$ID <- corine_vect$ID
-    eco_vals$ECO_ID_INTERNAL <- eco_vals[[1]]
-    
-    eco_id_to_name <- levels(as.factor(ecoregions_sf[[ecoregion_field]]))
-    eco_vals$ECO_CLASS <- eco_id_to_name[eco_vals$ECO_ID_INTERNAL]
-    eco_vals <- eco_vals[!is.na(eco_vals$ECO_CLASS), ]
-    dominant_eco <- eco_vals[, c("ID", "ECO_CLASS")]
-    
-    corine_vect <- dplyr::left_join(corine_vect, dominant_eco, by = "ID")
-    
-    # Drop those still missing ECO_CLASS
-    corine_vect <- corine_vect[!is.na(corine_vect$ECO_CLASS), ]
-    
-    # Combined label
-    corine_vect$unit_id2 <- paste0(
-      corine_vect$CORINE_CLASS, "_",
-      gsub("[^A-Za-z0-9]", "", as.character(corine_vect$ECO_CLASS))
-    )
-    
-    # Dissolve by unit_id2 (this is for defining units; NOT for final burned polygons writing)
-    intersected_units <- sf::st_cast(corine_vect, "POLYGON")
-    sf_agg <- intersected_units |>
-      dplyr::group_by(unit_id2) |>
-      dplyr::summarise(
-        CORINE_CLASS = dplyr::first(CORINE_CLASS),
-        CORINE_YEAR  = dplyr::first(CORINE_YEAR),
-        ECO_CLASS    = dplyr::first(ECO_CLASS),
-        .groups = "drop"
-      )
-    
-    sf_agg <- sf::st_make_valid(sf_agg)
-    sf_agg <- sf_agg[sf::st_geometry_type(sf_agg) %in% c("POLYGON", "MULTIPOLYGON"), ]
-    sf_agg <- sf::st_cast(sf_agg, "MULTIPOLYGON")
-    
-    units_grouped <- sf::st_as_sf(sf_agg)
-  }
-  
+
+  # Gate 1B PIECE 4 (2026-06-08): the ECOREGIONS PREP and CORINE × ecoregion
+  # INTERSECTION PREP blocks were removed together with the supervised
+  # ecoregion / corine_ecoregion Otsu modes. The supervised negative pool uses
+  # `burnable_only` (GLOBAL case) or `corine` (CORINE case); neither reads an
+  # ecoregion layer. The CORINE × ecoregion stratified Otsu lives in the
+  # DETERMINISTIC stage (process_otsu_rasters_grow), which is untouched.
+
   # ============================ MAIN MODES ============================
   # ---------------- Percentile trimming ----------------
   if (!is.null(trim_percentiles)) {
@@ -744,77 +629,8 @@ process_otsu_rasters_ <- function(
       stop("Each 'min' in 'trim_percentiles' must be smaller than its corresponding 'max'.")
     }
     
-    # ---- CASE 1: CORINE × ECOREGIONS ----
-    if (isTRUE(segment_by_intersection) && !is.null(units_grouped)) {
-      
-      for (i in seq_len(nrow(trim_percentiles))) {
-        pmin <- trim_percentiles$min[i]
-        pmax <- trim_percentiles$max[i]
-        
-        threshold_log <- NULL
-        all_polys <- list()
-        
-        for (j in seq_len(nrow(units_grouped))) {
-          unit <- units_grouped[j, ]
-          u <- terra::vect(unit)
-          
-          mask_r <- terra::crop(r, u)
-          mask_r <- terra::mask(mask_r, u)
-          mask_r <- terra::trim(mask_r)
-          
-          label_suffix <- paste0(unit$unit_id2, "_P", pmin * 100, "_toP", pmax * 100)
-          
-          res_output <- process_single_threshold(
-            r_input = mask_r,
-            pmin = pmin, pmax = pmax,
-            label_suffix = label_suffix,
-            corine_class = unit$CORINE_CLASS,
-            corine_year = unit$CORINE_YEAR,
-            ecoregion_name = unit$ECO_CLASS,
-            ecoregion_field = "ECO_CLASS",
-            cor_eco_name = unit$unit_id2,
-            cor_eco_field = "unit_id2",
-            min_otsu_threshold_value = min_otsu_threshold_value,
-            output_dir = output_dir,
-            year = year,
-            tile = tile,
-            n_rows = n_rows, n_cols = n_cols,
-            tile_overlap = tile_overlap,
-            python_exe = python_exe,
-            gdal_polygonize_script = gdal_polygonize_script,
-            burnable_mask = burnable_mask,
-            write_raster = FALSE,     # NO por unidad
-            vectorize = vectorize,
-            output_format = output_format
-          )
-          
-          if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-          
-          if (isTRUE(vectorize) && !is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-            res_output$polys$CORINE_CLASS <- unit$CORINE_CLASS
-            res_output$polys$ECO_CLASS <- unit$ECO_CLASS
-            res_output$polys$unit_id2 <- unit$unit_id2
-            all_polys[[length(all_polys) + 1]] <- res_output$polys
-          }
-        }
-        
-        if (isTRUE(vectorize)) {
-          if (!length(all_polys)) next
-          combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-          filename_base <- sprintf("BA_%s_PERC_CORI_ECOREG_P%02d_toP%02d", year, round(pmin * 100), round(pmax * 100))
-          out_file <- file.path(output_dir, paste0(filename_base, if (output_format == "geojson") ".geojson" else ".shp"))
-          .write_vector(combined, out_file, format = output_format)
-        }
-        
-        if (!is.null(threshold_log)) {
-          log_file <- file.path(output_dir, sprintf("BA_%s_CORI_ECOREG_PERC_P%02d_toP%02d.txt", year, round(pmin * 100), round(pmax * 100)))
-          if (file.exists(log_file)) file.remove(log_file)
-          write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-        }
-      }
-      
-    } else if (!is.null(corine_masked)) {
-      # ---- CASE 2: Percentiles by CORINE class ----
+    # ---- CASE: Percentiles by CORINE class ----
+    if (!is.null(corine_masked)) {
       for (i in seq_len(nrow(trim_percentiles))) {
         pmin <- trim_percentiles$min[i]
         pmax <- trim_percentiles$max[i]
@@ -869,66 +685,8 @@ process_otsu_rasters_ <- function(
         }
       }
       
-    } else if (!is.null(ecoregions_sf)) {
-      # ---- CASE 3: Percentiles by ECOREGION class ----
-      for (i in seq_len(nrow(trim_percentiles))) {
-        pmin <- trim_percentiles$min[i]
-        pmax <- trim_percentiles$max[i]
-        
-        threshold_log <- NULL
-        all_polys <- list()
-        
-        for (eco in ecoregion_classes) {
-          eco_mask <- ecoregions_sf[ecoregions_sf[[ecoregion_field]] == eco, ]
-          if (nrow(eco_mask) == 0) next
-          
-          eco_raster_mask <- terra::mask(r, terra::vect(eco_mask))
-          label_suffix <- paste0("ecoregion_", gsub("[^a-zA-Z0-9]", "_", eco), "_P", pmin * 100, "_toP", pmax * 100)
-          
-          res_output <- process_single_threshold(
-            r_input = eco_raster_mask,
-            pmin = pmin, pmax = pmax,
-            label_suffix = label_suffix,
-            ecoregion_name = eco,
-            ecoregion_field = ecoregion_field,
-            min_otsu_threshold_value = min_otsu_threshold_value,
-            output_dir = output_dir,
-            year = year,
-            tile = tile,
-            n_rows = n_rows, n_cols = n_cols,
-            tile_overlap = tile_overlap,
-            python_exe = python_exe,
-            gdal_polygonize_script = gdal_polygonize_script,
-            burnable_mask = burnable_mask,
-            write_raster = write_raster,
-            vectorize = vectorize,
-            output_format = output_format
-          )
-          
-          if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-          
-          if (isTRUE(vectorize) && !is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-            res_output$polys[[ecoregion_field]] <- eco
-            all_polys[[length(all_polys) + 1]] <- res_output$polys
-          }
-        }
-        
-        if (isTRUE(vectorize) && length(all_polys) > 0) {
-          combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-          filename <- sprintf("BA_%s_PERC_ECOREG_P%02d_toP%02d", year, round(pmin * 100), round(pmax * 100))
-          out_file <- file.path(output_dir, paste0(filename, if (output_format == "geojson") ".geojson" else ".shp"))
-          .write_vector(combined, out_file, format = output_format)
-        }
-        
-        if (!is.null(threshold_log)) {
-          log_file <- file.path(output_dir, sprintf("BA_%s_ECOREG_PERC_P%02d_toP%02d.txt", year, round(pmin * 100), round(pmax * 100)))
-          if (file.exists(log_file)) file.remove(log_file)
-          write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-        }
-      }
-      
     } else {
-      # ---- CASE 4: Global percentiles ----
+      # ---- CASE: Global percentiles ----
       for (i in seq_len(nrow(trim_percentiles))) {
         pmin <- trim_percentiles$min[i]
         pmax <- trim_percentiles$max[i]
@@ -967,158 +725,8 @@ process_otsu_rasters_ <- function(
     
   } else {
     # ---------------- OTSU / ORIGINAL ----------------
-    
-    # ============ CASE: CORINE × ECOREGION ============
-    if (isTRUE(segment_by_intersection) && !is.null(units_grouped)) {
-      
-      # ---- ORIGINAL scenario ----
-      if (do_orig) {
-        threshold_log <- NULL
-        all_polys <- list()
-        mosaic_r <- NULL  # (FIX) mosaic accumulator for raster mode
-        
-        for (j in seq_len(nrow(units_grouped))) {
-          unit <- units_grouped[j, ]
-          u <- terra::vect(unit)
-          
-          mask_r <- terra::crop(r, u)
-          mask_r <- terra::mask(mask_r, u)
-          mask_r <- terra::trim(mask_r)
-          
-          res_output <- process_single_threshold(
-            r_input = mask_r,
-            otsu_min = NULL,
-            label_suffix = paste0(unit$unit_id2, "_original"),
-            corine_class = unit$CORINE_CLASS,
-            corine_year = unit$CORINE_YEAR,
-            ecoregion_name = unit$ECO_CLASS,
-            ecoregion_field = "ECO_CLASS",
-            cor_eco_name = unit$unit_id2,
-            cor_eco_field = "unit_id2",
-            min_otsu_threshold_value = min_otsu_threshold_value,
-            output_dir = output_dir,
-            year = year,
-            tile = tile,
-            n_rows = n_rows, n_cols = n_cols,
-            tile_overlap = tile_overlap,
-            python_exe = python_exe,
-            gdal_polygonize_script = gdal_polygonize_script,
-            burnable_mask = burnable_mask,
-            write_raster = FALSE,    # NO por unidad (luego mosaico)
-            vectorize = vectorize,
-            output_format = output_format
-          )
-          
-          if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-          
-          if (isTRUE(vectorize)) {
-            if (!is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-              all_polys[[length(all_polys) + 1]] <- res_output$polys
-            }
-          } else {
-            if (!is.null(res_output$raster)) {
-              mosaic_r <- if (is.null(mosaic_r)) res_output$raster else terra::mosaic(mosaic_r, res_output$raster, fun = "max")
-            }
-          }
-        } # (FIX) cierre correcto del for
-        
-        # --- OUTPUT (ORIGINAL CORI×ECO) ---
-        if (isTRUE(vectorize)) {
-          if (length(all_polys) > 0) {
-            combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-            out_file <- file.path(output_dir, sprintf("BA_%s_ORIG_CORI_ECOREG%s", year, if (output_format == "geojson") ".geojson" else ".shp"))
-            .write_vector(combined, out_file, format = output_format)
-          }
-        } else {
-          if (isTRUE(write_raster) && !is.null(mosaic_r)) {
-            out_raster <- file.path(output_dir, sprintf("BA_%s_ORIG_CORI_ECOREG_binary.tif", year))
-            terra::writeRaster(mosaic_r, out_raster, overwrite = TRUE, datatype = "INT1U", NAflag = 0, gdal = c("COMPRESS=LZW"))
-          }
-        }
-        
-        if (!is.null(threshold_log)) {
-          log_file <- file.path(output_dir, sprintf("BA_%s_ORIG_CORI_ECOREG_log.txt", year))
-          if (file.exists(log_file)) file.remove(log_file)
-          write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-        }
-      }
-      
-      # ---- OTSU scenarios geX ----
-      if (do_otsu) {
-        for (otsu_min in otsu_thresholds) {
-          
-          threshold_log <- NULL
-          all_polys <- list()
-          mosaic_r <- NULL  # (FIX) reset mosaic per scenario
-          
-          for (j in seq_len(nrow(units_grouped))) {
-            unit <- units_grouped[j, ]
-            u <- terra::vect(unit)
-            
-            mask_r <- terra::crop(r, u)
-            mask_r <- terra::mask(mask_r, u)
-            mask_r <- terra::trim(mask_r)
-            
-            res_output <- process_single_threshold(
-              r_input = mask_r,
-              otsu_min = otsu_min,
-              label_suffix = paste0(unit$unit_id2, "_ge", otsu_min),
-              corine_class = unit$CORINE_CLASS,
-              corine_year = unit$CORINE_YEAR,
-              ecoregion_name = unit$ECO_CLASS,
-              ecoregion_field = "ECO_CLASS",
-              cor_eco_name = unit$unit_id2,
-              cor_eco_field = "unit_id2",
-              min_otsu_threshold_value = min_otsu_threshold_value,
-              output_dir = output_dir,
-              year = year,
-              tile = tile,
-              n_rows = n_rows, n_cols = n_cols,
-              tile_overlap = tile_overlap,
-              python_exe = python_exe,
-              gdal_polygonize_script = gdal_polygonize_script,
-              burnable_mask = burnable_mask,
-              write_raster = FALSE,   # NO por unidad
-              vectorize = vectorize,
-              output_format = output_format
-            )
-            
-            if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-            
-            if (isTRUE(vectorize)) {
-              if (!is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-                all_polys[[length(all_polys) + 1]] <- res_output$polys
-              }
-            } else {
-              if (!is.null(res_output$raster)) {
-                mosaic_r <- if (is.null(mosaic_r)) res_output$raster else terra::mosaic(mosaic_r, res_output$raster, fun = "max")
-              }
-            }
-          } # cierre for units
-          
-          # --- OUTPUT per geX ---
-          if (isTRUE(vectorize)) {
-            if (length(all_polys) > 0) {
-              combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-              out_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ECOREG_ge%d%s", year, otsu_min, if (output_format == "geojson") ".geojson" else ".shp"))
-              .write_vector(combined, out_file, format = output_format)
-            }
-          } else {
-            if (isTRUE(write_raster) && !is.null(mosaic_r)) {
-              out_raster <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ECOREG_ge%d_binary.tif", year, otsu_min))
-              terra::writeRaster(mosaic_r, out_raster, overwrite = TRUE, datatype = "INT1U", NAflag = 0, gdal = c("COMPRESS=LZW"))
-            }
-          }
-          
-          if (!is.null(threshold_log)) {
-            log_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ECOREG_ge%d_log.txt", year, otsu_min))
-            if (file.exists(log_file)) file.remove(log_file)
-            write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-          }
-        }
-      }
-      
-    } else if (!is.null(corine_masked)) {
+
+    if (!is.null(corine_masked)) {
       # ============ CASE: CORINE ============
       if (do_orig) {
         threshold_log <- NULL
@@ -1208,110 +816,6 @@ process_otsu_rasters_ <- function(
           
           if (!is.null(threshold_log)) {
             log_file <- file.path(output_dir, sprintf("BA_%s_otsu_CORI_ge%d_log.txt", year, otsu_min))
-            if (file.exists(log_file)) file.remove(log_file)
-            write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-          }
-        }
-      }
-      
-    } else if (!is.null(ecoregions_sf)) {
-      # ============ CASE: ECOREGION ============
-      if (do_orig) {
-        threshold_log <- NULL
-        all_polys <- list()
-        
-        for (eco in ecoregion_classes) {
-          eco_mask <- ecoregions_sf[ecoregions_sf[[ecoregion_field]] == eco, ]
-          if (nrow(eco_mask) == 0) next
-          
-          eco_raster_mask <- terra::mask(r, terra::vect(eco_mask))
-          
-          res_output <- process_single_threshold(
-            r_input = eco_raster_mask,
-            otsu_min = NULL,
-            label_suffix = paste0("ecoregion_", gsub("[^a-zA-Z0-9]", "_", eco), "_original"),
-            ecoregion_name = eco,
-            ecoregion_field = ecoregion_field,
-            min_otsu_threshold_value = min_otsu_threshold_value,
-            output_dir = output_dir,
-            year = year,
-            tile = tile,
-            n_rows = n_rows, n_cols = n_cols,
-            tile_overlap = tile_overlap,
-            python_exe = python_exe,
-            gdal_polygonize_script = gdal_polygonize_script,
-            burnable_mask = burnable_mask,
-            write_raster = write_raster,
-            vectorize = vectorize,
-            output_format = output_format
-          )
-          
-          if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-          if (isTRUE(vectorize) && !is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-            res_output$polys[[ecoregion_field]] <- eco
-            all_polys[[length(all_polys) + 1]] <- res_output$polys
-          }
-        }
-        
-        if (isTRUE(vectorize) && length(all_polys) > 0) {
-          combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-          out_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ORIG%s", year, if (output_format == "geojson") ".geojson" else ".shp"))
-          .write_vector(combined, out_file, format = output_format)
-        }
-        
-        if (!is.null(threshold_log)) {
-          log_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ORIG_log.txt", year))
-          if (file.exists(log_file)) file.remove(log_file)
-          write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
-        }
-      }
-      
-      if (do_otsu) {
-        for (otsu_min in otsu_thresholds) {
-          threshold_log <- NULL
-          all_polys <- list()
-          
-          for (eco in ecoregion_classes) {
-            eco_mask <- ecoregions_sf[ecoregions_sf[[ecoregion_field]] == eco, ]
-            if (nrow(eco_mask) == 0) next
-            
-            eco_raster_mask <- terra::mask(r, terra::vect(eco_mask))
-            
-            res_output <- process_single_threshold(
-              r_input = eco_raster_mask,
-              otsu_min = otsu_min,
-              label_suffix = paste0("ecoregion_", gsub("[^a-zA-Z0-9]", "_", eco), "_ge", otsu_min),
-              ecoregion_name = eco,
-              ecoregion_field = ecoregion_field,
-              min_otsu_threshold_value = min_otsu_threshold_value,
-              output_dir = output_dir,
-              year = year,
-              tile = tile,
-              n_rows = n_rows, n_cols = n_cols,
-              tile_overlap = tile_overlap,
-              python_exe = python_exe,
-              gdal_polygonize_script = gdal_polygonize_script,
-              burnable_mask = burnable_mask,
-              write_raster = write_raster,
-              vectorize = vectorize,
-              output_format = output_format
-            )
-            
-            if (!is.null(res_output$log)) threshold_log <- dplyr::bind_rows(threshold_log, res_output$log)
-            if (isTRUE(vectorize) && !is.null(res_output$polys) && nrow(res_output$polys) > 0 && !all(sf::st_is_empty(res_output$polys))) {
-              res_output$polys[[ecoregion_field]] <- eco
-              all_polys[[length(all_polys) + 1]] <- res_output$polys
-            }
-          }
-          
-          if (isTRUE(vectorize) && length(all_polys) > 0) {
-            combined <- do.call(rbind, all_polys) |> sf::st_make_valid()
-            out_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ge%d%s", year, otsu_min, if (output_format == "geojson") ".geojson" else ".shp"))
-            .write_vector(combined, out_file, format = output_format)
-          }
-          
-          if (!is.null(threshold_log)) {
-            log_file <- file.path(output_dir, sprintf("BA_%s_otsu_ECOREG_ge%d_log.txt", year, otsu_min))
             if (file.exists(log_file)) file.remove(log_file)
             write.table(threshold_log, file = log_file, row.names = FALSE, sep = "\t", quote = FALSE)
           }

@@ -166,8 +166,8 @@
 # information within each candidate patch. They include spectral
 # summaries derived from the immediate and, where applicable,
 # delayed change-index composites; contextual descriptors
-# capturing vegetation composition, ecoregion membership,
-# elevation and slope; and active-fire variables describing the
+# capturing vegetation composition, elevation and slope; and
+# active-fire variables describing the
 # presence, intensity and spatial configuration of hotspot
 # detections when these are available. Day-of-year metrics
 # associated with the selected change-index observations are

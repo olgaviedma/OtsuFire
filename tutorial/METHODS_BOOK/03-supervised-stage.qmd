@@ -23,7 +23,6 @@ The active one-year workflow starts from deterministic outputs of the same year 
 | `delayed_change_index` | Optional persistence-style support layer used in current feature extraction |
 | DEM and slope | Topographic predictors |
 | CORINE land-cover support | Polygon-level land-cover composition features |
-| Ecoregions | Dominant ecoregion context per polygon |
 | Hotspots when available | Optional feature support and current-year temporal filtering support |
 
 The `PAQUETE` tables describe these as canonical supervised inputs. The current bridge implementation stores several custom input overrides in the configuration object, but the delegated runtime still relies mainly on the standard project layout when the supervised pipeline actually runs. For that reason, this chapter documents both the conceptual inputs and the current implementation caveat.
@@ -84,7 +83,6 @@ Feature extraction then writes `03_FEATURES/features_geometry.gpkg` and related 
 - delayed change when available,
 - DEM and slope,
 - grouped CORINE composition,
-- dominant ecoregion,
 - hotspot density and intensity metrics when hotspot data are available.
 
 This is one of the clearest places where the mosaic stage remains methodologically central: every support raster is checked against the same annual template before feature extraction is allowed to proceed.

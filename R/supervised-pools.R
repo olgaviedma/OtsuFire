@@ -505,6 +505,8 @@ build_supervised_training_pools <- function(config,
       internal_decisions_path = internal_decisions_path,
       # §N+25: wired RUN input (NULL -> convention inside the builder).
       burnable_mask_path      = cfg_burnable_mask_path,
+      # Gate 1B PIECE 3: immediate change-index route from cfg (== one_year_tif).
+      severity_raster_path    = one_year_tif,
       verbose                 = UNB_VERBOSE
     )
     out_path <- res_det$out_gpkg

@@ -93,6 +93,48 @@
 #'   top-level `min_burned_pool_n` argument (documented above), NOT an
 #'   `options` key — kept top-level by design for discoverability.
 #'
+#' @param nrounds_max,early_stop Integer or `NULL`. XGBoost max boosting rounds
+#'   and early-stopping patience. `NULL` uses the canonical defaults
+#'   (`4000` / `80`). Stored in `cfg$train_control`.
+#' @param oof_seed_base,final_sampling_seed,final_seed Integer or `NULL`. The
+#'   three distinct RNG seeds (OOF block-CV; FINAL negative-pool sampling; FINAL
+#'   train/val split + xgboost). `NULL` uses the canonical `42` for each. Stored
+#'   in `cfg$train_control$seeds`.
+#' @param val_frac Numeric in (0, 1) or `NULL`. FINAL / nested-refit inner
+#'   validation fraction. `NULL` uses `0.15`.
+#' @param group_col Character or `NULL`. Grouping column for the grouped
+#'   train/val split. `NULL` uses `"block_id"`.
+#' @param impute_numeric,impute_factor_missing Character or `NULL`. Numeric
+#'   imputation rule (`"median"` / `"zero"`) and the missing-factor sentinel.
+#'   `NULL` uses `"median"` / `"MISSING"`.
+#' @param cap_contextual,cap_spectral,cap_random,cap_otsu Numeric `>= 0`
+#'   (`Inf` disables) or `NULL`. The four negative-bucket caps as a multiple of
+#'   `n_burned`. `NULL` uses `0.25` / `1.0` / `1.0` / `1.0`. Stored in
+#'   `cfg$train_control$caps`.
+#' @param feature_whitelist_override,feature_weights Optional subset of
+#'   `.supervised_feature_cols` and a named numeric per-feature weight vector,
+#'   or `NULL`. Stored in `cfg$train_control` and consumed by BOTH OOF and FINAL.
+#' @param training_protocol,oof_sampling Character or `NULL`. Training protocol
+#'   (`"legacy"` / `"nested_refit"`) and OOF per-fold negative sampling mode
+#'   (`"capped"` / `"full"`). `NULL` uses `"legacy"` / `"capped"`.
+#' @param model_params Named list or `NULL`. Optional override of the canonical
+#'   XGBoost hyperparameter block stored in `cfg$model_params` (the canonical
+#'   block MINUS `scale_pos_weight`, which is computed at train time). Supplying
+#'   it merges your fields onto the canonical block; `scale_pos_weight` is
+#'   rejected here.
+#'
+#' @section Gate 1B (2026-06-07) cfg single source of truth:
+#' `cfg$model_params` (the methodological XGBoost block, without
+#' `scale_pos_weight`) and `cfg$train_control` (caps, seeds, nrounds/early-stop,
+#' val_frac, group_col, imputation rules, whitelist/weights, protocol toggles)
+#' are the SINGLE SOURCE OF TRUTH for the supervised methodological parameters.
+#' The canonical defaults live ONLY in `.of_canonical_model_params()` /
+#' `.of_canonical_train_control()`; the builder arguments above let a user
+#' override them. Every downstream stage ([run_oneyear_supervised_pipeline()],
+#' [run_oof_diagnostics()], [train_final_burned_model()] and the internal
+#' engines) reads these resolved cfg sections rather than carrying its own
+#' defaults.
+#'
 #' @return S3 object of class `otsufire_supervised_burned_config`.
 #'
 #' @family workflow
@@ -119,6 +161,31 @@ build_supervised_burned_config <- function(
     topo = NULL,
     corine_raster = NULL,
     burnable_mask = NULL,
+    # ---- Gate 1B (2026-06-07): resolved methodological / training params ----
+    # The cfg is the SINGLE SOURCE OF TRUTH for these. Every argument defaults
+    # to NULL = "use the canonical default" (the canonical defaults live ONLY
+    # in .of_canonical_train_control() / .of_canonical_model_params(), nowhere
+    # else). A non-NULL value OVERRIDES the canonical default and is validated +
+    # stored in cfg$train_control / cfg$model_params, which is what every
+    # downstream stage then reads.
+    nrounds_max                = NULL,
+    early_stop                 = NULL,
+    oof_seed_base              = NULL,
+    final_sampling_seed        = NULL,
+    final_seed                 = NULL,
+    val_frac                   = NULL,
+    group_col                  = NULL,
+    impute_numeric             = NULL,
+    impute_factor_missing      = NULL,
+    cap_contextual             = NULL,
+    cap_spectral               = NULL,
+    cap_random                 = NULL,
+    cap_otsu                   = NULL,
+    feature_whitelist_override = NULL,
+    feature_weights            = NULL,
+    training_protocol          = NULL,
+    oof_sampling               = NULL,
+    model_params               = NULL,
     options = list()
 ) {
   scenario <- match.arg(scenario)
@@ -279,6 +346,34 @@ build_supervised_burned_config <- function(
     run_name = run_name, scenario = scenario
   )
 
+  # ---- Gate 1B (2026-06-07): resolve cfg$model_params + cfg$train_control ----
+  # The cfg becomes the SINGLE SOURCE OF TRUTH for all supervised
+  # methodological / training-control parameters. Canonical defaults come from
+  # .of_canonical_model_params() / .of_canonical_train_control() (the ONLY
+  # places they are defined); user-supplied builder args override them and are
+  # validated here. Every downstream stage reads cfg$model_params /
+  # cfg$train_control, so the 5-layer default duplication is eliminated.
+  model_params <- .of_resolve_supervised_model_params(model_params)
+  train_control <- .of_resolve_supervised_train_control(
+    nrounds_max                = nrounds_max,
+    early_stop                 = early_stop,
+    oof_seed_base              = oof_seed_base,
+    final_sampling_seed        = final_sampling_seed,
+    final_seed                 = final_seed,
+    val_frac                   = val_frac,
+    group_col                  = group_col,
+    impute_numeric             = impute_numeric,
+    impute_factor_missing      = impute_factor_missing,
+    cap_contextual             = cap_contextual,
+    cap_spectral               = cap_spectral,
+    cap_random                 = cap_random,
+    cap_otsu                   = cap_otsu,
+    feature_whitelist_override = feature_whitelist_override,
+    feature_weights            = feature_weights,
+    training_protocol          = training_protocol,
+    oof_sampling               = oof_sampling
+  )
+
   # §N+27 RESOLVED (2026-06-05): the supervised burned-like registry was an
   # abandoned research line. The `burned_like_registry_path` parameter, its
   # default-path resolution (via .resolve_registry_path()), and the cfg field
@@ -298,6 +393,10 @@ build_supervised_burned_config <- function(
     # and downstream introspection / print() stays self-documenting.
     negative_pool_policy     = neg_pool,
     min_burned_pool_n        = min_burned_pool_n,
+    # Gate 1B (2026-06-07): resolved methodological / training params. THE
+    # single source of truth read by every supervised stage.
+    model_params             = model_params,
+    train_control            = train_control,
     tool_paths               = tool_paths,
     options                  = options
   )
@@ -314,6 +413,15 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
   cat("  output_dir      :", x$output_dir, "\n")
   cat("  negative_pool   :", x$negative_pool_policy, "\n")
   cat("  min_burned_pool :", x$min_burned_pool_n, "\n")
+  if (!is.null(x$train_control)) {
+    tc <- x$train_control
+    cat("  train_control   : protocol=", tc$training_protocol,
+        " nrounds=", tc$nrounds_max, " early_stop=", tc$early_stop,
+        " val_frac=", tc$val_frac, "\n", sep = "")
+    cat("    caps          : contextual=", tc$caps$contextual,
+        " spectral=", tc$caps$spectral, " random=", tc$caps$random,
+        " otsu=", tc$caps$otsu, "\n", sep = "")
+  }
   cat("  inputs          :\n")
   for (nm in names(x$inputs)) {
     v <- x$inputs[[nm]]
@@ -327,6 +435,144 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 }
 
 # --- internal helpers --------------------------------------------------
+
+#' Resolve + validate cfg$model_params (Gate 1B).
+#'
+#' Canonical default = .of_canonical_model_params() (the canonical xgb block
+#' minus scale_pos_weight). A user override (named list) is merged on top of
+#' the canonical block and validated. scale_pos_weight is rejected here: it is
+#' site-specific (computed at train time), never a cfg field.
+#'
+#' @keywords internal
+#' @noRd
+.of_resolve_supervised_model_params <- function(model_params) {
+  base <- .of_canonical_model_params()
+  if (is.null(model_params)) return(base)
+  if (!is.list(model_params) || is.null(names(model_params)) ||
+      any(!nzchar(names(model_params)))) {
+    stop("'model_params' must be NULL or a named list of XGBoost params.",
+         call. = FALSE)
+  }
+  if ("scale_pos_weight" %in% names(model_params)) {
+    stop("'model_params' must not set 'scale_pos_weight': it is computed at ",
+         "train time from the training labels, not a cfg field.", call. = FALSE)
+  }
+  for (nm in names(model_params)) base[[nm]] <- model_params[[nm]]
+  base
+}
+
+#' Resolve + validate cfg$train_control (Gate 1B).
+#'
+#' Each argument is NULL (= canonical default from .of_canonical_train_control())
+#' or a user override. Validates numeric ranges, match.arg-style enums, and
+#' scalar types, then returns the resolved list stored as cfg$train_control.
+#'
+#' @keywords internal
+#' @noRd
+.of_resolve_supervised_train_control <- function(
+    nrounds_max, early_stop, oof_seed_base, final_sampling_seed, final_seed,
+    val_frac, group_col, impute_numeric, impute_factor_missing,
+    cap_contextual, cap_spectral, cap_random, cap_otsu,
+    feature_whitelist_override, feature_weights,
+    training_protocol, oof_sampling) {
+
+  tc <- .of_canonical_train_control()
+
+  # --- positive-integer / positive-numeric controls --------------------------
+  chk_pos_int <- function(v, nm) {
+    vi <- suppressWarnings(as.integer(v)[1L])
+    if (is.na(vi) || vi <= 0L) {
+      stop(sprintf("'%s' must be a single positive integer.", nm),
+           call. = FALSE)
+    }
+    vi
+  }
+  if (!is.null(nrounds_max)) tc$nrounds_max <- chk_pos_int(nrounds_max, "nrounds_max")
+  if (!is.null(early_stop))  tc$early_stop  <- chk_pos_int(early_stop, "early_stop")
+
+  if (!is.null(oof_seed_base))
+    tc$seeds$oof_seed_base <- chk_pos_int(oof_seed_base, "oof_seed_base")
+  if (!is.null(final_sampling_seed))
+    tc$seeds$final_sampling_seed <- chk_pos_int(final_sampling_seed,
+                                                "final_sampling_seed")
+  if (!is.null(final_seed))
+    tc$seeds$final_seed <- chk_pos_int(final_seed, "final_seed")
+
+  # --- val_frac in (0, 1) ----------------------------------------------------
+  if (!is.null(val_frac)) {
+    if (!is.numeric(val_frac) || length(val_frac) != 1L || is.na(val_frac) ||
+        val_frac <= 0 || val_frac >= 1) {
+      stop("'val_frac' must be a single number in (0, 1).", call. = FALSE)
+    }
+    tc$val_frac <- as.numeric(val_frac)
+  }
+
+  # --- group_col: single non-empty string or NULL ----------------------------
+  if (!is.null(group_col)) {
+    if (!is.character(group_col) || length(group_col) != 1L ||
+        !nzchar(group_col)) {
+      stop("'group_col' must be a single non-empty character string or NULL.",
+           call. = FALSE)
+    }
+    tc$group_col <- group_col
+  }
+
+  # --- imputation rules ------------------------------------------------------
+  if (!is.null(impute_numeric)) {
+    tc$impute_numeric <- match.arg(impute_numeric, c("median", "zero"))
+  }
+  if (!is.null(impute_factor_missing)) {
+    if (!is.character(impute_factor_missing) ||
+        length(impute_factor_missing) != 1L ||
+        is.na(impute_factor_missing) || !nzchar(impute_factor_missing)) {
+      stop("'impute_factor_missing' must be a single non-empty character ",
+           "string.", call. = FALSE)
+    }
+    tc$impute_factor_missing <- impute_factor_missing
+  }
+
+  # --- negative-bucket caps: numeric >= 0 (Inf allowed = disable) -------------
+  chk_cap <- function(v, nm) {
+    if (!is.numeric(v) || length(v) != 1L || is.na(v) || v < 0) {
+      stop(sprintf("'%s' must be a single number >= 0 (Inf disables the cap).",
+                   nm), call. = FALSE)
+    }
+    as.numeric(v)
+  }
+  if (!is.null(cap_contextual)) tc$caps$contextual <- chk_cap(cap_contextual, "cap_contextual")
+  if (!is.null(cap_spectral))   tc$caps$spectral   <- chk_cap(cap_spectral, "cap_spectral")
+  if (!is.null(cap_random))     tc$caps$random     <- chk_cap(cap_random, "cap_random")
+  if (!is.null(cap_otsu))       tc$caps$otsu       <- chk_cap(cap_otsu, "cap_otsu")
+
+  # --- feature whitelist / weights (pass-through, light validation) ----------
+  if (!is.null(feature_whitelist_override)) {
+    if (!is.character(feature_whitelist_override) ||
+        length(feature_whitelist_override) < 1L) {
+      stop("'feature_whitelist_override' must be NULL or a non-empty ",
+           "character vector.", call. = FALSE)
+    }
+    tc$feature_whitelist_override <- feature_whitelist_override
+  }
+  if (!is.null(feature_weights)) {
+    if (!is.numeric(feature_weights) || is.null(names(feature_weights)) ||
+        any(!nzchar(names(feature_weights)))) {
+      stop("'feature_weights' must be NULL or a NAMED numeric vector.",
+           call. = FALSE)
+    }
+    tc$feature_weights <- feature_weights
+  }
+
+  # --- protocol toggles ------------------------------------------------------
+  if (!is.null(training_protocol)) {
+    tc$training_protocol <- match.arg(training_protocol,
+                                      c("legacy", "nested_refit"))
+  }
+  if (!is.null(oof_sampling)) {
+    tc$oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
+  }
+
+  tc
+}
 
 #' Centralized supervised-RUN input-path conventions (§N+25)
 #'

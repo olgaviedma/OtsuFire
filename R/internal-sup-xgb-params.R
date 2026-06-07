@@ -37,6 +37,22 @@
     stop(".of_canonical_xgb_params(): 'scale_pos_weight' must be a single ",
          "finite numeric computed from the training labels.", call. = FALSE)
   }
+  .of_canonical_xgb_block(scale_pos_weight = scale_pos_weight)
+}
+
+#' Canonical XGBoost block WITHOUT scale_pos_weight (Gate 1B single source).
+#'
+#' Gate 1B (2026-06-07): the methodological xgb hyperparameters live in exactly
+#' ONE place. `build_supervised_burned_config()` calls this (with the sentinel
+#' weight) and strips `scale_pos_weight` to populate `cfg$model_params`, so the
+#' cfg block and the engine block are sourced from the same definition and can
+#' never silently diverge.
+#'
+#' @param scale_pos_weight Numeric scalar merged into the returned block.
+#' @return Named list of XGBoost parameters.
+#' @keywords internal
+#' @noRd
+.of_canonical_xgb_block <- function(scale_pos_weight) {
   list(
     booster          = "gbtree",
     objective        = "binary:logistic",
@@ -57,5 +73,76 @@
     lambda           = 1,
     alpha            = 0,
     scale_pos_weight = scale_pos_weight
+  )
+}
+
+# =============================================================================
+# Gate 1B (2026-06-07): SINGLE SOURCE OF TRUTH for the supervised
+# methodological / training-control parameters.
+#
+# Before Gate 1B these defaults were duplicated across 5 layers (the public
+# run_oneyear_supervised_pipeline, the internal dispatch / orchestrator, the
+# OOF / FINAL public wrappers, and the internal-pure engines). They now live
+# in EXACTLY two builders below, which `build_supervised_burned_config()`
+# resolves into `cfg$model_params` and `cfg$train_control`. Every downstream
+# consumer reads those resolved cfg sections; the internal-pure engines take
+# the resolved values as REQUIRED args with no methodological defaults.
+# =============================================================================
+
+#' Canonical methodological XGBoost block (Gate 1B), WITHOUT scale_pos_weight.
+#'
+#' This is the block stored in `cfg$model_params`. It is the canonical xgb
+#' block (`.of_canonical_xgb_block()`) with the site-specific
+#' `scale_pos_weight` removed: spw is computed at train time from the actual
+#' training labels at each fit site and is therefore NOT a cfg field.
+#'
+#' @return Named list of XGBoost params minus `scale_pos_weight`.
+#' @keywords internal
+#' @noRd
+.of_canonical_model_params <- function() {
+  blk <- .of_canonical_xgb_block(scale_pos_weight = 1)
+  blk[["scale_pos_weight"]] <- NULL
+  blk
+}
+
+#' Canonical supervised training-control defaults (Gate 1B single source).
+#'
+#' The ONE place the supervised training controls are defined. Resolved into
+#' `cfg$train_control` by `build_supervised_burned_config()`. The three seeds
+#' are kept distinct on purpose (they have always been 42 each, but address
+#' different RNG streams): `oof_seed_base` (block-CV OOF), `final_sampling_seed`
+#' (FINAL negative-pool sampling) and `final_seed` (FINAL train/val split +
+#' xgboost training).
+#'
+#' @return Named list with: nrounds_max, early_stop, seeds (list of
+#'   oof_seed_base / final_sampling_seed / final_seed), val_frac, group_col,
+#'   impute_numeric, impute_factor_missing, caps (list of contextual / spectral
+#'   / random / otsu), feature_whitelist_override, feature_weights,
+#'   training_protocol, oof_sampling.
+#' @keywords internal
+#' @noRd
+.of_canonical_train_control <- function() {
+  list(
+    nrounds_max = 4000L,
+    early_stop  = 80L,
+    seeds = list(
+      oof_seed_base       = 42L,
+      final_sampling_seed = 42L,
+      final_seed          = 42L
+    ),
+    val_frac    = 0.15,
+    group_col   = "block_id",
+    impute_numeric        = "median",
+    impute_factor_missing = "MISSING",
+    caps = list(
+      contextual = 0.25,
+      spectral   = 1.0,
+      random     = 1.0,
+      otsu       = 1.0
+    ),
+    feature_whitelist_override = NULL,
+    feature_weights            = NULL,
+    training_protocol = "legacy",
+    oof_sampling      = "capped"
   )
 }

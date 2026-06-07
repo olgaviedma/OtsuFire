@@ -307,43 +307,57 @@ align_to_template <- function(r, template, method = c("near", "bilinear"), name 
 run_supervised_pipeline <- function(target_year, scenario,
                                     min_burned_pool_n = 5L,
                                     overwrite                              = TRUE,
-                                    contextual_exclusion_to_burned_ratio   = 0.25,
-                                    spectral_hard_negative_to_burned_ratio = 1.0,
-                                    random_to_burned_ratio                 = 1.0,
-                                    otsu_unburned_to_burned_ratio          = 1.0,
-                                    feature_whitelist_override             = NULL,
-                                    feature_weights                        = NULL,
+                                    # Gate 1B (2026-06-07): these methodological
+                                    # params are REQUIRED resolved args with NO
+                                    # defaults. The single source of truth is
+                                    # cfg$train_control / cfg$model_params,
+                                    # resolved by build_supervised_burned_config()
+                                    # and threaded by the dispatcher
+                                    # .of_run_supervised_oneyear(). A dropped arg
+                                    # ERRORS in the guard block below.
+                                    contextual_exclusion_to_burned_ratio,
+                                    spectral_hard_negative_to_burned_ratio,
+                                    random_to_burned_ratio,
+                                    otsu_unburned_to_burned_ratio,
+                                    feature_whitelist_override,
+                                    feature_weights,
                                     reuse_upstream                         = FALSE,
-                                    # 2026-06-05 (D1 expose): OOF training knobs.
-                                    # FRENTE 1: UNIFIED to the canonical set.
-                                    oof_nrounds_max                        = 4000,
-                                    oof_early_stop                         = 80,
-                                    oof_seed_base                          = 42,
-                                    # 2026-06-05 (D1 expose): FINAL training knobs.
-                                    # FRENTE 1: now UNIFIED with the OOF set above
-                                    # (seeds 999 -> 42; nrounds/early-stop already
-                                    # matched after raising the OOF defaults).
-                                    final_sampling_seed                    = 42,
-                                    final_seed                             = 42,
-                                    final_val_frac                         = 0.15,
-                                    final_group_col                        = "block_id",
-                                    final_nrounds_max                      = 4000,
-                                    final_early_stopping_rounds            = 80,
-                                    final_impute_numeric                   = "median",
-                                    final_impute_factor_missing            = "MISSING",
-                                    # B1 (2026-06-07): nested-refit protocol
-                                    # toggle (default "legacy") + OOF per-fold
-                                    # sampling mode (default "capped"; only
-                                    # active under nested_refit). Threaded to
-                                    # BOTH run_oof_diagnostics AND
-                                    # train_final_burned_model.
-                                    training_protocol                      = c("legacy", "nested_refit"),
-                                    oof_sampling                           = c("capped", "full"),
+                                    oof_nrounds_max,
+                                    oof_early_stop,
+                                    oof_seed_base,
+                                    final_sampling_seed,
+                                    final_seed,
+                                    final_val_frac,
+                                    final_group_col,
+                                    final_nrounds_max,
+                                    final_early_stopping_rounds,
+                                    final_impute_numeric,
+                                    final_impute_factor_missing,
+                                    training_protocol,
+                                    oof_sampling,
                                     internal_decisions_path                = NULL,
                                     engine_bindings                        = NULL,
                                     config                                 = NULL) {
-  training_protocol <- match.arg(training_protocol)
-  oof_sampling <- match.arg(oof_sampling)
+  # Gate 1B: required-arg guard (no silent methodological defaults).
+  .req <- c("contextual_exclusion_to_burned_ratio",
+            "spectral_hard_negative_to_burned_ratio",
+            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+            "feature_whitelist_override", "feature_weights",
+            "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
+            "final_sampling_seed", "final_seed", "final_val_frac",
+            "final_group_col", "final_nrounds_max", "final_early_stopping_rounds",
+            "final_impute_numeric", "final_impute_factor_missing",
+            "training_protocol", "oof_sampling")
+  for (.nm in .req) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("run_supervised_pipeline(): required resolved arg '", .nm,
+           "' is missing (no methodological default; threaded from ",
+           "cfg$train_control / cfg$model_params via the dispatcher).",
+           call. = FALSE)
+    }
+  }
+  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
+  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
 
   # BUG 3 Phase 1b (2026-06-05): explicit engine bindings.
   # The dispatcher previously re-environmented this function so its ~40

@@ -40,7 +40,14 @@ test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
     overwrite = TRUE,
     verbose = FALSE,
     nrounds_max = 8L,
-    early_stopping_rounds = 4L
+    early_stopping_rounds = 4L,
+    # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
+    sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    model_params_base = OtsuFire:::.of_canonical_model_params()
   )))
   on.exit(unlink(out_dir, recursive = TRUE, force = TRUE), add = TRUE)
 
@@ -86,7 +93,14 @@ test_that("scoring path's prep_X_df + sparse.model.matrix yields whitelist-only 
     overwrite = TRUE,
     verbose = FALSE,
     nrounds_max = 8L,
-    early_stopping_rounds = 4L
+    early_stopping_rounds = 4L,
+    # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
+    sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    model_params_base = OtsuFire:::.of_canonical_model_params()
   )))
   on.exit(unlink(out_dir, recursive = TRUE, force = TRUE), add = TRUE)
 

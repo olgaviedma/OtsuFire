@@ -122,6 +122,19 @@
 #'   bucket caps the FINAL model uses to the outer-train negatives of each fold;
 #'   `"full"` uses all outer-train rows. Ignored on the legacy path.
 #'
+#' @section Gate 1B (2026-06-07) cfg single source of truth:
+#' The supervised methodological / training-control parameters now live in
+#' exactly ONE place: the cfg object built by
+#' [build_supervised_burned_config()] (`cfg$model_params` and
+#' `cfg$train_control`). Every methodological argument of this function (the
+#' four `*_to_burned_ratio` caps, `feature_whitelist_override`,
+#' `feature_weights`, the `oof_*` / `final_*` training knobs, `training_protocol`
+#' and `oof_sampling`) now DEFAULTS TO `NULL`, meaning "use the value resolved on
+#' the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
+#' explicit argument > cfg) and is written through to BOTH the OOF and FINAL
+#' stages identically. The canonical numeric defaults are no longer duplicated in
+#' this function; change them once, at the builder, and the whole chain follows.
+#'
 #' @section D1 training knobs (2026-06-05) + FRENTE 1 unification:
 #' The `oof_*` and `final_*` arguments expose the OOF and final-model training
 #' hyperparameters that were previously hardcoded at the engine defaults. They
@@ -183,63 +196,49 @@
 #' @export
 run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
                                             overwrite = FALSE,
-                                            contextual_exclusion_to_burned_ratio   = 0.25,
-                                            spectral_hard_negative_to_burned_ratio = 1.0,
-                                            random_to_burned_ratio                 = 1.0,
-                                            otsu_unburned_to_burned_ratio          = 1.0,
+                                            # Gate 1B (2026-06-07): all
+                                            # methodological knobs DEFAULT TO
+                                            # NULL = "use cfg$train_control /
+                                            # cfg$model_params" (the single
+                                            # source of truth). A non-NULL value
+                                            # OVERRIDES the cfg value and is
+                                            # written through to BOTH OOF and
+                                            # FINAL identically. The canonical
+                                            # numeric defaults live ONLY in
+                                            # build_supervised_burned_config()
+                                            # (.of_canonical_train_control /
+                                            # .of_canonical_model_params); they
+                                            # are no longer duplicated here.
+                                            contextual_exclusion_to_burned_ratio   = NULL,
+                                            spectral_hard_negative_to_burned_ratio = NULL,
+                                            random_to_burned_ratio                 = NULL,
+                                            otsu_unburned_to_burned_ratio          = NULL,
                                             feature_whitelist_override             = NULL,
                                             feature_weights                        = NULL,
                                             reuse_upstream                         = FALSE,
-                                            # FRENTE 1 (2026-06-05): OOF + FINAL
-                                            # training knobs UNIFIED to the
-                                            # canonical set. oof_nrounds_max
-                                            # 3000 -> 4000, oof_early_stop 75 ->
-                                            # 80, final_sampling_seed / final_seed
-                                            # 999 -> 42 (= oof_seed_base). All
-                                            # user-overridable.
-                                            oof_nrounds_max                        = 4000,
-                                            oof_early_stop                         = 80,
-                                            oof_seed_base                          = 42,
-                                            final_sampling_seed                    = 42,
-                                            final_seed                             = 42,
-                                            final_val_frac                         = 0.15,
-                                            final_group_col                        = "block_id",
-                                            final_nrounds_max                      = 4000,
-                                            final_early_stopping_rounds            = 80,
-                                            final_impute_numeric                   = "median",
-                                            final_impute_factor_missing            = "MISSING",
-                                            # B1 (2026-06-07): nested-refit
-                                            # training protocol. Default "legacy"
-                                            # reproduces the production model
-                                            # byte-for-byte; "nested_refit" opts
-                                            # into the leakage-free protocol
-                                            # (B1a/B1b/B1c/B1d) used identically
-                                            # by OOF and FINAL. `oof_sampling`
-                                            # ("capped"/"full") controls the OOF
-                                            # per-fold negative bucketing and is
-                                            # only active under nested_refit.
-                                            training_protocol                      = c("legacy", "nested_refit"),
-                                            oof_sampling                           = c("capped", "full"),
+                                            oof_nrounds_max                        = NULL,
+                                            oof_early_stop                         = NULL,
+                                            oof_seed_base                          = NULL,
+                                            final_sampling_seed                    = NULL,
+                                            final_seed                             = NULL,
+                                            final_val_frac                         = NULL,
+                                            final_group_col                        = NULL,
+                                            final_nrounds_max                      = NULL,
+                                            final_early_stopping_rounds            = NULL,
+                                            final_impute_numeric                   = NULL,
+                                            final_impute_factor_missing            = NULL,
+                                            training_protocol                      = NULL,
+                                            oof_sampling                           = NULL,
                                             ...) {
-  training_protocol <- match.arg(training_protocol)
-  oof_sampling <- match.arg(oof_sampling)
   if (!inherits(config, "otsufire_supervised_burned_config")) {
     stop("'config' must be created by build_supervised_burned_config().",
          call. = FALSE)
   }
-  if (!is.logical(run_consistency) || length(run_consistency) != 1L) {
-    stop("'run_consistency' must be TRUE or FALSE.", call. = FALSE)
-  }
-  if (!is.logical(overwrite) || length(overwrite) != 1L) {
-    stop("'overwrite' must be TRUE or FALSE.", call. = FALSE)
-  }
-  if (!is.logical(reuse_upstream) || length(reuse_upstream) != 1L) {
-    stop("'reuse_upstream' must be TRUE or FALSE.", call. = FALSE)
-  }
 
   # 0.5.0 hard removal: `additional_drop_cols` was replaced by
-  # `feature_whitelist_override`. Catch via `...` so old callers get
-  # a clear migration message.
+  # `feature_whitelist_override`. Catch via `...` so old callers get a clear
+  # migration message. Checked BEFORE the Gate 1B cfg resolution so the
+  # migration message wins over the train_control validation for stale calls.
   .dots <- list(...)
   if ("additional_drop_cols" %in% names(.dots) ||
       "extra_drop_cols" %in% names(.dots)) {
@@ -255,6 +254,47 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
   if (length(.dots) > 0L) {
     stop("Unused arguments passed to run_oneyear_supervised_pipeline(): ",
          paste(names(.dots), collapse = ", "), call. = FALSE)
+  }
+
+  # Gate 1B: resolve every methodological param from cfg, honouring explicit
+  # non-NULL overrides (override precedence: explicit arg > cfg). The cfg always
+  # carries fully-resolved + validated train_control / model_params, so the
+  # default (all-NULL) path reads exactly the canonical values with no literal
+  # numbers duplicated in this function.
+  .tc <- config$train_control
+  if (is.null(.tc) || !is.list(.tc)) {
+    stop("'config' has no resolved train_control; rebuild it with ",
+         "build_supervised_burned_config().", call. = FALSE)
+  }
+  contextual_exclusion_to_burned_ratio   <- contextual_exclusion_to_burned_ratio   %||% .tc$caps$contextual
+  spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio %||% .tc$caps$spectral
+  random_to_burned_ratio                 <- random_to_burned_ratio                 %||% .tc$caps$random
+  otsu_unburned_to_burned_ratio          <- otsu_unburned_to_burned_ratio          %||% .tc$caps$otsu
+  feature_whitelist_override             <- feature_whitelist_override             %||% .tc$feature_whitelist_override
+  feature_weights                        <- feature_weights                        %||% .tc$feature_weights
+  oof_nrounds_max                        <- oof_nrounds_max                        %||% .tc$nrounds_max
+  oof_early_stop                         <- oof_early_stop                         %||% .tc$early_stop
+  oof_seed_base                          <- oof_seed_base                          %||% .tc$seeds$oof_seed_base
+  final_sampling_seed                    <- final_sampling_seed                    %||% .tc$seeds$final_sampling_seed
+  final_seed                             <- final_seed                             %||% .tc$seeds$final_seed
+  final_val_frac                         <- final_val_frac                         %||% .tc$val_frac
+  final_group_col                        <- final_group_col                        %||% .tc$group_col
+  final_nrounds_max                      <- final_nrounds_max                      %||% .tc$nrounds_max
+  final_early_stopping_rounds            <- final_early_stopping_rounds            %||% .tc$early_stop
+  final_impute_numeric                   <- final_impute_numeric                   %||% .tc$impute_numeric
+  final_impute_factor_missing            <- final_impute_factor_missing            %||% .tc$impute_factor_missing
+  training_protocol                      <- training_protocol                      %||% .tc$training_protocol
+  oof_sampling                           <- oof_sampling                           %||% .tc$oof_sampling
+  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
+  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
+  if (!is.logical(run_consistency) || length(run_consistency) != 1L) {
+    stop("'run_consistency' must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(overwrite) || length(overwrite) != 1L) {
+    stop("'overwrite' must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(reuse_upstream) || length(reuse_upstream) != 1L) {
+    stop("'reuse_upstream' must be TRUE or FALSE.", call. = FALSE)
   }
 
   # terra memory ceiling: lift from default (~1 GB) to 16 GB for the

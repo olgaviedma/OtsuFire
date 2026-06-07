@@ -496,6 +496,39 @@ make_block_folds <- function(
   # ---------------------------------------------------------------------------
   # 8) Return
   # ---------------------------------------------------------------------------
+  # Item 10 (Gate 1B, 2026-06-07): REPRODUCIBLE fold fingerprint.
+  # `make_fold_fingerprint()` builds a deterministic identity of the fold
+  # configuration + the resulting fold assignments. It DELIBERATELY EXCLUDES
+  # any wall-clock time, so two equivalent fold runs (same inputs, same seed,
+  # same config) produce IDENTICAL fingerprints. The wall-clock timestamp is
+  # kept as a SEPARATE `created_at` metadata field that is NOT hashed into the
+  # fingerprint (it documents WHEN the folds were built, never WHICH folds).
+  fold_params <- list(
+    split_unit = split_unit,
+    fire_id_col = fire_id_col,
+    class_col = class_col,
+    pos_lab = pos_lab,
+    neg_lab = neg_lab,
+    block_sizes_m = block_sizes_m,
+    k_candidates = k_candidates,
+    n_repeats = n_repeats,
+    seed_base = seed_base,
+    balance_unburned_by = balance_unburned_by,
+    lonlat_action = lonlat_action,
+    crs_projected = crs_projected
+  )
+  fold_fingerprint <- make_fold_fingerprint(
+    params           = fold_params,
+    selected         = list(
+      block_size_m = best$block_size_m,
+      k_folds      = best$k,
+      ok           = best$ok
+    ),
+    train_with_folds = train_with_folds,
+    fold_cols        = paste0("fold_rep", seq_len(n_repeats)),
+    id_col           = folds_csv_id_col
+  )
+
   list(
     train_with_folds = train_with_folds,  # polygons + fold_rep*
     blocks           = best$blocks,       # chosen grid
@@ -511,19 +544,69 @@ make_block_folds <- function(
       pos_blocks_by_fold   = best$pos_blocks_by_fold
     ),
     saved = saved,
-    params = list(
-      split_unit = split_unit,
-      fire_id_col = fire_id_col,
-      class_col = class_col,
-      pos_lab = pos_lab,
-      neg_lab = neg_lab,
-      block_sizes_m = block_sizes_m,
-      k_candidates = k_candidates,
-      n_repeats = n_repeats,
-      seed_base = seed_base,
-      balance_unburned_by = balance_unburned_by,
-      lonlat_action = lonlat_action,
-      crs_projected = crs_projected
-    )
+    params = fold_params,
+    # Item 10: the REPRODUCIBLE identity of this fold set (no wall-clock).
+    fingerprint = fold_fingerprint,
+    # Item 10: SEPARATE metadata. `created_at` is wall-clock provenance only;
+    # it is NOT part of `fingerprint` and never participates in any
+    # reproducibility / equivalence comparison.
+    created_at = Sys.time()
   )
+}
+
+# Item 10 (Gate 1B, 2026-06-07): deterministic, wall-clock-FREE fingerprint of
+# a fold set. Two equivalent runs (same inputs, same seed, same config) yield an
+# IDENTICAL fingerprint; the wall-clock `created_at` is recorded separately by
+# the caller and is intentionally NOT fed in here. Base R only (no `digest` in
+# Imports): sorted key=value text plus a small order-stable rolling checksum,
+# mirroring `legacy_param_fingerprint_unb_legacy()`.
+make_fold_fingerprint <- function(params, selected, train_with_folds,
+                                  fold_cols, id_col = NULL) {
+  flat1 <- function(v) {
+    if (is.null(v)) return("NULL")
+    v <- unlist(v, use.names = TRUE)
+    if (!is.null(names(v)) && any(nzchar(names(v)))) {
+      v <- v[order(names(v))]
+      paste(sprintf("%s=%s", names(v),
+                    format(v, trim = TRUE, scientific = FALSE)),
+            collapse = ",")
+    } else {
+      paste(format(v, trim = TRUE, scientific = FALSE), collapse = ",")
+    }
+  }
+
+  # Config + selected layer.
+  cfg_kv <- vapply(params, flat1, character(1))
+  cfg_kv <- sprintf("%s=%s", names(params), cfg_kv)
+  cfg_kv <- cfg_kv[order(names(params))]
+  sel_kv <- vapply(selected, flat1, character(1))
+  sel_kv <- sprintf("selected.%s=%s", names(selected), sel_kv)
+  sel_kv <- sel_kv[order(names(selected))]
+
+  # Fold-assignment layer: the actual per-unit fold labels, ordered by a stable
+  # id (when available) so row order cannot perturb the fingerprint. This is
+  # what makes the fingerprint identify the ACTUAL folds, not merely the config.
+  assign_kv <- character(0)
+  df <- tryCatch(sf::st_drop_geometry(train_with_folds),
+                 error = function(e) as.data.frame(train_with_folds))
+  fold_cols <- intersect(fold_cols, names(df))
+  if (length(fold_cols) > 0L) {
+    ord <- if (!is.null(id_col) && id_col %in% names(df)) {
+      order(as.character(df[[id_col]]))
+    } else {
+      seq_len(nrow(df))
+    }
+    for (fc in sort(fold_cols)) {
+      vals <- as.integer(df[[fc]])[ord]
+      assign_kv <- c(assign_kv,
+                     sprintf("assign.%s=%s", fc,
+                             paste(vals, collapse = ",")))
+    }
+  }
+
+  body <- paste(c(cfg_kv, sel_kv, assign_kv), collapse = "\n")
+  bytes <- as.numeric(charToRaw(enc2utf8(body)))
+  chk <- 0
+  for (b in bytes) chk <- (chk * 31 + b) %% 1000000007
+  list(text = body, checksum = sprintf("%09d", as.integer(chk)))
 }

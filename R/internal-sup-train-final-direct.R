@@ -11,49 +11,44 @@ train_final_model_direct <- function(
     # neg_types routed to spectral_hard_negative (genuine spectral boundary cases).
     # All other neg_types from deterministic_drop_source go to contextual_exclusion.
     spectral_hard_negative_neg_types = c("spectral_reject_medium"),
-    # Contextual-exclusion cap: spectrally-hot geographic exclusions; capped to
-    # limit anti-burned signal (they look hotter than fire). Default 0.25x burned.
-    contextual_exclusion_to_burned_ratio = 0.25,
-    # Spectral-hard-negative cap: genuine decision-boundary cases; use all available.
-    spectral_hard_negative_to_burned_ratio = 1.0,
+    # Gate 1B (2026-06-07): the negative-bucket caps, seeds, val_frac, group_col,
+    # nrounds/early-stop and imputation rules are now REQUIRED resolved args with
+    # NO methodological defaults. The single source of truth is cfg$train_control
+    # (resolved by build_supervised_burned_config()); the public wrapper
+    # train_final_burned_model() forwards the resolved values. A dropped argument
+    # ERRORS here (see the missing()-guard block below) rather than silently
+    # reverting to a hardcoded default.
+    contextual_exclusion_to_burned_ratio,
+    spectral_hard_negative_to_burned_ratio,
     # --- Random-background cells (low-RBR cell-scale, easy cold) ---
     random_background_source = c("random_burnable_background"),
-    random_to_burned_ratio = 1,
+    random_to_burned_ratio,
     # --- Otsu current-year unburned patches (patch-scale, easy cold; separate for traceability) ---
     # Kept separate from background_cell so counts, caps, and model diagnostics can
     # be evaluated independently. Both are easy-cold negatives but differ in geometry
     # scale (0.81 ha cells vs ~9.72 ha patches) and derivation.
     otsu_unburned_source = c("otsu_patch_residual"),
-    otsu_unburned_to_burned_ratio = 1,
+    otsu_unburned_to_burned_ratio,
     # Exclude otsu_patch_review (ambiguous; S_PATCH_PA 0.15-0.45) and
     # otsu_patch_keep (S_PATCH_PA 0.45-0.70, substantial burned-pixel coverage).
     # Only otsu_patch_drop (S_PATCH_PA <= 0.15, easy cold) is eligible for training.
     otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep"),
-    # FRENTE 1 (2026-06-05): seeds UNIFIED with the OOF stage (seed_base 42).
-    # Were 999 (sampling_seed) and 999 (seed); now both default to 42 to match
-    # the OOF seed_base. RESULT-AFFECTING (changes the RNG stream of the
-    # negative-pool sampling and the train/val split). User-overridable.
-    sampling_seed = 42,
-    group_col = "block_id",
-    val_frac = 0.15,
-    seed = 42,
+    sampling_seed,
+    group_col,
+    val_frac,
+    seed,
     params = NULL,
-    nrounds_max = 4000,
-    early_stopping_rounds = 80,
-    # 0.5.0 (2026-05-09): subset of `.supervised_feature_cols` that
-    # the model is allowed to see. NULL (default) means use the full
-    # canonical whitelist. Names not in `.supervised_feature_cols`
-    # are rejected with a clear error -- the canonical list is fixed
-    # and this argument can only restrict it, never extend it.
+    nrounds_max,
+    early_stopping_rounds,
     feature_whitelist_override = NULL,
-    # 0.5.0 (2026-05-09): named numeric vector of per-feature weights
-    # forwarded to xgboost via `xgb.DMatrix` `feature_weights` info.
-    # Only features the user wants to weight differently from 1.0
-    # need to be named; anything else implicitly receives 1.0.
-    # Replaces Phase B Exp5a's external `xgboost::setinfo()` block.
     feature_weights = NULL,
-    impute_numeric = c("median", "zero"),
-    impute_factor_missing = "MISSING",
+    impute_numeric,
+    impute_factor_missing,
+    # Gate 1B (2026-06-07): cfg$model_params (canonical xgb block WITHOUT
+    # scale_pos_weight) is a REQUIRED arg. The engine merges the site-specific
+    # spw it computes from its own training split. The engine no longer holds
+    # its own methodological xgb defaults.
+    model_params_base,
     # B1 (2026-06-07): training protocol toggle. "legacy" (default) keeps the
     # EXACT historical behaviour byte-identical (impute over all L_ok, group
     # split, ONE xgb.train with early stopping on dval, deploy the tr_idx-only
@@ -68,7 +63,6 @@ train_final_model_direct <- function(
     verbose = TRUE,
     ...
 ) {
-  impute_numeric <- match.arg(impute_numeric)
   training_protocol <- match.arg(training_protocol)
 
   # 0.5.0 hard removal: `extra_drop_cols` / `additional_drop_cols`
@@ -134,6 +128,36 @@ train_final_model_direct <- function(
       stop("`feature_weights` values must be finite and >= 0.",
            call. = FALSE)
     }
+  }
+
+  # Gate 1B (2026-06-07): the resolved methodological args are REQUIRED. A
+  # dropped argument ERRORS here so an internal caller can never silently revert
+  # a parameter to a hardcoded default. (The pre-Gate-1B defaults are gone; the
+  # single source of truth is cfg$train_control / cfg$model_params, threaded by
+  # train_final_burned_model().) Placed AFTER the cheap input-shape validation
+  # so genuinely-malformed feature_weights still report their own error first.
+  .req <- c("contextual_exclusion_to_burned_ratio",
+            "spectral_hard_negative_to_burned_ratio",
+            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+            "sampling_seed", "group_col", "val_frac", "seed",
+            "nrounds_max", "early_stopping_rounds",
+            "impute_numeric", "impute_factor_missing", "model_params_base")
+  for (.nm in .req) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("train_final_model_direct(): required resolved arg '", .nm,
+           "' is missing (no methodological default; pass it from ",
+           "cfg$train_control / cfg$model_params).", call. = FALSE)
+    }
+  }
+  impute_numeric <- match.arg(impute_numeric, c("median", "zero"))
+  # Gate 1B: one closure over cfg$model_params so every xgb-params build site in
+  # this engine (legacy + nested_refit) sources the methodological block from
+  # cfg, merging the site-specific scale_pos_weight. model_params_base never
+  # contains scale_pos_weight.
+  .params_from_cfg <- function(scale_pos_weight) {
+    p <- model_params_base
+    p[["scale_pos_weight"]] <- scale_pos_weight
+    p
   }
 
   if (!file.exists(labelled_gpkg)) stop("No existe labelled_gpkg: ", labelled_gpkg)
@@ -446,16 +470,12 @@ train_final_model_direct <- function(
 
   if (is.null(params)) {
     spw <- sum(y[tr_idx] == 0) / max(1, sum(y[tr_idx] == 1))
-    # FRENTE 1 (2026-06-05): build the params from the SINGLE canonical
-    # source of truth shared with the OOF stage (run_oof_diagnostics), so
-    # FINAL and OOF can never diverge. Only scale_pos_weight is site-specific
-    # (computed here from this fit's training-split labels). This UNIFIES the
-    # FINAL block to the canonical set: vs the historical FINAL defaults this
-    # changes eval_metric "logloss" -> c("logloss","aucpr") (logloss FIRST so
-    # it still drives early stopping; aucpr visible only), max_depth 6 -> 5,
-    # min_child_weight 1 -> 5, colsample_bytree 0.8 -> 0.75. RESULT-AFFECTING
-    # and intentional (Natalia signed off); first evaluated in the 2017 run.
-    params <- .of_canonical_xgb_params(scale_pos_weight = spw)
+    # Gate 1B (2026-06-07): build the params from cfg$model_params
+    # (model_params_base, the SINGLE SOURCE OF TRUTH WITHOUT scale_pos_weight),
+    # merging the site-specific spw computed from this fit's training-split
+    # labels. cfg$model_params is itself sourced from .of_canonical_model_params(),
+    # so FINAL and OOF can never diverge.
+    params <- .params_from_cfg(scale_pos_weight = spw)
   }
 
   set.seed(seed)
@@ -485,7 +505,7 @@ train_final_model_direct <- function(
     group_col             = group_col,
     block_col             = group_col,
     val_frac              = val_frac,
-    params_fn             = .of_canonical_xgb_params,
+    params_fn             = .params_from_cfg,
     sampling_seed         = sampling_seed,
     fold_seed             = seed,
     feature_weights       = feature_weights,
@@ -510,7 +530,7 @@ train_final_model_direct <- function(
   val_idx    <- fit$inner_split$val_idx
   split_mode <- paste0("nested_refit_", fit$inner_split$mode)
   spw <- fit$spw_refit
-  params <- .of_canonical_xgb_params(scale_pos_weight = spw)
+  params <- .params_from_cfg(scale_pos_weight = spw)
   # best_iteration is carried via the audit + recipe$training below; mimic the
   # xgboost field so model$best_iteration reads consistently downstream.
   if (is.null(model$best_iteration)) model$best_iteration <- fit$best_iteration

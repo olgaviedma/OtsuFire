@@ -143,36 +143,54 @@
 #' @noRd
 .of_run_supervised_oneyear <- function(config, run_consistency = TRUE,
                                        overwrite = FALSE,
-                                       contextual_exclusion_to_burned_ratio   = 0.25,
-                                       spectral_hard_negative_to_burned_ratio = 1.0,
-                                       random_to_burned_ratio                 = 1.0,
-                                       otsu_unburned_to_burned_ratio          = 1.0,
-                                       feature_whitelist_override             = NULL,
-                                       feature_weights                        = NULL,
+                                       # Gate 1B (2026-06-07): these methodological
+                                       # params are REQUIRED resolved args with NO
+                                       # defaults. The single source of truth is
+                                       # cfg$train_control / cfg$model_params; the
+                                       # public run_oneyear_supervised_pipeline()
+                                       # resolves them (cfg + explicit overrides)
+                                       # and passes them here. A dropped arg ERRORS
+                                       # in the guard block below.
+                                       contextual_exclusion_to_burned_ratio,
+                                       spectral_hard_negative_to_burned_ratio,
+                                       random_to_burned_ratio,
+                                       otsu_unburned_to_burned_ratio,
+                                       feature_whitelist_override,
+                                       feature_weights,
                                        reuse_upstream                         = FALSE,
-                                       # 2026-06-05 (D1 expose): OOF + FINAL
-                                       # training knobs, threaded to the
-                                       # orchestrator. FRENTE 1: defaults UNIFIED
-                                       # to the canonical set (OOF nrounds 4000 /
-                                       # early_stop 80; FINAL seeds 42).
-                                       oof_nrounds_max                        = 4000,
-                                       oof_early_stop                         = 80,
-                                       oof_seed_base                          = 42,
-                                       final_sampling_seed                    = 42,
-                                       final_seed                             = 42,
-                                       final_val_frac                         = 0.15,
-                                       final_group_col                        = "block_id",
-                                       final_nrounds_max                      = 4000,
-                                       final_early_stopping_rounds            = 80,
-                                       final_impute_numeric                   = "median",
-                                       final_impute_factor_missing            = "MISSING",
-                                       # B1 (2026-06-07): nested-refit protocol
-                                       # toggle + OOF per-fold sampling mode,
-                                       # threaded to the orchestrator.
-                                       training_protocol                      = c("legacy", "nested_refit"),
-                                       oof_sampling                           = c("capped", "full")) {
-  training_protocol <- match.arg(training_protocol)
-  oof_sampling <- match.arg(oof_sampling)
+                                       oof_nrounds_max,
+                                       oof_early_stop,
+                                       oof_seed_base,
+                                       final_sampling_seed,
+                                       final_seed,
+                                       final_val_frac,
+                                       final_group_col,
+                                       final_nrounds_max,
+                                       final_early_stopping_rounds,
+                                       final_impute_numeric,
+                                       final_impute_factor_missing,
+                                       training_protocol,
+                                       oof_sampling) {
+  # Gate 1B: required-arg guard (no silent methodological defaults).
+  .req <- c("contextual_exclusion_to_burned_ratio",
+            "spectral_hard_negative_to_burned_ratio",
+            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+            "feature_whitelist_override", "feature_weights",
+            "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
+            "final_sampling_seed", "final_seed", "final_val_frac",
+            "final_group_col", "final_nrounds_max", "final_early_stopping_rounds",
+            "final_impute_numeric", "final_impute_factor_missing",
+            "training_protocol", "oof_sampling")
+  for (.nm in .req) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop(".of_run_supervised_oneyear(): required resolved arg '", .nm,
+           "' is missing (no methodological default; resolved from ",
+           "cfg$train_control / cfg$model_params by the public entry).",
+           call. = FALSE)
+    }
+  }
+  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
+  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   ns <- asNamespace("OtsuFire")
 
   # Resolve the internal_decisions path ONCE, here at the top of the chain.

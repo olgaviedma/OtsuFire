@@ -166,7 +166,10 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
-    otsu_unburned_to_burned_ratio          = 1.0
+    otsu_unburned_to_burned_ratio          = 1.0,
+    # Gate 1B (2026-06-07): nested path now requires these resolved controls.
+    val_frac = 0.15, impute_numeric = "median",
+    impute_factor_missing = "MISSING"
   )))
 
   # Every labelled unit gets an OOF prediction (outer_test never sub-sampled).
@@ -213,7 +216,10 @@ test_that("nested OOF 'full' sampling keeps the whole outer-train (no caps)", {
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
-    otsu_unburned_to_burned_ratio          = 1.0
+    otsu_unburned_to_burned_ratio          = 1.0,
+    # Gate 1B (2026-06-07): nested path now requires these resolved controls.
+    val_frac = 0.15, impute_numeric = "median",
+    impute_factor_missing = "MISSING"
   )))
   aud <- res$oof$oof_audit
   expect_true(all(aud$n_outer_train_post == aud$n_outer_train_pre))
@@ -241,6 +247,10 @@ test_that("dropped cap arg in run_dm_oof_pipeline(nested_refit) ERRORS", {
       save_prefix = "nr_err", prefix = "nr_err", overwrite = TRUE,
       training_protocol = "nested_refit",
       oof_sampling      = "capped",
+      # Gate 1B: supply the always-needed nested controls so the spectral-cap
+      # guard (not the val_frac/impute guard) is what surfaces.
+      val_frac = 0.15, impute_numeric = "median",
+      impute_factor_missing = "MISSING",
       # spectral cap DROPPED on purpose.
       contextual_exclusion_to_burned_ratio   = 0.25,
       random_to_burned_ratio                 = 1.0,
@@ -281,6 +291,8 @@ test_that("nested OOF errors when outer_train and outer_test share a fire_uid (l
       save_prefix = "nr_leak", prefix = "nr_leak", overwrite = TRUE,
       training_protocol = "nested_refit",
       oof_sampling      = "capped",
+      val_frac = 0.15, impute_numeric = "median",
+      impute_factor_missing = "MISSING",
       contextual_exclusion_to_burned_ratio   = 0.25,
       spectral_hard_negative_to_burned_ratio = 1.0,
       random_to_burned_ratio                 = 1.0,
@@ -307,16 +319,23 @@ test_that("the 4 cap formals have NO default in run_oof_xgb / run_dm_oof_pipelin
 # ---------------------------------------------------------------------------
 # legacy default + neg_type in id_cols.
 # ---------------------------------------------------------------------------
-test_that("training_protocol default is 'legacy' at every layer", {
+test_that("training_protocol default is 'legacy' end-to-end (Gate 1B: public via cfg)", {
+  # Gate 1B (2026-06-07): the PUBLIC functions default training_protocol to NULL
+  # (= "read from cfg"); the cfg's canonical default IS "legacy". The
+  # internal-pure engines keep the c("legacy","nested_refit") match.arg default.
   for (f in c("run_oneyear_supervised_pipeline", "run_oof_diagnostics",
-              "train_final_burned_model", "run_dm_oof_pipeline",
-              "run_oof_xgb")) {
-    tp <- eval(formals(get(f, envir = ns))$training_protocol)
-    expect_equal(tp[1], "legacy", info = paste("default not legacy:", f))
+              "train_final_burned_model")) {
+    expect_null(formals(get(f, envir = ns))$training_protocol,
+                info = paste("public default not NULL:", f))
   }
-  # train_final_model_direct engine too.
-  tpe <- eval(formals(get("train_final_model_direct", envir = ns))$training_protocol)
-  expect_equal(tpe[1], "legacy")
+  # cfg's canonical default training_protocol == "legacy".
+  expect_equal(get(".of_canonical_train_control", envir = ns)()$training_protocol,
+               "legacy")
+  # The internal engines keep their match.arg enum (first value = legacy).
+  for (f in c("run_dm_oof_pipeline", "run_oof_xgb", "train_final_model_direct")) {
+    tp <- eval(formals(get(f, envir = ns))$training_protocol)
+    expect_equal(tp[1], "legacy", info = paste("engine default not legacy:", f))
+  }
 })
 
 test_that("neg_type is in the OOF id_cols default (per-fold bucketing)", {

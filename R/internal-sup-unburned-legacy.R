@@ -72,12 +72,11 @@ read_vector_unb_legacy <- function(path, layer = NULL) {
 # which is now a fail-fast stop() because the dispatcher always supplies
 # data_base / result_name / composite_base explicitly.
 
-resolve_first_existing_path_unb_legacy <- function(...) {
-  candidates <- unlist(list(...), use.names = FALSE)
-  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
-  hit <- candidates[file.exists(candidates)]
-  if (length(hit)) normalizePath(hit[1], winslash = "/", mustWork = TRUE) else NULL
-}
+# C3 (Gate 1B piece 5, 2026-06-08): the first-existing-path candidate search
+# helper `resolve_first_existing_path_unb_legacy()` was REMOVED. It only fed the
+# severity-mosaic filesystem glob in build_unburned_from_legacy_pipeline(), which
+# now fails fast on a missing explicit `severity_raster_path` instead of guessing
+# across MinMin/DOY convention candidates.
 
 # AS02 (0.5.0): build a deterministic, human-readable fingerprint of all
 # decision-affecting legacy parameters. The cached intermediate outputs
@@ -733,24 +732,27 @@ build_unburned_from_legacy_pipeline <- function(
 
   corine_year <- get_corine_year_unb_legacy(target_year)
   reclass_matrix <- make_corine_reclass_matrix_unb_legacy()
-  # Severity mosaic resolution: prefer the EXPLICIT caller-supplied path (in
-  # production this is cfg$change_index, threaded by the orchestrator). Only
-  # fall back to convention candidates when none is supplied; the chosen
-  # source is logged below so the choice is never hidden.
-  if (!is.null(severity_raster_path) && nzchar(severity_raster_path)) {
-    one_year_tif <- severity_raster_path
-    one_year_tif_source <- "explicit (from config)"
-  } else {
-    one_year_tif <- resolve_first_existing_path_unb_legacy(
-      file.path(composite_base, paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
-      file.path(composite_base, "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif")),
-      file.path(composite_base, "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-      file.path(composite_base, paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-      file.path(data_base, "Imagery", "Composites_90m", "DOY", paste0("DOY_", target_year, "_mosaic_res90m.tif")),
-      file.path(data_base, "Imagery", "Composites_90m", "Min_Min", paste0("MinMin_", target_year, "_mosaic_res90m.tif"))
+  # C3 (Gate 1B piece 5, 2026-06-08): the severity / change-index mosaic is a
+  # REQUIRED supervised input. It MUST be supplied explicitly — in production
+  # the pools stage threads cfg$inputs$change_index here as `severity_raster_path`.
+  # The former behaviour silently GLOBBED the filesystem across six convention
+  # candidates (MinMin/DOY under composite_base or data_base/Imagery) and used
+  # the first that happened to exist, which could pick a stale or wrong-product
+  # raster behind the cfg's back. That candidate search is removed: if no
+  # explicit path is given we FAIL FAST naming the cfg field to set, BEFORE any
+  # heavy raster compute.
+  if (is.null(severity_raster_path) || !nzchar(severity_raster_path)) {
+    stop(
+      "build_unburned_from_legacy_pipeline() requires 'severity_raster_path' ",
+      "(the change-index / severity mosaic). In a supervised run this is the ",
+      "cfg$inputs$change_index route, threaded by the pools stage; set it via ",
+      "build_supervised_burned_config(change_index = ...). There is no ",
+      "convention-based filesystem search for this raster.",
+      call. = FALSE
     )
-    one_year_tif_source <- "convention fallback"
   }
+  one_year_tif <- severity_raster_path
+  one_year_tif_source <- "explicit (from config)"
   if (is.null(burnable_mask_path) || !nzchar(burnable_mask_path)) {
     burnable_mask_path <- file.path(
       data_base, "Corine_Masks",
@@ -778,11 +780,12 @@ build_unburned_from_legacy_pipeline <- function(
     )
   }
 
-  if (is.null(one_year_tif) || !file.exists(one_year_tif)) {
+  if (!file.exists(one_year_tif)) {
     stop(
-      "Could not locate severity mosaic for year ", target_year,
-      " (source: ", one_year_tif_source, "). ",
-      "Provide 'severity_raster_path' explicitly or check 'composite_base'.",
+      "Severity / change-index mosaic for year ", target_year,
+      " does not exist on disk: ", one_year_tif, ". ",
+      "It was supplied explicitly via 'severity_raster_path' ",
+      "(cfg$inputs$change_index). Check that path.",
       call. = FALSE
     )
   }
@@ -795,15 +798,25 @@ build_unburned_from_legacy_pipeline <- function(
   }
   stopifnot(file.exists(internal_decisions_path))
 
-  if (is.null(out_root_dir)) {
-    out_root_dir <- file.path(
-      data_base, "Results", target_year, result_name,
-      "SUPERVISED", scenario_name, "_LEGACY_UNBURNED"
+  # C3 (Gate 1B piece 5, 2026-06-08): the legacy-unburned output ROOT must be
+  # resolved from the cfg output routes, never invented from a filename
+  # convention. In a supervised run the pools stage derives
+  # `legacy_unb_root_dir` from config$output_routes$base and threads it here as
+  # `out_root_dir`. The former fallback silently fabricated a
+  # data_base/Results/.../SUPERVISED/.../_LEGACY_UNBURNED directory (a different
+  # output tree from the cfg-configured one), so cached stages and the unburned
+  # pool could be written/read under a path the caller never asked for. Require
+  # `out_root_dir`; fail fast BEFORE any heavy compute if it is absent.
+  if (is.null(out_root_dir) || !is.character(out_root_dir) ||
+      length(out_root_dir) != 1L || !nzchar(out_root_dir)) {
+    stop(
+      "build_unburned_from_legacy_pipeline() requires 'out_root_dir' (the ",
+      "legacy-unburned output root). In a supervised run this is derived from ",
+      "config$output_routes$base by the pools stage. There is no ",
+      "convention-based output directory fallback; pass 'out_root_dir' ",
+      "explicitly or supply config$output_routes.",
+      call. = FALSE
     )
-    # In production the orchestrator/pools stage always supplies out_root_dir
-    # from config$output_routes; log when we fall back so it is never hidden.
-    msg("Legacy unburned out_root_dir not supplied; using convention default: %s",
-        out_root_dir)
   }
   dir.create(out_root_dir, recursive = TRUE, showWarnings = FALSE)
 

@@ -23,10 +23,6 @@ process_otsu_rasters_(
   reproject = TRUE,
   resolution = 100,
   corine_classes = NULL,
-  ecoregion_shapefile_path = NULL,
-  ecoregion_field = NULL,
-  ecoregion_classes = NULL,
-  segment_by_intersection = FALSE,
   min_otsu_threshold_value = NULL,
   python_exe,
   gdal_polygonize_script,
@@ -76,14 +72,6 @@ process_otsu_rasters_(
 
 \item{corine_classes}{Optional vector of reclassified CORINE classes to keep.}
 
-\item{ecoregion_shapefile_path}{Path to WWF ecoregions shapefile.}
-
-\item{ecoregion_field}{Column in ecoregion shapefile used for class labels.}
-
-\item{ecoregion_classes}{Optional. Vector of selected ecoregion class names.}
-
-\item{segment_by_intersection}{Logical. If TRUE, intersects CORINE and ecoregions.}
-
 \item{min_otsu_threshold_value}{Minimum acceptable threshold. Used if Otsu value is lower.}
 
 \item{python_exe}{Path to Python executable.}
@@ -118,14 +106,18 @@ This function computes binary burned area masks from a severity index raster (RB
 using Otsu's thresholding or percentile clipping. The segmentation can be applied
 to the full raster or stratified by:
 - CORINE land cover classes (`corine_raster_path`)
-- WWF ecoregions (`ecoregion_shapefile_path`)
-- or the intersection of both (CORINE × Ecoregion)
+
+Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / CORINE × ecoregion
+stratification was removed (it was never wired into any supervised run; the
+canonical supervised negative-pool Otsu mode is `burnable_only`). The
+CORINE × ecoregion stratified Otsu lives in the DETERMINISTIC delineation
+stage (`process_otsu_rasters_grow()`), which is unaffected.
 
 ## Key features:
 - Supports Otsu thresholding after pre-filtering by minimum index values (`otsu_thresholds`) or using original values
 - Supports percentile-based thresholding via `trim_percentiles`
 - Enforces a minimum threshold (`min_otsu_threshold_value`) when Otsu yields low values
-- Allows stratification by CORINE, ecoregions, or their intersection
+- Allows stratification by CORINE land-cover classes
 - Enables CORINE reclassification using a custom `reclass_matrix`
 - Automatically computes RBR or dNBR if `nbr_pre_path` and `nbr_post_path` are provided
 - Outputs:

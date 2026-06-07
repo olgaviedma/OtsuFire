@@ -282,3 +282,92 @@ test_that("supervised config rejects the removed otsu_unburned_generation knob",
     regexp = "was removed in 2026-06"
   )
 })
+
+# ===========================================================================
+# Gate 1B PIECE 4 (2026-06-08): supervised ecoregion Otsu branch removed.
+# The canonical supervised negative-pool Otsu mode is `burnable_only`; the
+# only other supported mode is the ecoregion-free `corine`. The supervised
+# pipeline neither exposes nor derives any ecoregion path. The DETERMINISTIC
+# CORINE x ecoregion stratified Otsu is unaffected.
+# ===========================================================================
+
+test_that("PIECE 4: legacy unburned otsu_mode enum is burnable_only + corine only", {
+  ns <- asNamespace("OtsuFire")
+  fn <- get("build_unburned_from_legacy_pipeline", envir = ns)
+  modes <- eval(formals(fn)$otsu_mode)
+  expect_setequal(modes, c("burnable_only", "corine"))
+  # `burnable_only` is the canonical default (match.arg picks the first).
+  expect_identical(modes[[1L]], "burnable_only")
+})
+
+test_that("PIECE 4: dispatch + pools default the legacy otsu_mode to burnable_only", {
+  ns <- asNamespace("OtsuFire")
+  disp <- paste(deparse(get(".of_supervised_engine_bindings", envir = ns)),
+                collapse = "\n")
+  expect_match(disp, 'legacy_otsu_mode\\s*%\\|\\|%\\s*"burnable_only"')
+  pools <- paste(deparse(get("build_supervised_training_pools", envir = ns)),
+                 collapse = "\n")
+  expect_match(pools, 'legacy_otsu_mode\\s*%\\|\\|%\\s*"burnable_only"')
+})
+
+test_that("PIECE 4: no ecoregion path is exposed or derived in the supervised path", {
+  ns <- asNamespace("OtsuFire")
+  # The cfg builder no longer has an ecoregion_shapefile argument.
+  expect_false("ecoregion_shapefile" %in% names(formals(build_supervised_burned_config)))
+  # The legacy builder no longer has an ecoregion_shapefile_path argument.
+  fn <- get("build_unburned_from_legacy_pipeline", envir = ns)
+  expect_false("ecoregion_shapefile_path" %in% names(formals(fn)))
+  # No ecoregion path is hardcoded/derived in the legacy builder body.
+  src <- paste(deparse(fn), collapse = "\n")
+  expect_no_match(src, "ecoregiones_olson", fixed = TRUE)
+  expect_no_match(src, "ecoregion_shapefile")
+  # The supervised pool builder threads no ecoregion path.
+  pools <- paste(deparse(get("build_supervised_training_pools", envir = ns)),
+                 collapse = "\n")
+  expect_no_match(pools, "ecoregion")
+})
+
+test_that("PIECE 4: a cfg without any ecoregion input still builds + keeps corine_raster", {
+  skip_if_not_installed("sf"); skip_if_not_installed("terra")
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  cfg <- build_supervised_burned_config(
+    scenario = "balanced", internal_decisions = id,
+    change_index = ci, target_year = 2017L
+  )
+  # No ecoregion input field exists; corine_raster remains a supervised input.
+  expect_false("ecoregion_shapefile" %in% names(cfg$inputs))
+  expect_true("corine_raster" %in% names(cfg$inputs))
+})
+
+test_that("PIECE 4: supervised Otsu engine carries no ecoregion machinery", {
+  ns <- asNamespace("OtsuFire")
+  fn <- get("process_otsu_rasters_", envir = ns)
+  # No ecoregion / intersection arguments survive in the engine signature.
+  fmls <- names(formals(fn))
+  for (a in c("ecoregion_shapefile_path", "ecoregion_field",
+              "ecoregion_classes", "segment_by_intersection")) {
+    expect_false(a %in% fmls)
+  }
+  body_src <- paste(deparse(body(fn)), collapse = "\n")
+  expect_no_match(body_src, "ecoregions_sf")
+  expect_no_match(body_src, "units_grouped")
+  expect_no_match(body_src, "ECO_ID_INTERNAL")
+})
+
+test_that("PIECE 4: DETERMINISTIC CORINE x ecoregion Otsu wiring is preserved", {
+  ns <- asNamespace("OtsuFire")
+  # The deterministic stratified Otsu engine still accepts its ecoregion args.
+  grow <- get("process_otsu_rasters_grow", envir = ns)
+  gf <- names(formals(grow))
+  for (a in c("ecoregion_shapefile_path", "ecoregion_field",
+              "ecoregion_classes", "segment_by_intersection")) {
+    expect_true(a %in% gf)
+  }
+  # The deterministic detection dispatcher still wires the ecoregion path and
+  # the CORINE x ecoregion intersection through to the grow engine.
+  det <- paste(deparse(get(".of_run_detection", envir = ns)),
+               collapse = "\n")
+  expect_match(det, "ecoregion_shapefile_path")
+  expect_match(det, "segment_by_intersection")
+})
+

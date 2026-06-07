@@ -46,7 +46,7 @@
 #' @param peninsula_shapefile sf / SpatVector / path. Optional Iberian
 #'   peninsula border polygon. RUN input (§N+25): consumed by the legacy
 #'   unburned Otsu builder only when `options$legacy_otsu_mode` crops CORINE
-#'   to the peninsula (modes `"corine"` / `"corine_ecoregion"`). When `NULL`
+#'   to the peninsula (mode `"corine"`). When `NULL`
 #'   it defaults to the convention path
 #'   `<data_base>/Borders/Iberian_peninsula.shp`.
 #' @param topo SpatRaster / path. Optional two-band topography raster
@@ -58,14 +58,6 @@
 #'   for the target year's CORINE epoch. RUN input (§N+25). When `NULL` it
 #'   defaults to the convention path
 #'   `<data_base>/Corine_Masks/CLC_<corine_year>_peninsula.tif`.
-#' @param ecoregion_shapefile sf / SpatVector / path. Optional ecoregion border
-#'   polygon (Olson ecoregions). RUN input. Gate 1B PIECE 2 (2026-06-07):
-#'   consumed by the legacy unburned Otsu builder ONLY in the `ecoregion` /
-#'   `corine_ecoregion` modes (the default mode is `burnable_only`, which never
-#'   reads it). Previously a `<data_base>/Ecoregion/ecoregiones_olson.shp`
-#'   hardcode inside the builder; now a configurable cfg input. When `NULL` it
-#'   defaults to that convention path. NOTE: PIECE 2 only makes the path
-#'   configurable; the ecoregion Otsu branch is removed later in PIECE 4.
 #' @param burnable_mask SpatRaster / path. Optional binary burnable-area mask
 #'   for the target year's CORINE epoch. RUN input (§N+25): consumed by both
 #'   all_sources unburned builders. When `NULL` it defaults to the convention
@@ -205,10 +197,6 @@ build_supervised_burned_config <- function(
     topo = NULL,
     corine_raster = NULL,
     burnable_mask = NULL,
-    # Gate 1B PIECE 2 (2026-06-07): the ecoregion border used by the legacy Otsu
-    # builder's ecoregion / corine_ecoregion modes is now a configurable cfg
-    # input (was a data_base/Ecoregion hardcode). NULL -> convention default.
-    ecoregion_shapefile = NULL,
     # ---- Gate 1B (2026-06-07): resolved methodological / training params ----
     # The cfg is the SINGLE SOURCE OF TRUTH for these. Every argument defaults
     # to NULL = "use the canonical default" (the canonical defaults live ONLY
@@ -334,7 +322,6 @@ build_supervised_burned_config <- function(
   topo                 <- topo                 %||% conv$topo
   corine_raster        <- corine_raster        %||% conv$corine_raster
   burnable_mask        <- burnable_mask        %||% conv$burnable_mask
-  ecoregion_shapefile  <- ecoregion_shapefile  %||% conv$ecoregion_shapefile
 
   inputs <- list(
     internal_decisions   = .of_normalize_input_spec(internal_decisions,
@@ -362,10 +349,6 @@ build_supervised_burned_config <- function(
                                                      allow_null = TRUE),
     burnable_mask        = .of_normalize_input_spec(burnable_mask,
                                                      "burnable_mask",
-                                                     allow_null = TRUE),
-    # Gate 1B PIECE 2: ecoregion border (legacy Otsu ecoregion modes).
-    ecoregion_shapefile  = .of_normalize_input_spec(ecoregion_shapefile,
-                                                     "ecoregion_shapefile",
                                                      allow_null = TRUE)
   )
 
@@ -379,12 +362,11 @@ build_supervised_burned_config <- function(
   # config-time behaviour (existence enforced downstream, not here). The
   # VALIDATION-only inputs (strata / mask / EFFIS reference) are intentionally
   # absent here: they belong to the separate validate_fire_maps() call.
-  # Gate 1B PIECE 2: `ecoregion_shapefile` is deliberately NOT in this
-  # config-time existence loop. It is consumed ONLY by the non-default legacy
-  # Otsu `ecoregion` / `corine_ecoregion` modes (the default is
-  # `burnable_only`), and its convention default (data_base/Ecoregion) is
-  # absent in most setups; the legacy builder asserts its existence inside the
-  # ecoregion branch, exactly when (and only when) it is actually needed.
+  # Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / corine_ecoregion
+  # Otsu modes (and their `ecoregion_shapefile` cfg input) were removed. The
+  # canonical negative-pool Otsu mode is `burnable_only`; `"corine"` is also
+  # supported. CORINE×ecoregion stratification lives only in the deterministic
+  # stage, which is configured separately.
   for (.nm in c("delayed_change_index", "peninsula_shapefile", "topo",
                 "corine_raster", "burnable_mask")) {
     .of_check_input_file(inputs[[.nm]], .nm)
@@ -813,10 +795,6 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     } else NULL,
     peninsula_shapefile = if (has_db) {
       file.path(data_base, "Borders", "Iberian_peninsula.shp")
-    } else NULL,
-    # Gate 1B PIECE 2: ecoregion border convention (legacy Otsu ecoregion modes).
-    ecoregion_shapefile = if (has_db) {
-      file.path(data_base, "Ecoregion", "ecoregiones_olson.shp")
     } else NULL,
     topo = if (has_db) {
       file.path(data_base, "Topography", "elevation_slope.tif")

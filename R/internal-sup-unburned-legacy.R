@@ -640,7 +640,7 @@ build_unburned_from_legacy_pipeline <- function(
   severity_raster_path = NULL,
   internal_decisions_path = NULL,
   legacy_code_dir = NULL,
-  otsu_mode = c("burnable_only", "corine", "ecoregion", "corine_ecoregion"),
+  otsu_mode = c("burnable_only", "corine"),
   # AS01 (0.3.0): NULL by default. Plumbed from config$tool_paths via the
   # dispatcher. The downstream `process_otsu_rasters_()` call asserts
   # non-NULL. Provide explicitly when calling this function directly.
@@ -684,14 +684,6 @@ build_unburned_from_legacy_pipeline <- function(
   burnable_mask_path = NULL,
   corine_raster_path = NULL,
   peninsula_shapefile = NULL,
-  # Gate 1B PIECE 2 (2026-06-07): the ecoregion border is now a CONFIGURABLE
-  # input path (cfg$inputs$ecoregion_shapefile, threaded by supervised-pools.R)
-  # instead of an unconditional data_base/Ecoregion/ecoregiones_olson.shp
-  # hardcode. NULL falls back to EXACTLY that historical convention path, so
-  # passing nothing is byte-identical. NOTE: PIECE 2 only makes the PATH
-  # configurable; the ecoregion Otsu BRANCH itself (otsu_mode ecoregion /
-  # corine_ecoregion) is removed later in PIECE 4 — do not remove it here.
-  ecoregion_shapefile_path = NULL,
   # D4a (2026-06-05): forwarded to build_unburned_from_legacy_decisions().
   # FALSE (default) errors when the Otsu legacy pool is empty after
   # sanitisation instead of silently degrading to deterministic_direct
@@ -774,14 +766,6 @@ build_unburned_from_legacy_pipeline <- function(
   if (is.null(peninsula_shapefile) || !nzchar(peninsula_shapefile)) {
     peninsula_shapefile <- file.path(data_base, "Borders", "Iberian_peninsula.shp")
   }
-  # Gate 1B PIECE 2: consume the ecoregion border from the configurable path;
-  # fall back to the historical convention path only when none was supplied.
-  ecoregion_shapefile <- if (!is.null(ecoregion_shapefile_path) &&
-                             nzchar(ecoregion_shapefile_path)) {
-    ecoregion_shapefile_path
-  } else {
-    file.path(data_base, "Ecoregion", "ecoregiones_olson.shp")
-  }
   # The deterministic decisions GPKG is the user-supplied path, period. No
   # convention reconstruction. The caller (orchestrator) always threads the
   # user path down; require it here.
@@ -805,12 +789,8 @@ build_unburned_from_legacy_pipeline <- function(
   one_year_tif <- normalizePath(one_year_tif, winslash = "/", mustWork = TRUE)
   msg("Legacy unburned severity raster [%s]: %s", one_year_tif_source, one_year_tif)
   stopifnot(file.exists(burnable_mask_path))
-  if (otsu_mode %in% c("corine", "corine_ecoregion")) {
+  if (identical(otsu_mode, "corine")) {
     stopifnot(file.exists(corine_raster_path))
-    stopifnot(file.exists(peninsula_shapefile))
-  }
-  if (otsu_mode %in% c("ecoregion", "corine_ecoregion")) {
-    stopifnot(file.exists(ecoregion_shapefile))
     stopifnot(file.exists(peninsula_shapefile))
   }
   stopifnot(file.exists(internal_decisions_path))
@@ -839,16 +819,12 @@ build_unburned_from_legacy_pipeline <- function(
   otsu_file_stem <- switch(
     otsu_mode,
     burnable_only = sprintf("BA_%s_ge%d", target_year, otsu_threshold),
-    corine = sprintf("BA_%s_otsu_CORI_ge%d", target_year, otsu_threshold),
-    ecoregion = sprintf("BA_%s_otsu_ECOREG_ge%d", target_year, otsu_threshold),
-    corine_ecoregion = sprintf("BA_%s_otsu_CORI_ECOREG_ge%d", target_year, otsu_threshold)
+    corine = sprintf("BA_%s_otsu_CORI_ge%d", target_year, otsu_threshold)
   )
   ref_file_stem <- switch(
     otsu_mode,
     burnable_only = sprintf("BA_%s_ge%d", target_year, reference_otsu_threshold),
-    corine = sprintf("BA_%s_otsu_CORI_ge%d", target_year, reference_otsu_threshold),
-    ecoregion = sprintf("BA_%s_otsu_ECOREG_ge%d", target_year, reference_otsu_threshold),
-    corine_ecoregion = sprintf("BA_%s_otsu_CORI_ECOREG_ge%d", target_year, reference_otsu_threshold)
+    corine = sprintf("BA_%s_otsu_CORI_ge%d", target_year, reference_otsu_threshold)
   )
   otsu_raster_path <- file.path(dirs$otsu, sprintf("%s_binary.tif", otsu_file_stem))
   ref_raster_path <- file.path(dirs$otsu, sprintf("%s_binary.tif", ref_file_stem))
@@ -941,16 +917,12 @@ build_unburned_from_legacy_pipeline <- function(
       min_otsu_threshold_value = min_otsu_threshold_value,
       use_original = FALSE,
       trim_percentiles = NULL,
-      corine_raster_path = if (otsu_mode %in% c("corine", "corine_ecoregion")) corine_raster_path else NULL,
-      peninsula_shapefile = if (otsu_mode %in% c("corine", "ecoregion", "corine_ecoregion")) peninsula_shapefile else NULL,
-      reclassify_corine = otsu_mode %in% c("corine", "corine_ecoregion"),
-      reclass_matrix = if (otsu_mode %in% c("corine", "corine_ecoregion")) reclass_matrix else NULL,
+      corine_raster_path = if (identical(otsu_mode, "corine")) corine_raster_path else NULL,
+      peninsula_shapefile = if (identical(otsu_mode, "corine")) peninsula_shapefile else NULL,
+      reclassify_corine = identical(otsu_mode, "corine"),
+      reclass_matrix = if (identical(otsu_mode, "corine")) reclass_matrix else NULL,
       corine_classes = NULL,
-      ecoregion_shapefile_path = if (otsu_mode %in% c("ecoregion", "corine_ecoregion")) ecoregion_shapefile else NULL,
-      ecoregion_field = if (otsu_mode %in% c("ecoregion", "corine_ecoregion")) "EnZ_name" else NULL,
-      segment_by_intersection = identical(otsu_mode, "corine_ecoregion"),
-      output_corine_raster_dir = if (otsu_mode %in% c("corine", "corine_ecoregion")) file.path(dirs$otsu, "output_corine") else NULL,
-      output_corine_vector_dir = if (identical(otsu_mode, "corine_ecoregion")) file.path(dirs$otsu, "output_corine") else NULL,
+      output_corine_raster_dir = if (identical(otsu_mode, "corine")) file.path(dirs$otsu, "output_corine") else NULL,
       reproject = TRUE,
       resolution = 90,
       python_exe = python_exe,

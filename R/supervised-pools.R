@@ -166,27 +166,31 @@ build_supervised_training_pools <- function(config,
   # cfg carries one (the convention default is filled at config-build time);
   # pass NULL otherwise so each unburned builder falls back to EXACTLY its
   # historical convention path (byte-identical when nothing is supplied).
-  .cfg_input_path <- function(name) {
-    sp <- config$inputs[[name]]
-    if (is.null(sp)) return(NULL)
-    if (!is.null(sp$path) && length(sp$path) == 1L && !is.na(sp$path) &&
-        nzchar(sp$path) && identical(sp$type, "path")) sp$path else NULL
-  }
+  # Gate 1B: single shared cfg-input accessor (.of_sup_input_path,
+  # supervised-config.R) — same resolver the orchestrator + feature extractor use.
+  .cfg_input_path <- function(name) .of_sup_input_path(config, name)
   cfg_burnable_mask_path  <- .cfg_input_path("burnable_mask")
   cfg_corine_raster_path  <- .cfg_input_path("corine_raster")
   cfg_peninsula_shapefile <- .cfg_input_path("peninsula_shapefile")
 
-  # one_year_tif: severity raster for the legacy Otsu builder. Same resolution
-  # the orchestrator SETUP block uses (result_name first, Min_Min fallback).
-  one_year_tif <- file.path(
-    composite_base, result_name,
-    paste0("MinMin_", target_year, "_mosaic_res90m.tif")
-  )
-  if (!file.exists(one_year_tif)) {
-    one_year_tif <- file.path(
-      composite_base, "Min_Min",
+  # one_year_tif: the MAIN change-index raster, used here as the severity raster
+  # for the legacy Otsu builder. It is the REQUIRED, validated cfg$inputs$change_index
+  # field; CONSUMED from cfg$inputs (single source of truth), NOT reconstructed
+  # by the MinMin_<year>_mosaic_res90m.tif filename convention. The convention is
+  # the fallback ONLY when the cfg carries no on-disk change_index path (e.g. an
+  # in-memory SpatRaster spec) so behaviour stays byte-identical otherwise.
+  one_year_tif <- .cfg_input_path("change_index") %||% {
+    cand <- file.path(
+      composite_base, result_name,
       paste0("MinMin_", target_year, "_mosaic_res90m.tif")
     )
+    if (!file.exists(cand)) {
+      cand <- file.path(
+        composite_base, "Min_Min",
+        paste0("MinMin_", target_year, "_mosaic_res90m.tif")
+      )
+    }
+    cand
   }
 
   # Unburned output roots, replicating the orchestrator ROOT PATHS block.

@@ -581,13 +581,11 @@ run_supervised_pipeline <- function(target_year, scenario,
   # accessor returns the on-disk path of a cfg input spec, or NULL when the
   # input is NULL / in-memory (in-memory specs are not produced for these
   # raster/vector inputs in the run path, but NULL-safety is kept).
-  .cfg_input_path <- function(name) {
-    if (is.null(config) || is.null(config$inputs)) return(NULL)
-    sp <- config$inputs[[name]]
-    if (is.null(sp)) return(NULL)
-    if (!is.null(sp$path) && length(sp$path) == 1L && !is.na(sp$path) &&
-        nzchar(sp$path) && identical(sp$type, "path")) sp$path else NULL
-  }
+  # Gate 1B: route every cfg-input lookup through the single shared accessor
+  # `.of_sup_input_path()` (supervised-config.R) so the orchestrator, the pool
+  # builder and the feature extractor resolve inputs identically and cfg$inputs
+  # is the one source of truth.
+  .cfg_input_path <- function(name) .of_sup_input_path(config, name)
 
   corine_year         <- get_corine_year(target_year)
 
@@ -598,19 +596,40 @@ run_supervised_pipeline <- function(target_year, scenario,
   # so it is intentionally NOT reconstructed or validated here.
   topo_path <- .cfg_input_path("topo") %||%
     file.path(data_base, "Topography", "elevation_slope.tif")
-  hotspots_path       <- file.path(data_base, "Hotspots", paste0("hotspots_iberia_", target_year, ".geojson"))
+  # hotspots is an OPTIONAL input wired to cfg$inputs$hotspots (cfg validates
+  # it allow_null = TRUE so pre-MODIS years can run with hotspots = NULL). The
+  # cfg path is the single source of truth; the convention path is only the
+  # fallback for a cfg that did not carry an explicit hotspots path (e.g. the
+  # standalone-script path with a data_base set). When neither the cfg nor a
+  # data_base supplies one, hotspots_path is NULL and the layer is treated as
+  # absent below (use_hotspots disabled), exactly as for a missing file.
+  hotspots_path <- .cfg_input_path("hotspots") %||%
+    (if (!is.null(data_base) && nzchar(data_base))
+       file.path(data_base, "Hotspots",
+                 paste0("hotspots_iberia_", target_year, ".geojson"))
+     else NULL)
   corine_raster_path  <- .cfg_input_path("corine_raster") %||%
     file.path(data_base, "Corine_Masks", paste0("CLC_", corine_year, "_peninsula.tif"))
 
-  one_year_tif <- file.path(
-    composite_base, result_name,
-    paste0("MinMin_", target_year, "_mosaic_res90m.tif")
-  )
-  if (!file.exists(one_year_tif)) {
-    one_year_tif <- file.path(
-      composite_base, "Min_Min",
+  # change_index: the MAIN annual change-index (summer RBR + DOY_post) raster.
+  # It is a REQUIRED, validated field of cfg$inputs (build_supervised_burned_config
+  # rejects a NULL change_index). It is CONSUMED from cfg$inputs here — NOT
+  # reconstructed by the historical MinMin_<year>_mosaic_res90m.tif filename
+  # convention. The convention is retained ONLY as a fallback for the
+  # standalone-script path (config == NULL), so behaviour is byte-identical for
+  # existing scripts while the packaged pipeline is single-source-of-truth.
+  one_year_tif <- .cfg_input_path("change_index") %||% {
+    cand <- file.path(
+      composite_base, result_name,
       paste0("MinMin_", target_year, "_mosaic_res90m.tif")
     )
+    if (!file.exists(cand)) {
+      cand <- file.path(
+        composite_base, "Min_Min",
+        paste0("MinMin_", target_year, "_mosaic_res90m.tif")
+      )
+    }
+    cand
   }
 
   rbr_aw_tif <- .cfg_input_path("delayed_change_index") %||%
@@ -700,10 +719,11 @@ run_supervised_pipeline <- function(target_year, scenario,
   # deterministic delineation stage and were removed from the supervised
   # feature engine on 2026-06-05.
 
-  hotspots_sf_base <- if (file.exists(hotspots_path)) {
+  hotspots_sf_base <- if (!is.null(hotspots_path) && file.exists(hotspots_path)) {
     sf::read_sf(hotspots_path)
   } else {
-    msg("WARNING: no existe hotspots: %s (se desactiva use_hotspots)", hotspots_path)
+    msg("WARNING: no existe hotspots: %s (se desactiva use_hotspots)",
+        hotspots_path %||% "<none: cfg$inputs$hotspots = NULL>")
     sf::st_sf(
       frp = numeric(),
       confidence = numeric(),

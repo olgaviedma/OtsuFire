@@ -237,23 +237,35 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
            "to locate the change-index / autumn composites.", call. = FALSE)
     }
 
+    # Gate 1B: single shared cfg-input accessor (.of_sup_input_path,
+    # supervised-config.R). Convention fallback only when the cfg carries no
+    # explicit path (single source of truth).
+    .cfg_input_path <- function(name) .of_sup_input_path(config, name)
+
     corine_year         <- sfkit$get_corine_year(target_year)
     topo_path           <- file.path(data_base, "Topography",
                                      "elevation_slope.tif")
     corine_raster_path  <- file.path(data_base, "Corine_Masks",
                                      paste0("CLC_", corine_year,
                                             "_peninsula.tif"))
-    one_year_tif <- file.path(
-      composite_base, result_name,
-      paste0("MinMin_", target_year, "_mosaic_res90m.tif")
-    )
-    if (!file.exists(one_year_tif)) {
-      one_year_tif <- file.path(
-        composite_base, "Min_Min",
+    # change_index: the REQUIRED, validated cfg$inputs$change_index field,
+    # CONSUMED from cfg (not reconstructed by filename convention). Convention
+    # is the fallback only for an in-memory / pathless change_index spec.
+    one_year_tif <- .cfg_input_path("change_index") %||% {
+      cand <- file.path(
+        composite_base, result_name,
         paste0("MinMin_", target_year, "_mosaic_res90m.tif")
       )
+      if (!file.exists(cand)) {
+        cand <- file.path(
+          composite_base, "Min_Min",
+          paste0("MinMin_", target_year, "_mosaic_res90m.tif")
+        )
+      }
+      cand
     }
-    rbr_aw_tif <- file.path(
+    # delayed_change_index: optional cfg$inputs field; convention fallback.
+    rbr_aw_tif <- .cfg_input_path("delayed_change_index") %||% file.path(
       composite_base, "Autumn",
       paste0("mean_mean_", target_year, "_mosaic.tif")
     )
@@ -301,14 +313,20 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
 
   if (is.null(.hotspots_sf)) {
     data_base     <- config$options$data_base
-    hotspots_path <- file.path(data_base, "Hotspots",
-                               paste0("hotspots_iberia_", target_year,
-                                      ".geojson"))
-    hotspots_sf_base <- if (file.exists(hotspots_path)) {
+    # hotspots: OPTIONAL cfg$inputs$hotspots (allow_null = TRUE so pre-MODIS
+    # years run with hotspots = NULL). CONSUMED from cfg; convention path is the
+    # fallback only when the cfg carries no explicit hotspots path AND a
+    # data_base is available. NULL -> treated as an absent layer below.
+    hotspots_path <- .of_sup_input_path(config, "hotspots") %||%
+      (if (!is.null(data_base) && nzchar(data_base))
+         file.path(data_base, "Hotspots",
+                   paste0("hotspots_iberia_", target_year, ".geojson"))
+       else NULL)
+    hotspots_sf_base <- if (!is.null(hotspots_path) && file.exists(hotspots_path)) {
       sf::read_sf(hotspots_path)
     } else {
       msg("WARNING: no existe hotspots: %s (se desactiva use_hotspots)",
-          hotspots_path)
+          hotspots_path %||% "<none: cfg$inputs$hotspots = NULL>")
       sf::st_sf(
         frp = numeric(),
         confidence = numeric(),

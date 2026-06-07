@@ -161,11 +161,18 @@ or `NULL`. Stored in `cfg$train_control` and consumed by BOTH OOF and FINAL.}
 (`"legacy"` / `"nested_refit"`) and OOF per-fold negative sampling mode
 (`"capped"` / `"full"`). `NULL` uses `"legacy"` / `"capped"`.}
 
-\item{model_params}{Named list or `NULL`. Optional override of the canonical
-XGBoost hyperparameter block stored in `cfg$model_params` (the canonical
-block MINUS `scale_pos_weight`, which is computed at train time). Supplying
-it merges your fields onto the canonical block; `scale_pos_weight` is
-rejected here.}
+\item{model_params}{Named list or `NULL`. Optional PARTIAL override of the
+canonical XGBoost hyperparameter block stored in `cfg$model_params` (the
+canonical block MINUS `scale_pos_weight`, which is computed at train time).
+Supplying it merges your fields onto the canonical block field-by-field
+(e.g. `model_params = list(eta = 0.03)` changes only `eta` and leaves
+`max_depth`, `subsample`, ... canonical); `scale_pos_weight` is rejected
+here. Because the merge is per-field, provenance is recorded PER FIELD on
+`cfg$resolved_params_provenance$model_params`: each xgb field carries its
+canonical value, the requested value (`NA` when not supplied), the resolved
+value, and provenance (`"user"` when that specific field was supplied, else
+`"default"`). This mirrors `cfg$train_control` provenance and lets a
+downstream manifest render a per-field model_params provenance table.}
 
 \item{options}{Named list of advanced options. Recognized keys include
   `legacy_*`, `currentyear_*`, `unb_verbose`, `result_name`,

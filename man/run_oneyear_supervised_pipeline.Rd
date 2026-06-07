@@ -169,8 +169,9 @@ A named list of class `otsufire_supervised_run` with fields:
   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
   `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
-  `consistency_*`, `legacy_run_summary`,
-  `legacy_consistency_summary`.
+  `consistency_*`, `resolved_params_provenance`,
+  `model_params_provenance` (per-field cfg$model_params provenance table),
+  `legacy_run_summary`, `legacy_consistency_summary`.
 }
 \description{
 Top-level one-year supervised orchestrator defined by
@@ -212,7 +213,10 @@ Behaviour of a non-`NULL` function-level override:
 }
 Each resolution is recorded (cfg value / requested override / resolved value /
 provenance label) on `cfg$resolved_params_provenance` and in the returned run
-object's `resolved_params_provenance` field.
+object's `resolved_params_provenance` field. The PER-FIELD `cfg$model_params`
+provenance (the builder folds a PARTIAL xgb override onto the canonical block,
+so each xgb field carries canonical / requested / resolved / provenance) is
+surfaced separately on the run object's `model_params_provenance` field.
 
 REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
 future minor version. Migrate callers to

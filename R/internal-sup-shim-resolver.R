@@ -209,3 +209,39 @@
     data.frame(r, stringsAsFactors = FALSE)
   }))
 }
+
+#' Render the per-field cfg$model_params provenance as a tidy data.frame.
+#'
+#' Gate 1B (2026-06-07): `cfg$resolved_params_provenance$model_params` is a named
+#' list keyed by xgb field, each element a list with `canonical`, `requested`,
+#' `resolved`, `provenance` (built by `.of_model_params_provenance()` in the
+#' builder, since the builder folds a PARTIAL override onto the canonical block).
+#' This flattens it to one row per field for the run-level manifest, mirroring
+#' `.of_shim_record_to_df()`. Renders the exact provenance table a downstream
+#' manifest documents (param / canonical / requested / resolved / provenance).
+#'
+#' @param mp_prov The `cfg$resolved_params_provenance$model_params` list (or
+#'   NULL).
+#' @return A data.frame with columns param, canonical, requested, resolved,
+#'   provenance (zero rows when `mp_prov` is NULL/empty).
+#' @keywords internal
+#' @noRd
+.of_model_params_provenance_to_df <- function(mp_prov) {
+  empty <- data.frame(
+    param = character(0), canonical = character(0), requested = character(0),
+    resolved = character(0), provenance = character(0), stringsAsFactors = FALSE
+  )
+  if (is.null(mp_prov) || length(mp_prov) == 0L) return(empty)
+  rows <- lapply(names(mp_prov), function(nm) {
+    r <- mp_prov[[nm]]
+    data.frame(
+      param      = nm,
+      canonical  = r$canonical  %||% NA_character_,
+      requested  = r$requested  %||% NA_character_,
+      resolved   = r$resolved   %||% NA_character_,
+      provenance = r$provenance %||% NA_character_,
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}

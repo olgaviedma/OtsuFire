@@ -52,7 +52,7 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     params = list(booster = "gbtree", objective = "binary:logistic",
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
-    nrounds_max = 4L, early_stop = 3L, seed_base = 1L,
+    nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
 
@@ -73,7 +73,7 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     params = list(booster = "gbtree", objective = "binary:logistic",
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
-    nrounds_max = 4L, early_stop = 3L, seed_base = 1L,
+    nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = FALSE
   )))
   expect_identical(readLines(agg_csv),  sentinel)
@@ -86,7 +86,7 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     params = list(booster = "gbtree", objective = "binary:logistic",
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
-    nrounds_max = 4L, early_stop = 3L, seed_base = 1L,
+    nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
   expect_false(identical(readLines(agg_csv), sentinel))
@@ -158,7 +158,7 @@ test_that("run_dm_oof_pipeline does not clobber CSV/TXT sidecars when overwrite=
                        nthread = 1),
     result_dir  = result_dir,
     target_year = 2005L,
-    nrounds_max = 6L, early_stop = 4L, seed_base = 11L,
+    nrounds_max = 6L, early_stop = 4L, seed_base = 11L, group_col = "block_id",
     verbose     = 0, prefix = prefix, save_prefix = prefix,
     overwrite   = FALSE
   )))

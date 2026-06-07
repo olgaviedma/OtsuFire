@@ -88,6 +88,7 @@ capture_oof_args <- function(cfg, train_feats) {
       captured$nrounds_max <- a$nrounds_max
       captured$early_stop  <- a$early_stop
       captured$seed_base   <- a$seed_base
+      captured$group_col   <- a$group_col
       captured$caps <- c(a$contextual_exclusion_to_burned_ratio,
                          a$spectral_hard_negative_to_burned_ratio,
                          a$random_to_burned_ratio,
@@ -157,6 +158,9 @@ test_that("Gate 1B: params reaching the OOF engine equal cfg$train_control / cfg
   expect_equal(cap$nrounds_max, cfg$train_control$nrounds_max)
   expect_equal(cap$early_stop,  cfg$train_control$early_stop)
   expect_equal(cap$seed_base,   cfg$train_control$seeds$oof_seed_base)
+  # Gate 1B residual: OOF's group_col is sourced from cfg$train_control (same
+  # single source the FINAL stage uses), not a hardcoded literal.
+  expect_equal(cap$group_col,   cfg$train_control$group_col)
   expect_equal(cap$caps, with(cfg$train_control$caps,
                               c(contextual, spectral, random, otsu)))
   # The xgb params built for OOF are cfg$model_params + a computed spw.
@@ -225,7 +229,11 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
     cap_spectral        = 2.0,
     oof_seed_base       = 4242L,
     final_sampling_seed = 1234L,
-    final_seed          = 9999L
+    final_seed          = 9999L,
+    # Gate 1B residual: a DELIBERATELY non-default group_col must reach BOTH the
+    # OOF and FINAL engines from the single cfg$train_control (was hardcoded
+    # "block_id" on the OOF path).
+    group_col           = "custom_block_col"
   )
   # The cfg stores exactly these (no canonical fallback).
   expect_equal(cfg$train_control$nrounds_max, 137L)
@@ -235,6 +243,7 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
   expect_equal(cfg$train_control$seeds$oof_seed_base, 4242L)
   expect_equal(cfg$train_control$seeds$final_sampling_seed, 1234L)
   expect_equal(cfg$train_control$seeds$final_seed, 9999L)
+  expect_equal(cfg$train_control$group_col, "custom_block_col")
 
   cap_oof   <- capture_oof_args(cfg, mk_oof_train_feats())
   cap_final <- capture_final_args(cfg, mk_final_train_gpkg())
@@ -244,6 +253,8 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
   expect_equal(cap_oof$early_stop, 9L)
   expect_equal(cap_oof$seed_base, 4242L)
   expect_equal(cap_oof$caps[2], 2.0)
+  # The non-default group_col reaches the OOF engine (no hardcoded "block_id").
+  expect_equal(cap_oof$group_col, "custom_block_col")
 
   # FINAL engine: FINAL-specific seeds + val_frac + nrounds/early-stop + cap.
   expect_equal(cap_final$nrounds_max, 137L)
@@ -252,11 +263,14 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
   expect_equal(cap_final$sampling_seed, 1234L)
   expect_equal(cap_final$seed, 9999L)
   expect_equal(cap_final$caps[2], 2.0)
+  # The non-default group_col reaches the FINAL engine too.
+  expect_equal(cap_final$group_col, "custom_block_col")
 
-  # The shared knobs (nrounds, early-stop, the cap vector) are IDENTICAL across
-  # the two stages -- proof of a single source of truth, no substitution.
+  # The shared knobs (nrounds, early-stop, the cap vector, group_col) are
+  # IDENTICAL across the two stages -- proof of a single source of truth.
   expect_equal(cap_oof$nrounds_max, cap_final$nrounds_max)
   expect_equal(cap_oof$caps, cap_final$caps)
+  expect_equal(cap_oof$group_col, cap_final$group_col)
 })
 
 # ---------------------------------------------------------------------------
@@ -359,10 +373,36 @@ test_that("Gate 1B: run_dm_oof_pipeline ERRORS when nrounds_max is omitted (no s
     suppressMessages(fn(
       labelled = data.frame(), burned_like = data.frame(),
       labelled_df = data.frame(), params = list(), result_dir = tempdir(),
-      early_stop = 80L, seed_base = 42L
+      early_stop = 80L, seed_base = 42L, group_col = "block_id"
       # nrounds_max DROPPED on purpose.
     )),
     regexp = "required resolved arg 'nrounds_max'"
+  )
+})
+
+test_that("Gate 1B: run_dm_oof_pipeline ERRORS when group_col is omitted (no silent default)", {
+  fn <- get("run_dm_oof_pipeline", envir = ns)
+  expect_error(
+    suppressMessages(fn(
+      labelled = data.frame(), burned_like = data.frame(),
+      labelled_df = data.frame(), params = list(), result_dir = tempdir(),
+      nrounds_max = 4000L, early_stop = 80L, seed_base = 42L
+      # group_col DROPPED on purpose -> no silent revert to a hardcoded literal.
+    )),
+    regexp = "required resolved arg 'group_col'"
+  )
+})
+
+test_that("Gate 1B: run_oof_xgb ERRORS when group_col is omitted (no silent default)", {
+  fn <- get("run_oof_xgb", envir = ns)
+  expect_error(
+    suppressMessages(fn(
+      XL_mat = Matrix::Matrix(matrix(0, 1, 1), sparse = TRUE), y = 0L,
+      labelled_df = data.frame(fire_uid = "a", class = "burned"),
+      params = list(), nrounds_max = 4000L, early_stop = 80L, seed_base = 42L
+      # group_col DROPPED on purpose.
+    )),
+    regexp = "required resolved arg 'group_col'"
   )
 })
 

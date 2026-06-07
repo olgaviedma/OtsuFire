@@ -147,6 +147,14 @@ run_dm_oof_pipeline <- function(
     val_frac,
     impute_numeric,
     impute_factor_missing,
+    # Gate 1B (2026-06-07): `group_col` is a REQUIRED resolved arg with NO
+    # methodological default. The single source of truth is
+    # cfg$train_control$group_col, threaded by run_oof_diagnostics(). It drives
+    # the grouped block-CV on BOTH the legacy and nested_refit paths (forwarded
+    # to run_oof_xgb), so a dropped arg ERRORS in the guard block below. This
+    # removes the former hardcoded "block_id" literal that broke single-source
+    # symmetry with the FINAL stage.
+    group_col,
     ...
 ) {
   training_protocol <- match.arg(training_protocol)
@@ -197,7 +205,7 @@ run_dm_oof_pipeline <- function(
   # single source of truth is cfg$train_control, threaded by run_oof_diagnostics()).
   # Placed AFTER the `...` migration check so a stale additional_drop_cols call
   # still reports the migration message first.
-  for (.nm in c("nrounds_max", "early_stop", "seed_base")) {
+  for (.nm in c("nrounds_max", "early_stop", "seed_base", "group_col")) {
     if (eval(call("missing", as.name(.nm)))) {
       stop("run_dm_oof_pipeline(): required resolved arg '", .nm,
            "' is missing (no methodological default; threaded from ",
@@ -400,7 +408,9 @@ run_dm_oof_pipeline <- function(
     oof_sampling      = oof_sampling,
     prepared_labelled = if (!is.null(dm_defer)) dm_defer$prepared_labelled else NULL,
     model_cols        = if (!is.null(dm_defer)) dm_defer$model_cols else NULL,
-    group_col         = "block_id",
+    # Gate 1B (2026-06-07): threaded from cfg$train_control$group_col via
+    # run_oof_diagnostics() (was a hardcoded "block_id" literal).
+    group_col         = group_col,
     feature_weights   = feature_weights
   )
   # Gate 1B: val_frac / impute_* are used by run_oof_xgb only on the nested path

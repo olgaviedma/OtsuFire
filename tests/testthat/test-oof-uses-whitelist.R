@@ -120,6 +120,7 @@ test_that("OOF design bundle columns are within the whitelist", {
     nrounds_max = 6L,
     early_stop  = 4L,
     seed_base   = 11L,
+    group_col   = "block_id",
     verbose     = 0,
     save_prefix = "oof_smoke",
     overwrite   = TRUE

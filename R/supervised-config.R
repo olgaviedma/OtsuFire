@@ -15,7 +15,13 @@
 #' @param internal_decisions sf POLYGON layer or a GPKG path. Deterministic
 #'   decision layer produced for the same year and scenario. Required.
 #' @param change_index SpatRaster or raster path. Main annual change-index
-#'   raster. Required.
+#'   raster (band1 = summer RBR, band2 = DOY_post). Required. Gate 1B
+#'   (2026-06-07): CONSUMED from `cfg$inputs$change_index` end-to-end by the
+#'   orchestrator, the pool builder (legacy-Otsu severity raster) and the
+#'   feature extractor — it is NO LONGER reconstructed by the historical
+#'   `MinMin_<year>_mosaic_res90m.tif` filename convention. The convention path
+#'   survives only as a fallback for the standalone-script path (no cfg) or an
+#'   in-memory spec, so existing scripts stay byte-identical.
 #' @param delayed_change_index SpatRaster or raster path. Optional delayed
 #'   (autumn-winter) change-index raster for persistence-style features.
 #'   RUN input (§N+25): when supplied it is CONSUMED by the orchestrator as
@@ -659,6 +665,36 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
                        "_ETRS89.tif"))
     } else NULL
   )
+}
+
+#' Resolve a cfg$inputs on-disk path (Gate 1B input inventory).
+#'
+#' Single shared accessor for the supervised-input subsystem: returns the
+#' normalized on-disk PATH of `config$inputs[[name]]` when that input is a
+#' `type = "path"` spec, else `NULL` (the input is absent, in-memory, or the
+#' config itself is NULL). Every supervised stage that needs an input's file
+#' path (orchestrator, pool builder, feature extractor) consumes the input
+#' THROUGH this accessor, so `cfg$inputs` is the single source of truth and no
+#' stage reconstructs an input path by filename convention behind the cfg's
+#' back. A `NULL` return lets the caller apply its documented optional-input
+#' behaviour (skip / convention-fallback for the standalone-script path).
+#'
+#' @param config supervised config S3 object, or `NULL`.
+#' @param name character scalar input name (a key of `cfg$inputs`).
+#' @return character path or `NULL`.
+#'
+#' @keywords internal
+#' @noRd
+.of_sup_input_path <- function(config, name) {
+  if (is.null(config) || is.null(config$inputs)) return(NULL)
+  sp <- config$inputs[[name]]
+  if (is.null(sp)) return(NULL)
+  if (!is.null(sp$path) && length(sp$path) == 1L && !is.na(sp$path) &&
+      nzchar(sp$path) && identical(sp$type, "path")) {
+    sp$path
+  } else {
+    NULL
+  }
 }
 
 #' CORINE epoch for a target year (§N+25 convention helper).

@@ -33,7 +33,15 @@
 # Block 7: top-level library() calls removed. All these packages are
 # now declared in DESCRIPTION Imports and resolved via the package
 # namespace at load time.
-sf::sf_use_s2(FALSE)
+#
+# Gate 1C.4 (2026-06-08) cfg-isolation: the former top-level
+# `sf::sf_use_s2(FALSE)` was REMOVED. At namespace load it mutated the user's
+# GLOBAL sf S2 setting permanently with no restore (a session-state leak), and
+# in installed-package mode it was DEAD anyway (top-level R/*.R only re-runs
+# under pkgload::load_all()). The S2 toggle is now scoped + restored INSIDE
+# run_supervised_pipeline() via on.exit (mirroring the AS07 fix already applied
+# in internal-sup-unburned-legacy.R / validate-fire-maps.R), so the supervised
+# run does not contaminate the caller's session and two runs are isolated.
 
 # ============================== 2) GLOBAL CONFIG =========================
 # Block 4B: project-root resolution is dispatcher-injected at runtime.
@@ -389,6 +397,15 @@ run_supervised_pipeline <- function(target_year, scenario,
     stop("'overwrite' must be a single TRUE or FALSE.", call. = FALSE)
   }
 
+  # Gate 1C.4 cfg-isolation: scope the sf S2 toggle to THIS run and restore the
+  # caller's prior value on exit (replaces the removed top-level
+  # sf::sf_use_s2(FALSE) leak). The supervised geometry ops assume planar S2-off
+  # semantics; we set it here and put it back exactly as we found it, so a run
+  # leaves no global session residue for the next run / the user's session.
+  .prev_s2 <- sf::sf_use_s2()
+  suppressMessages(sf::sf_use_s2(FALSE))
+  on.exit(suppressMessages(sf::sf_use_s2(.prev_s2)), add = TRUE)
+
   cat("\n============================================================\n")
   cat(sprintf("RUNNING SUPERVISED PIPELINE | year=%s | scenario=%s\n", target_year, scenario))
   cat("============================================================\n")
@@ -662,7 +679,34 @@ run_supervised_pipeline <- function(target_year, scenario,
   stopifnot(file.exists(corine_raster_path))
   stopifnot(file.exists(topo_path))
   stopifnot(file.exists(rbr_aw_tif))
-  
+
+  # ------------------------------ GATE 1C.4 SEMANTIC/SPATIAL FAIL-FAST ----
+  # Single canonical semantic + spatial validator. Runs ONCE here, AFTER the
+  # cfg has been resolved and the REQUIRED inputs confirmed to exist (the Gate
+  # 1B / C3 path layer above), but BEFORE any heavy compute (the STATIC OBJECTS
+  # raster reads / alignment below and the entire pools->folds->features->model
+  # chain). It fails fast (no artefact written) on CRS/overlap/empty-raster/
+  # zero-burnable-mask/wrong-year/missing-column/incompatible-type/incompatible-
+  # schema/contradictory-cfg/foreign-cache problems, naming the offending input
+  # + cfg field. The checks are metadata/geometry-level (rasters opened
+  # header-only via terra::rast); only the burnable-mask alignment touches cells,
+  # reusing the Gate 1C.1 helper. cfg-isolated: reads ONLY config + the on-disk
+  # inputs it points at, writes nothing. Skipped on the standalone-script path
+  # (config == NULL), which has no cfg to validate against.
+  if (!is.null(config)) {
+    validate_supervised_execution(
+      config                     = config,
+      target_year                = target_year,
+      reuse_upstream             = reuse_upstream,
+      feature_whitelist_override = feature_whitelist_override,
+      training_protocol          = training_protocol,
+      oof_sampling               = oof_sampling,
+      data_base                  = data_base,
+      composite_base             = composite_base,
+      result_name                = result_name
+    )
+  }
+
   # ------------------------------ STATIC OBJECTS -------------------------
   topo       <- terra::rast(topo_path)
   

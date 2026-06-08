@@ -1,6 +1,11 @@
 # Block 7: top-level library() calls removed. Packages resolved via
 # DESCRIPTION Imports.
-sf::sf_use_s2(FALSE)
+#
+# Gate 1C.4 (2026-06-08) cfg-isolation: the former top-level
+# `sf::sf_use_s2(FALSE)` was REMOVED (global session-state leak, and DEAD in
+# installed-package mode). The S2 toggle is scoped + restored inside the
+# unburned builders that actually perform geometry ops (see
+# internal-sup-unburned-legacy.R) and inside run_supervised_pipeline().
 
 get_corine_year_unb <- function(y) {
   if (y >= 1984 && y <= 1999) "1990"
@@ -219,6 +224,14 @@ build_unburned_from_deterministic_decisions <- function(
   verbose = TRUE
 ) {
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
+
+  # Gate 1C.4 cfg-isolation: this builder uses planar (S2-off) sf semantics for
+  # its buffer/intersect ops. Scope the toggle to this call and restore the
+  # caller's prior value on exit (replaces the removed top-level
+  # sf::sf_use_s2(FALSE); mirrors the AS07 self-scoping in the legacy builders).
+  .prev_s2 <- sf::sf_use_s2()
+  suppressMessages(sf::sf_use_s2(FALSE))
+  on.exit(suppressMessages(sf::sf_use_s2(.prev_s2)), add = TRUE)
 
   corine_year <- get_corine_year_unb(target_year)
   # Gate 1B PIECE 3: consume the immediate change-index from cfg

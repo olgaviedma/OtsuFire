@@ -11,26 +11,12 @@
 
 ns <- asNamespace("OtsuFire")
 
-mk_ss_tif <- function() {
-  f <- tempfile(fileext = ".tif")
-  terra::writeRaster(terra::rast(ncol = 4, nrow = 4, vals = 1:16), f,
-                     overwrite = TRUE)
-  f
-}
-mk_ss_gpkg <- function() {
-  f <- tempfile(fileext = ".gpkg")
-  sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                              c(0, 1), c(0, 0)))), crs = 3035)
-  sf::st_write(sf::st_sf(id = 1L, geometry = sfc), f, quiet = TRUE,
-               delete_dsn = TRUE)
-  f
-}
-mk_ss_cfg <- function(...) {
-  build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = mk_ss_gpkg(),
-    change_index = mk_ss_tif(), target_year = 2025L, ...
-  )
-}
+# Gate 1D.7: these tiny cfg fixtures are shared with the other supervised
+# contract suites via helper-supervised-contracts.R (sc_* fixtures). Kept here
+# as thin aliases so the assertions below are untouched.
+mk_ss_tif  <- sc_change_index_tif
+mk_ss_gpkg <- sc_decisions_gpkg
+mk_ss_cfg  <- sc_min_cfg
 
 # ---------------------------------------------------------------------------
 # (1) Schema + canonical-equality of the two resolved cfg sections.
@@ -133,20 +119,9 @@ capture_final_args <- function(cfg, train_gpkg) {
   captured
 }
 
-mk_oof_train_feats <- function() {
-  sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                              c(0, 1), c(0, 0)))), crs = 3035)
-  sf::st_sf(fire_uid = "a", class = "burned",
-            fold_rep1 = 1L, fold_rep2 = 1L, geometry = sfc)
-}
-mk_final_train_gpkg <- function() {
-  sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                              c(0, 1), c(0, 0)))), crs = 3035)
-  g <- tempfile(fileext = ".gpkg")
-  sf::st_write(sf::st_sf(fire_uid = "a", class = "burned", geometry = sfc),
-               g, layer = "train_features", quiet = TRUE, delete_dsn = TRUE)
-  g
-}
+# Gate 1D.7: shared with the caps suite via helper-supervised-contracts.R.
+mk_oof_train_feats  <- sc_burned_train_sf
+mk_final_train_gpkg <- sc_burned_train_gpkg
 
 test_that("Gate 1B: params reaching the OOF engine equal cfg$train_control / cfg$model_params", {
   skip_if_not_installed("sf")

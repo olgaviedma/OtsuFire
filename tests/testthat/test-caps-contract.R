@@ -38,27 +38,12 @@
 ns <- asNamespace("OtsuFire")
 `%||%` <- function(x, y) if (is.null(x)) y else x  # local mirror (internal-only)
 
-# ---- small reusable cfg fixtures (mirror test-cfg-single-source.R) ----------
-.caps_tif <- function() {
-  f <- tempfile(fileext = ".tif")
-  terra::writeRaster(terra::rast(ncol = 4, nrow = 4, vals = 1:16), f,
-                     overwrite = TRUE)
-  f
-}
-.caps_gpkg <- function() {
-  f <- tempfile(fileext = ".gpkg")
-  sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                              c(0, 1), c(0, 0)))), crs = 3035)
-  sf::st_write(sf::st_sf(id = 1L, geometry = sfc), f, quiet = TRUE,
-               delete_dsn = TRUE)
-  f
-}
-.caps_cfg <- function(...) {
-  build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = .caps_gpkg(),
-    change_index = .caps_tif(), target_year = 2025L, ...
-  )
-}
+# ---- small reusable cfg fixtures (Gate 1D.7: shared via
+#      helper-supervised-contracts.R; kept as thin aliases so the assertions
+#      below are untouched) -----------------------------------------------------
+.caps_tif  <- sc_change_index_tif
+.caps_gpkg <- sc_decisions_gpkg
+.caps_cfg  <- sc_min_cfg
 
 # The four canonical (default) cap ratios, in the bucket order used everywhere
 # (contextual, spectral, random, otsu).
@@ -254,21 +239,10 @@ test_that("PART A / Phase B: cap_spectral=2.0 reaches BOTH OOF and FINAL and the
   expect_equal(cfg_spec, 2.0)
 
   # Capture the spectral cap each engine RECEIVES (mirror the single-source
-  # capture pattern; here we only need the spectral slot).
-  mk_oof_feats <- function() {
-    sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                                c(0, 1), c(0, 0)))), crs = 3035)
-    sf::st_sf(fire_uid = "a", class = "burned",
-              fold_rep1 = 1L, fold_rep2 = 1L, geometry = sfc)
-  }
-  mk_final_gpkg <- function() {
-    sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1),
-                                                c(0, 1), c(0, 0)))), crs = 3035)
-    g <- tempfile(fileext = ".gpkg")
-    sf::st_write(sf::st_sf(fire_uid = "a", class = "burned", geometry = sfc),
-                 g, layer = "train_features", quiet = TRUE, delete_dsn = TRUE)
-    g
-  }
+  # capture pattern; here we only need the spectral slot). Gate 1D.7: the tiny
+  # train fixtures are the shared sc_* fixtures (identical content).
+  mk_oof_feats  <- sc_burned_train_sf
+  mk_final_gpkg <- sc_burned_train_gpkg
 
   cap_env <- new.env()
   testthat::local_mocked_bindings(

@@ -694,8 +694,12 @@ run_supervised_pipeline <- function(target_year, scenario,
   # inputs it points at, writes nothing. Skipped on the standalone-script path
   # (config == NULL), which has no cfg to validate against.
   if (!is.null(config)) {
+    # strict = TRUE: the SAME engine that builds the structured report, run in
+    # fail-fast mode here. A blocking-severity check FAIL aborts the run with a
+    # single aggregated error before any heavy compute (no duplicated checks).
     validate_supervised_execution(
       config                     = config,
+      strict                     = TRUE,
       target_year                = target_year,
       reuse_upstream             = reuse_upstream,
       feature_whitelist_override = feature_whitelist_override,

@@ -111,7 +111,7 @@ test_that("(1) absent/invalid CRS on a spatial input fails fast", {
   r <- terra::rast(ci_p) * 1; terra::crs(r) <- ""
   terra::writeRaster(r, ci_nocrs, overwrite = TRUE)
   cfg2 <- rebuild_cfg_with(cfg, change_index = ci_nocrs)
-  expect_error(vse_fn()(cfg2, target_year = 2017L), regexp = "CRS")
+  expect_error(vse_fn()(cfg2, strict = TRUE, target_year = 2017L), regexp = "CRS")
   expect_no_heavy_artifact(cfg2)
 })
 
@@ -125,7 +125,7 @@ test_that("(2) no spatial overlap between inputs fails fast", {
   mask_far <- file.path(td, "burneable_mask_binary_corine_2012_ETRS89_far.tif")
   terra::writeRaster(m, mask_far, overwrite = TRUE)
   cfg2 <- rebuild_cfg_with(cfg, burnable_mask = mask_far)
-  expect_error(vse_fn()(cfg2, target_year = 2017L), regexp = "overlap")
+  expect_error(vse_fn()(cfg2, strict = TRUE, target_year = 2017L), regexp = "overlap")
   expect_no_heavy_artifact(cfg2)
 })
 
@@ -142,7 +142,7 @@ test_that("(3) empty raster fails fast", {
   # terra emits a GDAL "not recognized" warning while failing to open; that is
   # expected here (the validator turns it into a clean fail-fast error).
   expect_error(
-    suppressWarnings(vse_fn()(cfg, target_year = 2017L)),
+    suppressWarnings(vse_fn()(cfg, strict = TRUE, target_year = 2017L)),
     regexp = "empty raster|cannot open")
   expect_no_heavy_artifact(cfg)
 })
@@ -150,7 +150,7 @@ test_that("(3) empty raster fails fast", {
 test_that("(4) burnable mask with ZERO burnable cells fails fast", {
   td <- tempfile("vse4_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td, mask_vals = rep(0, 100))
-  expect_error(vse_fn()(cfg, target_year = 2017L),
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2017L),
                regexp = "ZERO burnable")
   expect_no_heavy_artifact(cfg)
 })
@@ -159,7 +159,7 @@ test_that("(5) wrong year (cfg target vs input) fails fast", {
   td <- tempfile("vse5_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L)
   # The change_index path token says 2017; validating against 2018 is wrong-year.
-  expect_error(vse_fn()(cfg, target_year = 2018L),
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2018L),
                regexp = "[Ww]rong-year|target_year")
   expect_no_heavy_artifact(cfg)
 })
@@ -168,7 +168,7 @@ test_that("(5b) decisions year column without target_year fails fast", {
   td <- tempfile("vse5b_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
                     decisions_extra = list(year = 1999L))
-  expect_error(vse_fn()(cfg, target_year = 2017L),
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2017L),
                regexp = "[Ww]rong-year|year")
   expect_no_heavy_artifact(cfg)
 })
@@ -176,7 +176,7 @@ test_that("(5b) decisions year column without target_year fails fast", {
 test_that("(6) required column absent in internal_decisions fails fast", {
   td <- tempfile("vse6_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td, drop_class_final = TRUE)
-  expect_error(vse_fn()(cfg, target_year = 2017L),
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2017L),
                regexp = "class_final")
   expect_no_heavy_artifact(cfg)
 })
@@ -184,7 +184,7 @@ test_that("(6) required column absent in internal_decisions fails fast", {
 test_that("(7) incompatible column type for class label fails fast", {
   td <- tempfile("vse7_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td, class_final = 1.5)  # numeric, not char/factor
-  expect_error(vse_fn()(cfg, target_year = 2017L),
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2017L),
                regexp = "incompatible type")
   expect_no_heavy_artifact(cfg)
 })
@@ -194,7 +194,7 @@ test_that("(8) incompatible feature schema (model expects missing cols) fails fa
   cfg <- mk_vse_cfg(out_dir = td)
   fake_recipe <- list(feature_names = c("featA", "featB", "featC"))
   expect_error(
-    vse_fn()(cfg, target_year = 2017L,
+    vse_fn()(cfg, strict = TRUE, target_year = 2017L,
              recipe = fake_recipe,
              scoring_feature_names = c("featA")),  # featB/featC missing
     regexp = "Incompatible feature schema|missing")
@@ -206,7 +206,7 @@ test_that("(9) contradictory configuration fails fast", {
   cfg <- mk_vse_cfg(out_dir = td)
   # legacy protocol + oof_sampling='full' is mutually exclusive.
   expect_error(
-    vse_fn()(cfg, target_year = 2017L,
+    vse_fn()(cfg, strict = TRUE, target_year = 2017L,
              training_protocol = "legacy", oof_sampling = "full"),
     regexp = "contradictory")
   expect_no_heavy_artifact(cfg)
@@ -225,9 +225,10 @@ test_that("(10) cache belonging to ANOTHER cfg is not silently reused", {
   # Under reuse_upstream = TRUE the foreign cache is a HARD ERROR (the run would
   # consume a pool built for a different cfg).
   expect_error(
-    vse_fn()(cfg, target_year = 2017L, reuse_upstream = TRUE),
-    regexp = "foreign pool|DIFFERENT cfg|contradictory")
-  # Without reuse_upstream it is a WARNING (the pool will be rebuilt).
+    vse_fn()(cfg, strict = TRUE, target_year = 2017L, reuse_upstream = TRUE),
+    regexp = "foreign pool|DIFFERENT cfg|contradictory|blocking check")
+  # Without reuse_upstream it is a WARNING (the pool will be rebuilt) — the
+  # engine emits the warning() regardless of strict mode.
   expect_warning(
     vse_fn()(cfg, target_year = 2017L, reuse_upstream = FALSE),
     regexp = "DIFFERENT cfg")
@@ -238,8 +239,86 @@ test_that("happy path: a fully-aligned valid cfg passes all checks", {
   td <- tempfile("vse_ok_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td)
   rep <- expect_silent(vse_fn()(cfg, target_year = 2017L))
-  expect_true(all(vapply(rep$report,
-                         function(v) grepl("^ok$|^skipped:", v), logical(1))))
+  # No blocking FAIL; every row is PASS, NOT_VERIFIABLE, or SKIPPED.
+  expect_true(all(rep$status %in% c("PASS", "NOT_VERIFIABLE", "SKIPPED")))
+  expect_false(any(rep$severity == "blocking" & rep$status == "FAIL"))
+})
+
+# ===========================================================================
+# (C) Gate 1D.1: STRUCTURED REPORT + STRICT-MODE CONTRACT
+# ===========================================================================
+
+test_that("public validator returns a structured report with the documented columns", {
+  td <- tempfile("vse_rep_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td)
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  expect_s3_class(rep, "data.frame")
+  expect_identical(names(rep),
+                   c("check", "status", "message", "evidence",
+                     "severity", "verifiable"))
+  expect_type(rep$verifiable, "logical")
+  expect_true(all(rep$status %in%
+                  c("PASS", "FAIL", "NOT_VERIFIABLE", "SKIPPED")))
+  expect_true(all(rep$severity %in% c("blocking", "warning", "info")))
+  # All 10 logical checks present.
+  expect_true(all(c("crs_rasters", "empty_raster", "crs_vectors", "overlap",
+                    "zero_burnable_mask", "wrong_year", "required_columns",
+                    "incompatible_types", "feature_schema",
+                    "contradictory_config", "foreign_cache") %in% rep$check))
+})
+
+test_that("clean cfg yields PASS or NOT_VERIFIABLE/SKIPPED, never a false PASS", {
+  td <- tempfile("vse_clean_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td)
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  # Any non-PASS row must be explicitly flagged verifiable = FALSE (it was not
+  # claimed to pass; it could not be evaluated / was inapplicable).
+  non_pass <- rep[rep$status != "PASS", , drop = FALSE]
+  expect_true(all(!non_pass$verifiable))
+  # A PASS row is always verifiable = TRUE.
+  pass <- rep[rep$status == "PASS", , drop = FALSE]
+  expect_true(all(pass$verifiable))
+})
+
+test_that("strict = TRUE errors on a blocking failure; strict = FALSE returns the report", {
+  td <- tempfile("vse_strict_"); dir.create(td)
+  # A wrong-year cfg trips the (blocking) wrong_year check.
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L)
+  # strict = FALSE: no error; report carries the blocking FAIL.
+  rep <- vse_fn()(cfg, strict = FALSE, target_year = 2018L)
+  expect_s3_class(rep, "data.frame")
+  wr <- rep[rep$check == "wrong_year", , drop = FALSE]
+  expect_identical(wr$status, "FAIL")
+  expect_identical(wr$severity, "blocking")
+  # strict = TRUE: aggregated error listing the failing check.
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2018L),
+               regexp = "blocking check.*FAILED|wrong_year")
+  expect_no_heavy_artifact(cfg)
+})
+
+test_that("NOT_VERIFIABLE is recorded for the feature-schema check when no model is supplied", {
+  td <- tempfile("vse_nv_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td)
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  fs <- rep[rep$check == "feature_schema", , drop = FALSE]
+  expect_identical(fs$status, "SKIPPED")
+  expect_false(fs$verifiable)
+  # A model whose schema cannot be introspected -> NOT_VERIFIABLE (no false PASS).
+  rep2 <- vse_fn()(cfg, target_year = 2017L,
+                   recipe = list(no_feature_names = TRUE),
+                   scoring_feature_names = c("anything"))
+  fs2 <- rep2[rep2$check == "feature_schema", , drop = FALSE]
+  expect_identical(fs2$status, "NOT_VERIFIABLE")
+  expect_false(fs2$verifiable)
+})
+
+test_that("strict = FALSE never errors even with multiple blocking failures", {
+  td <- tempfile("vse_nostop_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td, mask_vals = rep(0, 100))  # zero-burnable
+  # No error despite a blocking FAIL; the report records it.
+  rep <- vse_fn()(cfg, strict = FALSE, target_year = 2017L)
+  zb <- rep[rep$check == "zero_burnable_mask", , drop = FALSE]
+  expect_identical(zb$status, "FAIL")
 })
 
 # ===========================================================================
@@ -333,8 +412,10 @@ test_that("isolation: sequential AND interleaved validation use no shared/sessio
   # Validating B with A's year (and vice versa) trips the wrong-year guard —
   # proving the validator reads the CFG it was handed, never a leftover from the
   # previous call.
-  expect_error(vse_fn()(cfgB, target_year = 2017L), regexp = "[Ww]rong-year")
-  expect_error(vse_fn()(cfgA, target_year = 2016L), regexp = "[Ww]rong-year")
+  expect_error(vse_fn()(cfgB, strict = TRUE, target_year = 2017L),
+               regexp = "[Ww]rong-year")
+  expect_error(vse_fn()(cfgA, strict = TRUE, target_year = 2016L),
+               regexp = "[Ww]rong-year")
 
   # No global session state mutated by the validator.
   expect_identical(sf::sf_use_s2(), s2_before)

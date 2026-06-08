@@ -1,4 +1,35 @@
 
+#' Score the deterministic universe with the FINAL supervised model and export
+#' the final map.
+#'
+#' SCORING CONTRACT (Gate 1C.3, 2026-06-08) — implemented in the internal
+#' `score_with_final_model()` closure below:
+#' \itemize{
+#'   \item \strong{Schema source}: the feature schema (names, order, factor
+#'     handling, `_isNA` companions, imputation medians) comes from the SAVED
+#'     FINAL-refit RECIPE (`recipe$cols$feature_cols`, `recipe$cols$x_cols`,
+#'     `recipe$impute$numeric_medians`, `recipe$impute$impute_factor_missing`)
+#'     and is NEVER re-derived from the scoring-year data.
+#'   \item \strong{NA-preserving matrix}: the design matrix is built through the
+#'     SAME builder used in training/refit (`.of_nested_coerce_features` ->
+#'     `.of_nested_apply_medians` -> `.of_nested_build_matrix`) and handed to
+#'     `xgboost::xgb.DMatrix(missing = NA)`. No `sparse.model.matrix` /
+#'     `na.action` row-dropping; degenerate (all-NA-in-train) features are
+#'     treated as xgboost-missing.
+#'   \item \strong{Row / id / order preservation}: number of predictions ==
+#'     number of input polygons; row order and IDs preserved exactly.
+#'   \item \strong{Explicit, registered reconciliation policy} (via
+#'     `.of_reconcile_scoring_schema()`; recorded in
+#'     `attr(., "scoring_schema_record")`): expected feature absent -> created as
+#'     `NA_real_` (xgboost-missing); feature fully NA -> recipe-median impute or
+#'     xgboost-missing if degenerate; unknown categorical level -> recipe
+#'     sentinel (never invented); unexpected extra column -> dropped (cannot
+#'     shift the matrix); incompatible type -> coerced per recipe or set NA.
+#'     Supports `hotspots = NULL` / all-NA hotspot features.
+#' }
+#'
+#' @keywords internal
+#' @noRd
 score_burnedlike_and_export_final_map <- function(
     result_dir,
     prefix = "2022_patch_certified_v2",
@@ -41,78 +72,13 @@ score_burnedlike_and_export_final_map <- function(
     x
   }
 
-  # Bug 2 + AS04 (0.3.0): scoring must mirror the training preprocessing.
-  # When `recipe` is supplied, numeric NAs are imputed to the medians
-  # recorded at training time (`recipe$impute$numeric_medians`); factor
-  # NAs are imputed to `recipe$impute$impute_factor_missing` (default
-  # "MISSING"). Columns whose training pass had no NAs simply have no
-  # entry in numeric_medians; their NAs are left in place and become
-  # implicit-missing under the sparse encoder.
-  prep_X_df <- function(df, recipe = NULL) {
-    numeric_medians <- if (!is.null(recipe) &&
-                           !is.null(recipe$impute$numeric_medians)) {
-      recipe$impute$numeric_medians
-    } else {
-      list()
-    }
-    impute_factor_missing <- if (!is.null(recipe) &&
-                                 !is.null(recipe$impute$impute_factor_missing)) {
-      recipe$impute$impute_factor_missing
-    } else {
-      "MISSING"
-    }
-
-    for (nm in names(df)) {
-      if (is.factor(df[[nm]])) df[[nm]] <- as.character(df[[nm]])
-      if (is.character(df[[nm]])) {
-        df[[nm]][is.na(df[[nm]])] <- impute_factor_missing
-        lv <- unique(df[[nm]])
-        df[[nm]] <- factor(df[[nm]], levels = unique(c(lv, "__OTHER__")))
-      }
-      if (is.factor(df[[nm]]) && nlevels(df[[nm]]) < 2) {
-        lv <- levels(df[[nm]])
-        levels(df[[nm]]) <- unique(c(lv, "__OTHER__"))
-      }
-      if (is.logical(df[[nm]])) df[[nm]] <- as.integer(df[[nm]])
-      if (is.numeric(df[[nm]])) {
-        v <- df[[nm]]
-        v[is.infinite(v)] <- NA_real_
-        if (nm %in% names(numeric_medians) && anyNA(v)) {
-          v[is.na(v)] <- numeric_medians[[nm]]
-        }
-        df[[nm]] <- v
-      }
-    }
-    df
-  }
-
-  # KB2 (0.3.0): sparse-aware version of the column aligner. Replaces
-  # `align_to_x_cols_dense`, which padded missing columns with explicit
-  # dense zeros that XGBoost (trained sparse-style) interpreted as real
-  # values rather than as missing. Sparse all-zero columns leave the
-  # cells unstored, which XGBoost treats as missing — the convention
-  # the model was trained under.
-  align_to_x_cols <- function(X_new, x_cols) {
-    if (!inherits(X_new, "Matrix")) {
-      stop("Internal error: align_to_x_cols expects a sparse Matrix; ",
-           "got ", paste(class(X_new), collapse = "/"), ".",
-           call. = FALSE)
-    }
-    extra <- setdiff(colnames(X_new), x_cols)
-    if (length(extra) > 0) {
-      X_new <- X_new[, setdiff(colnames(X_new), extra), drop = FALSE]
-    }
-    missing_cols <- setdiff(x_cols, colnames(X_new))
-    if (length(missing_cols) > 0) {
-      Z <- Matrix::Matrix(0, nrow = nrow(X_new),
-                          ncol = length(missing_cols),
-                          sparse = TRUE)
-      colnames(Z) <- missing_cols
-      rownames(Z) <- rownames(X_new)
-      X_new <- cbind(X_new, Z)
-    }
-    X_new[, x_cols, drop = FALSE]
-  }
+  # Gate 1C.3 (2026-06-08): the scoring preprocessing (prep_X_df) and the sparse
+  # column aligner (align_to_x_cols) were REMOVED. Scoring now routes through the
+  # SAME NA-preserving builder the training/refit core uses
+  # (.of_nested_coerce_features -> .of_nested_apply_medians ->
+  # .of_nested_build_matrix), so the recipe medians, _isNA companions, factor
+  # handling and column alignment are applied identically at train and score
+  # time. See score_with_final_model() below.
 
   harmonize_cols_for_rbind <- function(A, B) {
     A <- normalize_geom_name(A, "geom")
@@ -281,79 +247,83 @@ score_burnedlike_and_export_final_map <- function(
     x[keep_idx, , drop = FALSE]
   }
 
+  # ===================================================================
+  # Gate 1C.3 (2026-06-08): NA-preserving, recipe-driven scoring.
+  #
+  # CONTRACT (see roxygen on score_burnedlike_and_export_final_map):
+  #   * SCHEMA SOURCE: the feature names, order, factor handling and imputation
+  #     all come from the SAVED FINAL-refit RECIPE (recipe$cols$feature_cols,
+  #     recipe$cols$x_cols, recipe$impute$numeric_medians,
+  #     recipe$impute$impute_factor_missing) -- NEVER re-derived from the
+  #     scoring-year data.
+  #   * NA-PRESERVING: the design matrix is built through the SAME builder the
+  #     nested-refit training core uses (.of_nested_coerce_features ->
+  #     .of_nested_apply_medians -> .of_nested_build_matrix(ref_cols = x_cols)),
+  #     and handed to xgboost::xgb.DMatrix(missing = NA). NO sparse.model.matrix
+  #     row-dropping; NO na.omit / na.action that drops rows.
+  #   * ROW / ID / ORDER PRESERVATION: number of predictions == number of input
+  #     polygons; row order and IDs are preserved exactly (one prediction per
+  #     input row, in input order). This is the H-blocker assertion.
+  #   * EXPLICIT POLICY: schema reconciliation against the recipe is performed by
+  #     .of_reconcile_scoring_schema() (expected-absent -> NA_real_; fully-NA ->
+  #     recipe-median impute / xgboost-missing; unknown level -> sentinel; extra
+  #     column -> dropped; incompatible type -> coerced or NA). Every decision is
+  #     RECORDED (no silent corrections) and surfaced as attr(out, "scoring_schema_record").
+  #
+  # This replaces the prior sparse.model.matrix(na.action = na.pass) path, which
+  # dropped any row still carrying an NA in a degenerate (all-NA-in-train,
+  # no-median) feature -- the registered B1 / H blocker for hotspots = NULL /
+  # pre-MODIS years and any all-NA feature.
+  # ===================================================================
   score_with_final_model <- function(sf_obj, model, recipe, id_col) {
     sf_obj <- normalize_geom_name(sf_obj, "geom")
     x_df <- as.data.frame(sf::st_drop_geometry(sf_obj))
+    n_in <- nrow(sf_obj)
+
     feature_cols <- recipe$cols$feature_cols
     x_cols_train <- recipe$cols$x_cols
+    medians <- recipe$impute$numeric_medians %||% list()
+    impute_factor_missing <- recipe$impute$impute_factor_missing %||% "MISSING"
 
-    missing_feat <- setdiff(feature_cols, names(x_df))
-    if (length(missing_feat) > 0) {
-      for (nm in missing_feat) x_df[[nm]] <- NA
-      msg("WARNING: se crean %d feature cols ausentes para scoring.", length(missing_feat))
+    # ---- explicit, registered schema reconciliation (recipe-driven) ----
+    rec <- .of_reconcile_scoring_schema(x_df, recipe)
+    model_df <- rec$df
+    schema_record <- rec$record
+    if (nrow(schema_record) > 0L && isTRUE(verbose)) {
+      tbl <- table(schema_record$action)
+      msg("Scoring schema reconciliation: %s",
+          paste(sprintf("%s=%d", names(tbl), as.integer(tbl)), collapse = ", "))
     }
 
-    # KB2 + Bug 2 + AS04 (0.3.0): apply training-time numeric medians
-    # BEFORE building the matrix, then use the sparse encoder so the
-    # implicit-zero-as-missing convention matches training.
-    model_df <- prep_X_df(x_df[, feature_cols, drop = FALSE], recipe = recipe)
-    row_id <- seq_len(nrow(model_df))
-    model_df$row_id__ <- row_id
-    rownames(model_df) <- as.character(row_id)
+    # ---- NA-preserving build, identical to the training/refit path ----
+    # 1) coerce factor/char/logical exactly as training did (numeric NAs kept);
+    # 2) apply the recipe medians (degenerate -> stays NA -> xgboost-missing);
+    # 3) build the NA-preserving matrix aligned to the recipe x_cols.
+    X_df_raw <- .of_nested_coerce_features(model_df, impute_factor_missing)
+    X_df_imp <- .of_nested_apply_medians(X_df_raw, medians)
+    M <- .of_nested_build_matrix(X_df_imp, ref_cols = x_cols_train)
 
-    # ===================================================================
-    # B1 BLOCKER (registered 2026-06-07) — DO NOT switch the PRODUCTION
-    # default to nested_refit on hotspot-less / pre-MODIS years until this
-    # site is fixed.
-    #
-    # This scoring matrix is built with sparse.model.matrix(na.action = na.pass)
-    # and only the columns present in recipe$impute$numeric_medians are imputed
-    # (prep_X_df above). A column that was DEGENERATE at training time (all-NA
-    # across the whole training pool, e.g. every hs_* feature on a hotspot-less
-    # / pre-MODIS year) has NO entry in numeric_medians, so its NA cells are left
-    # NA here. sparse.model.matrix then DROPS any row that still carries an NA in
-    # such a column (the `kept_rows` realignment below silently discards them),
-    # whereas the deployed nested_refit model was trained expecting that column
-    # as xgboost-missing (xgb.DMatrix(missing = NA)). Result: rows would be lost
-    # at scoring instead of scored with the feature treated as missing.
-    #
-    # The legacy FINAL path never hits this (it fabricates a 0 for non-finite
-    # medians, so no column is ever fully NA at scoring). nested_refit does NOT
-    # fabricate, so this site is the one remaining blocker for using it in
-    # production on years that yield a fully-degenerate feature.
-    #
-    # FIX (deferred, self-contained): switch this score-matrix builder to the
-    # SAME NA-preserving path the nested core uses --
-    #   .of_nested_build_matrix(X_df_imp, ref_cols = recipe$cols$x_cols) +
-    #   xgboost::xgb.DMatrix(M, missing = NA)
-    # which preserves all-NA-feature rows as xgboost-missing instead of dropping
-    # them. Scoring logic is intentionally LEFT UNCHANGED here to preserve
-    # legacy byte-identity (see HANDOFF 2026-06-07). Mirrored in the handoff.
-    # ===================================================================
-    form <- stats::as.formula("~ . - 1")
-    mf <- stats::model.frame(form, data = model_df,
-                              na.action = stats::na.pass)
-    X_new <- Matrix::sparse.model.matrix(form, data = mf)
-
-    drop_cols <- grep("^row_id__", colnames(X_new), value = TRUE)
-    if (length(drop_cols) > 0) {
-      X_new <- X_new[, setdiff(colnames(X_new), drop_cols), drop = FALSE]
+    # Row-preservation invariant: one matrix row per input polygon, same order.
+    if (nrow(M) != n_in) {
+      stop(sprintf(
+        "score_with_final_model(): NA-preserving matrix has %d rows but %d input polygons (row preservation violated).",
+        nrow(M), n_in), call. = FALSE)
     }
 
-    kept_rows <- suppressWarnings(as.integer(rownames(X_new)))
-    kept_rows <- kept_rows[!is.na(kept_rows)]
-    X_new <- align_to_x_cols(X_new, x_cols_train)
+    dmat <- xgboost::xgb.DMatrix(M, missing = NA)
+    p <- as.numeric(predict(model, dmat))
+    if (length(p) != n_in) {
+      stop(sprintf(
+        "score_with_final_model(): %d predictions for %d input polygons (length mismatch).",
+        length(p), n_in), call. = FALSE)
+    }
 
-    dmat <- xgboost::xgb.DMatrix(X_new)
-    p_kept <- predict(model, dmat)
-
-    p_full <- rep(NA_real_, nrow(sf_obj))
-    p_full[kept_rows] <- as.numeric(p_kept)
-
-    sf_obj |>
+    out <- sf_obj |>
       dplyr::mutate(
-        p_burned = p_full
+        p_burned = p
       )
+    attr(out, "scoring_schema_record") <- schema_record
+    out
   }
 
   if (!file.exists(model_rds)) stop("No existe model_rds: ", model_rds)

@@ -1,12 +1,15 @@
 # KB2 + Bug 2 + AS04 (OtsuFire 0.3.0): encoder parity at scoring.
 #
-# These tests train a tiny XGBoost model and exercise the imputation
-# + sparse encoder symmetry between training and scoring. The fixes
-# being verified:
-#   * prep_X_df at scoring applies recipe$impute$numeric_medians.
-#   * score_with_final_model uses Matrix::sparse.model.matrix.
-#   * align_to_x_cols pads missing columns with sparse zero columns
-#     (implicit-missing) instead of dense explicit zeros.
+# These tests train a tiny XGBoost model and exercise the imputation +
+# encoder symmetry between training and scoring: re-encoding the same imputed
+# feature frame reproduces the training-time prediction, and recipe-median
+# imputation makes an NA-bearing scoring frame match the imputed one.
+#
+# NOTE (Gate 1C.3, 2026-06-08): the production scoring closure
+# (score_with_final_model) no longer uses prep_X_df / sparse.model.matrix /
+# align_to_x_cols; it routes through the NA-preserving recipe-driven builder
+# (.of_nested_* + xgb.DMatrix(missing = NA)). These parity tests reimplement the
+# encoding inline and remain valid as a standalone median-imputation property.
 
 train_tiny_model <- function(seed = 1L) {
   skip_if_not_installed("xgboost")

@@ -413,6 +413,146 @@
   )
 }
 
+# =============================================================================
+# Gate 1C.3 (2026-06-08): recipe-driven scoring schema reconciliation.
+#
+# The H BLOCKER: the supervised SCORING path must work when hotspots = NULL and
+# when one or several features are entirely NA -- WITHOUT dropping rows and
+# WITHOUT reconstructing the feature schema from the scoring-year data. The
+# canonical schema source is the RECIPE saved during the FINAL refit
+# (recipe$cols$feature_cols / recipe$cols$x_cols / recipe$impute$numeric_medians
+# / recipe$impute$impute_factor_missing), NEVER re-derived from the scoring year.
+#
+# This helper reconciles a scoring data.frame against the SAVED recipe feature
+# schema and returns the reconciled feature data.frame PLUS an explicit,
+# REGISTERED reconciliation record (one row per recorded decision; no silent
+# corrections). The five registered cases:
+#
+#   1. EXPECTED FEATURE ABSENT  -> create it as NA_real_ (numeric) so it becomes
+#      xgboost-missing; recorded as action = "create_absent_numeric_NA". (Absent
+#      columns are created NA -- NOT zero -- so the all-NA-feature / hotspots=NULL
+#      path is treated as missing, exactly as the refit model was trained.)
+#   2. FEATURE FULLY NA         -> kept as-is (NA preserved). Downstream median
+#      imputation (.of_nested_apply_medians) fills it from the recipe median, or
+#      leaves it NA when the recipe median is itself degenerate (xgboost-missing).
+#      Recorded as action = "feature_fully_NA".
+#   3. NEW/UNKNOWN CATEGORICAL LEVEL -> mapped to the recipe sentinel
+#      (impute_factor_missing) when the level is unseen, never silently invented.
+#      Recorded as action = "remap_unknown_level".
+#   4. UNEXPECTED EXTRA COLUMN  -> dropped (the builder aligns to recipe$x_cols so
+#      extras cannot shift the matrix), recorded as action = "drop_extra_column".
+#   5. INCOMPATIBLE TYPE        -> coerced per the recipe (numeric expected ->
+#      as.numeric; non-coercible -> NA + flagged), recorded as
+#      action = "coerce_type" or "coerce_type_failed".
+#
+# @param df scoring feature data.frame (geometry already dropped).
+# @param recipe the saved FINAL-refit recipe (must carry $cols$feature_cols and
+#   $impute$impute_factor_missing; $cols$x_cols used by the caller).
+# @return list(df = reconciled feature data.frame restricted to recipe
+#   feature_cols in recipe order, record = data.frame reconciliation log).
+# @keywords internal
+# @noRd
+.of_reconcile_scoring_schema <- function(df, recipe) {
+  feature_cols <- recipe$cols$feature_cols
+  impute_factor_missing <- recipe$impute$impute_factor_missing %||% "MISSING"
+  # The recipe records numeric_medians only for non-degenerate columns; the
+  # presence/absence of a name there is provenance, not a coercion target here.
+
+  rec <- list()
+  add_rec <- function(column, case, action, detail = NA_character_) {
+    rec[[length(rec) + 1L]] <<- data.frame(
+      column = column, case = case, action = action,
+      detail = detail, stringsAsFactors = FALSE
+    )
+  }
+
+  present <- names(df)
+
+  # CASE 4: unexpected extra columns (anything not in the recipe feature schema).
+  # They are simply not selected below; record each so the drop is not silent.
+  extra <- setdiff(present, feature_cols)
+  for (nm in extra) add_rec(nm, "extra_column", "drop_extra_column")
+
+  # CASE 1: expected feature absent -> create as NA_real_ (xgboost-missing).
+  missing_feat <- setdiff(feature_cols, present)
+  for (nm in missing_feat) {
+    df[[nm]] <- NA_real_
+    add_rec(nm, "expected_absent", "create_absent_numeric_NA")
+  }
+
+  # Restrict + reorder to the recipe feature schema (drops the extras).
+  df <- df[, feature_cols, drop = FALSE]
+
+  # The supervised feature schema is NUMERIC by construction (the design-matrix
+  # builder uses cat_cols = character(0); no categorical predictor survives into
+  # the whitelist). A recipe feature therefore carries no factor levels, and any
+  # character/factor arriving at scoring is an INCOMPATIBLE TYPE for a numeric
+  # feature -> coerce to numeric (CASE 5), never treated as a new categorical
+  # level. If a future build introduces a genuine categorical recipe feature
+  # (recipe$cols$factor_levels), the unseen-level remap (CASE 3) would apply
+  # instead; that branch is retained for forward-compatibility.
+  recipe_factor_levels <- recipe$cols$factor_levels %||% list()
+
+  for (nm in feature_cols) {
+    col <- df[[nm]]
+    is_recipe_factor <- nm %in% names(recipe_factor_levels)
+    if ((is.character(col) || is.factor(col)) && is_recipe_factor) {
+      # CASE 3: genuine categorical recipe feature -> map unseen levels to the
+      # recipe sentinel (never invent a level).
+      lv <- recipe_factor_levels[[nm]]
+      unseen <- setdiff(unique(as.character(col)), c(lv, NA))
+      if (length(unseen) > 0L) {
+        col_chr <- as.character(col)
+        col_chr[col_chr %in% unseen] <- impute_factor_missing
+        df[[nm]] <- col_chr
+        add_rec(nm, "categorical", "remap_unknown_level",
+                detail = paste0("unseen: ", paste(unseen, collapse = ";")))
+      }
+    } else if (is.character(col) || is.factor(col)) {
+      # CASE 5 (numeric schema): a character/factor on a NUMERIC feature is an
+      # incompatible type -> coerce to numeric (uncoercible cells -> NA, which
+      # the median recipe then imputes / leaves xgboost-missing).
+      coerced <- suppressWarnings(as.numeric(as.character(col)))
+      df[[nm]] <- coerced
+      if (anyNA(coerced) & !all(is.na(coerced))) {
+        add_rec(nm, "incompatible_type", "coerce_type",
+                "char/factor on numeric feature -> numeric (some cells NA)")
+      } else {
+        add_rec(nm, "incompatible_type", "coerce_type",
+                "char/factor on numeric feature -> numeric")
+      }
+    } else if (is.logical(col)) {
+      df[[nm]] <- as.integer(col)
+      add_rec(nm, "incompatible_type", "coerce_type", "logical->integer")
+    } else if (!is.numeric(col)) {
+      # CASE 5: incompatible type -> coerce per recipe (numeric expected).
+      coerced <- suppressWarnings(as.numeric(as.character(col)))
+      if (all(is.na(coerced)) && !all(is.na(col))) {
+        df[[nm]] <- rep(NA_real_, length(col))
+        add_rec(nm, "incompatible_type", "coerce_type_failed",
+                "uncoercible to numeric; set NA")
+      } else {
+        df[[nm]] <- coerced
+        add_rec(nm, "incompatible_type", "coerce_type", "->numeric")
+      }
+    }
+    # CASE 2: feature fully NA (after the above) -> record; value left NA so the
+    # median recipe imputes it (or leaves it xgboost-missing if degenerate).
+    if (all(is.na(df[[nm]]))) {
+      add_rec(nm, "feature_fully_NA", "feature_fully_NA")
+    }
+  }
+
+  record <- if (length(rec) > 0L) {
+    do.call(rbind, rec)
+  } else {
+    data.frame(column = character(0), case = character(0),
+               action = character(0), detail = character(0),
+               stringsAsFactors = FALSE)
+  }
+  list(df = df, record = record)
+}
+
 # Transform a feature data.frame with a refit recipe (medians + factor handling)
 # and return a sparse design matrix aligned to `ref_x_cols`. Used to score the
 # outer_test fold with the REFIT medians (no refit on outer_test). Numeric NAs

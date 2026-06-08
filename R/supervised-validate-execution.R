@@ -30,6 +30,156 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
+# Gate 1D.3 — year-validation classification + evidence hierarchy (check 5).
+# ----------------------------------------------------------------------------
+
+#' Classify a supervised input as YEAR-SPECIFIC or ATEMPORAL (check-5 lookup).
+#'
+#' @description
+#' EXPLICIT lookup (not ad hoc) driving the robust year check. YEAR-SPECIFIC
+#' inputs MUST agree with the resolved cfg target year; ATEMPORAL inputs MUST
+#' NOT be required to carry the run year — they are SKIPPED by the year check.
+#'
+#' YEAR-SPECIFIC: `internal_decisions`, `change_index` (immediate change index),
+#'   `delayed_change_index` (delayed change index), `hotspots`,
+#'   `reference_burned_map` (the run's reference burned map, when supplied).
+#' ATEMPORAL: `topo`, `peninsula_shapefile`, `burnable_mask`, and the CORINE
+#'   products (`corine_raster`) — CORINE encodes its OWN epoch/year (e.g. 2012),
+#'   not the run target year, so a CORINE filename token must never be mistaken
+#'   for the run year.
+#'
+#' @param name character scalar input name (a key of `cfg$inputs`).
+#' @return `"year_specific"`, `"atemporal"`, or `"unknown"` (treated as
+#'   atemporal/skipped by the caller — never failed for lacking the run year).
+#' @keywords internal
+#' @noRd
+.of_vse_year_class <- function(name) {
+  year_specific <- c("internal_decisions", "change_index",
+                     "delayed_change_index", "hotspots",
+                     "reference_burned_map")
+  atemporal     <- c("topo", "peninsula_shapefile", "burnable_mask",
+                     "corine_raster")
+  if (name %in% year_specific) "year_specific"
+  else if (name %in% atemporal) "atemporal"
+  else "unknown"
+}
+
+#' Extract an unambiguous standalone 4-digit year token from a filename.
+#'
+#' A "year-like" token is a standalone `(19|20)\\d\\d` not glued to other digits
+#' (so `res90m`, `_res90m_`, a CRS code, or a resolution number is NOT matched),
+#' constrained to a plausible run-year magnitude window. Returns the UNIQUE
+#' year tokens found (so an ambiguous filename carrying two different years
+#' yields >1 element and is treated as non-determinable by the caller).
+#'
+#' @keywords internal
+#' @noRd
+.of_vse_filename_year <- function(path) {
+  if (is.null(path) || is.na(path) || !nzchar(path)) return(integer(0))
+  bn <- basename(path)
+  m <- regmatches(bn, gregexpr("(?<![0-9])(19|20)[0-9]{2}(?![0-9])",
+                               bn, perl = TRUE))[[1]]
+  if (length(m) == 0L) return(integer(0))
+  y <- suppressWarnings(as.integer(m))
+  y <- y[!is.na(y) & y >= 1900L & y <= 2100L]
+  sort(unique(y))
+}
+
+#' Resolve a YEAR-SPECIFIC input's year via the Gate 1D.3 evidence hierarchy.
+#'
+#' @description
+#' For ONE year-specific input, attempt to determine its year, IN ORDER:
+#'   1. a `year` / `fire_year` (case-insensitive) COLUMN for vector inputs;
+#'   2. explicit layer/raster METADATA that records a year (best-effort);
+#'   3. an UNAMBIGUOUS standalone 4-digit FILENAME token;
+#'   4. a cfg-registered DECLARED year for the input (`spec$declared_year`).
+#' The FIRST level that yields year(s) decides the outcome:
+#'   - the resolved year(s) MATCH the expected year -> `status = "match"`;
+#'   - they DIFFER -> `status = "mismatch"` (blocking FAIL in the caller);
+#'   - if NO level yields a year -> `status = "not_verifiable"` (NOT a false
+#'     PASS; the caller records NOT_VERIFIABLE, non-blocking by itself).
+#' Honesty rule: absence of evidence is recorded as NOT_VERIFIABLE, NEVER as a
+#' PASS — the function does not fabricate certainty.
+#'
+#' @param name character input name.
+#' @param path resolved on-disk path (or `NULL`).
+#' @param expected_year integer expected (resolved cfg target) year.
+#' @param declared optional cfg-registered declared year (`spec$declared_year`).
+#' @return list(status, years, evidence, checked) where `evidence` names the
+#'   hierarchy level used (or, for not_verifiable, the levels checked).
+#' @keywords internal
+#' @noRd
+.of_vse_resolve_input_year <- function(name, path, expected_year,
+                                       declared = NULL) {
+  ty <- suppressWarnings(as.integer(expected_year)[1L])
+  decide <- function(years, evidence) {
+    years <- sort(unique(years[!is.na(years)]))
+    if (!length(years)) return(NULL)
+    list(status = if (ty %in% years) "match" else "mismatch",
+         years = years, evidence = evidence)
+  }
+  is_vector <- name %in% c("internal_decisions", "hotspots",
+                           "reference_burned_map")
+
+  # --- level 1: a year / fire_year column (vector inputs only) --------------
+  if (is_vector && !is.null(path) && file.exists(path)) {
+    attrs <- tryCatch(
+      sf::st_drop_geometry(sf::st_read(path, quiet = TRUE)),
+      error = function(e) NULL)
+    if (!is.null(attrs) && nrow(attrs) > 0L) {
+      yr_col <- names(attrs)[tolower(names(attrs)) %in% c("year", "fire_year")]
+      if (length(yr_col) >= 1L) {
+        yv <- suppressWarnings(as.integer(attrs[[yr_col[1L]]]))
+        d <- decide(yv, sprintf("column:%s", yr_col[1L]))
+        if (!is.null(d)) return(c(d, list(checked = "column")))
+      }
+    }
+  }
+
+  # --- level 2: explicit raster/layer metadata (best-effort) ----------------
+  # terra/GDAL may expose a year via per-layer names or metadata tags. We treat
+  # a metadata-derived year as evidence only when it is unambiguous.
+  if (!is_vector && !is.null(path) && file.exists(path)) {
+    meta_years <- tryCatch({
+      r <- terra::rast(path)
+      toks <- c(terra::names(r),
+                tryCatch(terra::time(r), error = function(e) NULL),
+                unlist(tryCatch(terra::metags(r), error = function(e) NULL)))
+      toks <- toks[!is.na(toks)]
+      yy <- integer(0)
+      for (tk in as.character(toks)) {
+        yy <- c(yy, .of_vse_filename_year(tk))
+      }
+      sort(unique(yy))
+    }, error = function(e) integer(0))
+    if (length(meta_years) == 1L) {
+      d <- decide(meta_years, "metadata")
+      if (!is.null(d)) return(c(d, list(checked = "metadata")))
+    }
+  }
+
+  # --- level 3: unambiguous filename token ----------------------------------
+  if (!is.null(path)) {
+    ftok <- .of_vse_filename_year(path)
+    if (length(ftok) == 1L) {
+      d <- decide(ftok, "filename")
+      if (!is.null(d)) return(c(d, list(checked = "filename")))
+    }
+  }
+
+  # --- level 4: cfg-registered declared year --------------------------------
+  if (!is.null(declared)) {
+    dy <- suppressWarnings(as.integer(declared))
+    d <- decide(dy, "cfg_declared_year")
+    if (!is.null(d)) return(c(d, list(checked = "cfg_declared_year")))
+  }
+
+  list(status = "not_verifiable", years = integer(0),
+       evidence = "no year via column/metadata/filename/cfg_declared_year",
+       checked = "column,metadata,filename,cfg_declared_year")
+}
+
+# ----------------------------------------------------------------------------
 # Report-record constructor. ONE row of the structured report.
 # ----------------------------------------------------------------------------
 .of_vse_record <- function(check, status, message = NA_character_,
@@ -296,55 +446,108 @@
   }
 
   # ===========================================================================
-  # (5) Wrong year: filename token / hotspot rows / decisions year column.
+  # (5) Wrong year — ROBUST, evidence-hierarchy year validation (Gate 1D.3).
+  #
+  # CONTRACT (see .of_vse_year_class() / .of_vse_resolve_input_year() below):
+  #   * INPUT CLASSIFICATION is explicit, not ad hoc. YEAR-SPECIFIC inputs MUST
+  #     agree with the resolved cfg target year; ATEMPORAL inputs (topo,
+  #     peninsula, burnable_mask, CORINE products — CORINE encodes its OWN epoch,
+  #     not the run target) are SKIPPED (never failed for lacking the run year).
+  #   * For each YEAR-SPECIFIC input we resolve a year via a strict HIERARCHY:
+  #       (1) a `year` / `fire_year` column (vector inputs);
+  #       (2) explicit layer/raster metadata (if present);
+  #       (3) an UNAMBIGUOUS standalone 4-digit filename token of the right
+  #           magnitude (CORINE epoch / resolution numbers are excluded by
+  #           construction — those inputs are ATEMPORAL and never reach here);
+  #       (4) a cfg-registered declared year per input (`spec$declared_year`),
+  #           if the cfg records one.
+  #   * MATCH    -> PASS, evidence names the hierarchy level used.
+  #   * MISMATCH -> FAIL (blocking), naming input + found year + expected year.
+  #   * NO EVIDENCE at any level -> NOT_VERIFIABLE (verifiable = FALSE), NOT a
+  #     false PASS and NOT blocking by itself; the message lists the levels
+  #     checked and why none yielded a year.
+  # The engine collapses the per-input outcomes into ONE `wrong_year` record:
+  # FAIL if any input mismatches (the first mismatch raises, recorded blocking);
+  # otherwise PASS/NOT_VERIFIABLE summarising the per-input evidence.
   # ===========================================================================
-  token_year <- function(p) {
-    if (is.null(p)) return(NULL)
-    m <- regmatches(basename(p), gregexpr("(?<![0-9])(19|20)[0-9]{2}(?![0-9])",
-                                          basename(p), perl = TRUE))[[1]]
-    if (length(m) == 0L) return(NULL)
-    suppressWarnings(as.integer(m))
-  }
+  year_targets <- list(
+    change_index         = raster_inputs[["change_index"]],
+    delayed_change_index = raster_inputs[["delayed_change_index"]],
+    hotspots             = hs_path,
+    internal_decisions   = id_path,
+    reference_burned_map = .of_sup_input_path(config, "reference_burned_map")
+  )
+  year_targets <- year_targets[
+    vapply(names(year_targets),
+           function(nm) .of_vse_year_class(nm) == "year_specific" &&
+                        !is.null(year_targets[[nm]]),
+           logical(1))]
+
   run_check("wrong_year", "blocking", {
-    for (nm in names(raster_inputs)) {
-      yrs <- token_year(raster_inputs[[nm]])
-      # corine_raster / burnable_mask filenames encode the CORINE EPOCH year,
-      # NOT the target year — skip those two.
-      if (nm %in% c("corine_raster", "burnable_mask")) next
-      if (!is.null(yrs) && length(yrs) == 1L && !(ty %in% yrs)) {
-        stop(sprintf(paste0("validate_supervised_execution() [input='%s']: path ",
-                            "encodes year %d but cfg$target_year = %d. ",
-                            "Wrong-year input; check the cfg path for this ",
-                            "route."), nm, yrs[1L], ty),
+    rows <- list()
+    for (nm in names(year_targets)) {
+      yr <- .of_vse_resolve_input_year(
+        nm, year_targets[[nm]], expected_year = ty,
+        declared = tryCatch(config$inputs[[nm]]$declared_year,
+                            error = function(e) NULL))
+      if (yr$status == "mismatch") {
+        stop(sprintf(paste0("validate_supervised_execution() [input='%s']: ",
+                            "resolved year %s (evidence: %s) does NOT match the ",
+                            "expected cfg$target_year = %d. Wrong-year input; ",
+                            "check the cfg route for this input."),
+                     nm,
+                     paste(yr$years, collapse = "/"), yr$evidence, ty),
              call. = FALSE)
       }
+      rows[[nm]] <- yr
     }
-    if (!is.null(hs_path) && file.exists(hs_path)) {
-      yrs <- token_year(hs_path)
-      if (!is.null(yrs) && length(yrs) == 1L && !(ty %in% yrs)) {
-        stop(sprintf(paste0("validate_supervised_execution() [input='hotspots']: ",
-                            "path encodes year %d but cfg$target_year = %d."),
-                     yrs[1L], ty),
-             call. = FALSE)
-      }
-      hs_attr <- tryCatch(sf::st_drop_geometry(sf::st_read(hs_path, quiet = TRUE)),
-                          error = function(e) NULL)
-      if (!is.null(hs_attr) && "year" %in% names(hs_attr) && nrow(hs_attr) > 0L) {
-        hy <- suppressWarnings(as.integer(hs_attr[["year"]]))
-        if (all(is.na(hy)) || !(ty %in% hy)) {
-          stop(sprintf(paste0("validate_supervised_execution() ",
-                              "[input='hotspots']: layer has a 'year' column but ",
-                              "NO row for cfg$target_year = %d (years present: ",
-                              "%s). Wrong-year hotspots."), ty,
-                       paste(sort(unique(hy[!is.na(hy)])), collapse = ", ")),
-               call. = FALSE)
-        }
-      }
+    matched <- names(rows)[vapply(rows, function(r) r$status == "match",
+                                  logical(1))]
+    unverif <- names(rows)[vapply(rows, function(r) r$status == "not_verifiable",
+                                  logical(1))]
+    if (length(matched) > 0L && length(unverif) == 0L) {
+      add(.of_vse_record(
+        "wrong_year", "PASS",
+        sprintf("Every year-specific input agrees with cfg$target_year = %d.",
+                ty),
+        evidence = paste(sprintf("%s[%s]", matched,
+                                 vapply(rows[matched],
+                                        function(r) r$evidence, character(1))),
+                         collapse = "; "),
+        severity = "blocking"))
+    } else if (length(matched) > 0L) {
+      add(.of_vse_record(
+        "wrong_year", "PASS",
+        sprintf(paste0("All year-resolvable inputs agree with cfg$target_year ",
+                       "= %d; %d input(s) carried no verifiable year evidence ",
+                       "(%s) — recorded as not-verifiable, not a failure."),
+                ty, length(unverif), paste(unverif, collapse = ", ")),
+        evidence = paste(c(
+          sprintf("%s[%s]", matched,
+                  vapply(rows[matched], function(r) r$evidence, character(1))),
+          sprintf("%s[NOT_VERIFIABLE]", unverif)), collapse = "; "),
+        severity = "blocking"))
+    } else if (length(unverif) > 0L) {
+      add(.of_vse_record(
+        "wrong_year", "NOT_VERIFIABLE",
+        sprintf(paste0("No year-specific input carried verifiable year ",
+                       "evidence (checked column -> metadata -> filename token ",
+                       "-> cfg declared_year). Cannot confirm agreement with ",
+                       "cfg$target_year = %d; recorded NOT_VERIFIABLE rather ",
+                       "than a false PASS. Inputs: %s."),
+                ty, paste(unverif, collapse = ", ")),
+        evidence = paste(sprintf("%s[%s]", unverif,
+                                 vapply(rows[unverif],
+                                        function(r) r$evidence, character(1))),
+                         collapse = "; "),
+        severity = "warning", verifiable = FALSE))
+    } else {
+      add(.of_vse_record(
+        "wrong_year", "SKIPPED",
+        "No year-specific input resolved (all inputs absent or atemporal).",
+        evidence = "no year-specific inputs", severity = "info",
+        verifiable = FALSE))
     }
-    add(.of_vse_record("wrong_year", "PASS",
-                       sprintf("No input contradicts cfg$target_year = %d.", ty),
-                       evidence = sprintf("target_year=%d", ty),
-                       severity = "blocking"))
   })
 
   # ===========================================================================
@@ -383,20 +586,9 @@
                               "coerced via as.character())."), class(cf)[1L]),
                call. = FALSE)
         }
-        # (5b) decisions year column, when present, must include target_year.
-        yr_col <- intersect(c("year", "fire_year"), names(id_attr))
-        if (length(yr_col) >= 1L && nrow(id_attr) > 0L) {
-          dy <- suppressWarnings(as.integer(id_attr[[yr_col[1L]]]))
-          if (!all(is.na(dy)) && !(ty %in% dy)) {
-            stop(sprintf(paste0("validate_supervised_execution() ",
-                                "[input='internal_decisions']: layer has a '%s' ",
-                                "column but NO row for cfg$target_year = %d ",
-                                "(years present: %s). Wrong-year decisions."),
-                         yr_col[1L], ty,
-                         paste(sort(unique(dy[!is.na(dy)])), collapse = ", ")),
-                 call. = FALSE)
-          }
-        }
+        # NOTE: the internal_decisions year-column check moved to the unified,
+        # evidence-hierarchy check 5 (wrong_year) above (Gate 1D.3); it is no
+        # longer duplicated here.
         add(.of_vse_record("incompatible_types", "PASS",
                            "'class_final' is character/factor (valid class label type).",
                            evidence = sprintf("class=%s", class(cf)[1L]),
@@ -645,10 +837,23 @@
 #'   \item \strong{Empty raster} — a raster input with zero rows or columns.
 #'   \item \strong{Mask with ZERO burnable cells} — the burnable mask aligned to
 #'     the change-index template via [.of_align_mask_to_template()].
-#'   \item \strong{Wrong year} — `config$target_year` inconsistent with a
-#'     `<name>_<year>` token in a resolved input PATH, a hotspots `year` column
-#'     with no matching row, or an internal_decisions `year`/`fire_year` column
-#'     that never equals the target year. (Deeper closure is Gate 1D.3.)
+#'   \item \strong{Wrong year} (Gate 1D.3, robust evidence hierarchy). Inputs
+#'     are CLASSIFIED explicitly (\code{.of_vse_year_class()}): YEAR-SPECIFIC
+#'     inputs (internal_decisions, change_index, delayed_change_index, hotspots,
+#'     reference_burned_map) MUST agree with the resolved `config$target_year`;
+#'     ATEMPORAL inputs (topo, peninsula_shapefile, burnable_mask, and the CORINE
+#'     products — CORINE encodes its OWN epoch, not the run year) are SKIPPED and
+#'     never failed for lacking the run year. For each year-specific input the
+#'     year is resolved via a strict HIERARCHY
+#'     (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
+#'     (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
+#'     filename token (CORINE epochs / resolution numbers are excluded by
+#'     construction); (4) a cfg-registered declared year (`spec$declared_year`).
+#'     A determinable year that DIFFERS from the expected year FAILs (blocking,
+#'     naming input + found + expected); a MATCH PASSes with evidence of the
+#'     level used; and an input with NO verifiable year at ANY level is recorded
+#'     NOT_VERIFIABLE (verifiable = FALSE) — never a false PASS, and not blocking
+#'     by itself.
 #'   \item \strong{Required columns absent} — internal_decisions missing its
 #'     label column `class_final`.
 #'   \item \strong{Incompatible types} — the `class_final` label column is not

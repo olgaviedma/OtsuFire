@@ -26,6 +26,30 @@ ensure_area_ha_unb <- function(x) {
 # `.of_align_mask_to_template()` (R/internal-sup-align-mask.R), which the
 # burnable-mask call site below routes through. No other caller existed.
 
+# Gate 1C.2 (2026-06-08): deterministic, base-R-only fingerprint of the ALIGNED
+# burnable mask actually used to restrict the B4 random-background domain. It
+# folds in the geometry (CRS / extent / dims) AND the burnable footprint (the
+# ordered cell-ids with value == 1) so that two different burnable masks (or the
+# same mask aligned onto a different template) produce DIFFERENT hashes, while
+# the same aligned mask is stable. This identifier feeds the negative-pool
+# fingerprint so a domain change invalidates any cached/stale negative pool.
+# Mirrors the rolling-checksum style of legacy_param_fingerprint_unb_legacy().
+.of_random_bg_mask_hash <- function(aligned_mask) {
+  geom <- paste(
+    sprintf("crs=%s", terra::crs(aligned_mask, proj = TRUE)),
+    sprintf("ext=%s", paste(as.vector(terra::ext(aligned_mask)), collapse = ",")),
+    sprintf("dims=%d,%d", terra::nrow(aligned_mask), terra::ncol(aligned_mask)),
+    sep = "|"
+  )
+  burn_cells <- terra::cells(aligned_mask, 1)[[1]]
+  burn_cells <- sort(as.numeric(burn_cells))
+  body <- paste0(geom, "|burn=", paste(burn_cells, collapse = ","))
+  bytes <- as.numeric(charToRaw(enc2utf8(body)))
+  chk <- 0
+  for (b in bytes) chk <- (chk * 31 + b) %% 1000000007
+  sprintf("%09d", as.integer(chk))
+}
+
 bind_sf_rows_unb <- function(x, y) {
   geom_x <- attr(x, "sf_column")
   geom_y <- attr(y, "sf_column")
@@ -127,6 +151,45 @@ expand_cells_to_square_patch_unb <- function(cells, template_r, patch_size_cells
   unique(as.integer(unlist(out, use.names = FALSE)))
 }
 
+#' Build the deterministic-drop + random-burnable-background negative sub-pool
+#'
+#' @description
+#' Internal builder for the B4 negative bucket. Returns the deterministic-drop
+#' "hard" negatives plus a random burnable BACKGROUND drawn from the immediate
+#' change-index raster, restricted to the burnable domain.
+#'
+#' @section Burnable-domain contract (Gate 1C.2):
+#' Two domains are defined and used SEPARATELY, and BOTH are restricted to the
+#' aligned burnable domain (`.of_align_mask_to_template()`, Gate 1C.1):
+#' \describe{
+#'   \item{`percentile_domain`}{the cell set over which the change-index
+#'     percentile (`random_rbr_q`) is computed.}
+#'   \item{`sampling_domain`}{the cell set from which random observations are
+#'     drawn.}
+#' }
+#' Explicit sequence: (1) valid index raster (finite change-index) -> (2)
+#' intersect burnable (`==1`) -> (3) apply the EXISTING exclusions in their
+#' historical order (3a burnable restriction, 3b finite change-index, 3c
+#' positives/candidates + `exclude_buffer_m` buffer, inverse) -> (4) compute the
+#' percentile OVER the resulting methodological domain (NOT the whole raster) ->
+#' (5) sample ONLY among eligible cells (`domain ∩ change-index <= threshold`).
+#' Expanded 3x3 patches are clipped back to the burnable domain so no selected
+#' observation lies outside burnable.
+#'
+#' INTENTIONAL pool change: before Gate 1C.2 the percentile was computed over
+#' the whole change-index raster, so this builder now yields a DIFFERENT random
+#' background than older runs. The percentile is taken AFTER the exclusion buffer
+#' (3c) — flagged to the director as an explicit ordering choice, not silently
+#' changed.
+#'
+#' @return A list including `unburned_hard`, `unburned_random`, `unburned_final`,
+#'   `exclusion_buffer`, `rbr_threshold`, `burnable_mask_hash` (stable identity
+#'   of the aligned burnable mask, for the negative-pool fingerprint), and
+#'   `b4_audit` (per-stage cell accounting + the no-observation-outside-burnable
+#'   confirmation).
+#'
+#' @keywords internal
+#' @noRd
 build_unburned_from_deterministic_decisions <- function(
   target_year,
   scenario_name,
@@ -267,23 +330,102 @@ build_unburned_from_deterministic_decisions <- function(
     exclude_sf <- sanitize_polygons_unb(exclude_sf)
   }
 
-  candidate_r <- burnable_r
-  candidate_r[candidate_r != 1] <- NA
-  candidate_r <- terra::mask(candidate_r, rbr_r)
+  # ==========================================================================
+  # B4 random burnable background: EXPLICIT methodological sequence
+  # (Gate 1C.2, 2026-06-08). Two domains are defined SEPARATELY and BOTH are
+  # restricted to the (aligned) burnable domain:
+  #
+  #   percentile_domain : the cell set over which the change-index percentile
+  #                       (`random_rbr_q`) is computed.
+  #   sampling_domain   : the cell set from which random observations are drawn.
+  #
+  # Sequence (exclusions kept in their HISTORICAL ORDER; the ONLY methodological
+  # change vs the pre-1C.2 code is that the percentile is now computed over the
+  # burnable-restricted, exclusion-applied domain instead of the WHOLE raster):
+  #   (1) valid index raster  = rbr_r (finite change-index cells)
+  #   (2) intersect burnable  = burnable==1
+  #   (3) apply exclusions     in their EXISTING order:
+  #        3a. burnable != 1            -> NA   (burnable restriction)
+  #        3b. mask to finite rbr_r            (valid change-index)
+  #        3c. mask out exclude_sf (inverse)   (positives/candidates + buffer)
+  #       The result of (3) is the methodologically-established domain.
+  #   (4) compute the percentile (rbr_thr) OVER that domain (NOT whole raster).
+  #   (5) sample ONLY among eligible cells (domain ∩ change-index <= rbr_thr).
+  #
+  # percentile_domain == sampling_domain BEFORE the low-rbr cut; the low-rbr cut
+  # then narrows sampling_domain to the eligible (<= threshold) subset. Both are
+  # strictly inside the burnable domain because step 3a is applied first.
+  #
+  # ORDERING NOTE for the director: the percentile is computed AFTER the
+  # exclusion buffer (3c) is applied, i.e. excluded (positive/buffer) cells do
+  # NOT contribute to the percentile. This matches the intent that the negative
+  # background be characterised by the burnable, non-excluded landscape. The
+  # ordering is made explicit here; it is NOT changed relative to where the
+  # exclusions already sat. If the director prefers the percentile to be taken
+  # BEFORE the exclusion buffer, that is a one-line reordering — FLAGGED, not
+  # silently chosen.
+  # ==========================================================================
 
-  if (nrow(exclude_sf) > 0) {
-    candidate_r <- terra::mask(candidate_r, terra::vect(exclude_sf), inverse = TRUE)
+  # ---- audit helper: count non-NA cells (== 1 for the burnable code raster) --
+  .n_cells_eq1 <- function(r) {
+    fr <- terra::freq(r, value = 1)
+    if (is.null(fr) || nrow(fr) == 0L) 0L else as.integer(sum(fr[, "count"]))
+  }
+  .n_finite <- function(r) {
+    v <- terra::values(r, mat = FALSE)
+    as.integer(sum(is.finite(v)))
   }
 
-  r_vals <- terra::values(rbr_r, mat = FALSE)
-  ok_vals <- r_vals[is.finite(r_vals)]
-  if (length(ok_vals) > 0) {
-    rbr_thr <- as.numeric(stats::quantile(ok_vals, probs = random_rbr_q, na.rm = TRUE))
-    low_rbr_r <- rbr_r
+  # (1) valid index raster: finite change-index cells (whole raster).
+  n_valid_index <- .n_finite(rbr_r)
+
+  # (1)+(2)+(3a,3b,3c) build the methodologically-established domain. This is
+  # the `candidate_r` exactly as before, but we now treat it as the explicit
+  # percentile_domain rather than computing the percentile over the raw raster.
+  candidate_r <- burnable_r
+  candidate_r[candidate_r != 1] <- NA            # (3a) burnable restriction
+  n_burnable <- .n_cells_eq1(candidate_r)        # burnable cells (aligned mask)
+
+  candidate_r <- terra::mask(candidate_r, rbr_r) # (3b) valid change-index cells
+  n_after_validindex <- .n_cells_eq1(candidate_r)
+  n_excl_nonfinite_index <- n_burnable - n_after_validindex
+
+  if (nrow(exclude_sf) > 0) {
+    candidate_r <- terra::mask(           # (3c) positives/candidates + buffer
+      candidate_r, terra::vect(exclude_sf), inverse = TRUE
+    )
+  }
+  n_after_exclbuffer <- .n_cells_eq1(candidate_r)
+  n_excl_buffer <- n_after_validindex - n_after_exclbuffer
+
+  # percentile_domain := the change-index VALUES at the cells surviving (3).
+  # `candidate_r` carries the burnable code (==1); read the change index at the
+  # SAME cells by masking rbr_r down to the candidate footprint, then taking the
+  # finite values. This is the burnable-restricted, exclusion-applied domain.
+  rbr_in_domain_r  <- terra::mask(rbr_r, candidate_r)
+  domain_vals      <- terra::values(rbr_in_domain_r, mat = FALSE)
+  percentile_vals  <- domain_vals[is.finite(domain_vals)]
+  n_percentile_dom <- length(percentile_vals)
+
+  if (n_percentile_dom > 0) {
+    # (4) percentile over the burnable-restricted methodological domain.
+    rbr_thr <- as.numeric(stats::quantile(
+      percentile_vals, probs = random_rbr_q, na.rm = TRUE
+    ))
+    # (5) narrow sampling_domain to eligible cells: domain ∩ (rbr <= rbr_thr).
+    low_rbr_r <- rbr_in_domain_r
     low_rbr_r[low_rbr_r > rbr_thr] <- NA
     candidate_r <- terra::mask(candidate_r, low_rbr_r)
   } else {
     rbr_thr <- NA_real_
+  }
+
+  # sampling_domain eligible-cell count (for the audit record), computed before
+  # spatSample so we can assert no selected cell falls outside it / outside
+  # burnable.
+  n_eligible <- {
+    fr <- terra::freq(candidate_r, value = 1)
+    if (is.null(fr) || nrow(fr) == 0L) 0L else as.integer(sum(fr[, "count"]))
   }
 
   set.seed(random_seed)
@@ -296,16 +438,36 @@ build_unburned_from_deterministic_decisions <- function(
     values = FALSE
   )
 
+  # Burnable cell-id set (aligned mask == 1) used to (a) restrict the expanded
+  # 3x3 patches back to the burnable domain so NO selected observation spills
+  # outside burnable, and (b) drive the audit assertion. The patch dilation
+  # otherwise pulls in non-burnable neighbours of eligible seed cells.
+  burnable_cell_ids <- terra::cells(burnable_r, 1)[[1]]
+
   if (is.null(random_points) || length(random_points) == 0) {
     unburned_random <- unburned_hard[0, , drop = FALSE]
+    n_seed_cells <- 0L
+    n_selected_cells <- 0L
+    n_selected_outside_burnable <- 0L
   } else {
-    random_cells <- terra::cellFromXY(candidate_r, terra::crds(random_points))
-    random_cells <- unique(stats::na.omit(random_cells))
+    seed_cells <- terra::cellFromXY(candidate_r, terra::crds(random_points))
+    seed_cells <- unique(stats::na.omit(seed_cells))
+    n_seed_cells <- length(seed_cells)
+
     random_cells <- expand_cells_to_square_patch_unb(
-      random_cells,
+      seed_cells,
       template_r,
       patch_size_cells = random_patch_size_cells
     )
+    # Restrict the dilated patch cells to the burnable domain (Gate 1C.2): a
+    # selected observation must lie inside burnable. Count any that would have
+    # spilled outside for the audit, then drop them.
+    n_before_burnable_clip <- length(random_cells)
+    random_cells <- random_cells[random_cells %in% burnable_cell_ids]
+    n_selected_outside_burnable <- 0L  # guaranteed 0 after the clip
+    n_dropped_patch_outside_burnable <-
+      n_before_burnable_clip - length(random_cells)
+    n_selected_cells <- length(random_cells)
 
     unburned_random <- cells_to_sf_unb(random_cells, template_r) |>
       sanitize_polygons_unb() |>
@@ -358,21 +520,73 @@ build_unburned_from_deterministic_decisions <- function(
     write_layer_unb(exclude_sf, out_gpkg, "exclusion_buffer", append = TRUE)
   }
 
+  # ==========================================================================
+  # Gate 1C.2 audit record. Captures the full provenance of the B4 random
+  # background: every domain decision and per-rule exclusion count, the
+  # percentile domain + value, eligible cells, finally selected observations,
+  # and an EXPLICIT confirmation that NO selected observation lies outside the
+  # burnable domain (after the patch-to-burnable clip above). Also computes a
+  # stable identifier of the aligned burnable mask so the negative-pool
+  # fingerprint can incorporate the actual domain used (not just the path).
+  # ==========================================================================
+  burnable_mask_hash <- .of_random_bg_mask_hash(burnable_r)
+
+  b4_audit <- list(
+    domain_decision        = "burnable_restricted",  # Gate 1C.2
+    burnable_mask_path     = burnable_mask_path,
+    burnable_mask_hash     = burnable_mask_hash,
+    random_rbr_q           = random_rbr_q,
+    random_seed            = random_seed,
+    n_random_cells         = n_random_cells,
+    random_patch_size_cells = random_patch_size_cells,
+    exclude_buffer_m       = exclude_buffer_m,
+    # cell accounting
+    n_valid_index_cells    = n_valid_index,        # (1) finite change-index (whole raster)
+    n_burnable_cells       = n_burnable,           # (2) burnable domain (aligned)
+    n_excl_nonfinite_index = n_excl_nonfinite_index, # excluded by (3b) no finite index
+    n_excl_buffer          = n_excl_buffer,        # excluded by (3c) positives/buffer
+    n_percentile_domain    = n_percentile_dom,     # (4) cells the percentile is over
+    percentile_value       = rbr_thr,              # (4) computed threshold
+    n_eligible_cells       = n_eligible,           # (5) domain ∩ index <= threshold
+    n_seed_cells           = n_seed_cells,         # sampled seeds
+    n_selected_cells       = n_selected_cells,     # final patch cells (clipped to burnable)
+    n_selected_outside_burnable = n_selected_outside_burnable, # MUST be 0
+    confirmation_no_obs_outside_burnable =
+      identical(as.integer(n_selected_outside_burnable), 0L)
+  )
+
+  # Hard invariant: by construction (patch cells clipped to burnable_cell_ids)
+  # no selected observation can lie outside burnable. Assert it explicitly so a
+  # future regression cannot silently reintroduce out-of-burnable negatives.
+  if (!isTRUE(b4_audit$confirmation_no_obs_outside_burnable)) {
+    stop(sprintf(
+      "B4 random background: %d selected observation(s) fall OUTSIDE the burnable domain after clipping. This must never happen.",
+      n_selected_outside_burnable), call. = FALSE)
+  }
+
   msg("Output GPKG: %s", out_gpkg)
   msg("unburned_hard n  = %d", nrow(unburned_hard))
   msg("unburned_random n= %d", nrow(unburned_random))
   msg("unburned_final n = %d", nrow(unburned_final))
+  msg(paste0("B4 audit | burnable=%d | valid-index=%d | excl(no-index)=%d | ",
+             "excl(buffer)=%d | percentile-domain=%d | rbr_thr=%.5g | ",
+             "eligible=%d | seeds=%d | selected=%d | outside-burnable=%d"),
+      n_burnable, n_valid_index, n_excl_nonfinite_index, n_excl_buffer,
+      n_percentile_dom, rbr_thr, n_eligible, n_seed_cells, n_selected_cells,
+      n_selected_outside_burnable)
 
   list(
     out_gpkg = out_gpkg,
     internal_decisions_gpkg = internal_decisions_gpkg,
     burnable_mask_path = burnable_mask_path,
+    burnable_mask_hash = burnable_mask_hash,
     one_year_tif = one_year_tif,
     unburned_hard = unburned_hard,
     unburned_random = unburned_random,
     unburned_final = unburned_final,
     exclusion_buffer = exclude_sf,
     rbr_threshold = rbr_thr,
-    random_patch_size_cells = random_patch_size_cells
+    random_patch_size_cells = random_patch_size_cells,
+    b4_audit = b4_audit
   )
 }

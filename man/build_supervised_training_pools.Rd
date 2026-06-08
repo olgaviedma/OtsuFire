@@ -42,6 +42,18 @@ A named list with both the objects and the written paths:
       `qa_reasons_csv` — the QA audit file paths.
     \item `unburned_hard`, `unburned_random`, `unburned_final_raw`,
       `exclusion_buffer` — the auxiliary unburned sub-pools.
+    \item `b4_audit` — Gate 1C.2 audit record for the random burnable
+      background: cell accounting at each stage (valid index, burnable,
+      per-rule exclusions), the percentile domain + value, eligible cells,
+      finally selected observations, and an explicit confirmation that NO
+      selected observation falls outside the burnable domain.
+    \item `neg_pool_fingerprint` — deterministic `list(text, checksum)`
+      identity of the negative pool. It folds in the B4 burnable-domain
+      decision, the aligned-mask hash, the percentile config + value, the
+      RNG seeds, the exclusions and the relevant inputs, so any cache/pool
+      whose fingerprint predates the burnable-domain restriction is
+      INVALIDATED rather than silently reused. Also written as a sidecar
+      `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
   }
 }
 \description{
@@ -84,6 +96,17 @@ are invoked in the SAME order (deterministic-decisions first, legacy second)
 so the RNG stream — and therefore the sampled negatives — are identical to a
 full orchestrator run.
 }
+\section{Burnable-domain restriction (Gate 1C.2, INTENTIONAL pool change)}{
+
+The B4 random burnable-background bucket now computes its change-index
+percentile AND draws its sample ONLY within the (aligned) burnable domain.
+Previously the percentile was taken over the WHOLE change-index raster, so a
+run on this code produces a DIFFERENT negative pool than older runs. This is
+a deliberate methodological correction; the `neg_pool_fingerprint` changes
+accordingly so stale pools cannot be reused. The legacy single-fit and the
+nested_refit consumers both operate on this one upstream-built pool.
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(

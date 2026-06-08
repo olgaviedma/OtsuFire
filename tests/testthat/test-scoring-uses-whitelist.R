@@ -73,7 +73,12 @@ test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
   expect_setequal(recipe$cols$feature_cols, whitelist)
 })
 
-test_that("scoring path's prep_X_df + sparse.model.matrix yields whitelist-only cols", {
+# NOTE (Gate 1C.3, 2026-06-08): the production scoring closure now uses the
+# NA-preserving recipe-driven builder (.of_reconcile_scoring_schema +
+# .of_nested_* + xgb.DMatrix(missing = NA)), not prep_X_df/sparse.model.matrix.
+# This test reimplements the column-selection step inline and still asserts the
+# scoring feature set is whitelist-admissible (the invariant under test).
+test_that("scoring path feature selection yields whitelist-only cols", {
   skip_if_not_installed("sf")
   skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")

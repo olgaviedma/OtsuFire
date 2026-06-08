@@ -482,6 +482,61 @@ validate_fire_maps <- function(input_shapefile,
     )
   }
 
+  # Content/identity fingerprint of a vector input (path on disk OR in-memory
+  # sf). Used to make raster caches input-aware so that a changed input on disk
+  # busts the cache automatically, without requiring force_reprocess_*=TRUE.
+  # - For a path: hash normalized path + mtime + size of the file (and, for
+  #   shapefiles, the .dbf sidecar which holds attributes).
+  # - For an in-memory sf: hash a structural fingerprint (nrow + bbox + crs +
+  #   geometry type) since there is no file mtime to consult.
+  vector_input_cache_tag <- function(x) {
+    if (is.null(x)) return("in-none")
+    parts <- character(0)
+    if (is.character(x) && length(x) == 1L && nzchar(x)) {
+      np <- normalizePath(x, winslash = "/", mustWork = FALSE)
+      parts <- c(parts, "path", basename(np))
+      sidecars <- np
+      if (identical(tolower(tools::file_ext(np)), "shp")) {
+        sidecars <- c(np, sub("\\.shp$", ".dbf", np, ignore.case = TRUE))
+      }
+      for (f in sidecars) {
+        if (file.exists(f)) {
+          fi <- file.info(f)
+          parts <- c(
+            parts,
+            basename(f),
+            format(fi$mtime, "%Y%m%d%H%M%S", tz = "UTC"),
+            format(fi$size, scientific = FALSE)
+          )
+        }
+      }
+    } else if (inherits(x, "sf")) {
+      bb <- tryCatch(sf::st_bbox(x), error = function(e) NULL)
+      bb_str <- if (is.null(bb)) "nobbox" else paste(
+        format(as.numeric(bb), trim = TRUE, nsmall = 0), collapse = ","
+      )
+      crs_str <- tryCatch(
+        format(sf::st_crs(x)$wkt %||% sf::st_crs(x)$input %||% "nocrs"),
+        error = function(e) "nocrs"
+      )
+      geom_str <- tryCatch(
+        paste(as.character(sf::st_geometry_type(x, by_geometry = FALSE)), collapse = "+"),
+        error = function(e) "nogeom"
+      )
+      parts <- c(
+        parts, "sf",
+        format(nrow(x), scientific = FALSE),
+        bb_str, crs_str, geom_str
+      )
+    } else {
+      parts <- c(parts, class(x)[1])
+    }
+    paste0(
+      "in-",
+      make_short_cache_hash(make_cache_safe_tag(paste(parts, collapse = "|")))
+    )
+  }
+
   align_optional_raster <- function(x, template, mask_v) {
     xr <- if (inherits(x, "SpatRaster")) x else terra::rast(x)
     if (terra::nlyr(xr) > 1L) {
@@ -774,19 +829,27 @@ validate_fire_maps <- function(input_shapefile,
     ref_start_doy_col = ref_start_doy_col
   )
 
+  # Input-aware reference cache key: the obs_cache_tag above only captures
+  # observability + DOY-column settings, NOT the identity of ref_shapefile. A
+  # changed reference layer on disk (same observability settings) would
+  # otherwise be silently reused. Fold a fingerprint of ref_shapefile into the
+  # tag so a changed reference busts the cache automatically (without requiring
+  # force_reprocess_ref = TRUE). Unchanged references reuse the cache as before.
+  ref_cache_tag <- paste0(obs_cache_tag, "_", vector_input_cache_tag(ref_shapefile))
+
   # ---- cache paths ----
   ref_vec_cache  <- validation_output_path(
     cache_output_dir,
-    paste0("reference_fires_processed_", year_target, "_", obs_cache_tag, ".gpkg")
+    paste0("reference_fires_processed_", year_target, "_", ref_cache_tag, ".gpkg")
   )
   ref_rast_cache <- validation_output_path(
     cache_output_dir,
-    paste0("reference_fire_mask_", year_target, "_", obs_cache_tag, ".tif")
+    paste0("reference_fire_mask_", year_target, "_", ref_cache_tag, ".tif")
   )
   ref_obs_cache  <- if (!is.null(observability_raster)) {
     validation_output_path(
       observability_output_dir,
-      paste0("reference_fires_observability_", year_target, "_", obs_cache_tag, ".csv")
+      paste0("reference_fires_observability_", year_target, "_", ref_cache_tag, ".csv")
     )
   } else {
     NULL
@@ -794,7 +857,7 @@ validate_fire_maps <- function(input_shapefile,
   ref_not_obs_cache <- if (!is.null(observability_raster)) {
     validation_output_path(
       observability_output_dir,
-      paste0("reference_fires_not_observable_", year_target, "_", obs_cache_tag, ".gpkg")
+      paste0("reference_fires_not_observable_", year_target, "_", ref_cache_tag, ".gpkg")
     )
   } else {
     NULL
@@ -1018,9 +1081,14 @@ validate_fire_maps <- function(input_shapefile,
     input_name <- input_names[k]
     message("Processing input: ", input_name)
 
+    # Input-aware cache key: fold a content/identity fingerprint of the
+    # prediction input into the filename so a changed input on disk (e.g.
+    # keep_only.gpkg rewritten) busts the cache automatically, even with
+    # force_reprocess_pred = FALSE. Unchanged inputs reuse the cache as before.
+    pred_in_tag <- vector_input_cache_tag(shp)
     pred_tif <- validation_output_path(
       cache_output_dir,
-      paste0("predicted_fire_mask_", year_target, "_", input_name, ".tif")
+      paste0("predicted_fire_mask_", year_target, "_", input_name, "_", pred_in_tag, ".tif")
     )
     if (force_reprocess_pred && file.exists(pred_tif)) {
       message("Force reprocessing prediction raster: deleting ", basename(pred_tif))

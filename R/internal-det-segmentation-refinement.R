@@ -842,7 +842,7 @@ segmentation_refinement <- function(
     # Match columns that are exactly the variant OR start with it plus a join suffix
     drop_by_fields <- unique(unlist(lapply(variants, function(v) {
       if (!nzchar(v)) return(character(0))
-      rx <- paste0("^", gsub("([\\.^$|()\\[\\]{}*+?\\\\])", "\\\\\\1", v),
+      rx <- paste0("^", gsub("([\\.^$|()\\[\\]{}*+?\\\\])", "\\\\\\1", v, perl = TRUE),
                    "($|[._].+|_[0-9]+$|_x$|_y$|\\.x$|\\.y$)")
       grep(rx, nms, ignore.case = TRUE, value = TRUE)
     })))

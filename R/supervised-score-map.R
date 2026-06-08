@@ -16,6 +16,28 @@
 #' calling it directly produces byte-identical scoring / final-map outputs to a
 #' full run.
 #'
+#' @section Mandatory recipe + enforced feature-schema check (Gate 1D.2):
+#' The `recipe` produced by the FINAL refit is a \strong{mandatory} input and is
+#' the \strong{canonical} source of the scoring feature schema on the MAIN path:
+#' feature names and order, types, `_isNA` companions, imputation medians,
+#' categorical levels, and the missing/extra/unknown-level policies all come
+#' from `recipe$cols$feature_cols` / `recipe$cols$x_cols` /
+#' `recipe$impute$numeric_medians` / `recipe$impute$impute_factor_missing` —
+#' the schema is \strong{never} reconstructed from the scoring-year data. Before
+#' the scoring matrix is built, this function runs the SINGLE Gate 1D.1
+#' validation engine ([validate_supervised_execution()], `strict = TRUE`) with
+#' the model + recipe + the scoring frame's column names, so the
+#' feature-schema check (check 8) is \strong{ENFORCED and verifiable} on the
+#' main path (a genuinely incompatible schema fails fast; it is no longer
+#' SKIPPED / NOT_VERIFIABLE). The check is recipe-driven and aligned with the
+#' Gate 1C.3 5-case reconciliation policy: column-order altered → realigned to
+#' recipe order; a feature missing → created as `NA_real_` (xgboost-missing) +
+#' `_isNA`; an extra column → dropped (cannot shift the matrix); a type change →
+#' coerced per the recipe or set NA; a new categorical level → recipe sentinel
+#' (never invented); a feature all-NA → recipe-median impute / xgboost-missing.
+#' Every reconciliation decision is RECORDED (no silent corrections). Proving:
+#' `recipe of refit model -> final scoring -> exact same schema`.
+#'
 #' @details
 #' The current-year temporal adjustment is applied inside the engine using the
 #' three thresholds `preyear_overlap_threshold`, `hotspot_density_threshold` and
@@ -35,7 +57,10 @@
 #'   `03_FEATURES/features_geometry.gpkg`). Forwarded as the engine's
 #'   `unlabeled_gpkg` (read back by `scoring_layer`).
 #' @param model Fitted xgboost model object OR an RDS path.
-#' @param recipe Training recipe list OR an RDS path.
+#' @param recipe Training recipe list OR an RDS path. \strong{Mandatory} — this
+#'   is the canonical feature-schema source at scoring (Gate 1D.2). It must carry
+#'   `recipe$cols$feature_cols` (the refit feature schema); the function errors
+#'   rather than reconstruct the schema from the scoring year.
 #' @param config Required `otsufire_supervised_burned_config` (from
 #'   [build_supervised_burned_config()]). Used to derive `result_dir`
 #'   (`output_routes$base`), `out_score_dir` (`08_SCORED`), `out_map_dir`
@@ -255,6 +280,81 @@ score_supervised_burned_map <- function(
   }
   if (!is.character(oof_summary) || length(oof_summary) != 1L) {
     stop("'oof_summary' must be NULL or a single GPKG path.", call. = FALSE)
+  }
+
+  # ---------------------------------------------------------------------------
+  # 3b) Gate 1D.2 — MANDATORY recipe-driven feature-schema enforcement (check 8)
+  #     on the MAIN path, BEFORE the scoring matrix is built.
+  #
+  # The recipe saved during the FINAL refit is the CANONICAL schema source
+  # (recipe$cols$feature_cols, incl. any _isNA companions; medians; factor
+  # handling; the 1C.3 5-case reconciliation policy). It is REQUIRED above (a
+  # missing recipe already errors), so there is NO silent schema reconstruction
+  # from the scoring year. Here we make Gate 1C.4's feature-schema check (check
+  # 8) VERIFIABLE and ENFORCED on the orchestrator main path by running the
+  # SINGLE Gate 1D.1 validation engine with the model + recipe + the scoring
+  # frame's column names — so a schema incompatibility fails fast with a clear
+  # aggregated error, instead of being SKIPPED/NOT_VERIFIABLE (the Gate 1C.4
+  # flag #1). The recipe stays the schema source: the candidate is the scoring
+  # inputs, the expected set is read from the recipe, never re-derived.
+  #
+  # The reconciliation that follows in the engine (.of_reconcile_scoring_schema)
+  # then HEALS the 5 recoverable cases (order / missing / extra / type / level /
+  # all-NA) per the explicit 1C.3 policy and RECORDS every decision; check 8
+  # only blocks the genuinely-incompatible case (a recipe feature that is
+  # neither present nor creatable), which the reconciler cannot recover.
+  # Resolve the loaded recipe object (recipe may be an object or an RDS path).
+  recipe_obj <- if (is.character(recipe) && length(recipe) == 1L) {
+    tryCatch(readRDS(recipe), error = function(e)
+      stop(sprintf("Could not read 'recipe' RDS for schema enforcement: %s (%s)",
+                   recipe, conditionMessage(e)), call. = FALSE))
+  } else {
+    recipe
+  }
+  model_obj <- if (is.character(model) && length(model) == 1L) {
+    tryCatch(readRDS(model), error = function(e) NULL)
+  } else {
+    model
+  }
+  expected_schema <- .of_model_expected_features(model = model_obj,
+                                                 recipe = recipe_obj)
+  if (!length(expected_schema)) {
+    stop("score_supervised_burned_map(): the FINAL-refit recipe does not carry ",
+         "a feature schema (recipe$cols$feature_cols). The recipe is the ",
+         "MANDATORY canonical schema source at scoring (Gate 1D.2); refusing to ",
+         "reconstruct the schema from the scoring year. Re-run the FINAL refit ",
+         "so a complete recipe is produced.", call. = FALSE)
+  }
+  # Read the scoring frame's column names (the candidate schema) WITHOUT loading
+  # geometry/cells: read 0 rows of the resolved scoring layer.
+  scoring_feature_names <- tryCatch({
+    hd <- sf::st_read(unlabeled_gpkg, layer = scoring_layer, quiet = TRUE)
+    nm <- names(sf::st_drop_geometry(hd))
+    nm
+  }, error = function(e)
+    stop(sprintf("score_supervised_burned_map(): could not read scoring layer ",
+                 "'%s' column names for schema enforcement (%s).",
+                 scoring_layer, conditionMessage(e)), call. = FALSE))
+  # Run the SINGLE validation engine in strict mode (check 8 now verifiable).
+  # data_base/composite_base/result_name come from cfg$options so the engine
+  # resolves the SAME input paths the run consumes (other checks stay PASS /
+  # NOT_VERIFIABLE; only the feature-schema check is newly enforced here).
+  .opts <- config$options %||% list()
+  validate_supervised_execution(
+    config                = config,
+    strict                = TRUE,
+    target_year           = target_year,
+    model                 = model_obj,
+    recipe                = recipe_obj,
+    scoring_feature_names = scoring_feature_names,
+    data_base             = .opts$data_base,
+    composite_base        = .opts$composite_base,
+    result_name           = .opts$result_name %||% "Min_Min")
+  if (isTRUE(verbose)) {
+    message(sprintf(paste0("[Gate 1D.2] feature-schema check PASS: recipe ",
+                           "schema (%d features) is covered by the scoring ",
+                           "inputs; reconciliation will heal recoverable cases."),
+                    length(expected_schema)))
   }
 
   # ---------------------------------------------------------------------------

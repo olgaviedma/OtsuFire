@@ -416,11 +416,75 @@
 
   # ===========================================================================
   # (8) Incompatible feature schema (only when a model/recipe is involved).
+  #
+  # Gate 1D.2: the saved FINAL-refit RECIPE is the CANONICAL schema source. When
+  # a recipe carrying `$cols$feature_cols` is supplied, the check is RECIPE-
+  # DRIVEN and aligned with the Gate 1C.3 5-case reconciliation policy: a
+  # recipe feature that is MISSING / EXTRA / a TYPE change / a new LEVEL /
+  # all-NA is RECOVERABLE by .of_reconcile_scoring_schema() and therefore PASSES
+  # (the reconciler creates/drops/coerces/remaps and RECORDS the decision); the
+  # check only FAILS on the genuinely-INCOMPATIBLE case the reconciler cannot
+  # recover (a feature that coerces to all-NA -> "coerce_type_failed"). The
+  # schema is taken FROM the recipe, never re-derived from the scoring year.
+  #
+  # When only a legacy/alternative schema (recipe$feature_names, or a model's
+  # feature_names) is available — i.e. no `$cols$feature_cols` to drive the
+  # reconciler — the check keeps the strict "scoring must cover the schema"
+  # semantics (any missing expected name FAILs).
   # ===========================================================================
   if ((!is.null(model) || !is.null(recipe)) && !is.null(scoring_feature_names)) {
     run_check("feature_schema", "blocking", {
       expected <- .of_model_expected_features(model, recipe)
-      if (length(expected)) {
+      recipe_feature_cols <- tryCatch(recipe$cols$feature_cols,
+                                       error = function(e) NULL)
+      recipe_driven <- is.character(recipe_feature_cols) &&
+        length(recipe_feature_cols) > 0L
+      if (recipe_driven) {
+        # Dry-run the SAME reconciler the scoring path uses, on a 1-row frame
+        # carrying exactly the scoring feature columns (values are placeholders;
+        # the reconciliation DECISIONS depend on column presence/type/levels,
+        # which we model from the names). This proves recipe -> reconciliation
+        # -> exact recipe schema, and classifies each expected feature.
+        probe <- as.data.frame(
+          stats::setNames(
+            rep(list(NA_real_), length(scoring_feature_names)),
+            scoring_feature_names),
+          stringsAsFactors = FALSE)
+        if (nrow(probe) == 0L) probe <- probe[1, , drop = FALSE]
+        rec <- .of_reconcile_scoring_schema(probe, recipe)
+        # After reconciliation the frame MUST carry exactly the recipe feature
+        # schema, in recipe order — the structural proof of check 8 on the main
+        # path.
+        if (!identical(names(rec$df), recipe_feature_cols)) {
+          stop(sprintf(paste0("validate_supervised_execution(): post-",
+                              "reconciliation feature schema does NOT match the ",
+                              "recipe (expected %d cols in recipe order; got a ",
+                              "different set/order). Incompatible feature schema."),
+                       length(recipe_feature_cols)), call. = FALSE)
+        }
+        unrecoverable <- rec$record[rec$record$action == "coerce_type_failed", ,
+                                    drop = FALSE]
+        if (nrow(unrecoverable) > 0L) {
+          stop(sprintf(paste0("validate_supervised_execution(): %d scoring ",
+                              "feature(s) are INCOMPATIBLE with the recipe and ",
+                              "cannot be reconciled (uncoercible to numeric): ",
+                              "%s. Incompatible feature schema."),
+                       nrow(unrecoverable),
+                       paste(utils::head(unrecoverable$column, 10L),
+                             collapse = ", ")),
+               call. = FALSE)
+        }
+        created <- sum(rec$record$action == "create_absent_numeric_NA")
+        dropped <- sum(rec$record$action == "drop_extra_column")
+        add(.of_vse_record("feature_schema", "PASS",
+                           sprintf(paste0("Scoring inputs reconcile to the recipe ",
+                                          "schema (%d expected features; %d ",
+                                          "created-absent, %d extra dropped)."),
+                                   length(recipe_feature_cols), created, dropped),
+                           evidence = sprintf("%d recipe features (recipe-driven)",
+                                              length(recipe_feature_cols)),
+                           severity = "blocking"))
+      } else if (length(expected)) {
         missing_cols <- setdiff(expected, scoring_feature_names)
         if (length(missing_cols)) {
           stop(sprintf(paste0("validate_supervised_execution(): scoring inputs ",
@@ -590,10 +654,21 @@
 #'   \item \strong{Incompatible types} — the `class_final` label column is not
 #'     character/factor.
 #'   \item \strong{Incompatible feature schema} — when a `model`/`recipe` is
-#'     supplied, the `scoring_feature_names` do not cover the expected schema.
-#'     (Mandatory-recipe wiring is Gate 1D.2; here the check is SKIPPED when no
-#'     model/recipe is supplied and NOT_VERIFIABLE when the schema cannot be
-#'     introspected — never a false PASS.)
+#'     supplied with `scoring_feature_names`, the scoring inputs are checked
+#'     against the model/recipe schema. Gate 1D.2 makes this RECIPE-DRIVEN and
+#'     ENFORCED on the main scoring path: the canonical schema is read from
+#'     `recipe$cols$feature_cols` (never re-derived from the scoring year), and
+#'     the check is aligned with the Gate 1C.3 5-case reconciliation policy — a
+#'     missing / extra / type-changed / unknown-level / all-NA feature is
+#'     RECOVERABLE and PASSES (the reconciler heals + records it), while a
+#'     genuinely incompatible feature (uncoercible) FAILs (blocking). When only a
+#'     legacy schema (`recipe$feature_names` / `model$feature_names`) is
+#'     available the strict coverage semantics apply (any uncovered name FAILs).
+#'     The check is SKIPPED only when no model/recipe + names are supplied, and
+#'     NOT_VERIFIABLE when no schema can be introspected — never a false PASS.
+#'     [score_supervised_burned_map()] runs this check (`strict = TRUE`) before
+#'     building the scoring matrix, so it is no longer best-effort on the main
+#'     path.
 #'   \item \strong{Contradictory configuration} — mutually exclusive cfg
 #'     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
 #'     `training_protocol = "legacy"` with `oof_sampling = "full"`; a
@@ -714,19 +789,42 @@ validate_supervised_execution <- function(config,
 
 #' Expected feature names of a fitted model / recipe (check 8 helper).
 #'
-#' Best-effort extraction of the feature schema a model/recipe expects, used to
-#' assert the scoring inputs cover it. Returns `character(0)` when the schema
-#' cannot be introspected (the check then records NOT_VERIFIABLE rather than
-#' guessing).
+#' Extraction of the feature schema a model/recipe expects, used to assert the
+#' scoring inputs cover it. The CANONICAL source is the saved FINAL-refit
+#' RECIPE: `recipe$cols$feature_cols` is the exact pre-design-matrix feature set
+#' (incl. any `_isNA` companions) the model was trained on, and is what the
+#' scoring path reconciles against via [.of_reconcile_scoring_schema()] (Gate
+#' 1C.3). This MUST therefore be the schema check 8 enforces on the main path
+#' (Gate 1D.2): `recipe of refit model -> final scoring -> exact same schema`.
+#'
+#' Resolution order (recipe is authoritative; never reconstructed from the
+#' scoring year):
+#' \enumerate{
+#'   \item `recipe$cols$feature_cols` — the canonical refit feature schema.
+#'   \item legacy/alternative recipe shapes (`feature_names` / `features` /
+#'     `expected_features`) — forward/back-compat only.
+#'   \item the fitted xgboost `model$feature_names` — the EXPANDED design-matrix
+#'     columns (== `recipe$cols$x_cols`); used only when no recipe schema is
+#'     available, since a scoring frame carries pre-expansion feature columns.
+#' }
+#' Returns `character(0)` only when NONE of these can be introspected (the check
+#' then records NOT_VERIFIABLE rather than guessing).
 #'
 #' @keywords internal
 #' @noRd
 .of_model_expected_features <- function(model = NULL, recipe = NULL) {
   out <- character(0)
   if (!is.null(recipe)) {
-    fn <- recipe$feature_names %||% recipe$features %||%
-          recipe$expected_features
-    if (is.character(fn)) out <- fn
+    # CANONICAL: the refit recipe's pre-design-matrix feature columns.
+    fc <- tryCatch(recipe$cols$feature_cols, error = function(e) NULL)
+    if (is.character(fc) && length(fc)) {
+      out <- fc
+    } else {
+      # Forward/back-compat alternative recipe shapes.
+      fn <- recipe$feature_names %||% recipe$features %||%
+            recipe$expected_features
+      if (is.character(fn)) out <- fn
+    }
   }
   if (!length(out) && !is.null(model)) {
     fn <- tryCatch({

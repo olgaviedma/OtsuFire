@@ -491,7 +491,14 @@
   # level. If a future build introduces a genuine categorical recipe feature
   # (recipe$cols$factor_levels), the unseen-level remap (CASE 3) would apply
   # instead; that branch is retained for forward-compatibility.
-  recipe_factor_levels <- recipe$cols$factor_levels %||% list()
+  # NOTE: use an explicit NULL test (not `%||%`), because `%||%` treats a
+  # length-1 list whose element is multi-valued as a coercion target and would
+  # error on `is.na()`; factor_levels is a named list of level vectors.
+  recipe_factor_levels <- if (is.null(recipe$cols$factor_levels)) {
+    list()
+  } else {
+    recipe$cols$factor_levels
+  }
 
   for (nm in feature_cols) {
     col <- df[[nm]]

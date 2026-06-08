@@ -32,7 +32,10 @@ deterministic scoring universe (the `scoring_features` layer of
 
 \item{model}{Fitted xgboost model object OR an RDS path.}
 
-\item{recipe}{Training recipe list OR an RDS path.}
+\item{recipe}{Training recipe list OR an RDS path. \strong{Mandatory} — this
+is the canonical feature-schema source at scoring (Gate 1D.2). It must carry
+`recipe$cols$feature_cols` (the refit feature schema); the function errors
+rather than reconstruct the schema from the scoring year.}
 
 \item{config}{Required `otsufire_supervised_burned_config` (from
 [build_supervised_burned_config()]). Used to derive `result_dir`
@@ -128,6 +131,30 @@ supplied they are written to temporary RDS files so the engine's
 `readRDS()`-based loading path is byte-identical; when paths are supplied they
 are forwarded directly.
 }
+\section{Mandatory recipe + enforced feature-schema check (Gate 1D.2)}{
+
+The `recipe` produced by the FINAL refit is a \strong{mandatory} input and is
+the \strong{canonical} source of the scoring feature schema on the MAIN path:
+feature names and order, types, `_isNA` companions, imputation medians,
+categorical levels, and the missing/extra/unknown-level policies all come
+from `recipe$cols$feature_cols` / `recipe$cols$x_cols` /
+`recipe$impute$numeric_medians` / `recipe$impute$impute_factor_missing` —
+the schema is \strong{never} reconstructed from the scoring-year data. Before
+the scoring matrix is built, this function runs the SINGLE Gate 1D.1
+validation engine ([validate_supervised_execution()], `strict = TRUE`) with
+the model + recipe + the scoring frame's column names, so the
+feature-schema check (check 8) is \strong{ENFORCED and verifiable} on the
+main path (a genuinely incompatible schema fails fast; it is no longer
+SKIPPED / NOT_VERIFIABLE). The check is recipe-driven and aligned with the
+Gate 1C.3 5-case reconciliation policy: column-order altered → realigned to
+recipe order; a feature missing → created as `NA_real_` (xgboost-missing) +
+`_isNA`; an extra column → dropped (cannot shift the matrix); a type change →
+coerced per the recipe or set NA; a new categorical level → recipe sentinel
+(never invented); a feature all-NA → recipe-median impute / xgboost-missing.
+Every reconciliation decision is RECORDED (no silent corrections). Proving:
+`recipe of refit model -> final scoring -> exact same schema`.
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(

@@ -283,19 +283,33 @@ test_that("observability filter excludes non-observable reference polygons and r
     tmp, "VALIDATION", "01_SUMMARY", "fire_metrics_global_2000.csv"
   )))
 
+  # Content-aware cache contract (f9130a6): observability-tagged caches carry
+  # BOTH the observability hash `obs-<8HEX>` AND a mandatory ref-input
+  # fingerprint `_in-<8HEX>` immediately before the extension.
+  obs_dir <- file.path(tmp, "VALIDATION", "02_OBSERVABILITY")
   obs_csv <- list.files(
-    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
-    pattern = "^reference_fires_observability_2000_obs-[A-F0-9]{8}\\.csv$",
+    obs_dir,
+    pattern = "^reference_fires_observability_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.csv$",
     full.names = TRUE
   )
   expect_length(obs_csv, 1L)
+  # The mandatory `_in-<8HEX>` suffix: a name WITHOUT it must NOT be produced.
+  expect_length(
+    list.files(obs_dir, pattern = "^reference_fires_observability_2000_obs-[A-F0-9]{8}\\.csv$"),
+    0L
+  )
 
   obs_gpkg <- list.files(
-    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
-    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    obs_dir,
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
     full.names = TRUE
   )
   expect_length(obs_gpkg, 1L)
+  # OLD nameless-hash filename (no `_in-`) must be absent.
+  expect_length(
+    list.files(obs_dir, pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$"),
+    0L
+  )
 
   dropped_sf <- suppressWarnings(sf::st_read(obs_gpkg, quiet = TRUE))
   expect_s3_class(dropped_sf, "sf")
@@ -371,12 +385,21 @@ test_that("observability filter skips the excluded-polygons gpkg when all refere
   )))
 
   expect_true(all(res$reference_observability$observable_flag))
+  # No not-observable gpkg is produced when every reference is observable —
+  # checked against the strict content-aware contract (obs hash + mandatory
+  # `_in-<8HEX>`) AND against the OLD nameless-hash pattern, so neither variant
+  # is silently produced.
+  obs_dir <- file.path(tmp, "VALIDATION", "02_OBSERVABILITY")
   obs_gpkg <- list.files(
-    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
-    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    obs_dir,
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
     full.names = TRUE
   )
   expect_length(obs_gpkg, 0L)
+  expect_length(
+    list.files(obs_dir, pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$"),
+    0L
+  )
 })
 
 test_that("reference cache is separated by observability tag", {
@@ -423,22 +446,71 @@ test_that("reference cache is separated by observability tag", {
   )
 
   expect_equal(unname(res_obs$polygon_summary$N_Reference_Polygons), 1L)
-  expect_true(file.exists(file.path(
-    tmp, "VALIDATION", "_CACHE", "reference_fires_processed_2000_obs-none.gpkg"
+
+  cache_dir <- file.path(tmp, "VALIDATION", "_CACHE")
+  obs_subdir <- file.path(tmp, "VALIDATION", "02_OBSERVABILITY")
+
+  # ---- Content-aware cache contract (f9130a6) ----------------------------
+  # Point 3 + point 1: the no-observability run writes EXACTLY ONE processed
+  # cache tagged `obs-none` followed by the MANDATORY `_in-<8HEX>` ref-input
+  # fingerprint immediately before the extension.
+  no_obs_cache <- list.files(
+    cache_dir,
+    pattern = "^reference_fires_processed_2000_obs-none_in-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(no_obs_cache, 1L)
+  expect_s3_class(suppressWarnings(sf::st_read(no_obs_cache, quiet = TRUE)), "sf")
+
+  # Point 8: the OLD nameless-hash filename (no `_in-`) must NOT be produced
+  # and must NOT be silently accepted/reused. Assert absence of ANY processed
+  # cache whose obs tag is followed directly by `.gpkg` (obs-none OR obs-<hex>)
+  # with no `_in-` segment.
+  expect_false(file.exists(file.path(
+    cache_dir, "reference_fires_processed_2000_obs-none.gpkg"
   )))
+  expect_length(
+    list.files(
+      cache_dir,
+      pattern = "^reference_fires_processed_2000_obs-(none|[A-F0-9]{8})\\.gpkg$"
+    ),
+    0L
+  )
+
+  # Point 2 + point 1: the observability run writes EXACTLY ONE processed cache
+  # carrying the observability hash `obs-<8HEX>` AND the mandatory `_in-<8HEX>`
+  # suffix. obs-none and obs-<hex> are distinct files (cache separated by tag).
   obs_cache <- list.files(
-    file.path(tmp, "VALIDATION", "_CACHE"),
-    pattern = "^reference_fires_processed_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    cache_dir,
+    pattern = "^reference_fires_processed_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
     full.names = TRUE
   )
   expect_length(obs_cache, 1L)
+  expect_s3_class(suppressWarnings(sf::st_read(obs_cache, quiet = TRUE)), "sf")
+  expect_false(identical(basename(no_obs_cache), basename(obs_cache)))
+
+  # Point 6: the SAME inputs produce the SAME cache name. Capture the obs-run
+  # `_in-<8HEX>` fingerprint; a second identical obs run must reuse it (no new
+  # `in-` tag appears, the cache count under obs-<hex> stays at exactly 1).
+  in_hash_run1 <- sub(
+    "^.*_(in-[A-F0-9]{8})\\.gpkg$", "\\1", basename(obs_cache)
+  )
+  expect_match(in_hash_run1, "^in-[A-F0-9]{8}$")
 
   obs_not_observable <- list.files(
-    file.path(tmp, "VALIDATION", "02_OBSERVABILITY"),
-    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$",
+    obs_subdir,
+    pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
     full.names = TRUE
   )
   expect_length(obs_not_observable, 1L)
+  # Point 8 (observability dir): no OLD nameless-hash not-observable gpkg.
+  expect_length(
+    list.files(
+      obs_subdir,
+      pattern = "^reference_fires_not_observable_2000_obs-[A-F0-9]{8}\\.gpkg$"
+    ),
+    0L
+  )
 
   unlink(obs_not_observable)
   expect_false(file.exists(obs_not_observable))
@@ -461,6 +533,59 @@ test_that("reference cache is separated by observability tag", {
     "Temporal observability filter excluded 1 of 2 reference polygons"
   )
   expect_true(file.exists(obs_not_observable))
+
+  # Point 6 (deterministic name): the rerun used the SAME inputs, so the
+  # processed cache name — including its `_in-<8HEX>` fingerprint — is stable.
+  # There is still EXACTLY ONE obs-tagged processed cache, under the SAME
+  # `in-` hash captured from run 1 (no second `in-` tag was minted).
+  obs_cache_run2 <- list.files(
+    cache_dir,
+    pattern = "^reference_fires_processed_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  expect_length(obs_cache_run2, 1L)
+  in_hash_run2 <- sub(
+    "^.*_(in-[A-F0-9]{8})\\.gpkg$", "\\1", basename(obs_cache_run2)
+  )
+  expect_identical(in_hash_run2, in_hash_run1)
+
+  # Point 7 (content-aware busting): perturb a RELEVANT ref input — drop one
+  # reference feature and rewrite ref.shp (changes nrow + .dbf size/mtime).
+  # The `_in-<8HEX>` fingerprint must change, so a SECOND processed cache file
+  # under a DIFFERENT `in-` tag appears and the old one is NOT reused.
+  ref_perturbed <- sf::st_read(fx$ref, quiet = TRUE)
+  ref_perturbed <- ref_perturbed[ref_perturbed$id == 1L, , drop = FALSE]
+  suppressWarnings(sf::st_write(ref_perturbed, fx$ref, quiet = TRUE,
+                                delete_dsn = TRUE))
+
+  suppressWarnings(suppressMessages(validate_fire_maps(
+    input_shapefile        = fx$pred,
+    ref_shapefile          = fx$ref,
+    mask_shapefile         = fx$mask,
+    burnable_raster        = fx$burnable,
+    observability_raster   = fx$observability,
+    year_target            = 2000L,
+    validation_dir         = tmp,
+    binary_burnable        = TRUE,
+    burnable_threshold     = 0.5,
+    threshold_completely_detected = 90,
+    threshold_min_detected = 10,
+    metrics_type           = "all"
+  )))
+
+  obs_caches_after <- list.files(
+    cache_dir,
+    pattern = "^reference_fires_processed_2000_obs-[A-F0-9]{8}_in-[A-F0-9]{8}\\.gpkg$",
+    full.names = TRUE
+  )
+  # A second, distinctly-tagged cache now exists alongside the first.
+  expect_length(obs_caches_after, 2L)
+  in_hashes_after <- sub(
+    "^.*_(in-[A-F0-9]{8})\\.gpkg$", "\\1", basename(obs_caches_after)
+  )
+  expect_length(unique(in_hashes_after), 2L)
+  expect_true(in_hash_run1 %in% in_hashes_after)         # old not deleted...
+  expect_true(any(in_hashes_after != in_hash_run1))      # ...and not reused
 })
 
 test_that("legacy flat outputs are moved out of the validation root", {

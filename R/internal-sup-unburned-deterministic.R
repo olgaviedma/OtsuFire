@@ -21,19 +21,10 @@ ensure_area_ha_unb <- function(x) {
   x
 }
 
-align_to_template_unb <- function(r, template, method = c("near", "bilinear")) {
-  method <- match.arg(method)
-  if (!terra::same.crs(r, template)) {
-    r <- terra::project(r, template, method = method)
-  }
-  if (!terra::compareGeom(r, template, stopOnError = FALSE)) {
-    r <- terra::resample(r, template, method = method)
-  }
-  if (!terra::compareGeom(r, template, stopOnError = FALSE)) {
-    stop("Raster still does not match template after alignment.", call. = FALSE)
-  }
-  r
-}
+# Gate 1C.1 (2026-06-08): `align_to_template_unb()` removed. Its
+# project/resample/compareGeom logic now lives in the single reusable helper
+# `.of_align_mask_to_template()` (R/internal-sup-align-mask.R), which the
+# burnable-mask call site below routes through. No other caller existed.
 
 bind_sf_rows_unb <- function(x, y) {
   geom_x <- attr(x, "sf_column")
@@ -230,11 +221,16 @@ build_unburned_from_deterministic_decisions <- function(
     ensure_area_ha_unb()
 
   template_r <- terra::rast(one_year_tif)[[1]]
-  burnable_r <- align_to_template_unb(
-    terra::rast(burnable_mask_path),
-    template_r,
-    method = "near"
-  )
+  # Gate 1C.1 (2026-06-08): align the burnable mask through the single reusable
+  # helper, which PROJECTS on a CRS mismatch (the old path could silently zero
+  # all burnable cells across CRS) and validates {0,1}/burnable-area before use.
+  burnable_r <- .of_align_mask_to_template(
+    mask = terra::rast(burnable_mask_path),
+    template = template_r,
+    allowed_values = c(0, 1),
+    binary = TRUE,
+    mask_name = "burnable mask (deterministic builder)"
+  )$aligned
   rbr_r <- template_r
 
   unburned_hard <- internal_decisions |>

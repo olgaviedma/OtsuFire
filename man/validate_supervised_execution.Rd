@@ -83,10 +83,23 @@ The 10 checks:
   \item \strong{Empty raster} — a raster input with zero rows or columns.
   \item \strong{Mask with ZERO burnable cells} — the burnable mask aligned to
     the change-index template via [.of_align_mask_to_template()].
-  \item \strong{Wrong year} — `config$target_year` inconsistent with a
-    `<name>_<year>` token in a resolved input PATH, a hotspots `year` column
-    with no matching row, or an internal_decisions `year`/`fire_year` column
-    that never equals the target year. (Deeper closure is Gate 1D.3.)
+  \item \strong{Wrong year} (Gate 1D.3, robust evidence hierarchy). Inputs
+    are CLASSIFIED explicitly (\code{.of_vse_year_class()}): YEAR-SPECIFIC
+    inputs (internal_decisions, change_index, delayed_change_index, hotspots,
+    reference_burned_map) MUST agree with the resolved `config$target_year`;
+    ATEMPORAL inputs (topo, peninsula_shapefile, burnable_mask, and the CORINE
+    products — CORINE encodes its OWN epoch, not the run year) are SKIPPED and
+    never failed for lacking the run year. For each year-specific input the
+    year is resolved via a strict HIERARCHY
+    (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
+    (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
+    filename token (CORINE epochs / resolution numbers are excluded by
+    construction); (4) a cfg-registered declared year (`spec$declared_year`).
+    A determinable year that DIFFERS from the expected year FAILs (blocking,
+    naming input + found + expected); a MATCH PASSes with evidence of the
+    level used; and an input with NO verifiable year at ANY level is recorded
+    NOT_VERIFIABLE (verifiable = FALSE) — never a false PASS, and not blocking
+    by itself.
   \item \strong{Required columns absent} — internal_decisions missing its
     label column `class_final`.
   \item \strong{Incompatible types} — the `class_final` label column is not

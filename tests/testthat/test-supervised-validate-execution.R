@@ -381,6 +381,96 @@ test_that("changing a cfg input path changes the consumed input + fingerprint", 
   expect_false(identical(cfp_fn()(cfgA)$checksum, cfp_fn()(cfgB)$checksum))
 })
 
+# ===========================================================================
+# (D) Gate 1D.3: ROBUST YEAR VALIDATION — classification + evidence hierarchy
+# ===========================================================================
+
+wy_row <- function(rep) rep[rep$check == "wrong_year", , drop = FALSE]
+
+test_that("1D.3: correct year in filename token -> PASS (evidence=filename)", {
+  td <- tempfile("vy_film_"); dir.create(td)
+  # change_index filename carries the matching year token (2017); decisions has
+  # no year info, so it is the filename token on change_index that proves it.
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_2017_mosaic_res90m.tif")
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "PASS")
+  expect_match(wr$evidence, "change_index\\[filename\\]")
+})
+
+test_that("1D.3: WRONG year in filename token -> FAIL/blocking early", {
+  td <- tempfile("vy_filw_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_2017_mosaic_res90m.tif")
+  # Validating against 2018 makes the 2017 filename token a mismatch.
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2018L),
+               regexp = "Wrong-year|does NOT match")
+  rep <- vse_fn()(cfg, strict = FALSE, target_year = 2018L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "FAIL")
+  expect_identical(wr$severity, "blocking")
+  expect_no_heavy_artifact(cfg)
+})
+
+test_that("1D.3: correct year in a fire_year column -> PASS (evidence=column)", {
+  td <- tempfile("vy_col_"); dir.create(td)
+  # change_index filename has NO year token; the decisions fire_year column does.
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_mosaic_res90m.tif",
+                    decisions_extra = list(fire_year = 2017L))
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "PASS")
+  expect_match(wr$evidence, "internal_decisions\\[column:fire_year\\]")
+})
+
+test_that("1D.3: column year vs cfg discrepancy -> FAIL/blocking", {
+  td <- tempfile("vy_cold_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_mosaic_res90m.tif",
+                    decisions_extra = list(year = 1999L))
+  expect_error(vse_fn()(cfg, strict = TRUE, target_year = 2017L),
+               regexp = "Wrong-year|does NOT match")
+  rep <- vse_fn()(cfg, strict = FALSE, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "FAIL")
+  expect_identical(wr$severity, "blocking")
+})
+
+test_that("1D.3: an ATEMPORAL input (burnable_mask/CORINE) is never year-failed", {
+  td <- tempfile("vy_atemp_"); dir.create(td)
+  # The burnable_mask + CORINE filenames carry the CORINE EPOCH year (2012),
+  # which differs from target_year 2017. They must NOT trip the year check —
+  # they are classified ATEMPORAL and skipped (never enumerated in wrong_year).
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_2017_mosaic_res90m.tif")
+  expect_identical(OtsuFire:::.of_vse_year_class("burnable_mask"), "atemporal")
+  expect_identical(OtsuFire:::.of_vse_year_class("corine_raster"), "atemporal")
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "PASS")
+  # No atemporal input appears in the wrong_year evidence.
+  expect_no_match(wr$evidence, "burnable_mask|corine")
+  expect_false(any(rep$severity == "blocking" & rep$status == "FAIL"))
+})
+
+test_that("1D.3: a YEAR-SPECIFIC input with NO verifiable year -> NOT_VERIFIABLE (no false PASS)", {
+  td <- tempfile("vy_nv_"); dir.create(td)
+  # change_index filename has NO year token AND decisions carry no year column:
+  # the ONLY year-specific inputs cannot be resolved at any hierarchy level.
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_mosaic_res90m.tif")
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "NOT_VERIFIABLE")
+  expect_false(wr$verifiable)              # never a false PASS
+  expect_false(wr$severity == "blocking")  # not blocking by itself
+  expect_match(wr$evidence, "change_index|internal_decisions")
+  # A NOT_VERIFIABLE wrong_year does not abort even in strict mode.
+  expect_silent(vse_fn()(cfg, strict = TRUE, target_year = 2017L))
+})
+
 test_that("isolation: sequential AND interleaved validation use no shared/session state", {
   tda <- tempfile("vse_iso_a_"); dir.create(tda)
   tdb <- tempfile("vse_iso_b_"); dir.create(tdb)

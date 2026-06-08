@@ -66,7 +66,28 @@
 #'       `qa_reasons_csv` — the QA audit file paths.
 #'     \item `unburned_hard`, `unburned_random`, `unburned_final_raw`,
 #'       `exclusion_buffer` — the auxiliary unburned sub-pools.
+#'     \item `b4_audit` — Gate 1C.2 audit record for the random burnable
+#'       background: cell accounting at each stage (valid index, burnable,
+#'       per-rule exclusions), the percentile domain + value, eligible cells,
+#'       finally selected observations, and an explicit confirmation that NO
+#'       selected observation falls outside the burnable domain.
+#'     \item `neg_pool_fingerprint` — deterministic `list(text, checksum)`
+#'       identity of the negative pool. It folds in the B4 burnable-domain
+#'       decision, the aligned-mask hash, the percentile config + value, the
+#'       RNG seeds, the exclusions and the relevant inputs, so any cache/pool
+#'       whose fingerprint predates the burnable-domain restriction is
+#'       INVALIDATED rather than silently reused. Also written as a sidecar
+#'       `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
 #'   }
+#'
+#' @section Burnable-domain restriction (Gate 1C.2, INTENTIONAL pool change):
+#' The B4 random burnable-background bucket now computes its change-index
+#' percentile AND draws its sample ONLY within the (aligned) burnable domain.
+#' Previously the percentile was taken over the WHOLE change-index raster, so a
+#' run on this code produces a DIFFERENT negative pool than older runs. This is
+#' a deliberate methodological correction; the `neg_pool_fingerprint` changes
+#' accordingly so stale pools cannot be reused. The legacy single-fit and the
+#' nested_refit consumers both operate on this one upstream-built pool.
 #'
 #' @family workflow
 #' @export
@@ -510,6 +531,12 @@ build_supervised_training_pools <- function(config,
     out_path <- res_det$out_gpkg
     stopifnot(file.exists(out_path))
 
+    # Gate 1C.2: B4 audit + aligned-burnable-mask hash, carried up so the
+    # negative-pool fingerprint (below) can fold in the ACTUAL burnable domain
+    # used for the random background (not just the mask path).
+    b4_audit           <- res_det$b4_audit
+    burnable_mask_hash <- res_det$burnable_mask_hash
+
     unburned_hard   <- to_crs_safe(res_det$unburned_hard, crs_master) |>
       mutate(source = "deterministic_drop_hard")
     unburned_random <- to_crs_safe(res_det$unburned_random, crs_master) |>
@@ -631,7 +658,9 @@ build_supervised_training_pools <- function(config,
       unburned_random    = unburned_random,
       unburned_final_raw = unburned_final_raw,
       exclusion_buffer   = exclusion_buffer,
-      unburned_pool      = unburned_pool
+      unburned_pool      = unburned_pool,
+      b4_audit           = b4_audit,
+      burnable_mask_hash = burnable_mask_hash
     )
   })
 
@@ -640,6 +669,47 @@ build_supervised_training_pools <- function(config,
   unburned_final_raw <- unb$unburned_final_raw
   exclusion_buffer   <- unb$exclusion_buffer
   unburned_pool      <- unb$unburned_pool
+  b4_audit           <- unb$b4_audit
+  burnable_mask_hash <- unb$burnable_mask_hash
+
+  # ===========================================================================
+  # A4b. Negative-pool fingerprint (Gate 1C.2). Deterministic identity of the
+  # negative pool sufficient to INVALIDATE any cached/stale pool whose B4 domain
+  # decision, burnable mask, percentile/config, seed, exclusions or relevant
+  # inputs predate this run. Built via the same base-R fingerprinter the legacy
+  # cache uses (legacy_param_fingerprint_unb_legacy). It folds in AT LEAST:
+  #   - the B4 domain decision (burnable-restricted) + the aligned-mask hash,
+  #   - the percentile config (random_rbr_q) + its computed value,
+  #   - the RNG seeds (det + legacy),
+  #   - the exclusions (exclude_buffer_m, patch size, n_random_cells),
+  #   - the relevant inputs (change index, burnable mask path, decisions path).
+  # Because the pool is built ONCE here and SHARED downstream, both the legacy
+  # (single-fit) and nested_refit consumers operate on exactly this pool /
+  # fingerprint — there is no second, independently-built pool.
+  # ===========================================================================
+  neg_pool_fingerprint <- legacy_param_fingerprint_unb_legacy(list(
+    neg_pool_policy          = "all_sources",
+    b4_domain_decision       = b4_audit$domain_decision %||% "burnable_restricted",
+    b4_burnable_mask_hash    = burnable_mask_hash %||% NA_character_,
+    b4_burnable_mask_path    = cfg_burnable_mask_path %||% "",
+    b4_random_rbr_q          = UNB_RANDOM_RBR_Q,
+    b4_percentile_value      = b4_audit$percentile_value %||% NA_real_,
+    b4_random_seed           = UNB_RANDOM_SEED,
+    b4_n_random_cells        = UNB_N_RANDOM_CELLS,
+    b4_random_patch_size     = UNB_RANDOM_PATCH_SIZE_CELLS,
+    b4_exclude_buffer_m      = UNB_EXCL_BUFFER_M,
+    b4_n_percentile_domain   = b4_audit$n_percentile_domain %||% NA_integer_,
+    b4_n_eligible_cells      = b4_audit$n_eligible_cells %||% NA_integer_,
+    legacy_random_seed       = UNB_LEGACY_RANDOM_SEED,
+    legacy_sample_n          = UNB_LEGACY_SAMPLE_N,
+    legacy_otsu_mode         = UNB_LEGACY_OTSU_MODE,
+    target_year              = target_year,
+    scenario                 = scenario,
+    change_index             = one_year_tif,
+    internal_decisions_path  = internal_decisions_path
+  ))
+  msg("Negative-pool fingerprint (Gate 1C.2): CHECKSUM=%s",
+      neg_pool_fingerprint$checksum)
 
   # ===========================================================================
   # A5. Final labelled training set = burned + unburned
@@ -691,6 +761,30 @@ build_supervised_training_pools <- function(config,
       NULL
     })
 
+    # Gate 1C.2: persist the negative-pool fingerprint sidecar next to the pools
+    # GPKG. It is the authoritative identity of THIS (burnable-domain-restricted)
+    # negative pool. Any cache/consumer that compares against a fingerprint
+    # predating this decision will MISMATCH and must rebuild rather than silently
+    # reuse a burnable-domain-naive pool. Overwritten every run with the pool.
+    fp_path <- file.path(
+      pools_dir,
+      sprintf("%d_%s_neg_pool_fingerprint.txt", target_year, scenario)
+    )
+    fp_token <- c(
+      "# OtsuFire negative-pool fingerprint (Gate 1C.2).",
+      "# B4 random background percentile+sampling restricted to burnable domain.",
+      "# A cache whose fingerprint differs from this MUST rebuild (no silent reuse).",
+      sprintf("CHECKSUM=%s", neg_pool_fingerprint$checksum),
+      "---",
+      neg_pool_fingerprint$text
+    )
+    tryCatch(
+      writeLines(fp_token, fp_path),
+      error = function(e)
+        warning("Could not write negative-pool fingerprint sidecar (",
+                conditionMessage(e), ").", call. = FALSE)
+    )
+
     msg("DONE - pools saved: %s", gpkg_pools_out)
   }
 
@@ -712,6 +806,11 @@ build_supervised_training_pools <- function(config,
     unburned_random       = unburned_random,
     unburned_final_raw    = unburned_final_raw,
     exclusion_buffer      = exclusion_buffer,
+    # Gate 1C.2: B4 audit record + negative-pool fingerprint (burnable-domain
+    # restricted). The fingerprint INVALIDATES any cached/stale pool whose B4
+    # domain / mask / percentile / seed / exclusions / inputs differ.
+    b4_audit              = b4_audit,
+    neg_pool_fingerprint  = neg_pool_fingerprint,
     audited_internal_gpkg = file.path(
       dirs$`01_POOLS`, paste0(qa_prefix, "_audited_internal.gpkg")
     ),

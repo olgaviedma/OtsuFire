@@ -283,10 +283,17 @@ process_otsu_rasters_ <- function(
     }
     
     # ---- (FIX) Apply burnable mask BEFORE minmax/hist/otsu and before binarization ----
+    # Gate 1C.1 (2026-06-08): align via the single reusable helper, which
+    # PROJECTS on a CRS mismatch (the old resample-without-project silently
+    # zeroed all burnable cells across CRS) and validates the result.
     if (!is.null(burnable_mask)) {
-      if (!terra::compareGeom(burnable_mask, r_filtered, stopOnError = FALSE)) {
-        burnable_mask <- terra::resample(burnable_mask, r_filtered, method = "near")
-      }
+      burnable_mask <- .of_align_mask_to_template(
+        mask = burnable_mask,
+        template = r_filtered,
+        allowed_values = c(0, 1),
+        binary = TRUE,
+        mask_name = "burnable mask"
+      )$aligned
       burn01 <- terra::ifel(!is.na(burnable_mask) & burnable_mask == 1, 1, NA)
       r_filtered <- terra::mask(r_filtered, burn01)
       r_filtered <- terra::trim(r_filtered)
@@ -598,7 +605,18 @@ process_otsu_rasters_ <- function(
     }
     
     # Align CORINE to r
-    corine_resampled <- terra::resample(corine_raster_reclassed, r, method = "near")
+    # Gate 1C.1 (2026-06-08): route the categorical CORINE raster through the
+    # single reusable helper so it PROJECTS on a CRS mismatch instead of a bare
+    # resample-without-project. CORINE is multi-class (not {0,1}), so binary
+    # validation/allowed-values are disabled (binary = FALSE, allowed_values =
+    # NULL); the helper still applies method = "near" and validates geometry.
+    corine_resampled <- .of_align_mask_to_template(
+      mask = corine_raster_reclassed,
+      template = r,
+      allowed_values = NULL,
+      binary = FALSE,
+      mask_name = "CORINE raster"
+    )$aligned
     corine_masked <- terra::mask(corine_resampled, r)
     
     if (!is.null(corine_classes)) {

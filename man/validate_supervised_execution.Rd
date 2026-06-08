@@ -92,10 +92,21 @@ The 10 checks:
   \item \strong{Incompatible types} — the `class_final` label column is not
     character/factor.
   \item \strong{Incompatible feature schema} — when a `model`/`recipe` is
-    supplied, the `scoring_feature_names` do not cover the expected schema.
-    (Mandatory-recipe wiring is Gate 1D.2; here the check is SKIPPED when no
-    model/recipe is supplied and NOT_VERIFIABLE when the schema cannot be
-    introspected — never a false PASS.)
+    supplied with `scoring_feature_names`, the scoring inputs are checked
+    against the model/recipe schema. Gate 1D.2 makes this RECIPE-DRIVEN and
+    ENFORCED on the main scoring path: the canonical schema is read from
+    `recipe$cols$feature_cols` (never re-derived from the scoring year), and
+    the check is aligned with the Gate 1C.3 5-case reconciliation policy — a
+    missing / extra / type-changed / unknown-level / all-NA feature is
+    RECOVERABLE and PASSES (the reconciler heals + records it), while a
+    genuinely incompatible feature (uncoercible) FAILs (blocking). When only a
+    legacy schema (`recipe$feature_names` / `model$feature_names`) is
+    available the strict coverage semantics apply (any uncovered name FAILs).
+    The check is SKIPPED only when no model/recipe + names are supplied, and
+    NOT_VERIFIABLE when no schema can be introspected — never a false PASS.
+    [score_supervised_burned_map()] runs this check (`strict = TRUE`) before
+    building the scoring matrix, so it is no longer best-effort on the main
+    path.
   \item \strong{Contradictory configuration} — mutually exclusive cfg
     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
     `training_protocol = "legacy"` with `oof_sampling = "full"`; a

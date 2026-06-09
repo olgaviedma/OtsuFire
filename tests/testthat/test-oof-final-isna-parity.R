@@ -1,53 +1,21 @@
 # ============================================================================
-# Gate 1D.7 (2026-06-08): OOF <-> FINAL `_isNA` COMPANION PARITY, END-TO-END
-# FROM ONE `extract_supervised_features` OUTPUT.
+# Gate 1D.8 (2026-06-09): OOF <-> FINAL <-> SCORING `_isNA` COMPANION PARITY,
+# END-TO-END FROM ONE RAW FEATURE FRAME (NO pre-seeded `_isNA` columns).
 #
-# Gate 1D.4 proved OOF and FINAL share the resolved recipe/params and call the
-# SAME leakage-free core. It explicitly DEFERRED one boundary check (see the
-# NOTE at test-oof-final-symmetry.R around line 343): the `_isNA` companion
-# column parity. 1D.4 asserted only the BASE feature set (whitelist members,
-# `_isNA` stripped) was identical, because the two captured `feature_cols`
-# vectors differed in their `_isNA` companions FOR THAT FIXTURE -- the OOF chain
-# ran build_design_matrix_patches() (which SYNTHESISES an `_isNA` flag per
-# numeric feature) while the FINAL engine read `_isNA` companions straight from
-# its input GPKG, which carried none. 1D.4 attributed this to "how each path is
-# fed here, NOT a recipe asymmetry", reasoning that in a real run BOTH stages
-# consume the SAME features GPKG produced once by extract_supervised_features(),
-# so the `_isNA` set would be identical too.
+# This suite was the executable record of the KEYSTONE defect (Gate 1D.7): fed
+# the SAME extract_supervised_features() output, OOF synthesised 51 `_isNA`
+# companions (build_design_matrix_patches) while FINAL synthesised NONE (the
+# nested core consumed feature_cols verbatim and extract_supervised_features()
+# writes no `_isNA` to the GPKG). The deployed model + the OOF diagnostics ran on
+# DIFFERENT feature spaces (51 vs 102 x_cols).
 #
-# THIS suite RE-ASSERTS that deferred boundary directly: it drives BOTH the OOF
-# design-matrix build and the FINAL refit-core from ONE upstream feature frame
-# (the analogue of a single extract_supervised_features() GPKG feeding both
-# stages) and asks whether the deployed `_isNA` companion SET + the full design
-# matrix x_cols are IDENTICAL across the two stages.
-#
-# RESULT (recorded for the director): they are NOT identical. The `_isNA`
-# companion synthesis is ASYMMETRIC:
-#   * OOF  -> build_design_matrix_patches() (R/internal-sup-create-matrix.R:156-165)
-#            SYNTHESISES `<feat>_isNA` for EVERY numeric feature; these become the
-#            OOF design-matrix model_cols the per-fold core trains on.
-#   * FINAL -> feat_cols = .filter_to_supervised_whitelist(names(L_df))
-#            (R/internal-sup-train-final-direct.R:332) picks up ONLY the `_isNA`
-#            columns PHYSICALLY PRESENT in the input frame. The shared nested
-#            core (.of_nested_build_matrix, R/internal-sup-nested-refit.R:173)
-#            does NOT synthesise any `_isNA`; it consumes feature_cols verbatim.
-#   * extract_supervised_features() does NOT write `_isNA` companions into the
-#            features GPKG (the synthesis is documented as a downstream
-#            matrix-builder step, R/internal-sup-extract-features.R:431-437), so
-#            FINAL receives ZERO `_isNA` columns from the same upstream frame.
-#
-# NET: fed the SAME extract_supervised_features() output, OOF trains a design
-# matrix with 51 `_isNA` companions while FINAL trains one with 0. The deployed
-# feature spaces are NOT identical -- a real `_isNA` parity defect at the
-# OOF/FINAL boundary, exactly the one 1D.4 flagged as not re-asserted.
-#
-# Per the Gate 1D.7 scope limit (contract-test/consolidation; do NOT redesign):
-# this suite (a) DOCUMENTS the intended parity contract with an executable check
-# that currently FAILS-BY-INTENT (xfail), recording the exact divergence, and
-# (b) PROVES the base-feature parity that DOES hold. The fix (make FINAL
-# synthesise `_isNA` symmetrically, or make extract_supervised_features() write
-# the companions once for both stages) is a methodological change left to the
-# director.
+# Gate 1D.8 unified OOF, FINAL and scoring on ONE shared recipe / builder: the
+# `_isNA` synthesis now lives in the shared core (.of_synthesize_isna_companions,
+# invoked by .of_nested_coerce_features) and is the SAME for every path. This
+# suite is now a NORMAL PASSING parity test: from ONE raw frame WITHOUT any
+# pre-seeded `_isNA` columns it asserts identical column SET, ORDER, COUNT and
+# hash of the deployed feature order across OOF, FINAL and SCORING, and that the
+# legacy and nested_refit protocols yield the SAME feature space.
 # ============================================================================
 
 ns_ip <- asNamespace("OtsuFire")
@@ -66,7 +34,7 @@ make_isna_upstream_df <- function(n = 60L, seed = 7L) {
     matrix(stats::runif(n * length(wl)), nrow = n,
            dimnames = list(NULL, wl)))
   # Inject NA into a spread of features (RBR / topo / hotspot) so the synthesised
-  # companions are non-degenerate and the asymmetry is visible.
+  # companions are non-degenerate and any asymmetry would be visible.
   for (t in c("rbr_med", "elev_med", "slope_med", "hs_conf_mean", "hs_frp_sum")) {
     feat[[t]][sample.int(n, 12L)] <- NA
   }
@@ -112,30 +80,56 @@ oof_model_cols_from <- function(df) {
 # trained on + the recipe$cols$x_cols scoring aligns to) from the SAME upstream
 # frame, replicating train_final_model_direct()'s feat_cols derivation + the
 # shared nested-refit core.
-final_x_cols_from <- function(df) {
+final_fit_from <- function(df) {
   wl <- g_ip(".supervised_feature_cols")
   feat_cols <- g_ip(".filter_to_supervised_whitelist")(names(df), whitelist = wl)
   params_fn <- function(spw) {
     p <- g_ip(".of_canonical_xgb_params")(spw); p$nthread <- 1L; p
   }
-  fit <- suppressMessages(suppressWarnings(g_ip(".of_nested_refit_fit")(
+  suppressMessages(suppressWarnings(g_ip(".of_nested_refit_fit")(
     train_df = df, feature_cols = feat_cols, label_col = "class",
     group_col = "block_id", block_col = "block_id", val_frac = 0.2,
     params_fn = params_fn, sampling_seed = 42L, fold_seed = 42L,
     nrounds_max = 8L, early_stopping_rounds = 4L,
     impute_numeric = "median", impute_factor_missing = "MISSING",
     verbose = FALSE)))
-  fit$x_cols
+}
+final_x_cols_from <- function(df) final_fit_from(df)$x_cols
+
+# Resolve the SCORING deployed x_cols from the SAME upstream frame: build the
+# saved-recipe shape from the FINAL fit, then drive the production scoring build
+# (.of_reconcile_scoring_schema -> .of_nested_coerce_features ->
+# .of_nested_apply_medians -> .of_nested_build_matrix(ref = x_cols)) on the raw
+# (no `_isNA`) feature frame.
+scoring_x_cols_from <- function(df, fit) {
+  medians <- fit$medians[!vapply(fit$medians,
+                                 function(z) is.null(z) || is.na(z), logical(1))]
+  recipe <- list(
+    cols = list(id_col = "fire_uid", class_col = "class", group_col = "block_id",
+                feature_cols = fit$feature_cols,
+                base_features = fit$base_features,
+                missing_indicator_features = fit$missing_indicator_features,
+                final_feature_order = fit$final_feature_order,
+                x_cols = fit$x_cols),
+    impute = list(impute_numeric = "median", numeric_medians = medians,
+                  impute_factor_missing = "MISSING"))
+  wl <- g_ip(".supervised_feature_cols")
+  # Raw scoring frame: ONLY the base whitelist features (NO `_isNA`), + admin.
+  x_df <- df[, intersect(names(df), c("fire_uid", wl)), drop = FALSE]
+  rec <- g_ip(".of_reconcile_scoring_schema")(x_df, recipe)
+  X_raw <- g_ip(".of_nested_coerce_features")(rec$df, "MISSING")
+  X_imp <- g_ip(".of_nested_apply_medians")(X_raw, medians)
+  M <- g_ip(".of_nested_build_matrix")(X_imp, ref_cols = recipe$cols$x_cols)
+  colnames(M)
 }
 
 isna_of <- function(v) sort(grep("_isNA$", v, value = TRUE))
 base_of <- function(v) v[!grepl("_isNA$", v)]
 
 # ---------------------------------------------------------------------------
-# (1) BASE-FEATURE parity DOES hold (the load-bearing 1D.4 guarantee): stripped
-#     of `_isNA`, OOF and FINAL train on the SAME canonical whitelist features
-#     in the SAME canonical order. This is asserted here end-to-end from ONE
-#     upstream frame (not just from the captured args of 1D.4).
+# (1) BASE-FEATURE parity (load-bearing 1D.4 guarantee): stripped of `_isNA`,
+#     OOF and FINAL train on the SAME canonical whitelist features in the SAME
+#     canonical order, end-to-end from ONE upstream frame.
 # ---------------------------------------------------------------------------
 test_that("base feature set (whitelist, _isNA stripped) is identical OOF vs FINAL from one upstream frame", {
   skip_if_not_installed("sf"); skip_if_not_installed("xgboost")
@@ -149,71 +143,104 @@ test_that("base feature set (whitelist, _isNA stripped) is identical OOF vs FINA
   oof_base   <- base_of(oof_cols)
   final_base <- base_of(final_cols)
 
-  # Same base features (set) ...
   expect_setequal(oof_base, final_base)
-  # ... and both follow the canonical whitelist order.
   expect_identical(oof_base,   intersect(wl, oof_base))
   expect_identical(final_base, intersect(wl, final_base))
-  # The base sets are byte-identical (same names, same order) across stages.
   expect_identical(oof_base, final_base)
 })
 
 # ---------------------------------------------------------------------------
-# (2) THE DEFERRED 1D.4 BOUNDARY, re-asserted: the `_isNA` companion SET + the
-#     FULL deployed x_cols must be IDENTICAL across OOF and FINAL when both are
-#     fed the SAME upstream extract_supervised_features() frame.
-#
-#     This is the intended contract. It currently FAILS (documented defect):
-#     OOF synthesises 51 `_isNA` companions; FINAL synthesises none. We mark it
-#     xfail and assert the EXACT divergence so the contract is navigable and the
-#     regression is locked until the director fixes the synthesis asymmetry.
+# (2) KEYSTONE PARITY (the formerly-xfail boundary, NOW PASSING): the `_isNA`
+#     companion SET + the FULL deployed x_cols are IDENTICAL across OOF, FINAL
+#     and SCORING when all three are fed the SAME raw frame with NO pre-seeded
+#     `_isNA` columns. hash(OOF) == hash(FINAL) == hash(SCORING).
 # ---------------------------------------------------------------------------
-test_that("[xfail/DEFECT] _isNA companion set + x_cols should be IDENTICAL OOF vs FINAL from one upstream frame", {
+test_that("_isNA companion set + x_cols are IDENTICAL across OOF, FINAL and SCORING (one upstream frame)", {
   skip_if_not_installed("sf"); skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")
 
   df <- make_isna_upstream_df()
+  fit        <- final_fit_from(df)
   oof_cols   <- oof_model_cols_from(df)
-  final_cols <- final_x_cols_from(df)
+  final_cols <- fit$x_cols
+  score_cols <- scoring_x_cols_from(df, fit)
 
-  oof_isna   <- isna_of(oof_cols)
-  final_isna <- isna_of(final_cols)
+  # Every path actually synthesises `_isNA` companions now (the fix).
+  expect_true(length(isna_of(oof_cols))   > 0L)
+  expect_true(length(isna_of(final_cols)) > 0L)
+  expect_true(length(isna_of(score_cols)) > 0L)
 
-  # --- The INTENDED contract (what a correct, symmetric pipeline guarantees) ---
-  # When the engine is fixed, flip these two `expect_false`/divergence asserts to
-  # the commented `expect_identical`/`expect_setequal` and delete the xfail note.
-  #   expect_setequal(oof_isna, final_isna)          # _isNA companion SET parity
-  #   expect_identical(oof_cols, final_cols)          # full x_cols parity (order)
+  # COUNT parity.
+  expect_identical(length(oof_cols), length(final_cols))
+  expect_identical(length(final_cols), length(score_cols))
 
-  # --- The DEFECT, asserted explicitly (recorded + reported to the director) ---
-  # OOF synthesises a companion for every numeric feature; FINAL synthesises none
-  # because extract_supervised_features() writes no `_isNA` columns and the
-  # nested core never fabricates them.
-  expect_true(length(oof_isna)  > 0L,
-              info = "OOF synthesises _isNA companions (build_design_matrix_patches)")
-  expect_identical(length(final_isna), 0L,
-                   info = paste("DEFECT: FINAL synthesises NO _isNA companions",
-                                "from the same upstream frame"))
-  # The companion sets are NOT identical -> the deployed feature spaces differ.
-  expect_false(setequal(oof_isna, final_isna),
-               info = paste("DEFECT: OOF/FINAL _isNA companion SET differs when",
-                            "fed the same extract_supervised_features output."))
-  # The full design-matrix x_cols are NOT identical either (neither set nor order)
-  expect_false(setequal(oof_cols, final_cols),
-               info = "DEFECT: OOF/FINAL deployed x_cols differ (set).")
-  expect_false(identical(oof_cols, final_cols),
-               info = "DEFECT: OOF/FINAL deployed x_cols differ (order).")
+  # SET parity.
+  expect_setequal(oof_cols, final_cols)
+  expect_setequal(final_cols, score_cols)
+  expect_setequal(isna_of(oof_cols), isna_of(final_cols))
+  expect_setequal(isna_of(final_cols), isna_of(score_cols))
 
-  # Pin the EXACT divergence so the fix is unambiguous: every OOF `_isNA` is one
-  # FINAL lacks; FINAL has no `_isNA` FINAL-only.
-  expect_setequal(setdiff(final_isna, oof_isna), character(0))
-  expect_true(length(setdiff(oof_isna, final_isna)) == length(oof_isna))
+  # ORDER parity (byte-identical column order).
+  expect_identical(oof_cols, final_cols)
+  expect_identical(final_cols, score_cols)
+
+  # HASH parity: the single load-bearing acceptance assertion.
+  h_oof   <- digest::digest(oof_cols)
+  h_final <- digest::digest(final_cols)
+  h_score <- digest::digest(score_cols)
+  expect_identical(h_oof, h_final)
+  expect_identical(h_final, h_score)
 })
 
 # ---------------------------------------------------------------------------
-# (3) DETERMINISM of the boundary: re-running each stage's column derivation on
-#     the SAME upstream frame is byte-identical (so the parity comparison above
-#     is stable, and a future fix can be asserted exactly).
+# (3) legacy == nested_refit feature space: the two TRAINING PROTOCOLS share the
+#     SAME shared recipe / feature space (only the training procedure differs).
+#     Driven through the real FINAL engine on a GPKG built from the raw frame.
+# ---------------------------------------------------------------------------
+test_that("legacy and nested_refit FINAL protocols yield the SAME feature space (one upstream frame)", {
+  skip_if_not_installed("sf"); skip_if_not_installed("xgboost")
+  skip_if_not_installed("Matrix"); skip_if_not_installed("dplyr")
+
+  df <- make_isna_upstream_df()
+  sfc <- sf::st_sfc(lapply(seq_len(nrow(df)), function(i) {
+    x <- (i %% 5); y <- (i %/% 5)
+    sf::st_polygon(list(rbind(c(x, y), c(x + 1, y), c(x + 1, y + 1),
+                              c(x, y + 1), c(x, y))))
+  }), crs = 3035)
+  g <- tempfile(fileext = ".gpkg")
+  on.exit(unlink(g, force = TRUE), add = TRUE)
+  sf::st_write(sf::st_sf(df, geometry = sfc), g, layer = "train_features",
+               quiet = TRUE, delete_dsn = TRUE)
+
+  engine <- g_ip("train_final_model_direct")
+  common <- list(
+    labelled_gpkg = g, labelled_layer = "train_features",
+    out_dir = NULL, overwrite = TRUE, verbose = FALSE,
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
+    sampling_seed = 42L, group_col = "block_id", val_frac = 0.2,
+    seed = 42L, nrounds_max = 8L, early_stopping_rounds = 4L,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    model_params_base = g_ip(".of_canonical_model_params")())
+
+  res_leg <- suppressMessages(suppressWarnings(do.call(engine,
+    c(common, list(prefix = "leg", training_protocol = "legacy")))))
+  res_nst <- suppressMessages(suppressWarnings(do.call(engine,
+    c(common, list(prefix = "nst", training_protocol = "nested_refit")))))
+
+  # Both protocols deploy the SAME shared feature space (base + `_isNA`).
+  expect_setequal(res_leg$x_cols, res_nst$x_cols)
+  expect_setequal(res_leg$feature_cols, res_nst$feature_cols)
+  expect_true(length(isna_of(res_leg$x_cols)) > 0L)
+  expect_true(length(isna_of(res_nst$x_cols)) > 0L)
+  # And it matches the standalone-core feature space derived above.
+  expect_setequal(res_leg$x_cols, final_x_cols_from(df))
+})
+
+# ---------------------------------------------------------------------------
+# (4) DETERMINISM of the boundary: re-running each stage's column derivation on
+#     the SAME upstream frame is byte-identical.
 # ---------------------------------------------------------------------------
 test_that("each stage's deployed columns are deterministic for a fixed upstream frame", {
   skip_if_not_installed("sf"); skip_if_not_installed("xgboost")

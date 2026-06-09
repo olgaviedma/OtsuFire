@@ -361,21 +361,20 @@ train_final_model_direct <- function(
   nested_audit <- NULL
 
   if (identical(training_protocol, "legacy")) {
-  # ---- LEGACY path (byte-identical to the historical behaviour) ----
-  X_df <- L_df[, feat_cols, drop = FALSE]
-  for (nm in names(X_df)) {
-    if (is.factor(X_df[[nm]])) X_df[[nm]] <- as.character(X_df[[nm]])
-    if (is.character(X_df[[nm]])) {
-      X_df[[nm]][is.na(X_df[[nm]])] <- impute_factor_missing
-      lv <- unique(X_df[[nm]])
-      X_df[[nm]] <- factor(X_df[[nm]], levels = unique(c(lv, "__OTHER__")))
-    }
-    if (is.factor(X_df[[nm]]) && nlevels(X_df[[nm]]) < 2) {
-      lv <- levels(X_df[[nm]])
-      levels(X_df[[nm]]) <- unique(c(lv, "__OTHER__"))
-    }
-    if (is.logical(X_df[[nm]])) X_df[[nm]] <- as.integer(X_df[[nm]])
-  }
+  # ---- LEGACY path ----
+  # Gate 1D.8 (2026-06-09): the legacy path now ALSO synthesises the SHARED
+  # `<feature>_isNA` companions (via the same .of_nested_coerce_features ->
+  # .of_synthesize_isna_companions used by nested_refit + scoring), so the
+  # corrected legacy baseline trains on the SAME feature space as OOF / scoring
+  # (base + `_isNA`). Only the TRAINING PROCEDURE differs between legacy and
+  # nested_refit, NOT the feature space. This is an intentional, result-affecting
+  # change vs the old defective 51-column legacy model.
+  X_df <- .of_nested_coerce_features(L_df[, feat_cols, drop = FALSE],
+                                     impute_factor_missing,
+                                     synthesize_isna = TRUE)
+  # The recipe feature space is now the FULL post-synthesis set (base + `_isNA`),
+  # in canonical order -- identical to the nested_refit / scoring feature space.
+  feat_cols <- names(X_df)
 
   numeric_medians <- list()
   for (nm in names(X_df)) {
@@ -516,6 +515,10 @@ train_final_model_direct <- function(
     verbose               = verbose
   )
   model <- fit$model
+  # Gate 1D.8: the recipe feature space is the FULL post-synthesis set (base +
+  # `_isNA`) the shared core derived -- identical to the legacy / OOF / scoring
+  # feature space. Record it as recipe$cols$feature_cols below.
+  feat_cols <- fit$feature_cols
   # Deploy the REFIT recipe. `numeric_medians` excludes degenerate (all-NA in
   # train) columns -> the scoring path leaves those cells NA (xgboost missing),
   # exactly matching how the refit model was trained.
@@ -566,6 +569,20 @@ train_final_model_direct <- function(
   nested_audit$otsu_selected              <- nrow(sampled_otsu)
   nested_audit$outer_test_capped          <- FALSE  # no outer test in FINAL
   nested_audit$outer_test_used_for_fit    <- FALSE
+  }
+
+  # Gate 1D.8: the recipe records the base / `_isNA` partition + canonical order
+  # of the SHARED feature space, identical for legacy and nested_refit. For
+  # nested the partition comes from the shared core; for legacy it is derived
+  # from the post-synthesis feature set (feat_cols == names(X_df)).
+  if (identical(training_protocol, "nested_refit")) {
+    base_features              <- fit$base_features
+    missing_indicator_features <- fit$missing_indicator_features
+    final_feature_order        <- fit$final_feature_order
+  } else {
+    missing_indicator_features <- feat_cols[grepl("_isNA$", feat_cols)]
+    base_features              <- setdiff(feat_cols, missing_indicator_features)
+    final_feature_order        <- feat_cols
   }
 
   files <- list()
@@ -653,7 +670,16 @@ train_final_model_direct <- function(
         id_col = id_col,
         class_col = class_col,
         group_col = group_col,
+        # Gate 1D.8: feature_cols is the FULL SHARED feature space (base +
+        # `_isNA`) in canonical order; base_features / missing_indicator_features
+        # record the partition; final_feature_order is the canonical
+        # pre-one-hot order. x_cols is the deployed design-matrix column order
+        # (post one-hot; for the all-numeric supervised schema x_cols ==
+        # final_feature_order). The scoring path aligns to feature_cols + x_cols.
         feature_cols = feat_cols,
+        base_features = base_features,
+        missing_indicator_features = missing_indicator_features,
+        final_feature_order = final_feature_order,
         x_cols = colnames(X)
       ),
       training = list(

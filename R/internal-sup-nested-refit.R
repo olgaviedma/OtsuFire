@@ -67,18 +67,175 @@
   list(tr_idx = tr_idx, val_idx = val_idx, mode = mode)
 }
 
+# =============================================================================
+# Gate 1D.8 (2026-06-09): SHARED `_isNA` missingness-indicator synthesis.
+#
+# THE SINGLE place every supervised preprocessing path (OOF, FINAL, scoring;
+# legacy AND nested_refit) creates `<feature>_isNA` companions. Before this gate
+# the synthesis lived ONLY inside build_design_matrix_patches() (the OOF design
+# matrix), so OOF trained on base + `_isNA` (~102 cols) while FINAL / scoring saw
+# only the base whitelist (~51 cols) -- the deployed model and the OOF
+# diagnostics ran on DIFFERENT feature spaces. Routing every path through this
+# one helper restores OOF == FINAL == scoring parity.
+#
+# CANONICAL `_isNA` SEMANTICS (code + roxygen on apply_supervised_recipe):
+#   * SCOPE: an `_isNA` companion is created for EVERY MEASURED NUMERIC feature
+#     (matching the historical B5 / build_design_matrix_patches scope). Logical
+#     columns are coerced to integer first and therefore ALSO get a companion
+#     (e.g. hotspot_available_isNA, which is all-0 because the flag is never NA).
+#     CATEGORICAL (character/factor) features get NO `_isNA` companion (they
+#     carry a sentinel level instead) -- this matches the prior behaviour.
+#   * VALUE: feature_isNA <- as.integer(is.na(feature)), computed BEFORE
+#     imputation, row-local (no cross-row leakage).
+#   * DEDUPE / NO SECOND ORDER: a column already ending in `_isNA` never gets a
+#     `<x>_isNA_isNA` companion; an `_isNA` column that arrives in the input is
+#     REGENERATED from its base feature (if the base is present) and never
+#     duplicated.
+#   * FEATURE ABSENT / ALL-NA: handled upstream (the base column exists, possibly
+#     all-NA) so its companion is simply all-1; nothing special here.
+#
+# ORDER: base feature columns are kept in their incoming order, then ALL `_isNA`
+# companions are appended in base-feature order. This deterministic
+# base-block-then-indicator-block layout is identical for every path, which is
+# what makes hash(feature_order_OOF) == hash(FINAL) == hash(SCORING).
+#
+# @param X_df coerced feature data.frame (numeric/integer/factor; logicals
+#   already coerced to integer by the caller, or coerce here defensively).
+# @return X_df with `<feature>_isNA` companions appended (base block first).
+# @keywords internal
+# @noRd
+.of_synthesize_isna_companions <- function(X_df) {
+  base_names <- names(X_df)
+  # Numeric/integer base features that are NOT themselves `_isNA` flags.
+  isna_targets <- base_names[vapply(base_names, function(nm) {
+    if (grepl("_isNA$", nm)) return(FALSE)
+    is.numeric(X_df[[nm]]) || is.integer(X_df[[nm]]) || is.logical(X_df[[nm]])
+  }, logical(1))]
+
+  companions <- list()
+  for (nm in isna_targets) {
+    flag_nm <- paste0(nm, "_isNA")
+    companions[[flag_nm]] <- as.integer(is.na(X_df[[nm]]))
+  }
+
+  # Drop any pre-existing `_isNA` columns whose base feature is present (they are
+  # REGENERATED above; never trust / duplicate an input-provided companion). An
+  # `_isNA` column whose base feature is ABSENT is left untouched (it is itself a
+  # base feature from the recipe's point of view).
+  preexisting_isna <- base_names[grepl("_isNA$", base_names)]
+  regenerated <- intersect(preexisting_isna, names(companions))
+  keep_base <- setdiff(base_names, regenerated)
+
+  out <- X_df[, keep_base, drop = FALSE]
+  for (flag_nm in names(companions)) {
+    out[[flag_nm]] <- companions[[flag_nm]]
+  }
+  out
+}
+
+#' Fit the SHARED supervised preprocessing recipe on TRAINING data only.
+#'
+#' Gate 1D.8 (2026-06-09): the ONE recipe object that is the single source of
+#' truth for the supervised feature space across OOF, FINAL and scoring. It is
+#' fit on TRAINING rows only (no held-out / scoring data) and then APPLIED
+#' (never re-fit) to any frame via [apply_supervised_recipe()].
+#'
+#' CANONICAL PREPROCESSING ORDER (identical everywhere):
+#'   original features -> resolve base-feature whitelist -> create
+#'   `<feature>_isNA` indicators (BEFORE imputation) -> fit imputation medians /
+#'   factor levels on TRAINING -> canonical final column order
+#'   (base block, then `_isNA` block).
+#'
+#' MISSING POLICY: each measured numeric base feature gets an
+#' `<feature>_isNA = as.integer(is.na(feature))` indicator and is then imputed to
+#' the TRAINING median (`impute_numeric = "median"`; "zero" forces 0). An all-NA
+#' training column has an NA median -> the indicator is all-1 and the base is left
+#' NA so xgboost treats it as missing (degenerate rule). `_isNA` scope = all
+#' measured numeric whitelist features (logicals coerced to integer first, so they
+#' get a -- typically all-0 -- companion); categorical features get NO `_isNA`.
+#'
+#' WEIGHTS POLICY: `_isNA` indicators carry the CANONICAL weight 1.0 unless the
+#' caller's `feature_weights` names them explicitly (no automatic inheritance from
+#' the base feature). This is applied identically in OOF and FINAL.
+#'
+#' @param training_df data.frame of TRAINING rows carrying the base feature
+#'   columns (`base_features`).
+#' @param base_features character; the base whitelist features (no `_isNA`).
+#' @param impute_numeric "median" (default) or "zero".
+#' @param impute_factor_missing sentinel level for character/factor NAs.
+#' @return a recipe list with: `base_features`, `missing_indicator_features`,
+#'   `final_feature_order`, `numeric_medians` (named list; NA = degenerate),
+#'   `impute_numeric`, `impute_factor_missing`. Apply it with
+#'   [apply_supervised_recipe()].
+#' @keywords internal
+#' @noRd
+fit_supervised_recipe <- function(training_df, base_features,
+                                  impute_numeric = c("median", "zero"),
+                                  impute_factor_missing = "MISSING") {
+  impute_numeric <- match.arg(impute_numeric)
+  base_features <- intersect(base_features, names(training_df))
+  X_raw <- .of_nested_coerce_features(training_df[, base_features, drop = FALSE],
+                                      impute_factor_missing, synthesize_isna = TRUE)
+  medians <- .of_nested_fit_medians(X_raw, seq_len(nrow(X_raw)), impute_numeric)
+  final_order <- names(X_raw)
+  list(
+    base_features              = base_features,
+    missing_indicator_features = final_order[grepl("_isNA$", final_order)],
+    final_feature_order        = final_order,
+    numeric_medians            = medians,
+    impute_numeric             = impute_numeric,
+    impute_factor_missing      = impute_factor_missing
+  )
+}
+
+#' Apply a fitted supervised recipe to ANY frame (no re-fit).
+#'
+#' Gate 1D.8 (2026-06-09): the deterministic transform half of the shared recipe.
+#' Synthesises the SAME `<feature>_isNA` indicators, imputes with the recipe's
+#' TRAINING medians (degenerate -> left NA -> xgboost-missing), and returns an
+#' NA-preserving design matrix in the recipe's canonical column order. Used
+#' identically by OOF (outer-test), FINAL (refit) and scoring.
+#'
+#' @param df data.frame to transform (any rows; base features may be absent /
+#'   all-NA -- the indicator is created and the base follows the missing policy).
+#' @param recipe a recipe from [fit_supervised_recipe()] (or the persisted FINAL
+#'   recipe, which carries the same fields under `$impute` / `$cols`).
+#' @return a base matrix aligned to `recipe$final_feature_order`, NA-preserving.
+#' @keywords internal
+#' @noRd
+apply_supervised_recipe <- function(df, recipe) {
+  ifm <- recipe$impute_factor_missing %||% "MISSING"
+  meds <- recipe$numeric_medians %||% list()
+  ref  <- recipe$final_feature_order
+  base <- recipe$base_features %||% setdiff(ref, grep("_isNA$", ref, value = TRUE))
+  cols <- intersect(base, names(df))
+  X_raw <- .of_nested_coerce_features(df[, cols, drop = FALSE], ifm,
+                                      synthesize_isna = TRUE)
+  X_imp <- .of_nested_apply_medians(X_raw, meds)
+  .of_nested_build_matrix(X_imp, ref_cols = ref)
+}
+
 # Prepare a data.frame of feature columns (factor/character/logical handling)
 # WITHOUT imputing numeric NAs. This mirrors the non-numeric coercions performed
 # in train_final_model_direct() (lines ~327-339) so the downstream
 # sparse.model.matrix() behaves identically, but leaves numeric NAs in place so
 # imputation can be fit train-only afterwards.
 #
-# Returns the coerced data.frame (numeric columns still carry NA where missing,
-# and non-finite values coerced to NA).
+# Gate 1D.8 (2026-06-09): after the factor/logical coercions, this now ALSO
+# synthesises the shared `<feature>_isNA` companions (.of_synthesize_isna_companions)
+# so OOF, FINAL and scoring build the SAME feature space. The `_isNA` flags are
+# created BEFORE imputation (the caller fits/applies medians afterwards).
 #
+# Returns the coerced data.frame (numeric columns still carry NA where missing,
+# non-finite values coerced to NA, `_isNA` companions appended).
+#
+# @param synthesize_isna logical; when TRUE (default) append the shared `_isNA`
+#   companions. The scoring path passes TRUE too (its reconciler creates the
+#   BASE columns; the companions are synthesised here, identically to training).
 # @keywords internal
 # @noRd
-.of_nested_coerce_features <- function(X_df, impute_factor_missing) {
+.of_nested_coerce_features <- function(X_df, impute_factor_missing,
+                                       synthesize_isna = TRUE) {
   for (nm in names(X_df)) {
     if (is.factor(X_df[[nm]])) X_df[[nm]] <- as.character(X_df[[nm]])
     if (is.character(X_df[[nm]])) {
@@ -91,6 +248,9 @@
       levels(X_df[[nm]]) <- unique(c(lv, "__OTHER__"))
     }
     if (is.logical(X_df[[nm]])) X_df[[nm]] <- as.integer(X_df[[nm]])
+  }
+  if (isTRUE(synthesize_isna)) {
+    X_df <- .of_synthesize_isna_companions(X_df)
   }
   X_df
 }
@@ -270,13 +430,22 @@
     stop(".of_nested_refit_fit(): no feature columns present in train_df.")
   }
 
+  # Gate 1D.8: the SHARED recipe synthesises `_isNA` companions itself
+  # (.of_nested_coerce_features -> .of_synthesize_isna_companions). Strip any
+  # `_isNA` companion that arrives in feature_cols whose BASE feature is also
+  # present, so we never carry an input-provided companion into the matrix (it is
+  # regenerated). base_features is the recipe's canonical pre-synthesis set.
+  base_features <- feature_cols[!(grepl("_isNA$", feature_cols) &
+                                  sub("_isNA$", "", feature_cols) %in% feature_cols)]
+
   y_all <- as.integer(train_df[[label_col]] == "burned")
   n_all <- nrow(train_df)
   n_pos <- sum(y_all == 1L)
   n_neg <- sum(y_all == 0L)
 
-  # Coerce non-numeric features once (factor/char/logical) WITHOUT imputing.
-  X_df_raw <- .of_nested_coerce_features(train_df[, feature_cols, drop = FALSE],
+  # Coerce non-numeric features once (factor/char/logical) WITHOUT imputing, then
+  # synthesise the shared `_isNA` companions (identical for OOF / FINAL / scoring).
+  X_df_raw <- .of_nested_coerce_features(train_df[, base_features, drop = FALSE],
                                          impute_factor_missing)
 
   # Build an NA-preserving design matrix (degenerate / missing cells stay NA so
@@ -375,6 +544,17 @@
     verbose = if (isTRUE(verbose)) 1 else 0
   )
 
+  # Gate 1D.8: the recipe's column sets. base_features = the pre-synthesis
+  # whitelist features; missing_indicator_features = the synthesised `_isNA`
+  # companions; final_feature_order = the canonical post-synthesis feature order
+  # (base block then `_isNA` block, BEFORE any factor one-hot expansion).
+  # feature_cols (returned + persisted into recipe$cols$feature_cols, which the
+  # scoring reconciler aligns to) is the FULL post-synthesis set in canonical
+  # order, so OOF/FINAL/scoring all share ONE feature space.
+  final_feature_order <- names(X_df_raw)
+  missing_indicator_features <- final_feature_order[grepl("_isNA$", final_feature_order)]
+  feature_cols_full <- final_feature_order
+
   # Degenerate columns: features whose REFIT median is NA (all-NA in train_df).
   degenerate_cols <- names(med_refit)[vapply(med_refit, function(z) is.null(z) || is.na(z), logical(1))]
 
@@ -404,7 +584,13 @@
     best_iteration = best_iteration,
     medians        = med_refit,
     x_cols         = refit_x_cols,
-    feature_cols   = feature_cols,
+    # Gate 1D.8: feature_cols is now the FULL post-synthesis set (base + `_isNA`),
+    # in canonical order -- the single shared feature space. The recipe also
+    # records the base / indicator partition separately.
+    feature_cols   = feature_cols_full,
+    base_features  = base_features,
+    missing_indicator_features = missing_indicator_features,
+    final_feature_order        = final_feature_order,
     spw_selection  = spw_sel,
     spw_refit      = spw_refit,
     inner_split    = spl,

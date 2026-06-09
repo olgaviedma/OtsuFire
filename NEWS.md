@@ -1,98 +1,122 @@
 # OtsuFire (development version)
 
-## Corrected defect: OOF / FINAL `_isNA` divergence
+# OtsuFire 0.6.0
 
-A feature-recipe defect was found and corrected during Gate 1D.8, before the
-smoke run and before the definitive run:
+Supervised-closure milestone (Gate 1B–1E). This release unifies the supervised
+feature recipe across the out-of-fold (OOF), FINAL-refit, and scoring stages,
+restricts the random background to the burnable domain, removes several
+abandoned supervised code paths, and adds the public
+`validate_supervised_execution()` entry point plus a runtime feature-schema
+parity guard. For a 0.x package this is shipped as a MINOR bump (0.5.0 ->
+0.6.0); 0.x minors may carry breaking changes, and the items below are breaking.
 
-* Previously, the OOF diagnostics generated the 51 `<feature>_isNA`
-  missing-indicator companions, but the FINAL refit and the scoring path did
-  NOT use them. OOF therefore evaluated a 102-column feature space (51 base +
-  51 indicators) while the deployed FINAL model and scoring ran on a different
-  (51-column) space.
-* As a result, the prior OOF diagnostics did **not** exactly represent the
-  deployed model. The prior FINAL was not necessarily invalid, but it was a
-  **different model** than the one OOF evaluated.
-* The correction was made **before the smoke and before the definitive 2017
-  run**. OOF, FINAL and scoring now share the **same recipe** (one shared
-  builder; 51 base + 51 `_isNA` = 102 columns), enforced at runtime by the
-  feature-schema parity guard below.
-* **Definitive results require RETRAINING both models** (OOF and FINAL) under
-  the corrected common recipe.
-* Any comparison baseline produced under the current code must be named the
-  **"legacy training protocol under the corrected common feature recipe"** — it
-  is **not** an exact reproduction of the old 51-feature FINAL, because the
-  feature recipe (and therefore the feature space) changed when the `_isNA`
-  indicators were unified across the three paths.
+## BREAKING CHANGES
 
-## Methodology documentation refresh (Gate 1E.2/1E.3)
+* **Shared `_isNA` feature recipe (OOF / FINAL / scoring now share ONE recipe).**
+  Previously the OOF diagnostics built the 51 `<feature>_isNA` missing-indicator
+  companions (a 102-column space: 51 base + 51 indicators) while the FINAL refit
+  and the scoring path did NOT, so they ran on a different 51-column space. The
+  three stages now build features through a single shared recipe builder; the
+  FINAL model and the scoring matrix therefore use the **102-column** space
+  (51 base + 51 `_isNA`). **Models trained under the old recipe must be
+  retrained** — the deployed feature space changed.
+* **B4 `random_background` restricted to the burnable domain.** The random
+  background percentile selection and sampling now operate only inside the
+  burnable mask (with CRS alignment) and contribute to a content-aware
+  `neg_pool_fingerprint`. The **negative pool changed**, so **prior negative-pool
+  caches are invalidated** and will be rebuilt.
+* **Removed abandoned supervised paths and knobs:**
+  * `deterministic_direct` (the pipeline is always the `all_sources` negative
+    pool; the user-selectable path no longer exists).
+  * the supervised burned-like **registry** (API argument, orchestrator code,
+    and cfg field).
+  * the `negative_pool_policy` parameter (the policy is implicitly and always
+    `all_sources`).
+  * the supervised **ecoregion Otsu branch** (`burnable_only` is canonical; the
+    deterministic CORINE × ecoregion stratification in the delineation stage is
+    preserved — ecoregions are not a supervised feature).
+* **Mask / CRS now projected on mismatch.** The burnable-mask alignment helper
+  reprojects on a CRS mismatch instead of silently zeroing cross-CRS masks
+  (which previously produced empty masks without error).
 
-The narrative docs (METHODS_BOOK chapters, the workflow-overview vignette) were
-updated to match the current code and to remove obsolete content:
+## DEPRECATIONS
 
-* Documented internal validation (OOF, against deterministic-decision labels)
-  vs external validation (`validate_fire_maps()` against EFFIS — omission,
-  commission, F1, IoU); the two are computed against different references and
-  are not comparable.
-* Clarified that `p_burned` / `p_burned_current_year` is a MODEL SCORE under the
-  training distribution, not a calibrated probability.
-* Documented the burnable-only negative pool, the burnable-domain B4 random
-  background, the content-aware `neg_pool_fingerprint`, and that CORINE ×
-  ecoregion stratification is used only in the deterministic delineation stage
-  (not the supervised negative pool; ecoregions are not a supervised feature).
-* Documented `training_protocol` (legacy vs nested_refit) as a training-procedure
-  choice (not a feature-space change), `cfg$model_params` / `cfg$train_control`
-  as the single source of truth, the caps, and `scale_pos_weight`.
-* Documented the shared feature recipe / `_isNA` indicators and the runtime
-  feature-schema parity guard.
-* Removed obsolete content: the rejected/removed supervised burned-like
-  registry, `deterministic_direct` as a current path, ecoregions in the
-  supervised pool, the standalone-script "bridge" framing (the pipeline is
-  package-internal), and references to the removed `negative_pool_policy` knob.
+* **Function-level methodological / training-control parameter shims** on the
+  supervised entry points (the four `*_to_burned_ratio` caps,
+  `feature_whitelist_override`, `feature_weights`, `sampling_seed`, `seed`,
+  `val_frac`, `group_col`, `nrounds_max`, `early_stopping_rounds`, `impute_*`,
+  `training_protocol`) are DEPRECATED. The canonical single source of truth is
+  `build_supervised_burned_config()` (`cfg$model_params` / `cfg$train_control`).
+  A non-`NULL` override of a canonical-default field now emits a deprecation
+  warning of class `"otsufire_deprecated_param"`; an override that conflicts with
+  an EXPLICIT builder value is an error. Removal plan: deprecated now (warn) ->
+  scheduled for removal in **0.7.0**, consistent with the roxygen note.
 
-## Runtime feature-schema parity guard
+## NEW
 
-Gate 1E (2026-06-09) adds a RUNTIME feature-schema parity guard that prevents the
-out-of-fold (OOF), FINAL-refit, and scoring stages from silently diverging in
-feature space on real data. It is the runtime backstop for the Gate 1D.8 `_isNA`
-defect (OOF synthesised 51 `_isNA` companions while FINAL synthesised none, so the
-deployed model and the OOF diagnostics ran on different feature spaces).
+* **`validate_supervised_execution()` is now a public export.** Workflow-level
+  validator with a structured report, running on the single shared supervised
+  engine.
+* **`cfg$model_params` / `cfg$train_control` are the single source of truth**
+  for supervised parameters, with **per-field provenance** (default vs
+  user-set), so partial overrides (e.g. a partial xgboost override) are tracked
+  field by field.
+* **Runtime feature-schema parity guard.** Gate 1E (2026-06-09) adds a runtime
+  guard that prevents the OOF, FINAL-refit, and scoring stages from silently
+  diverging in feature space on real data — the runtime backstop for the `_isNA`
+  defect. A new internal helper `feature_schema_fingerprint()` computes a
+  reproducible, wall-clock-FREE structural fingerprint (base-R rolling checksum,
+  no `digest` dependency) that hashes ONLY the structural feature-space contract:
+  base-feature names + order, the `_isNA` indicator names + order,
+  `final_feature_order`, `feature_cols` / `x_cols`, the `n_base` /
+  `n_indicators` / `n_total` counts, the numeric-vs-factor encoding contract, the
+  feature-weights POLICY (the rule "`_isNA` indicators carry the canonical weight
+  1.0"), and the contract version `.OF_SUPERVISED_FEATURE_CONTRACT_VERSION`
+  (`"1.0"`). It DELIBERATELY EXCLUDES imputation medians, learned categorical
+  levels, `scale_pos_weight`, `best_iteration`, seeds, any fold-fitted statistic,
+  and any timestamp (these legitimately differ between an OOF fold and FINAL). In
+  the nested_refit (Phase B) path each outer fold's refit recipe is fingerprinted
+  and the guard asserts all folds satisfy the SAME contract (mismatch = stop);
+  FINAL asserts its fingerprint equals the canonical OOF contract before training
+  or saving and persists it as `recipe$schema_fingerprint`; scoring re-checks
+  `final_feature_order`, the column count / names / order, and the saved
+  fingerprint before predicting (mismatch = stop). The fingerprints, counts,
+  guard result, and contract version are written to a
+  `_feature_schema_parity.txt` summary and the run return value; the Phase B run
+  ABORTS if OOF, FINAL, and scoring fingerprints are not compatible.
+* **Three-level reproducibility contract** (A exact identity / B numeric /
+  C cartographic) governing what must be bit-identical versus numerically or
+  cartographically equivalent across runs.
+* **NA-preserving, recipe-driven scoring.** Scoring no longer drops rows;
+  `hotspots = NULL` and all-NA features are supported end to end (missing
+  `hs_*` are treated as missing, not as a sentinel value).
+* **Semantic / spatial fail-fast validation** of supervised inputs and output
+  routes, with cfg isolation guarantees (no hidden fallbacks or convention
+  reconstruction).
 
-* New internal helper `feature_schema_fingerprint()` computes a reproducible,
-  wall-clock-FREE structural fingerprint (base-R rolling checksum, no `digest`
-  dependency, mirroring the fold/pool fingerprinters). It hashes ONLY the
-  STRUCTURAL feature-space contract: the base-feature names + order, the `_isNA`
-  indicator names + order, the `final_feature_order`, the `feature_cols` /
-  `x_cols`, the `n_base` / `n_indicators` / `n_total` counts, the
-  numeric-vs-factor encoding contract, the feature-weights POLICY (the rule
-  "`_isNA` indicators carry the canonical weight 1.0", not a fitted vector), and
-  the contract version `.OF_SUPERVISED_FEATURE_CONTRACT_VERSION` (`"1.0"`). It
-  DELIBERATELY EXCLUDES imputation medians, learned categorical level values,
-  `scale_pos_weight`, `best_iteration`, seeds, any fold-fitted statistic, and any
-  timestamp — these legitimately differ between an OOF fold and FINAL because they
-  are fit on different training sets. The guard checks the structural CONTRACT,
-  not the equality of fitted recipes.
+## FIXES
 
-* OOF (nested_refit path): each outer fold's refit recipe is fingerprinted; the
-  guard ASSERTS all folds satisfy the SAME structural contract (identical
-  fingerprint) and establishes the canonical OOF fingerprint. A discrepancy is an
-  ERROR (stop), not a warning. A per-fold fingerprint sidecar CSV is written.
+* **AS02 cache fingerprint.** Fixed the legacy-pool cache fingerprint multiline
+  comparison so honest cache reuse works (the cache filenames previously encoded
+  only a few parameters; the full parameter fingerprint is now persisted and
+  compared).
+* **The 9 pre-existing warnings eliminated** (tibble row-names, GDAL shapefile
+  warnings, etc.), behaviour-preserving.
+* **Fingerprints exclude timestamps.** The fold, negative-pool, and run
+  fingerprints are wall-clock-FREE, so reruns reproduce identical fingerprints.
+* **`overwrite` default documented as `FALSE`** and honored end to end, including
+  partial writes.
 
-* FINAL: the refit recipe records its structural fingerprint and, BEFORE training
-  or saving the FINAL model, ASSERTS it equals the canonical OOF contract (when
-  the run carried one). Mismatch is an ERROR. The fingerprint is saved together
-  with the model/recipe (`recipe$schema_fingerprint`).
+## Note on the corrected defect and baseline naming
 
-* Scoring: before predicting, the scoring matrix produced from the saved FINAL
-  recipe is checked against `final_feature_order`, the column count, the column
-  names + order, and the SAVED structural fingerprint. Any discrepancy ABORTS
-  (stop) with a clear message — the schema expected by the FINAL model must equal
-  the schema produced during scoring.
-
-* Run manifest: the package writes the OOF per-fold fingerprints, the canonical
-  OOF fingerprint, the FINAL fingerprint, the scoring-matrix fingerprint, the
-  `n_base` / `n_indicators` / `n_total` counts, the guard result (pass/abort), and
-  the contract version into a `_feature_schema_parity.txt` summary and the run
-  return value. For the Phase B (nested_refit) path the RUN ABORTS if the OOF,
-  FINAL and scoring structural fingerprints are not compatible. The guard logic
-  lives in the package, so the runner inherits it.
+The `_isNA` divergence above was found and corrected during Gate 1D.8, **before**
+the smoke run and **before** the definitive run. As a result the prior OOF
+diagnostics did **not** exactly represent the deployed model: OOF evaluated the
+102-column space while the deployed FINAL/scoring ran on a 51-column space — the
+prior FINAL was a **different model** than the one OOF evaluated. Definitive
+results require RETRAINING both models (OOF and FINAL) under the corrected common
+recipe. Any comparison baseline produced under the current code must be named the
+**"legacy training protocol under the corrected common feature recipe"** — it is
+**not** an exact reproduction of the old 51-feature FINAL, because the feature
+recipe (and therefore the feature space) changed when the `_isNA` indicators were
+unified across the three paths.

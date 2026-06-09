@@ -1,6 +1,7 @@
 Package: OtsuFire
 Title: Otsu-Based Burned-Area Mapping with rule-based unsupervised filters and supervised classification
-Version: 0.5.0
+Version: 0.6.0
+Date: 2026-06-09
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
              person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
              person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
@@ -48,9 +49,9 @@ Suggests:
     rmarkdown
 SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,
     only used when grow_engine = "whitebox" in the deterministic stage);
-    Python (>= 3.8) with GDAL bindings (optional, only required when
-    negative_pool_policy = "all_sources" in the supervised one-year
-    workflow, which shells out to gdal_polygonize.py and ogr2ogr).
+    Python (>= 3.8) with GDAL bindings (optional, only required by the
+    supervised one-year workflow's negative-pool construction, which shells
+    out to gdal_polygonize.py and ogr2ogr).
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 RoxygenNote: 7.3.2

@@ -61,9 +61,12 @@ test_that("AS09: legacy pool keeps a single canonical area_ha column", {
 
   legacy_path   <- tempfile(fileext = ".shp")
   internal_path <- tempfile(fileext = ".gpkg")
-  sf::st_write(legacy, legacy_path, quiet = TRUE, delete_dsn = TRUE)
+  # Fresh `tempfile()` paths do not exist yet, so `delete_dsn = TRUE` has
+  # nothing to delete; for a `.shp` it makes GDAL probe the missing file and
+  # emit a spurious "GDAL Error 1: ... does not appear to be a file" message.
+  sf::st_write(legacy, legacy_path, quiet = TRUE)
   sf::st_write(internal, internal_path, layer = "internal_decisions",
-               quiet = TRUE, delete_dsn = TRUE)
+               quiet = TRUE)
 
   res <- fn(
     legacy_patches_path     = legacy_path,

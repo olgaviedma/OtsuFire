@@ -142,9 +142,12 @@ mk_fake_data_base <- function(target_year, corine_year) {
                      overwrite = TRUE)
   sfc <- sf::st_sfc(sf::st_polygon(list(rbind(c(0,0), c(1,0), c(1,1),
                                               c(0,1), c(0,0)))), crs = 3035)
+  # `db` is a fresh temp dir, so the target `.shp` does not exist yet;
+  # `delete_dsn = TRUE` would make GDAL probe the missing file and emit a
+  # spurious "GDAL Error 1: ... does not appear to be a file" message.
   sf::st_write(sf::st_sf(id = 1L, geometry = sfc),
                file.path(db, "Borders", "Iberian_peninsula.shp"),
-               quiet = TRUE, delete_dsn = TRUE)
+               quiet = TRUE)
   list(data_base = db, composite_base = cb)
 }
 

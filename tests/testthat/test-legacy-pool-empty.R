@@ -31,9 +31,13 @@ mk_rect_pool <- function(xmin, ymin, xmax, ymax) {
   # with the expected layer name for the internal-decisions layer.
   legacy_path <- tempfile(fileext = ".shp")
   internal_path <- tempfile(fileext = ".gpkg")
-  sf::st_write(legacy, legacy_path, quiet = TRUE, delete_dsn = TRUE)
+  # `tempfile()` returns a fresh, non-existent path, so `delete_dsn = TRUE`
+  # has nothing to delete; for a `.shp` it makes GDAL probe the missing file
+  # and emit a spurious "GDAL Error 1: ... does not appear to be a file"
+  # message. Omit it (the GPKG keeps it harmlessly, but drop it for symmetry).
+  sf::st_write(legacy, legacy_path, quiet = TRUE)
   sf::st_write(internal, internal_path, layer = "internal_decisions",
-               quiet = TRUE, delete_dsn = TRUE)
+               quiet = TRUE)
   list(legacy_path = legacy_path, internal_path = internal_path)
 }
 

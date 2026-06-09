@@ -173,11 +173,17 @@ cache_reuse_decision_intended <- function(reuse_existing, fingerprint_path, toke
   isTRUE(reuse_existing) && isTRUE(matches)
 }
 
-# The PRODUCTION AS02 reuse decision, byte-for-byte (line 914-915): compares the
-# read-back lines against the in-memory token with `identical()`, NO collapse.
+# The PRODUCTION AS02 reuse decision, mirroring the engine byte-for-byte
+# (R/internal-sup-unburned-legacy.R:914-925, AS02 fix): BOTH sides are collapsed
+# to a single "\n"-joined string before `identical()`, so an embedded newline in
+# fp$text round-trips through writeLines/readLines correctly. This is now the
+# SAME rule as `cache_reuse_decision_intended`; we keep a distinct helper so the
+# test that pins the production source (below) and the behavioural test reference
+# the live engine semantics, not a frozen copy of the old broken comparison.
 cache_reuse_decision_production <- function(reuse_existing, fingerprint_path, token) {
   matches <- file.exists(fingerprint_path) &&
-    identical(readLines(fingerprint_path, warn = FALSE), token)
+    identical(paste(readLines(fingerprint_path, warn = FALSE), collapse = "\n"),
+              paste(token, collapse = "\n"))
   isTRUE(reuse_existing) && isTRUE(matches)
 }
 
@@ -210,22 +216,25 @@ test_that("PART B: content-aware cache (INTENDED contract) reuses a valid artifa
 })
 
 # ---------------------------------------------------------------------------
-# DEFECT (Gate 1D.6, reported to director): the PRODUCTION AS02 cache-match
-# comparison NEVER matches on an unchanged re-run when the fingerprint has >1
-# param. `fp$text` is a SINGLE multi-line string (params joined by "\n"); the
-# stored `fingerprint_token` keeps it as one element, but `writeLines()` expands
-# the embedded newlines into separate on-disk lines, so `readLines()` returns
-# MORE elements than `fingerprint_token` and `identical(...)` is FALSE. The
-# net effect: `cache_fingerprint_matches` is ALWAYS FALSE for a real (multi-
-# param) call, so the legacy unburned stage NEVER reuses -- it silently
-# recomputes every run, contradicting the AS02 docstring ("a normal production
-# re-run with unchanged params ... the reuse path is byte-identical to before").
-# This is a CORRECTNESS-of-reuse defect (wasteful recompute, not stale data), so
-# overwrite=FALSE safety is NOT violated; we mark it failing-by-intent here and
-# leave the fix to the director (one-line: compare with a collapse, or store
-# fp$text already split via writeLines, or read+collapse both sides).
+# AS02 FIX (Gate 1D, was a Gate 1D.6 failing-by-intent DEFECT): the PRODUCTION
+# AS02 cache-match comparison previously NEVER matched an unchanged re-run when
+# the fingerprint had >1 param. `fp$text` is a SINGLE multi-line string (params
+# joined by "\n"); the stored `fingerprint_token` keeps it as one element, but
+# `writeLines()` expands the embedded newlines into separate on-disk lines, so
+# `readLines()` returned MORE elements than `fingerprint_token` and the old
+# `identical(readLines(...), fingerprint_token)` was ALWAYS FALSE. Net effect:
+# `cache_fingerprint_matches` was ALWAYS FALSE for a real (multi-param) call, so
+# the legacy unburned stage NEVER reused -- it silently RECOMPUTED every run
+# (wasteful, but never stale: overwrite=FALSE safety was intact).
+#
+# FIX: normalise BOTH sides before comparing --
+#   identical(paste(readLines(<fp file>), collapse = "\n"),
+#             paste(fingerprint_token,    collapse = "\n"))
+# so an unchanged call MATCHES (cache reused) and a changed call does NOT.
+# The assertion below is FLIPPED from the old failing-by-intent expect_false:
+# the production comparison now MATCHES an unchanged multi-param re-run.
 # ---------------------------------------------------------------------------
-test_that("PART B [xfail/DEFECT]: production AS02 token comparison should match an unchanged multi-param re-run", {
+test_that("PART B: production AS02 token comparison MATCHES an unchanged multi-param re-run (AS02 fix)", {
   fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
   d <- tempfile("unbcache_prod_"); dir.create(d)
   on.exit(unlink(d, recursive = TRUE, force = TRUE), add = TRUE)
@@ -234,19 +243,93 @@ test_that("PART B [xfail/DEFECT]: production AS02 token comparison should match 
   params <- list(target_year = 2017L, otsu_threshold = 0L,
                  sample_n = 1000L, random_seed = 42L)   # >1 param -> multi-line
   token <- as02_token(fp(params))
-  writeLines(token, fingerprint_path)
+  writeLines(token, fingerprint_path)   # production write side (expands newlines)
 
   # The INTENDED contract holds (robust comparison): unchanged params -> reuse.
   expect_true(cache_reuse_decision_intended(TRUE, fingerprint_path, token))
 
-  # The PRODUCTION comparison is broken: it returns FALSE on the SAME params,
-  # so the cache never reuses. We assert the DEFECT explicitly (documented +
-  # reported); flip this to expect_true once the engine comparison is fixed.
-  expect_false(
+  # FIXED: the production comparison now ALSO matches the SAME params (the cache
+  # is reused). Previously this returned FALSE (failing-by-intent expect_false);
+  # the normalize-both-sides fix makes it TRUE.
+  expect_true(
     cache_reuse_decision_production(TRUE, fingerprint_path, token),
-    info = paste("DEFECT: production AS02 fingerprint comparison never matches",
-                 "a multi-param re-run (writeLines expands fp$text newlines).")
+    info = paste("AS02 fix: production fingerprint comparison MATCHES an",
+                 "unchanged multi-param re-run (both sides collapsed to \\n).")
   )
+})
+
+# ---------------------------------------------------------------------------
+# AS02 source guard: the LIVE engine comparison normalises BOTH sides (collapse
+# to one "\n"-joined string) rather than the old element-wise identical(). This
+# pins the fix in the production body so a regression to the broken comparison
+# fails here, not just behaviourally.
+# ---------------------------------------------------------------------------
+test_that("PART B: the production AS02 comparison normalises BOTH sides before identical() (collapse fix)", {
+  # deparse() may wrap a single call across several lines, so collapse all
+  # internal whitespace to single spaces before matching the source tokens.
+  src <- paste(deparse(body(get("build_unburned_from_legacy_pipeline", envir = ns))),
+               collapse = " ")
+  src <- gsub("[[:space:]]+", " ", src)
+  # Both the read-back file and the in-memory token are collapsed with "\n".
+  expect_true(grepl('paste(readLines(fingerprint_path, warn = FALSE), collapse = "\\n")',
+                    src, fixed = TRUE),
+              info = "read-back lines are collapsed before comparison")
+  expect_true(grepl('paste(fingerprint_token, collapse = "\\n")', src, fixed = TRUE),
+              info = "in-memory token is collapsed before comparison")
+  # The OLD broken form (identical of raw readLines vs raw token) is gone.
+  expect_false(grepl("identical(readLines(fingerprint_path, warn = FALSE), fingerprint_token)",
+                     src, fixed = TRUE),
+               info = "the old element-wise comparison is removed")
+})
+
+# ---------------------------------------------------------------------------
+# AS02 reuse / invalidate contract (the 4 required behaviours), exercised
+# end-to-end through the PRODUCTION write side (writeLines, which expands
+# fp$text's embedded newlines) + the PRODUCTION reuse decision. We model the
+# stage's reuse gate, `reuse_ok <- reuse_existing && cache_fingerprint_matches`,
+# overlaid with the overwrite contract (overwrite=TRUE always regenerates).
+# ---------------------------------------------------------------------------
+test_that("PART B: AS02 cache reuses on unchanged input, invalidates on changed input, honours overwrite", {
+  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+  d <- tempfile("unbcache_contract_"); dir.create(d)
+  on.exit(unlink(d, recursive = TRUE, force = TRUE), add = TRUE)
+  fingerprint_path <- file.path(d, "_LEGACY_PARAM_FINGERPRINT.txt")
+
+  # A realistic multi-param call (so fp$text spans several lines -- the regime
+  # where the defect bit). Persist the fingerprint exactly as the engine does.
+  params_v1 <- list(target_year = 2017L, otsu_threshold = 0L, buffers_m = 90L,
+                    sample_n = 1000L, random_seed = 42L)
+  token_v1 <- as02_token(fp(params_v1))
+  writeLines(token_v1, fingerprint_path)
+
+  # The engine's reuse gate (reuse_existing AND fingerprint match), overlaid with
+  # the overwrite=TRUE-always-regenerates contract.
+  recompute_planned <- function(reuse_existing, overwrite, path, token) {
+    if (isTRUE(overwrite)) return(TRUE)                     # overwrite always rebuilds
+    reuse_ok <- cache_reuse_decision_production(reuse_existing, path, token)
+    !isTRUE(reuse_ok)                                       # recompute iff NOT reusable
+  }
+
+  # (1) SAME input -> fingerprint MATCHES -> cache REUSED (no recompute).
+  expect_true(cache_reuse_decision_production(TRUE, fingerprint_path, token_v1))
+  expect_false(recompute_planned(reuse_existing = TRUE, overwrite = FALSE,
+                                 fingerprint_path, token_v1))
+
+  # (2) DIFFERENT input -> fingerprint DIFFERS -> cache INVALIDATED (rebuild).
+  params_v2 <- list(target_year = 2017L, otsu_threshold = 100L, buffers_m = 90L,
+                    sample_n = 1000L, random_seed = 42L)    # ONE param changed
+  token_v2 <- as02_token(fp(params_v2))
+  expect_false(cache_reuse_decision_production(TRUE, fingerprint_path, token_v2))
+  expect_true(recompute_planned(reuse_existing = TRUE, overwrite = FALSE,
+                                fingerprint_path, token_v2))
+
+  # (3) overwrite=FALSE -> a VALID unchanged cache is NOT needlessly recomputed.
+  expect_false(recompute_planned(reuse_existing = TRUE, overwrite = FALSE,
+                                 fingerprint_path, token_v1))
+
+  # (4) overwrite=TRUE -> regenerates regardless (even with a matching cache).
+  expect_true(recompute_planned(reuse_existing = TRUE, overwrite = TRUE,
+                                fingerprint_path, token_v1))
 })
 
 test_that("PART B: the production unburned stage gates reuse on a fingerprint MATCH (not mere existence)", {

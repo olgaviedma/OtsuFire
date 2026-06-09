@@ -911,8 +911,18 @@ build_unburned_from_legacy_pipeline <- function(
     "---",
     fp$text
   )
+  # AS02 fix: `fingerprint_token` is a character vector whose LAST element
+  # (`fp$text`) is itself a multi-line string with embedded "\n". `writeLines`
+  # expands those embedded newlines into separate on-disk lines, so a naive
+  # `identical(readLines(...), fingerprint_token)` always returned FALSE (the
+  # round-trip changes the element count) and the cache was NEVER reused.
+  # Normalise BOTH sides to a single "\n"-joined string before comparing so an
+  # unchanged call MATCHES and a changed call does NOT.
   cache_fingerprint_matches <- file.exists(fingerprint_path) &&
-    identical(readLines(fingerprint_path, warn = FALSE), fingerprint_token)
+    identical(
+      paste(readLines(fingerprint_path, warn = FALSE), collapse = "\n"),
+      paste(fingerprint_token, collapse = "\n")
+    )
   reuse_ok <- isTRUE(reuse_existing) && isTRUE(cache_fingerprint_matches)
   if (isTRUE(reuse_existing) && !isTRUE(cache_fingerprint_matches)) {
     msg(paste0("Legacy cache fingerprint %s; recomputing all stages instead ",

@@ -310,7 +310,13 @@
 #'   workflow that commonly produces the prediction layer passed to
 #'   `input_shapefile`; [run_oneyear_supervised_pipeline()] for the
 #'   supervised workflow whose thresholded `final_map.gpkg` is also a
-#'   valid input here.
+#'   valid input here. `validate_fire_maps()` performs EXTERNAL,
+#'   POST-RUN cartographic validation of PRODUCED maps against
+#'   independent reference perimeters (e.g. EFFIS); for the
+#'   complementary PRE-RUN validator that audits the supervised
+#'   CONFIGURATION + EXECUTION (CRS / overlap / year / cfg
+#'   contradictions / cache provenance) BEFORE any map is produced, see
+#'   [validate_supervised_execution()].
 #'
 #' @examples
 #' \dontrun{

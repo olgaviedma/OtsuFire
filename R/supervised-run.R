@@ -22,13 +22,14 @@
 #'   [build_supervised_burned_config()].
 #' @param run_consistency Logical. Whether to execute the
 #'   deterministic-vs-supervised consistency block.
-#' @param overwrite Logical. Default `TRUE` regenerates/clobbers stage
-#'   outputs (historical behaviour). When `FALSE`, the engine forwards
-#'   the flag to the unburned builder and the OOF / final-model wrappers,
-#'   which skip or reuse existing on-disk stage outputs instead of
-#'   overwriting them. (Before 2026-06-05 this flag was cosmetic: it was
-#'   validated but never threaded, and the engine always behaved as if
-#'   `overwrite = TRUE`.)
+#' @param overwrite Logical. Default `FALSE`: existing on-disk stage
+#'   outputs are skipped/reused instead of being clobbered (the flag is
+#'   forwarded to the unburned builder and the OOF / final-model
+#'   wrappers). Set `TRUE` to regenerate/clobber every stage output. (The
+#'   default is `FALSE` so an interrupted run can resume without
+#'   recomputing completed stages. Before 2026-06-05 this flag was
+#'   cosmetic: it was validated but never threaded, and the engine always
+#'   behaved as if `overwrite = TRUE`.)
 #' @param contextual_exclusion_to_burned_ratio Numeric. Cap on the
 #'   contextual-exclusion negative pool (deterministic-drop polygons whose
 #'   `neg_type` is NOT `spectral_reject_medium`), expressed as a multiple

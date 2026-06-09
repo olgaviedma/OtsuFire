@@ -4,7 +4,7 @@ title: "Front Matter"
 
 # Front Matter
 
-This book documents the current OtsuFire workflow as supported by four source groups: the paper draft, the `PAQUETE` design tables, the active standalone scripts under `00_USAGE`, and the current package bridge files under `OtsuFire/R`. It is therefore both a methods guide and a project-state tutorial.
+This book documents the current OtsuFire workflow as supported by the paper draft, the example usage drivers under `00_USAGE`, and the package implementation under `OtsuFire/R` (the canonical runtime). It is therefore both a methods guide and a project-state tutorial.
 
 When those sources disagree, the text follows the most explicit current implementation state recorded in the handoff and in the active package and runner logic. Sections that are still conceptually present but not yet operationally documented are left as explicit TODO items instead of being reconstructed from guesswork.
 
@@ -26,21 +26,18 @@ flowchart LR
 
 | Task | Current entry point | Current status |
 |---|---|---|
-| Annual mosaic | `change_index_mosaic()` | Package-facing mosaic function; legacy manual usage still exists under `00_USAGE/00_MOSAIC_USAGE` |
-| One-year deterministic | `00_USAGE/01_DETERMINISTIC_USAGE/DETERMINISTIC_PIPELINE.R` | Canonical standalone deterministic runtime |
-| Deterministic package bridge | `build_burned_mapping_config()` + `run_deterministic_pipeline()` | Bridge validated against standalone when registry state and seed are controlled |
-| One-year supervised | `00_USAGE/02_SUPERVISED_USAGE/03_PATCH_LEVEL_PIPELINE_2.R` | Canonical standalone supervised runtime |
-| Supervised package bridge | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` | Bridge validated against standalone (2026-04-16) under frozen deterministic inputs |
+| Annual mosaic | `change_index_mosaic()` | Package-facing mosaic function |
+| One-year deterministic | `build_burned_mapping_config()` + `run_deterministic_pipeline()` | Canonical package runtime |
+| One-year supervised | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` | Canonical package runtime (fully package-internal) |
 | Validation utility | `validate_fire_maps()` | Shared modular utility for compatible burned-area prediction layers, including deterministic outputs and thresholded supervised `p_burned` outputs |
-| Batch orchestration | `00_USAGE/MASTER_FIRE_MAPPING_PIPELINE.R` | Convenience wrapper, but not a neutral mirror of standalone supervised defaults |
-| LOYO | `00_USAGE/02_SUPERVISED_USAGE/YEAR_OOF_PIPELINE.R` | Archived; a new dedicated multiyear script is still pending |
+| LOYO | (none) | Separate temporal-validation concept; a new dedicated multiyear runtime is still pending |
 
 ## Terminology Used In This Book
 
 - `change_index` is the package-facing generic term for the annual burned-sensitive raster. In the current annual runtime this is usually the `MinMin_<year>_mosaic_res90m.tif` mosaic.
 - `deterministic stage` means the rule-based annual stage that writes the canonical `internal_decisions` layer.
 - `one-year supervised` means the current operational annual supervised workflow, including same-year OOF diagnostics.
-- `standalone` means direct use of scripts under `00_USAGE`. `package bridge` means the exported functions in `OtsuFire/R` that source and delegate to the active standalone runtime.
+- `usage driver` means an example script under `00_USAGE` that builds a config and calls the package functions. The package functions in `OtsuFire/R` are the runtime (fully package-internal); they do not source external scripts.
 - `LOYO` means a separate temporal-validation design. It should not be confused with the within-year OOF outputs.
 
 ## How To Read This Book

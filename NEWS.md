@@ -1,5 +1,55 @@
 # OtsuFire (development version)
 
+## Corrected defect: OOF / FINAL `_isNA` divergence
+
+A feature-recipe defect was found and corrected during Gate 1D.8, before the
+smoke run and before the definitive run:
+
+* Previously, the OOF diagnostics generated the 51 `<feature>_isNA`
+  missing-indicator companions, but the FINAL refit and the scoring path did
+  NOT use them. OOF therefore evaluated a 102-column feature space (51 base +
+  51 indicators) while the deployed FINAL model and scoring ran on a different
+  (51-column) space.
+* As a result, the prior OOF diagnostics did **not** exactly represent the
+  deployed model. The prior FINAL was not necessarily invalid, but it was a
+  **different model** than the one OOF evaluated.
+* The correction was made **before the smoke and before the definitive 2017
+  run**. OOF, FINAL and scoring now share the **same recipe** (one shared
+  builder; 51 base + 51 `_isNA` = 102 columns), enforced at runtime by the
+  feature-schema parity guard below.
+* **Definitive results require RETRAINING both models** (OOF and FINAL) under
+  the corrected common recipe.
+* Any comparison baseline produced under the current code must be named the
+  **"legacy training protocol under the corrected common feature recipe"** — it
+  is **not** an exact reproduction of the old 51-feature FINAL, because the
+  feature recipe (and therefore the feature space) changed when the `_isNA`
+  indicators were unified across the three paths.
+
+## Methodology documentation refresh (Gate 1E.2/1E.3)
+
+The narrative docs (METHODS_BOOK chapters, the workflow-overview vignette) were
+updated to match the current code and to remove obsolete content:
+
+* Documented internal validation (OOF, against deterministic-decision labels)
+  vs external validation (`validate_fire_maps()` against EFFIS — omission,
+  commission, F1, IoU); the two are computed against different references and
+  are not comparable.
+* Clarified that `p_burned` / `p_burned_current_year` is a MODEL SCORE under the
+  training distribution, not a calibrated probability.
+* Documented the burnable-only negative pool, the burnable-domain B4 random
+  background, the content-aware `neg_pool_fingerprint`, and that CORINE ×
+  ecoregion stratification is used only in the deterministic delineation stage
+  (not the supervised negative pool; ecoregions are not a supervised feature).
+* Documented `training_protocol` (legacy vs nested_refit) as a training-procedure
+  choice (not a feature-space change), `cfg$model_params` / `cfg$train_control`
+  as the single source of truth, the caps, and `scale_pos_weight`.
+* Documented the shared feature recipe / `_isNA` indicators and the runtime
+  feature-schema parity guard.
+* Removed obsolete content: the rejected/removed supervised burned-like
+  registry, `deterministic_direct` as a current path, ecoregions in the
+  supervised pool, the standalone-script "bridge" framing (the pipeline is
+  package-internal), and references to the removed `negative_pool_policy` knob.
+
 ## Runtime feature-schema parity guard
 
 Gate 1E (2026-06-09) adds a RUNTIME feature-schema parity guard that prevents the

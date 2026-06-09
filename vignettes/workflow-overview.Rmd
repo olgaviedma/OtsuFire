@@ -101,9 +101,9 @@ scored   <- score_burned_patches(det_cfg, patches)
 ## 3. Supervised one-year stage
 
 The supervised stage trains an XGBoost model on the deterministic
-decisions plus contextual unburned negatives, runs OOF diagnostics,
-and emits a `final_map.gpkg` whose `p_burned` field is the per-patch
-burned probability.
+decisions plus a burnable-only unburned negative pool, runs OOF
+diagnostics, and emits a `final_map.gpkg` whose `p_burned` field is the
+per-patch burned **model score**.
 
 ```{r sup, purl = FALSE}
 sup_cfg <- build_supervised_burned_config(
@@ -114,10 +114,9 @@ sup_cfg <- build_supervised_burned_config(
   target_year        = 2020L,
   output_dir         = "/path/to/Results",
   options = list(
-    data_base            = "/path/to/Data",
-    composite_base       = "/path/to/Imagery/Composites_90m",
-    result_name          = "Min_Min",
-    negative_pool_policy = "all_sources"
+    data_base      = "/path/to/Data",
+    composite_base = "/path/to/Imagery/Composites_90m",
+    result_name    = "Min_Min"
   )
 )
 
@@ -128,20 +127,32 @@ sup_run <- run_oneyear_supervised_pipeline(
 )
 ```
 
-`negative_pool_policy` controls how unburned negatives are sourced:
+The negative-pool strategy is no longer configurable. Every run uses
+`all_sources` implicitly: a burnable-only, four-bucket unburned
+taxonomy (contextual exclusions, spectral hard negatives, random
+burnable background, and Otsu current-year residual patches) with
+independent caps relative to the burned count. The random background
+bucket draws its sample (and computes its percentile) only within the
+burnable domain, after the burnable mask and all exclusions/buffers.
+CORINE × ecoregion stratification is used only in the deterministic
+delineation stage, not in the supervised negative pool. The former
+user-selectable `negative_pool_policy` knob and its
+`"deterministic_direct"` baseline were removed on 2026-06-05;
+`negative_pool_policy = "all_sources"` is accepted as a no-op, and any
+other value errors. The pipeline is entirely package-internal: no
+external `sys.source()` of legacy scripts and no namespace mutation.
 
-* `"deterministic_direct"` — Mode A baseline. Uses only the
-  deterministic decisions to derive contextual exclusions, spectral
-  hard negatives, random burnable background, and Otsu-unburned
-  samples.
-* `"all_sources"` — operational default for the `balanced`,
-  `restrictive`, and `strict` scenarios. Adds a current-year Otsu
-  unburned pool computed by the package-internal legacy helpers
-  (`polygonize_Otsu()`, `coverage_by_patch_raster()`,
-  `run_scenarios()`, `process_otsu_rasters_()`).
+The OOF diagnostics, the FINAL refit, and scoring share ONE feature
+recipe (51 base features plus the matching `<feature>_isNA` indicators
+created before imputation = 102 columns). A runtime feature-schema
+parity guard aborts the run if the three feature spaces diverge. The
+training procedure is selected by `cfg$train_control$training_protocol`
+(`"legacy"` or `"nested_refit"`); this is a choice of training
+procedure, not feature space.
 
-Both modes are entirely package-internal: no external `sys.source()`
-of legacy scripts and no namespace mutation are performed.
+`p_burned` (and the temporally adjusted `p_burned_current_year`) is a
+model score under the training distribution — it must not be treated as
+a calibrated probability without an explicit calibration step.
 
 If you want explicit access to the supervised sub-stages,
 `build_supervised_training_pools()`, `make_spatial_folds()`,
@@ -151,9 +162,23 @@ each cover one stage of the pipeline.
 
 ## 4. Validation and consistency
 
-`validate_fire_maps()` is workflow-independent: it can be applied to
-any compatible burned-area prediction layer, including supervised
-outputs after thresholding `p_burned`.
+There are two distinct validations, against two different references.
+
+**Internal validation (OOF).** The out-of-fold diagnostics
+(`05_OOF`) measure how well the model reproduces the *deterministic
+decision* labels, using spatial block folds. Under `nested_refit`, the
+outer test fold is held out entirely (never used for the watchlist,
+imputation fitting, selection, or the inner early-stopping split); the
+model is fit on the outer-train rows, early-stopped on an inner
+validation split, refit on all outer-train rows at the selected
+`best_iteration`, and then predicts the untouched outer-test fold. OOF
+AUC / PR-AUC are **not ground truth**: the labels are deterministic
+decisions, not field observations.
+
+**External validation.** `validate_fire_maps()` is
+workflow-independent: threshold `p_burned` (or `p_burned_current_year`)
+into a burned-area prediction layer and compare it against an external
+reference (EFFIS). It reports omission, commission, F1, and IoU.
 
 ```{r validate, purl = FALSE}
 val <- validate_fire_maps(
@@ -162,6 +187,27 @@ val <- validate_fire_maps(
   threshold = 0.5
 )
 ```
+
+External metrics are computed against a *different reference* (EFFIS)
+than the OOF metrics (deterministic-decision labels). They are **not
+comparable** to OOF AUC / PR-AUC — keep the two evaluations distinct.
+
+### Corrected defect: OOF / FINAL `_isNA` divergence
+
+A defect was found and corrected during Gate 1D.8, before the smoke run
+and before the definitive run. Previously, **OOF generated the `_isNA`
+missing-indicator companions, but the FINAL refit and scoring did
+NOT** — so OOF evaluated a 102-column feature space while the deployed
+model and scoring ran on a different (51-column) space. Consequently
+the **prior OOF diagnostics did not exactly represent the deployed
+model**, and the **prior FINAL was a different model** than the one OOF
+evaluated (the prior FINAL was not necessarily invalid, just different).
+The correction unified OOF, FINAL and scoring on the **same recipe**.
+**Definitive results require retraining both models** under the
+corrected recipe. Any comparison baseline produced under the current
+code must be named the **"legacy training protocol under the corrected
+common feature recipe"** — it is not an exact reproduction of the old
+51-feature FINAL.
 
 `check_supervised_consistency()` compares the deterministic and
 supervised outputs of the same run and writes per-issue diagnostic

@@ -1088,12 +1088,7 @@ run_supervised_pipeline <- function(target_year, scenario,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         val_frac          = final_val_frac,
         impute_numeric    = final_impute_numeric,
-        impute_factor_missing = final_impute_factor_missing,
-        # Precision 1 (2026-06-07): the deprecated methodological shims were
-        # already resolved (warned/conflict-checked/recorded) at the
-        # run_oneyear_supervised_pipeline() boundary; the values forwarded here
-        # are the resolved scalars, so suppress a second deprecation warning.
-        .internal_resolved = TRUE
+        impute_factor_missing = final_impute_factor_missing
       )
       # Preserve the historical `pipe1` shape consumed below
       # (pipe1$files), and keep the inner wrapper object available.

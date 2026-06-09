@@ -95,6 +95,19 @@
 #'   behaviour).
 #' @param verbose Logical. Forwarded to [train_final_model_direct()]. Default
 #'   `TRUE`.
+#' @param canonical_oof_fingerprint Internal use only; the canonical OOF
+#'   structural feature-schema fingerprint threaded by the orchestrator from the
+#'   OOF stage for the parity guard. Forwarded to the engine, which asserts the
+#'   FINAL refit's structural fingerprint equals it BEFORE training/saving
+#'   (ERROR on mismatch). `NULL` (default) = FINAL runs standalone and still
+#'   computes + persists its own fingerprint.
+#' @param .internal_resolved Internal use only; set automatically by the
+#'   orchestrator and not intended for direct callers. When `TRUE` it signals
+#'   that the deprecated methodological shims were ALREADY resolved (warned /
+#'   conflict-checked / provenance-recorded) at the
+#'   [run_oneyear_supervised_pipeline()] boundary, so this function skips
+#'   re-warning to avoid double-warning on the orchestrated path. Direct callers
+#'   leave it at the default `FALSE` and get the full deprecated-shim treatment.
 #'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{

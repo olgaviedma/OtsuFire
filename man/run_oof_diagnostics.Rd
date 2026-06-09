@@ -128,6 +128,14 @@ explicit argument rather than a config route).}
 \item{overwrite}{Logical. Forwarded to [run_dm_oof_pipeline()] (controls
 whether the design-matrix bundle is recomputed/clobbered). Default `TRUE`
 (historical behaviour).}
+
+\item{.internal_resolved}{Internal use only; set automatically by the
+orchestrator and not intended for direct callers. When `TRUE` it signals
+that the deprecated methodological shims were ALREADY resolved (warned /
+conflict-checked / provenance-recorded) at the
+[run_oneyear_supervised_pipeline()] boundary, so this function skips
+re-warning to avoid double-warning on the orchestrated path. Direct callers
+leave it at the default `FALSE` and get the full deprecated-shim treatment.}
 }
 \value{
 A named list with both the objects and the written paths:

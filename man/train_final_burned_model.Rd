@@ -109,12 +109,27 @@ it is a GPKG path. Default `"train_features"`.}
 `07_FINAL_MODEL_V2` artifacts. Defaults to
 `config$output_routes$final_model_dir`.}
 
+\item{canonical_oof_fingerprint}{Internal use only; the canonical OOF
+structural feature-schema fingerprint threaded by the orchestrator from the
+OOF stage for the parity guard. Forwarded to the engine, which asserts the
+FINAL refit's structural fingerprint equals it BEFORE training/saving
+(ERROR on mismatch). `NULL` (default) = FINAL runs standalone and still
+computes + persists its own fingerprint.}
+
 \item{overwrite}{Logical. Forwarded to [train_final_model_direct()]
 (controls clobbering of the training-ok GPKG). Default `TRUE` (historical
 behaviour).}
 
 \item{verbose}{Logical. Forwarded to [train_final_model_direct()]. Default
 `TRUE`.}
+
+\item{.internal_resolved}{Internal use only; set automatically by the
+orchestrator and not intended for direct callers. When `TRUE` it signals
+that the deprecated methodological shims were ALREADY resolved (warned /
+conflict-checked / provenance-recorded) at the
+[run_oneyear_supervised_pipeline()] boundary, so this function skips
+re-warning to avoid double-warning on the orchestrated path. Direct callers
+leave it at the default `FALSE` and get the full deprecated-shim treatment.}
 }
 \value{
 A named list with both the objects and the written paths:

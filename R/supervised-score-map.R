@@ -411,6 +411,10 @@ score_supervised_burned_map <- function(
       file.path(out_map_dir, paste0(prefix, "_final_map_counts.csv")),
     burned_like_gpkg          = files$burned_like_gpkg,
     burned_like_counts_csv    = files$burned_like_counts_csv,
+    # Gate 1E (2026-06-09): the scoring-matrix structural fingerprint (asserted
+    # == the SAVED FINAL fingerprint before predicting). The orchestrator threads
+    # this into the run manifest's scoring leg.
+    scoring_schema_fingerprint = out$scoring_schema_fingerprint,
     scored                    = out
   )
 }

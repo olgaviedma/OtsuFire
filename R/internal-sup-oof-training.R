@@ -163,6 +163,12 @@ run_oof_xgb <- function(
 
     oof_long <- do.call(rbind, oof_rows)
     oof_audit <- NULL
+    # Gate 1E: the structural parity guard is wired into the nested_refit path
+    # (the leakage-free protocol the Phase B run uses). The legacy path predates
+    # the shared recipe and trains on a single globally-imputed matrix (one
+    # feature space by construction), so it carries no per-fold recipe to
+    # fingerprint.
+    schema_guard <- NULL
   } else {
     # -------------------------------------------------------------------------
     # NESTED_REFIT path (B1).
@@ -253,6 +259,14 @@ run_oof_xgb <- function(
 
     oof_rows <- list()
     audit_rows <- list()
+    # Gate 1E (2026-06-09): runtime feature-schema parity guard. Record the
+    # STRUCTURAL feature-space fingerprint of EVERY outer fold's refit recipe and
+    # assert all folds satisfy the SAME structural contract (identical
+    # fingerprint). A discrepancy is an ERROR (stop), not a warning -- it is the
+    # Gate 1D.8 `_isNA` class of defect. The common fingerprint becomes the
+    # CANONICAL OOF contract, returned for the FINAL / scoring cross-checks.
+    schema_fp_list <- list()
+    schema_fp_rows <- list()
 
     for (r in seq_along(fold_cols)) {
       fold_col <- fold_cols[r]
@@ -313,6 +327,30 @@ run_oof_xgb <- function(
           impute_numeric        = impute_numeric,
           impute_factor_missing = impute_factor_missing,
           verbose               = verbose > 0
+        )
+
+        # Gate 1E: STRUCTURAL fingerprint of THIS fold's refit recipe. Derived
+        # ONLY from the structural contract the shared core records
+        # (base_features / missing_indicator_features / final_feature_order /
+        # feature_cols / x_cols) -- NOT from this fold's medians / spw /
+        # best_iteration (which legitimately differ per fold).
+        fold_fp <- feature_schema_fingerprint(list(
+          base_features              = fit$base_features,
+          missing_indicator_features = fit$missing_indicator_features,
+          final_feature_order        = fit$final_feature_order,
+          feature_cols               = fit$feature_cols,
+          x_cols                     = fit$x_cols
+        ))
+        fp_key <- sprintf("rep%d_fold%d", r, k)
+        schema_fp_list[[fp_key]] <- fold_fp
+        schema_fp_rows[[length(schema_fp_rows) + 1L]] <- data.frame(
+          stage = "OOF", rep = r, fold = k,
+          n_base = fold_fp$payload$n_base,
+          n_indicators = fold_fp$payload$n_indicators,
+          n_total = fold_fp$payload$n_total,
+          fingerprint = fold_fp$hash,
+          contract_version = fold_fp$payload$contract_version,
+          stringsAsFactors = FALSE
         )
 
         # Transform the FULL outer_test with the REFIT medians (no refit) and
@@ -377,6 +415,22 @@ run_oof_xgb <- function(
 
     oof_long <- do.call(rbind, oof_rows)
     oof_audit <- dplyr::bind_rows(audit_rows)
+
+    # Gate 1E: assert ALL outer folds share the SAME structural feature-space
+    # contract and establish the CANONICAL OOF fingerprint (the common one). A
+    # divergence aborts here with a diff-style error.
+    schema_canonical_fp <- .of_oof_canonical_fingerprint(schema_fp_list)
+    schema_guard <- list(
+      per_fold     = schema_fp_list,
+      canonical    = schema_canonical_fp,
+      per_fold_tbl = if (length(schema_fp_rows)) {
+        dplyr::bind_rows(schema_fp_rows)
+      } else NULL,
+      n_base       = schema_canonical_fp$payload$n_base,
+      n_indicators = schema_canonical_fp$payload$n_indicators,
+      n_total      = schema_canonical_fp$payload$n_total,
+      contract_version = schema_canonical_fp$payload$contract_version
+    )
   }
 
   oof_agg <- oof_long |>
@@ -411,5 +465,17 @@ run_oof_xgb <- function(
     }
   }
 
-  list(oof_long = oof_long, oof_agg = oof_agg, oof_audit = oof_audit)
+  # Gate 1E: emit the per-fold structural fingerprint table as a sidecar (nested
+  # path only) so the manifest / an audit can show every fold satisfied the
+  # canonical OOF contract.
+  if (!is.null(out_dir) && !is.null(schema_guard) &&
+      !is.null(schema_guard$per_fold_tbl)) {
+    csv_fp <- file.path(out_dir, paste0(prefix, "_oof_schema_fingerprints.csv"))
+    if (isTRUE(overwrite) || !file.exists(csv_fp)) {
+      write.csv(schema_guard$per_fold_tbl, csv_fp, row.names = FALSE)
+    }
+  }
+
+  list(oof_long = oof_long, oof_agg = oof_agg, oof_audit = oof_audit,
+       schema_guard = schema_guard)
 }

@@ -303,6 +303,70 @@ score_burnedlike_and_export_final_map <- function(
     X_df_imp <- .of_nested_apply_medians(X_df_raw, medians)
     M <- .of_nested_build_matrix(X_df_imp, ref_cols = x_cols_train)
 
+    # =================================================================
+    # Gate 1E (2026-06-09): runtime feature-schema parity guard, SCORING leg.
+    # BEFORE predicting, assert the schema the FINAL model EXPECTS equals the
+    # schema scoring PRODUCED. This is the decisive cross-check: a divergence
+    # here means the model would predict on the wrong feature space (the Gate
+    # 1D.8 class of defect). ANY discrepancy ABORTS (stop), never a warning.
+    #
+    # Checks, all against the SAVED FINAL recipe (the canonical schema source):
+    #   (a) produced column NAMES + ORDER == recipe$cols$x_cols (exact);
+    #   (b) produced column COUNT == length(recipe$cols$x_cols);
+    #   (c) produced column NAMES + ORDER == recipe$cols$final_feature_order
+    #       when present (the pre-one-hot canonical order; for the all-numeric
+    #       supervised schema x_cols == final_feature_order);
+    #   (d) the STRUCTURAL fingerprint recomputed from what scoring produced
+    #       == the SAVED fingerprint persisted with the FINAL model
+    #       (recipe$schema_fingerprint$hash), when the recipe carries one.
+    # ----------------------------------------------------------------
+    produced_cols <- colnames(M)
+    # (a) + (b): exact name / order / count match to the deployed x_cols.
+    if (!identical(produced_cols, as.character(x_cols_train))) {
+      stop(sprintf(paste0(
+        "Feature-schema parity guard ABORT (scoring vs FINAL model x_cols): the ",
+        "scoring matrix columns do not match the schema the FINAL model expects.\n",
+        "  expected (%d): %s\n  produced (%d): %s\n",
+        "The FINAL recipe is the MANDATORY schema source; refusing to predict on ",
+        "a divergent feature space."),
+        length(x_cols_train),
+        paste(utils::head(x_cols_train, 12L), collapse = ","),
+        length(produced_cols),
+        paste(utils::head(produced_cols, 12L), collapse = ",")),
+        call. = FALSE)
+    }
+    # (c): final_feature_order cross-check (when the recipe records it).
+    ffo <- recipe$cols$final_feature_order
+    if (!is.null(ffo) && !identical(produced_cols, as.character(ffo))) {
+      stop(sprintf(paste0(
+        "Feature-schema parity guard ABORT (scoring vs FINAL final_feature_order): ",
+        "scoring produced a different feature order than the FINAL recipe's ",
+        "canonical final_feature_order.\n  expected (%d): %s\n  produced (%d): %s"),
+        length(ffo), paste(utils::head(ffo, 12L), collapse = ","),
+        length(produced_cols), paste(utils::head(produced_cols, 12L), collapse = ",")),
+        call. = FALSE)
+    }
+    # (d): STRUCTURAL fingerprint round-trip. Recompute the fingerprint from what
+    # scoring produced (using the recipe's structural partition + the produced
+    # x_cols) and assert it equals the fingerprint SAVED with the FINAL model.
+    saved_fp <- recipe$schema_fingerprint
+    scoring_schema_fp <- NULL
+    if (!is.null(saved_fp) && !is.null(saved_fp$hash)) {
+      scoring_schema_fp <- feature_schema_fingerprint(list(
+        base_features              = recipe$cols$base_features,
+        missing_indicator_features = recipe$cols$missing_indicator_features,
+        final_feature_order        = recipe$cols$final_feature_order,
+        feature_cols               = recipe$cols$feature_cols,
+        x_cols                     = produced_cols
+      ))
+      .of_assert_schema_fingerprints_equal(
+        where    = "scoring matrix vs SAVED FINAL fingerprint (pre-predict)",
+        expected = saved_fp,
+        produced = scoring_schema_fp
+      )
+    }
+    # =================================================================
+
     # Row-preservation invariant: one matrix row per input polygon, same order.
     if (nrow(M) != n_in) {
       stop(sprintf(
@@ -323,6 +387,10 @@ score_burnedlike_and_export_final_map <- function(
         p_burned = p
       )
     attr(out, "scoring_schema_record") <- schema_record
+    # Gate 1E: surface the scoring-matrix structural fingerprint (it round-trips
+    # to the SAVED FINAL fingerprint -- asserted above) so the run manifest can
+    # record the scoring leg of the OOF/FINAL/scoring parity contract.
+    attr(out, "scoring_schema_fingerprint") <- scoring_schema_fp
     out
   }
 
@@ -378,7 +446,12 @@ score_burnedlike_and_export_final_map <- function(
     S$n_preds <- NA_integer_
   }
 
-  final_map_full <- score_with_final_model(S, model, recipe, id_col) |>
+  scored_full <- score_with_final_model(S, model, recipe, id_col)
+  # Gate 1E: capture the scoring-matrix structural fingerprint BEFORE the
+  # downstream dplyr pipe strips the attribute (the guard already asserted, in
+  # score_with_final_model, that it round-trips to the SAVED FINAL fingerprint).
+  scoring_schema_fingerprint <- attr(scored_full, "scoring_schema_fingerprint")
+  final_map_full <- scored_full |>
     dplyr::mutate(
       p_burned_oof = as.numeric(.data[["p_oof_mean"]]),
       source_set = "deterministic"
@@ -511,6 +584,10 @@ score_burnedlike_and_export_final_map <- function(
     final_map_full = final_map_full,
     final_map = final_map,
     burned_like_scored = burned_like_sf,
+    # Gate 1E (2026-06-09): the scoring-matrix structural fingerprint (asserted
+    # == the SAVED FINAL fingerprint inside score_with_final_model). NULL when
+    # the loaded recipe carried no saved fingerprint (pre-Gate-1E model).
+    scoring_schema_fingerprint = scoring_schema_fingerprint,
     files = list(
       scored_gpkg = scored_gpkg,
       final_map_gpkg = final_gpkg,

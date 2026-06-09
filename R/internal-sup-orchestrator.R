@@ -963,6 +963,10 @@ run_supervised_pipeline <- function(target_year, scenario,
   }
   
   # ============================== 9) MODELING ============================
+  # Gate 1E (2026-06-09): the feature-schema parity manifest is assembled inside
+  # the modeling block (OOF -> FINAL -> scoring); pre-initialise it to NULL so the
+  # run return can surface it whether or not modeling ran this invocation.
+  schema_parity_manifest <- NULL
   if (isTRUE(DO_MODEL)) {
 
     # Precision 2 (2026-06-07): PACKAGE-LEVEL spectral-cap parity guard. The
@@ -1132,6 +1136,13 @@ run_supervised_pipeline <- function(target_year, scenario,
         impute_factor_missing      = final_impute_factor_missing,
         # B1 (2026-06-07): same protocol toggle as the OOF stage.
         training_protocol          = training_protocol,
+        # Gate 1E (2026-06-09): thread the CANONICAL OOF structural feature-schema
+        # fingerprint into the FINAL refit so it ASSERTS its own structural
+        # contract == the OOF contract BEFORE training/saving (ERROR on mismatch).
+        # NULL on the legacy OOF path (no per-fold recipe to fingerprint), in
+        # which case FINAL still computes + persists its own fingerprint.
+        canonical_oof_fingerprint  =
+          if (!is.null(pipe1$schema_guard)) pipe1$schema_guard$canonical else NULL,
         labelled_layer = "train_features",
         out_dir        = dirs$`07_FINAL_MODEL_V2`,
         overwrite      = overwrite,
@@ -1167,6 +1178,53 @@ run_supervised_pipeline <- function(target_year, scenario,
 
     print(pipe2$train$direct$files)
     print(pipe2$score$scored$files)
+
+    # Gate 1E (2026-06-09): runtime feature-schema PARITY MANIFEST + Phase B
+    # abort. Assemble the OOF (per-fold + canonical) / FINAL / scoring structural
+    # fingerprints, the n_base/n_indicators/n_total counts, the contract version
+    # and the guard RESULT into the run summary the package writes. For the
+    # Phase B (nested_refit) path the run ABORTS here if the three legs are not
+    # compatible. The OOF (per-fold equality + canonical), FINAL (vs canonical)
+    # and scoring (vs saved FINAL) assertions already fired upstream; this is the
+    # consolidated record + the cross-leg Phase B gate.
+    schema_parity_manifest <- time_step("C3 feature-schema parity manifest", {
+      mani <- .of_build_schema_parity_manifest(
+        oof_guard  = pipe1$schema_guard,
+        final_fp   = pipe2$train$schema_fingerprint,
+        scoring_fp = pipe2$score$scoring_schema_fingerprint,
+        phase_b    = identical(training_protocol, "nested_refit")
+      )
+      manifest_path <- file.path(dirs$`07_FINAL_MODEL_V2`,
+                                 paste0(prefix_oof, "_feature_schema_parity.txt"))
+      if (isTRUE(overwrite) || !file.exists(manifest_path)) {
+        writeLines(c(
+          "[feature_schema_parity_guard]",
+          paste0("contract_version: ", mani$contract_version),
+          paste0("phase_b: ", mani$phase_b),
+          paste0("guard_result: ", mani$guard_result),
+          paste0("n_base: ", mani$n_base),
+          paste0("n_indicators: ", mani$n_indicators),
+          paste0("n_total: ", mani$n_total),
+          paste0("oof_canonical_fingerprint: ", mani$oof_canonical_fingerprint),
+          paste0("final_fingerprint: ", mani$final_fingerprint),
+          paste0("scoring_fingerprint: ", mani$scoring_fingerprint),
+          "[oof_per_fold_fingerprints]",
+          if (length(mani$oof_per_fold_fingerprints)) {
+            paste0(names(mani$oof_per_fold_fingerprints), ": ",
+                   mani$oof_per_fold_fingerprints)
+          } else "none (legacy OOF path)"
+        ), con = manifest_path)
+      }
+      mani$manifest_path <- manifest_path
+      mani
+    })
+    msg("[Gate 1E] feature-schema parity guard: %s (contract %s) | OOF=%s FINAL=%s SCORING=%s",
+        schema_parity_manifest$guard_result,
+        schema_parity_manifest$contract_version,
+        schema_parity_manifest$oof_canonical_fingerprint,
+        schema_parity_manifest$final_fingerprint,
+        schema_parity_manifest$scoring_fingerprint)
+
     # §N+27 (2026-06-05): STEP C4 (append_supervised_registry) removed —
     # abandoned research line. `pipe2$score$burned_like_scored` remains a
     # normal public output (written by C3 as `_burned_like_scored.gpkg`);
@@ -1187,6 +1245,10 @@ run_supervised_pipeline <- function(target_year, scenario,
     # §N+26: always all_sources, so common_unb_dir is always the legacy
     # unburned root. (The deterministic_common_unb_dir is still created above
     # as a byte-identical filesystem side effect, but is no longer selected.)
-    common_unb_dir = legacy_unb_root_dir
+    common_unb_dir = legacy_unb_root_dir,
+    # Gate 1E (2026-06-09): the runtime feature-schema parity guard manifest
+    # (OOF/FINAL/scoring fingerprints, counts, contract version, pass/abort).
+    # NULL when modeling did not run this invocation.
+    feature_schema_parity = schema_parity_manifest
   ))
 }

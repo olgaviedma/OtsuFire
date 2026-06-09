@@ -624,6 +624,12 @@ run_dm_oof_pipeline <- function(
   invisible(list(
     dm = dm,
     oof = oof,
+    # Gate 1E (2026-06-09): the structural feature-schema parity guard payload
+    # from run_oof_xgb() (nested_refit path): per-fold + canonical fingerprints,
+    # asserted identical across folds inside run_oof_xgb(). The orchestrator
+    # threads `schema_guard$canonical` into the FINAL / scoring cross-checks and
+    # the run manifest. NULL on the legacy path.
+    schema_guard = oof$schema_guard,
     files = list(
       dm_dir = save_dir_dm,
       oof_dir = out_dir_oof,
@@ -632,7 +638,9 @@ run_dm_oof_pipeline <- function(
       labeled_oof_summary_gpkg = labeled_oof_summary_gpkg,
       oof_metrics_path = oof_metrics_path,
       oof_metrics_summary_path = oof_metrics_summary_path,
-      oof_best_thresholds_path = oof_best_thresholds_path
+      oof_best_thresholds_path = oof_best_thresholds_path,
+      oof_schema_fingerprints_path = file.path(
+        out_dir_oof, paste0(prefix, "_oof_schema_fingerprints.csv"))
     )
   ))
 }

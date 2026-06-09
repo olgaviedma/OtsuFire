@@ -403,6 +403,12 @@ train_final_model_direct <- function(
   }
 
   row_id <- seq_len(nrow(X_df))
+  # Carry the sequential row identity through `sparse.model.matrix` via row
+  # names so that, if rows are dropped (NA handling), the survivors can be
+  # recovered from `rownames(X)` below. Row names cannot be set on a tibble
+  # (deprecated), so coerce to a base data.frame first -- behaviour-identical
+  # for `sparse.model.matrix`, which reads the columns the same way.
+  X_df <- as.data.frame(X_df, stringsAsFactors = FALSE)
   rownames(X_df) <- as.character(row_id)
   X <- Matrix::sparse.model.matrix(~ . - 1, data = X_df)
   if (nrow(X) != length(row_id)) {

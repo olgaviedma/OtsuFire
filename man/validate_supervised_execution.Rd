@@ -49,7 +49,7 @@ convention roots, so the validator resolves the SAME input paths the
 orchestrator will consume (cfg path \%||\% convention).}
 }
 \value{
-A `data.frame` — the structured report (see \strong{Structured
+A `data.frame` -- the structured report (see \strong{Structured
   report}). Returned invisibly when `strict = TRUE` and all blocking checks
   pass; returned visibly when `strict = FALSE`.
 }
@@ -65,8 +65,8 @@ caught in well under a second instead of 5-10 min into the chain after
 partial artefacts are produced.
 
 Unlike the previous internal-only contract (which `stop()`ed silently from
-inside the orchestrator), this function returns a STRUCTURED REPORT — one row
-per check — so a caller can INSPECT exactly which checks passed, failed, or
+inside the orchestrator), this function returns a STRUCTURED REPORT -- one row
+per check -- so a caller can INSPECT exactly which checks passed, failed, or
 could not be evaluated. The orchestrator calls this same function in
 `strict = TRUE` mode at the same early hook, so the report engine and the
 fail-fast behaviour share ONE implementation of the checks.
@@ -80,54 +80,54 @@ The 10 checks:
   \item \strong{No spatial overlap} between the change-index template and
     each other spatial input, tested on bounding geometries reprojected into
     the template CRS (Gate 1C.1 extent-intersection logic).
-  \item \strong{Empty raster} — a raster input with zero rows or columns.
-  \item \strong{Mask with ZERO burnable cells} — the burnable mask aligned to
+  \item \strong{Empty raster} -- a raster input with zero rows or columns.
+  \item \strong{Mask with ZERO burnable cells} -- the burnable mask aligned to
     the change-index template via [.of_align_mask_to_template()].
   \item \strong{Wrong year} (Gate 1D.3, robust evidence hierarchy). Inputs
     are CLASSIFIED explicitly (\code{.of_vse_year_class()}): YEAR-SPECIFIC
     inputs (internal_decisions, change_index, delayed_change_index, hotspots,
     reference_burned_map) MUST agree with the resolved `config$target_year`;
     ATEMPORAL inputs (topo, peninsula_shapefile, burnable_mask, and the CORINE
-    products — CORINE encodes its OWN epoch, not the run year) are SKIPPED and
+    products -- CORINE encodes its OWN epoch, not the run year) are SKIPPED and
     never failed for lacking the run year. For each year-specific input the
     year is resolved via a strict HIERARCHY
     (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
     (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
     filename token (CORINE epochs / resolution numbers are excluded by
-    construction). (A fourth level — a cfg-registered declared year
-    (`spec$declared_year`) — was scoped but is \strong{NOT IMPLEMENTED}: the
+    construction). (A fourth level -- a cfg-registered declared year
+    (`spec$declared_year`) -- was scoped but is \strong{NOT IMPLEMENTED}: the
     builder records no such field, so it was removed from the active flow in
     1E.5 and is reserved as a future extension.)
     A determinable year that DIFFERS from the expected year FAILs (blocking,
     naming input + found + expected); a MATCH PASSes with evidence of the
     level used; and an input with NO verifiable year at ANY level is recorded
-    NOT_VERIFIABLE (verifiable = FALSE) — never a false PASS, and not blocking
+    NOT_VERIFIABLE (verifiable = FALSE) -- never a false PASS, and not blocking
     by itself.
-  \item \strong{Required columns absent} — internal_decisions missing its
+  \item \strong{Required columns absent} -- internal_decisions missing its
     label column `class_final`.
-  \item \strong{Incompatible types} — the `class_final` label column is not
+  \item \strong{Incompatible types} -- the `class_final` label column is not
     character/factor.
-  \item \strong{Incompatible feature schema} — when a `model`/`recipe` is
+  \item \strong{Incompatible feature schema} -- when a `model`/`recipe` is
     supplied with `scoring_feature_names`, the scoring inputs are checked
     against the model/recipe schema. Gate 1D.2 makes this RECIPE-DRIVEN and
     ENFORCED on the main scoring path: the canonical schema is read from
     `recipe$cols$feature_cols` (never re-derived from the scoring year), and
-    the check is aligned with the Gate 1C.3 5-case reconciliation policy — a
+    the check is aligned with the Gate 1C.3 5-case reconciliation policy -- a
     missing / extra / type-changed / unknown-level / all-NA feature is
     RECOVERABLE and PASSES (the reconciler heals + records it), while a
     genuinely incompatible feature (uncoercible) FAILs (blocking). When only a
     legacy schema (`recipe$feature_names` / `model$feature_names`) is
     available the strict coverage semantics apply (any uncovered name FAILs).
     The check is SKIPPED only when no model/recipe + names are supplied, and
-    NOT_VERIFIABLE when no schema can be introspected — never a false PASS.
+    NOT_VERIFIABLE when no schema can be introspected -- never a false PASS.
     [score_supervised_burned_map()] runs this check (`strict = TRUE`) before
     building the scoring matrix, so it is no longer best-effort on the main
     path.
-  \item \strong{Contradictory configuration} — mutually exclusive cfg
+  \item \strong{Contradictory configuration} -- mutually exclusive cfg
     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
     `training_protocol = "legacy"` with `oof_sampling = "full"`; a
     `feature_whitelist_override` that is not a subset of the canonical list).
-  \item \strong{Cache belonging to ANOTHER cfg} — a persisted negative-pool
+  \item \strong{Cache belonging to ANOTHER cfg} -- a persisted negative-pool
     fingerprint sidecar (Gate 1C.2) whose checksum disagrees with the
     fingerprint recomputed from the CURRENT cfg. Under `reuse_upstream = TRUE`
     this is a BLOCKING failure; otherwise it is a WARNING (the pool is rebuilt
@@ -140,13 +140,13 @@ The return value is a `data.frame` with one row per check and the columns:
 \describe{
   \item{`check`}{Check id (e.g. `"crs_rasters"`, `"overlap"`).}
   \item{`status`}{One of `"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (the check
-    could not be evaluated given the inputs — e.g. an in-memory input with no
-    on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable —
+    could not be evaluated given the inputs -- e.g. an in-memory input with no
+    on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable --
     e.g. no model supplied for the feature-schema check).}
   \item{`message`}{Human-readable outcome / failure message.}
   \item{`evidence`}{What was inspected (path / CRS / year / column list).}
   \item{`severity`}{`"blocking"`, `"warning"`, or `"info"`.}
-  \item{`verifiable`}{Logical — could this check actually be evaluated for the
+  \item{`verifiable`}{Logical -- could this check actually be evaluated for the
     given inputs. A NOT_VERIFIABLE / SKIPPED row has `verifiable = FALSE`,
     making it impossible to mistake an unevaluable check for a true PASS.}
 }
@@ -158,7 +158,7 @@ With `strict = TRUE` the function raises a single aggregated error if ANY
 row with `severity == "blocking"` has `status == "FAIL"`, listing every
 failing check and its message; otherwise it returns the report invisibly.
 With `strict = FALSE` (default) it ALWAYS returns the report (visibly) and
-never errors on a check FAIL — the caller decides what to do. (A non-blocking
+never errors on a check FAIL -- the caller decides what to do. (A non-blocking
 foreign-cache mismatch still emits a `warning()` in both modes, preserving the
 Gate 1C.4 behaviour.) The orchestrator invokes `strict = TRUE` so a
 misconfigured run aborts before heavy compute.

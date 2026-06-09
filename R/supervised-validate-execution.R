@@ -2,7 +2,7 @@
 # Gate 1C.4 / 1D.1: semantic + spatial validation for the supervised
 # one-year pipeline, plus the cfg-isolation fingerprint helper.
 #
-# Architecture (Gate 1D.1 — ONE implementation of the 10 checks):
+# Architecture (Gate 1D.1 -- ONE implementation of the 10 checks):
 #   .of_validate_supervised_execution_engine()  -- internal ENGINE. Runs all 10
 #        checks and RETURNS a STRUCTURED report (one record per check). It does
 #        NOT stop() on a failing check; it records the outcome.
@@ -30,7 +30,7 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-# Gate 1D.3 — year-validation classification + evidence hierarchy (check 5).
+# Gate 1D.3 -- year-validation classification + evidence hierarchy (check 5).
 # ----------------------------------------------------------------------------
 
 #' Classify a supervised input as YEAR-SPECIFIC or ATEMPORAL (check-5 lookup).
@@ -38,19 +38,19 @@
 #' @description
 #' EXPLICIT lookup (not ad hoc) driving the robust year check. YEAR-SPECIFIC
 #' inputs MUST agree with the resolved cfg target year; ATEMPORAL inputs MUST
-#' NOT be required to carry the run year — they are SKIPPED by the year check.
+#' NOT be required to carry the run year -- they are SKIPPED by the year check.
 #'
 #' YEAR-SPECIFIC: `internal_decisions`, `change_index` (immediate change index),
 #'   `delayed_change_index` (delayed change index), `hotspots`,
 #'   `reference_burned_map` (the run's reference burned map, when supplied).
 #' ATEMPORAL: `topo`, `peninsula_shapefile`, `burnable_mask`, and the CORINE
-#'   products (`corine_raster`) — CORINE encodes its OWN epoch/year (e.g. 2012),
+#'   products (`corine_raster`) -- CORINE encodes its OWN epoch/year (e.g. 2012),
 #'   not the run target year, so a CORINE filename token must never be mistaken
 #'   for the run year.
 #'
 #' @param name character scalar input name (a key of `cfg$inputs`).
 #' @return `"year_specific"`, `"atemporal"`, or `"unknown"` (treated as
-#'   atemporal/skipped by the caller — never failed for lacking the run year).
+#'   atemporal/skipped by the caller -- never failed for lacking the run year).
 #' @keywords internal
 #' @noRd
 .of_vse_year_class <- function(name) {
@@ -98,10 +98,10 @@
 #'   - if NO level yields a year -> `status = "not_verifiable"` (NOT a false
 #'     PASS; the caller records NOT_VERIFIABLE, non-blocking by itself).
 #' Honesty rule: absence of evidence is recorded as NOT_VERIFIABLE, NEVER as a
-#' PASS — the function does not fabricate certainty.
+#' PASS -- the function does not fabricate certainty.
 #'
-#' NOT IMPLEMENTED (future extension): a fourth hierarchy level — a
-#' cfg-registered DECLARED year per input (`spec$declared_year`) — was scoped
+#' NOT IMPLEMENTED (future extension): a fourth hierarchy level -- a
+#' cfg-registered DECLARED year per input (`spec$declared_year`) -- was scoped
 #' (Gate 1D.3) but never wired: the config builder
 #' [build_supervised_burned_config()] does NOT populate a `declared_year` on any
 #' `cfg$inputs[[*]]` spec, so the branch could never fire. It is REMOVED from
@@ -176,7 +176,7 @@
   }
 
   # NOTE (1E.5): a level-4 "cfg-registered declared year" (`spec$declared_year`)
-  # is NOT IMPLEMENTED — the builder never records one, so it is intentionally
+  # is NOT IMPLEMENTED -- the builder never records one, so it is intentionally
   # absent from this hierarchy (see the function header). The hierarchy is
   # column -> metadata -> filename only.
 
@@ -209,7 +209,7 @@
 #' stop()s on a failing check (the foreign-cache check may still `warning()`
 #' in the non-blocking branch, preserving the Gate 1C.4 behaviour); each check
 #' appends one record to a structured report. Both the public wrapper
-#' [validate_supervised_execution()] and the orchestrator consume THIS engine —
+#' [validate_supervised_execution()] and the orchestrator consume THIS engine --
 #' there is no duplicated check logic.
 #'
 #' Each record carries: `check`, `status` (PASS / FAIL / NOT_VERIFIABLE /
@@ -432,7 +432,7 @@
   }
 
   # ===========================================================================
-  # (4) Mask with ZERO burnable cells — align to template (Gate 1C.1 helper).
+  # (4) Mask with ZERO burnable cells -- align to template (Gate 1C.1 helper).
   # ===========================================================================
   if (!is.null(mask_path) && !is.null(template_r) && file.exists(mask_path)) {
     run_check("zero_burnable_mask", "blocking", {
@@ -452,21 +452,21 @@
   }
 
   # ===========================================================================
-  # (5) Wrong year — ROBUST, evidence-hierarchy year validation (Gate 1D.3).
+  # (5) Wrong year -- ROBUST, evidence-hierarchy year validation (Gate 1D.3).
   #
   # CONTRACT (see .of_vse_year_class() / .of_vse_resolve_input_year() below):
   #   * INPUT CLASSIFICATION is explicit, not ad hoc. YEAR-SPECIFIC inputs MUST
   #     agree with the resolved cfg target year; ATEMPORAL inputs (topo,
-  #     peninsula, burnable_mask, CORINE products — CORINE encodes its OWN epoch,
+  #     peninsula, burnable_mask, CORINE products -- CORINE encodes its OWN epoch,
   #     not the run target) are SKIPPED (never failed for lacking the run year).
   #   * For each YEAR-SPECIFIC input we resolve a year via a strict HIERARCHY:
   #       (1) a `year` / `fire_year` column (vector inputs);
   #       (2) explicit layer/raster metadata (if present);
   #       (3) an UNAMBIGUOUS standalone 4-digit filename token of the right
   #           magnitude (CORINE epoch / resolution numbers are excluded by
-  #           construction — those inputs are ATEMPORAL and never reach here).
+  #           construction -- those inputs are ATEMPORAL and never reach here).
   #     (A level-4 cfg-registered declared year was scoped but is NOT
-  #      IMPLEMENTED — the builder records no `spec$declared_year`; it was
+  #      IMPLEMENTED -- the builder records no `spec$declared_year`; it was
   #      removed from the active flow in 1E.5. See .of_vse_resolve_input_year().)
   #   * MATCH    -> PASS, evidence names the hierarchy level used.
   #   * MISMATCH -> FAIL (blocking), naming input + found year + expected year.
@@ -525,7 +525,7 @@
         "wrong_year", "PASS",
         sprintf(paste0("All year-resolvable inputs agree with cfg$target_year ",
                        "= %d; %d input(s) carried no verifiable year evidence ",
-                       "(%s) — recorded as not-verifiable, not a failure."),
+                       "(%s) -- recorded as not-verifiable, not a failure."),
                 ty, length(unverif), paste(unverif, collapse = ", ")),
         evidence = paste(c(
           sprintf("%s[%s]", matched,
@@ -625,8 +625,8 @@
   # schema is taken FROM the recipe, never re-derived from the scoring year.
   #
   # When only a legacy/alternative schema (recipe$feature_names, or a model's
-  # feature_names) is available — i.e. no `$cols$feature_cols` to drive the
-  # reconciler — the check keeps the strict "scoring must cover the schema"
+  # feature_names) is available -- i.e. no `$cols$feature_cols` to drive the
+  # reconciler -- the check keeps the strict "scoring must cover the schema"
   # semantics (any missing expected name FAILs).
   # ===========================================================================
   if ((!is.null(model) || !is.null(recipe)) && !is.null(scoring_feature_names)) {
@@ -650,7 +650,7 @@
         if (nrow(probe) == 0L) probe <- probe[1, , drop = FALSE]
         rec <- .of_reconcile_scoring_schema(probe, recipe)
         # After reconciliation the frame MUST carry exactly the recipe feature
-        # schema, in recipe order — the structural proof of check 8 on the main
+        # schema, in recipe order -- the structural proof of check 8 on the main
         # path.
         if (!identical(names(rec$df), recipe_feature_cols)) {
           stop(sprintf(paste0("validate_supervised_execution(): post-",
@@ -718,7 +718,7 @@
   run_check("contradictory_config", "blocking", {
     if (identical(training_protocol, "legacy") &&
         identical(oof_sampling, "full")) {
-      stop("validate_supervised_execution(): contradictory configuration — ",
+      stop("validate_supervised_execution(): contradictory configuration -- ",
            "oof_sampling = 'full' is only meaningful under training_protocol = ",
            "'nested_refit', but training_protocol = 'legacy'. Set oof_sampling = ",
            "'capped' or switch to nested_refit.", call. = FALSE)
@@ -731,7 +731,7 @@
         extra <- setdiff(feature_whitelist_override, canon)
         if (length(extra)) {
           stop(sprintf(paste0("validate_supervised_execution(): contradictory ",
-                              "configuration — feature_whitelist_override ",
+                              "configuration -- feature_whitelist_override ",
                               "contains name(s) not in the canonical whitelist: ",
                               "%s. The override can only RESTRICT the canonical ",
                               "51-feature list."),
@@ -748,7 +748,7 @@
                                               ty), full.names = TRUE)) > 0L
       missing_up <- need[!file.exists(need)]
       if (length(missing_up) || !have_folds) {
-        stop("validate_supervised_execution(): contradictory configuration — ",
+        stop("validate_supervised_execution(): contradictory configuration -- ",
              "reuse_upstream = TRUE but the required upstream artefacts are ",
              "absent (run a baseline first). Missing: ",
              paste(c(missing_up, if (!have_folds) "train_with_folds gpkg"),
@@ -824,8 +824,8 @@
 #' partial artefacts are produced.
 #'
 #' Unlike the previous internal-only contract (which `stop()`ed silently from
-#' inside the orchestrator), this function returns a STRUCTURED REPORT — one row
-#' per check — so a caller can INSPECT exactly which checks passed, failed, or
+#' inside the orchestrator), this function returns a STRUCTURED REPORT -- one row
+#' per check -- so a caller can INSPECT exactly which checks passed, failed, or
 #' could not be evaluated. The orchestrator calls this same function in
 #' `strict = TRUE` mode at the same early hook, so the report engine and the
 #' fail-fast behaviour share ONE implementation of the checks.
@@ -839,54 +839,54 @@
 #'   \item \strong{No spatial overlap} between the change-index template and
 #'     each other spatial input, tested on bounding geometries reprojected into
 #'     the template CRS (Gate 1C.1 extent-intersection logic).
-#'   \item \strong{Empty raster} — a raster input with zero rows or columns.
-#'   \item \strong{Mask with ZERO burnable cells} — the burnable mask aligned to
+#'   \item \strong{Empty raster} -- a raster input with zero rows or columns.
+#'   \item \strong{Mask with ZERO burnable cells} -- the burnable mask aligned to
 #'     the change-index template via [.of_align_mask_to_template()].
 #'   \item \strong{Wrong year} (Gate 1D.3, robust evidence hierarchy). Inputs
 #'     are CLASSIFIED explicitly (\code{.of_vse_year_class()}): YEAR-SPECIFIC
 #'     inputs (internal_decisions, change_index, delayed_change_index, hotspots,
 #'     reference_burned_map) MUST agree with the resolved `config$target_year`;
 #'     ATEMPORAL inputs (topo, peninsula_shapefile, burnable_mask, and the CORINE
-#'     products — CORINE encodes its OWN epoch, not the run year) are SKIPPED and
+#'     products -- CORINE encodes its OWN epoch, not the run year) are SKIPPED and
 #'     never failed for lacking the run year. For each year-specific input the
 #'     year is resolved via a strict HIERARCHY
 #'     (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
 #'     (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
 #'     filename token (CORINE epochs / resolution numbers are excluded by
-#'     construction). (A fourth level — a cfg-registered declared year
-#'     (`spec$declared_year`) — was scoped but is \strong{NOT IMPLEMENTED}: the
+#'     construction). (A fourth level -- a cfg-registered declared year
+#'     (`spec$declared_year`) -- was scoped but is \strong{NOT IMPLEMENTED}: the
 #'     builder records no such field, so it was removed from the active flow in
 #'     1E.5 and is reserved as a future extension.)
 #'     A determinable year that DIFFERS from the expected year FAILs (blocking,
 #'     naming input + found + expected); a MATCH PASSes with evidence of the
 #'     level used; and an input with NO verifiable year at ANY level is recorded
-#'     NOT_VERIFIABLE (verifiable = FALSE) — never a false PASS, and not blocking
+#'     NOT_VERIFIABLE (verifiable = FALSE) -- never a false PASS, and not blocking
 #'     by itself.
-#'   \item \strong{Required columns absent} — internal_decisions missing its
+#'   \item \strong{Required columns absent} -- internal_decisions missing its
 #'     label column `class_final`.
-#'   \item \strong{Incompatible types} — the `class_final` label column is not
+#'   \item \strong{Incompatible types} -- the `class_final` label column is not
 #'     character/factor.
-#'   \item \strong{Incompatible feature schema} — when a `model`/`recipe` is
+#'   \item \strong{Incompatible feature schema} -- when a `model`/`recipe` is
 #'     supplied with `scoring_feature_names`, the scoring inputs are checked
 #'     against the model/recipe schema. Gate 1D.2 makes this RECIPE-DRIVEN and
 #'     ENFORCED on the main scoring path: the canonical schema is read from
 #'     `recipe$cols$feature_cols` (never re-derived from the scoring year), and
-#'     the check is aligned with the Gate 1C.3 5-case reconciliation policy — a
+#'     the check is aligned with the Gate 1C.3 5-case reconciliation policy -- a
 #'     missing / extra / type-changed / unknown-level / all-NA feature is
 #'     RECOVERABLE and PASSES (the reconciler heals + records it), while a
 #'     genuinely incompatible feature (uncoercible) FAILs (blocking). When only a
 #'     legacy schema (`recipe$feature_names` / `model$feature_names`) is
 #'     available the strict coverage semantics apply (any uncovered name FAILs).
 #'     The check is SKIPPED only when no model/recipe + names are supplied, and
-#'     NOT_VERIFIABLE when no schema can be introspected — never a false PASS.
+#'     NOT_VERIFIABLE when no schema can be introspected -- never a false PASS.
 #'     [score_supervised_burned_map()] runs this check (`strict = TRUE`) before
 #'     building the scoring matrix, so it is no longer best-effort on the main
 #'     path.
-#'   \item \strong{Contradictory configuration} — mutually exclusive cfg
+#'   \item \strong{Contradictory configuration} -- mutually exclusive cfg
 #'     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
 #'     `training_protocol = "legacy"` with `oof_sampling = "full"`; a
 #'     `feature_whitelist_override` that is not a subset of the canonical list).
-#'   \item \strong{Cache belonging to ANOTHER cfg} — a persisted negative-pool
+#'   \item \strong{Cache belonging to ANOTHER cfg} -- a persisted negative-pool
 #'     fingerprint sidecar (Gate 1C.2) whose checksum disagrees with the
 #'     fingerprint recomputed from the CURRENT cfg. Under `reuse_upstream = TRUE`
 #'     this is a BLOCKING failure; otherwise it is a WARNING (the pool is rebuilt
@@ -898,13 +898,13 @@
 #' \describe{
 #'   \item{`check`}{Check id (e.g. `"crs_rasters"`, `"overlap"`).}
 #'   \item{`status`}{One of `"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (the check
-#'     could not be evaluated given the inputs — e.g. an in-memory input with no
-#'     on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable —
+#'     could not be evaluated given the inputs -- e.g. an in-memory input with no
+#'     on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable --
 #'     e.g. no model supplied for the feature-schema check).}
 #'   \item{`message`}{Human-readable outcome / failure message.}
 #'   \item{`evidence`}{What was inspected (path / CRS / year / column list).}
 #'   \item{`severity`}{`"blocking"`, `"warning"`, or `"info"`.}
-#'   \item{`verifiable`}{Logical — could this check actually be evaluated for the
+#'   \item{`verifiable`}{Logical -- could this check actually be evaluated for the
 #'     given inputs. A NOT_VERIFIABLE / SKIPPED row has `verifiable = FALSE`,
 #'     making it impossible to mistake an unevaluable check for a true PASS.}
 #' }
@@ -914,7 +914,7 @@
 #' row with `severity == "blocking"` has `status == "FAIL"`, listing every
 #' failing check and its message; otherwise it returns the report invisibly.
 #' With `strict = FALSE` (default) it ALWAYS returns the report (visibly) and
-#' never errors on a check FAIL — the caller decides what to do. (A non-blocking
+#' never errors on a check FAIL -- the caller decides what to do. (A non-blocking
 #' foreign-cache mismatch still emits a `warning()` in both modes, preserving the
 #' Gate 1C.4 behaviour.) The orchestrator invokes `strict = TRUE` so a
 #' misconfigured run aborts before heavy compute.
@@ -951,7 +951,7 @@
 #'   convention roots, so the validator resolves the SAME input paths the
 #'   orchestrator will consume (cfg path \%||\% convention).
 #'
-#' @return A `data.frame` — the structured report (see \strong{Structured
+#' @return A `data.frame` -- the structured report (see \strong{Structured
 #'   report}). Returned invisibly when `strict = TRUE` and all blocking checks
 #'   pass; returned visibly when `strict = FALSE`.
 #'
@@ -1013,10 +1013,10 @@ validate_supervised_execution <- function(config,
 #' Resolution order (recipe is authoritative; never reconstructed from the
 #' scoring year):
 #' \enumerate{
-#'   \item `recipe$cols$feature_cols` — the canonical refit feature schema.
+#'   \item `recipe$cols$feature_cols` -- the canonical refit feature schema.
 #'   \item legacy/alternative recipe shapes (`feature_names` / `features` /
-#'     `expected_features`) — forward/back-compat only.
-#'   \item the fitted xgboost `model$feature_names` — the EXPANDED design-matrix
+#'     `expected_features`) -- forward/back-compat only.
+#'   \item the fitted xgboost `model$feature_names` -- the EXPANDED design-matrix
 #'     columns (== `recipe$cols$x_cols`); used only when no recipe schema is
 #'     available, since a scoring frame carries pre-expansion feature columns.
 #' }
@@ -1067,7 +1067,7 @@ validate_supervised_execution <- function(config,
 #' Preview the negative-pool fingerprint from the cfg ALONE (check 10 helper).
 #'
 #' Recomputes the cfg-determined SUBSET of the Gate 1C.2 negative-pool
-#' fingerprint — the fields that are knowable from the cfg BEFORE the pool is
+#' fingerprint -- the fields that are knowable from the cfg BEFORE the pool is
 #' built (policy, seeds, percentile config, exclusions, year/scenario, and the
 #' resolved input paths). This is INTENTIONALLY a deterministic function of the
 #' cfg only; it folds in NO timestamp and NO runtime-measured quantity, so two
@@ -1123,7 +1123,7 @@ validate_supervised_execution <- function(config,
 #' obeys the same no-timestamps rule.
 #'
 #' @param config A resolved `otsufire_supervised_burned_config`.
-#' @return `list(text, checksum)` — the canonical fingerprint token.
+#' @return `list(text, checksum)` -- the canonical fingerprint token.
 #'
 #' @keywords internal
 #' @noRd

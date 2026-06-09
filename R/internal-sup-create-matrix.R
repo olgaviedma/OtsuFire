@@ -93,20 +93,14 @@ build_design_matrix_patches <- function(
     X_all$hs_any <- as.integer(X_all[[hs_n_col]] > 0)
   }
 
-  if (!is.na(hs_n_col) && !is.na(hs_conf_col) &&
-      all(c(hs_n_col, hs_conf_col) %in% names(X_all))) {
-    flag <- paste0(hs_conf_col, "_isNA")
-    X_all[[flag]] <- as.integer(is.na(X_all[[hs_conf_col]]))
-    X_all[[hs_conf_col]][is.na(X_all[[hs_conf_col]]) & X_all[[hs_n_col]] == 0] <- 0
-  }
-  
-  if (!is.na(hs_n_col) && !is.na(hs_frp_col) &&
-      all(c(hs_n_col, hs_frp_col) %in% names(X_all))) {
-    flag <- paste0(hs_frp_col, "_isNA")
-    X_all[[flag]] <- as.integer(is.na(X_all[[hs_frp_col]]))
-    X_all[[hs_frp_col]][is.na(X_all[[hs_frp_col]]) & X_all[[hs_n_col]] == 0] <- 0
-  }
-  
+  # Gate 1D.8 (2026-06-09): the `_isNA` companions for hs_conf / hs_frp are no
+  # longer synthesised inline here -- they are produced by the SHARED helper
+  # (.of_synthesize_isna_companions) below, identically to the FINAL / scoring
+  # paths, so OOF and FINAL share ONE feature space. We still apply the
+  # hotspot-specific value rule (when hs_n == 0 a missing conf/frp is a real 0,
+  # not "unknown"), and we do it AFTER the shared `_isNA` synthesis captures the
+  # ORIGINAL missingness (so the flag reflects the raw NA, not the zeroed value).
+
   # ---- 2) categóricas ----
   to_factor_with_missing <- function(x) {
     x <- as.factor(x)
@@ -149,31 +143,40 @@ build_design_matrix_patches <- function(
     for (nm in logical_cols) X_all[[nm]] <- as.integer(X_all[[nm]])
   }
   
+  # Gate 1D.8 (2026-06-09): SHARED `_isNA` synthesis. Replaces the old inline
+  # per-numeric-column loop (and the inline hotspot-block flags above) with the
+  # ONE shared helper used by the FINAL / scoring paths, so OOF and FINAL build
+  # the IDENTICAL feature space (same `_isNA` companion set, same canonical
+  # base-block-then-indicator-block order). Bug-8 dedupe (no `<x>_isNA_isNA`,
+  # regenerate any input-provided companion) lives inside the helper.
+  X_all <- .of_synthesize_isna_companions(X_all)
+
+  # Hotspot value rule (applied AFTER `_isNA` synthesis so the flag reflects the
+  # ORIGINAL missingness): when there were no hotspots (hs_n == 0), a missing
+  # conf/frp value is a real 0, not "unknown".
+  if (!is.na(hs_n_col) && !is.na(hs_conf_col) &&
+      all(c(hs_n_col, hs_conf_col) %in% names(X_all))) {
+    X_all[[hs_conf_col]][is.na(X_all[[hs_conf_col]]) & X_all[[hs_n_col]] == 0] <- 0
+  }
+  if (!is.na(hs_n_col) && !is.na(hs_frp_col) &&
+      all(c(hs_n_col, hs_frp_col) %in% names(X_all))) {
+    X_all[[hs_frp_col]][is.na(X_all[[hs_frp_col]]) & X_all[[hs_n_col]] == 0] <- 0
+  }
+
   num_names <- names(X_all)[vapply(X_all, is.numeric, logical(1))]
   idx_median <- if (median_from == "labelled") seq_len(nL) else seq_len(nrow(X_all))
   medians_used <- list()
-  
-  for (nm in num_names) {
-    # Bug 8 (0.3.0): only synthesise an `_isNA` flag for columns that
-    # are not themselves already `_isNA` flags. Otherwise we generate
-    # `<x>_isNA_isNA` second-order flags that bloat the matrix and
-    # leak through the deny lists.
-    is_existing_flag <- grepl("_isNA$", nm)
-    if (!is_existing_flag) {
-      flag_nm <- paste0(nm, "_isNA")
-      if (!flag_nm %in% names(X_all)) X_all[[flag_nm]] <- as.integer(is.na(X_all[[nm]]))
-    }
 
-    if (isTRUE(defer_impute)) {
-      # B1: do NOT impute and do NOT fabricate a median. Per-fold medians are
-      # fit later inside the nested-refit core on the outer-train rows only.
-      next
+  if (!isTRUE(defer_impute)) {
+    for (nm in num_names) {
+      med <- stats::median(X_all[[nm]][idx_median], na.rm = TRUE)
+      if (is.na(med)) med <- 0
+      medians_used[[nm]] <- med
+      X_all[[nm]][is.na(X_all[[nm]])] <- med
     }
-    med <- stats::median(X_all[[nm]][idx_median], na.rm = TRUE)
-    if (is.na(med)) med <- 0
-    medians_used[[nm]] <- med
-    X_all[[nm]][is.na(X_all[[nm]])] <- med
   }
+  # B1: defer_impute leaves numeric NAs in place (per-fold medians are fit later
+  # inside the nested-refit core on the outer-train rows only).
 
   # ---- 3b) B1 deferred-impute early return ----
   # Return the prepared (coerced, _isNA-flagged, hotspot-derived, but NOT

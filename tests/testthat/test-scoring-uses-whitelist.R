@@ -66,11 +66,19 @@ test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
                                   collapse = ", ")))
 
   # Invariant 3 (architectural symmetry): recipe$cols$feature_cols
-  # is exactly intersect(.supervised_feature_cols, available
-  # numeric/integer cols). For our fixture every whitelist feature
-  # is supplied as numeric, so the intersection is the full
-  # whitelist.
-  expect_setequal(recipe$cols$feature_cols, whitelist)
+  # is the SHARED feature space. Gate 1D.8 (2026-06-09) -- INTENTIONAL CHANGE due
+  # to the OOF/FINAL/scoring unification: feature_cols is now the FULL
+  # post-synthesis set (every whitelist BASE feature PLUS its `<feat>_isNA`
+  # companion), in canonical order, identical to the OOF / scoring feature space.
+  # Previously (the defective 51-col FINAL recipe) it was the bare whitelist with
+  # NO `_isNA`; that asymmetry is exactly what 1D.8 fixed. We now assert the base
+  # block equals the whitelist and that recipe$cols$base_features records the
+  # partition.
+  base_fc <- recipe$cols$feature_cols[!grepl("_isNA$", recipe$cols$feature_cols)]
+  expect_setequal(base_fc, whitelist)
+  expect_setequal(recipe$cols$base_features, whitelist)
+  expect_true(length(recipe$cols$missing_indicator_features) > 0L)
+  expect_identical(recipe$cols$feature_cols, recipe$cols$final_feature_order)
 })
 
 # NOTE (Gate 1C.3, 2026-06-08): the production scoring closure now uses the

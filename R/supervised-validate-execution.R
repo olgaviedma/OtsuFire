@@ -612,6 +612,74 @@
   }
 
   # ===========================================================================
+  # (10b) internal_decisions polygon-sanitisation DRY-RUN.
+  #
+  # Non-destructive dry-run of the SAME canonical helper the pools stage uses
+  # (.of_sanitize_supervised_polygons, error_on_empty = FALSE). Empty geometries
+  # are the OFFICIAL drop policy, so their presence must NOT block the run --
+  # they are reported as "PASS_WITH_SANITIZATION" with explicit counts
+  # (e.g. 1278 -> 1274, 4 dropped). It is BLOCKING only if sanitisation would
+  # leave the layer COMPLETELY EMPTY. This closes the sf 1.0-20 empty-geometry
+  # defect that the real-2017 smoke surfaced (st_collection_extract zeroing a
+  # layer that merely contained a handful of empty geometries).
+  # ===========================================================================
+  if (!is.null(id_path) && file.exists(id_path)) {
+    run_check("sanitize_decisions", "blocking", {
+      id_sf <- tryCatch(
+        sf::st_read(id_path, quiet = TRUE, layer = "internal_decisions"),
+        error = function(e)
+          stop("validate_supervised_execution() [input='internal_decisions']: ",
+               "cannot read layer 'internal_decisions' for the sanitise ",
+               "dry-run (", conditionMessage(e), ").", call. = FALSE))
+      n_in <- nrow(id_sf)
+      san_id_col <- if ("fire_uid" %in% names(id_sf)) "fire_uid" else NULL
+      dry <- .of_sanitize_supervised_polygons(
+        id_sf, geom_name = "geometry", id_col = san_id_col,
+        error_on_empty = FALSE)
+      a <- dry$audit
+      n_dropped <- a$n_input - a$n_output
+      if (a$n_output == 0L) {
+        stop(sprintf(paste0("validate_supervised_execution() ",
+                            "[input='internal_decisions']: polygon ",
+                            "sanitisation would leave the layer COMPLETELY ",
+                            "EMPTY (n_input=%d, all dropped: empty_before=%d, ",
+                            "empty_after_make_valid=%d, gc_without_polygon=%d). ",
+                            "There is no usable polygon to train on."),
+                     a$n_input, a$n_empty_before, a$n_empty_after_make_valid,
+                     a$n_without_polygon_component), call. = FALSE)
+      }
+      ev <- sprintf(paste0("n_input=%d -> n_output=%d; empty_before=%d, ",
+                           "empty_after_make_valid=%d, gc=%d, ",
+                           "gc_without_polygon=%d"),
+                    a$n_input, a$n_output, a$n_empty_before,
+                    a$n_empty_after_make_valid, a$n_geometrycollection,
+                    a$n_without_polygon_component)
+      if (n_dropped > 0L) {
+        add(.of_vse_record(
+          "sanitize_decisions", "PASS_WITH_SANITIZATION",
+          sprintf(paste0("internal_decisions sanitises cleanly: %d input ",
+                         "feature(s) -> %d usable polygon(s) (%d dropped as ",
+                         "empty/non-polygonal). Empty geometries are the ",
+                         "official drop policy; not a blocking condition."),
+                  n_in, a$n_output, n_dropped),
+          evidence = ev, severity = "warning"))
+      } else {
+        add(.of_vse_record(
+          "sanitize_decisions", "PASS",
+          sprintf(paste0("internal_decisions sanitises with no drops: %d ",
+                         "feature(s), all usable polygons."), a$n_output),
+          evidence = ev, severity = "blocking"))
+      }
+    })
+  } else {
+    add(.of_vse_record("sanitize_decisions", "NOT_VERIFIABLE",
+                       paste0("internal_decisions is in-memory or NULL; the ",
+                              "sanitise dry-run cannot run off disk."),
+                       evidence = "in-memory or NULL", severity = "blocking",
+                       verifiable = FALSE))
+  }
+
+  # ===========================================================================
   # (8) Incompatible feature schema (only when a model/recipe is involved).
   #
   # Gate 1D.2: the saved FINAL-refit RECIPE is the CANONICAL schema source. When
@@ -891,6 +959,17 @@
 #'     fingerprint recomputed from the CURRENT cfg. Under `reuse_upstream = TRUE`
 #'     this is a BLOCKING failure; otherwise it is a WARNING (the pool is rebuilt
 #'     this run).
+#'   \item \strong{internal_decisions polygon-sanitisation dry-run}
+#'     (`sanitize_decisions`) -- a NON-DESTRUCTIVE dry-run of the SAME canonical
+#'     polygon sanitiser the pools stage uses
+#'     (\code{.of_sanitize_supervised_polygons()}). Empty geometries are the
+#'     official drop policy, so their presence is NOT blocking: the check
+#'     reports `"PASS_WITH_SANITIZATION"` with the explicit counts (e.g.
+#'     1278 -> 1274, 4 dropped). It is BLOCKING only when sanitisation would
+#'     leave the layer COMPLETELY EMPTY (no usable polygon to train on). This
+#'     guards against the sf 1.0-20 defect where an indiscriminate
+#'     `st_collection_extract()` zeroed a layer that merely contained a few
+#'     empty geometries.
 #' }
 #'
 #' @section Structured report:
@@ -899,8 +978,11 @@
 #'   \item{`check`}{Check id (e.g. `"crs_rasters"`, `"overlap"`).}
 #'   \item{`status`}{One of `"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (the check
 #'     could not be evaluated given the inputs -- e.g. an in-memory input with no
-#'     on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable --
-#'     e.g. no model supplied for the feature-schema check).}
+#'     on-disk path), `"SKIPPED"` (the check is legitimately inapplicable --
+#'     e.g. no model supplied for the feature-schema check), or
+#'     `"PASS_WITH_SANITIZATION"` (the `sanitize_decisions` check passes after
+#'     the official drop of empty/non-polygonal geometries -- a non-blocking,
+#'     warning-severity outcome that records the drop counts).}
 #'   \item{`message`}{Human-readable outcome / failure message.}
 #'   \item{`evidence`}{What was inspected (path / CRS / year / column list).}
 #'   \item{`severity`}{`"blocking"`, `"warning"`, or `"info"`.}

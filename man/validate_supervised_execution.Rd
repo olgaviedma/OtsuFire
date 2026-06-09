@@ -132,6 +132,17 @@ The 10 checks:
     fingerprint recomputed from the CURRENT cfg. Under `reuse_upstream = TRUE`
     this is a BLOCKING failure; otherwise it is a WARNING (the pool is rebuilt
     this run).
+  \item \strong{internal_decisions polygon-sanitisation dry-run}
+    (`sanitize_decisions`) -- a NON-DESTRUCTIVE dry-run of the SAME canonical
+    polygon sanitiser the pools stage uses
+    (\code{.of_sanitize_supervised_polygons()}). Empty geometries are the
+    official drop policy, so their presence is NOT blocking: the check
+    reports `"PASS_WITH_SANITIZATION"` with the explicit counts (e.g.
+    1278 -> 1274, 4 dropped). It is BLOCKING only when sanitisation would
+    leave the layer COMPLETELY EMPTY (no usable polygon to train on). This
+    guards against the sf 1.0-20 defect where an indiscriminate
+    `st_collection_extract()` zeroed a layer that merely contained a few
+    empty geometries.
 }
 }
 \section{Structured report}{
@@ -141,8 +152,11 @@ The return value is a `data.frame` with one row per check and the columns:
   \item{`check`}{Check id (e.g. `"crs_rasters"`, `"overlap"`).}
   \item{`status`}{One of `"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (the check
     could not be evaluated given the inputs -- e.g. an in-memory input with no
-    on-disk path), or `"SKIPPED"` (the check is legitimately inapplicable --
-    e.g. no model supplied for the feature-schema check).}
+    on-disk path), `"SKIPPED"` (the check is legitimately inapplicable --
+    e.g. no model supplied for the feature-schema check), or
+    `"PASS_WITH_SANITIZATION"` (the `sanitize_decisions` check passes after
+    the official drop of empty/non-polygonal geometries -- a non-blocking,
+    warning-severity outcome that records the drop counts).}
   \item{`message`}{Human-readable outcome / failure message.}
   \item{`evidence`}{What was inspected (path / CRS / year / column list).}
   \item{`severity`}{`"blocking"`, `"warning"`, or `"info"`.}

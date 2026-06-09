@@ -471,6 +471,35 @@ test_that("1D.3: a YEAR-SPECIFIC input with NO verifiable year -> NOT_VERIFIABLE
   expect_silent(vse_fn()(cfg, strict = TRUE, target_year = 2017L))
 })
 
+test_that("1E.5: level-4 cfg declared_year is NOT IMPLEMENTED (dormant branch removed)", {
+  # The Gate 1D.3 year hierarchy is column -> metadata -> filename ONLY. A
+  # fourth level (a cfg-registered spec$declared_year) was scoped but never
+  # wired: the builder records no declared_year, so the branch could never fire.
+  # 1E.5 removed it from the active flow. Assert it stays removed so a future
+  # edit cannot silently re-introduce a check that reports PASS off a field the
+  # package never populates.
+
+  # (a) The resolver no longer accepts a `declared` argument.
+  fn <- OtsuFire:::.of_vse_resolve_input_year
+  expect_false("declared" %in% names(formals(fn)))
+
+  # (b) A clean cfg builds no declared_year on any input spec.
+  td <- tempfile("vy_l4_"); dir.create(td)
+  cfg <- mk_vse_cfg(out_dir = td, target_year = 2017L,
+                    ci_name = "MinMin_mosaic_res90m.tif")  # no filename year
+  declared <- vapply(names(cfg$inputs), function(nm) {
+    is.null(cfg$inputs[[nm]]$declared_year)
+  }, logical(1))
+  expect_true(all(declared))  # NO input carries a declared_year
+
+  # (c) With no column/metadata/filename year evidence, the year check is
+  # NOT_VERIFIABLE (it does NOT fabricate a PASS off a level-4 declared year).
+  rep <- vse_fn()(cfg, target_year = 2017L)
+  wr <- wy_row(rep)
+  expect_identical(wr$status, "NOT_VERIFIABLE")
+  expect_no_match(wr$evidence, "declared")
+})
+
 test_that("isolation: sequential AND interleaved validation use no shared/session state", {
   tda <- tempfile("vse_iso_a_"); dir.create(tda)
   tdb <- tempfile("vse_iso_b_"); dir.create(tdb)

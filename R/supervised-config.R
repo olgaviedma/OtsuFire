@@ -501,10 +501,12 @@ build_supervised_burned_config <- function(
 
   # §N+27 RESOLVED (2026-06-05): the supervised burned-like registry was an
   # abandoned research line. The `burned_like_registry_path` parameter, its
-  # default-path resolution (via .resolve_registry_path()), and the cfg field
-  # are removed. The deterministic phase keeps its own registry READER
-  # (build_rbr_keep_pool_from_registry); .resolve_registry_path() in
-  # R/utils-registry.R is preserved for that side.
+  # default-path resolution, and the cfg field are removed. The deterministic
+  # phase keeps its own registry READER (build_rbr_keep_pool_from_registry),
+  # which receives an explicit `registry_path` from its caller; there is no
+  # implicit default-path resolution helper anywhere in the package
+  # (R/utils-registry.R and its .resolve_registry_path() were deleted in
+  # 1E.6 as dead code with no live caller).
 
   cfg <- list(
     scenario                 = scenario,

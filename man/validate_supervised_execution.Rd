@@ -94,7 +94,10 @@ The 10 checks:
     (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
     (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
     filename token (CORINE epochs / resolution numbers are excluded by
-    construction); (4) a cfg-registered declared year (`spec$declared_year`).
+    construction). (A fourth level — a cfg-registered declared year
+    (`spec$declared_year`) — was scoped but is \strong{NOT IMPLEMENTED}: the
+    builder records no such field, so it was removed from the active flow in
+    1E.5 and is reserved as a future extension.)
     A determinable year that DIFFERS from the expected year FAILs (blocking,
     naming input + found + expected); a MATCH PASSes with evidence of the
     level used; and an input with NO verifiable year at ANY level is recorded

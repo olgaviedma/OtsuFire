@@ -1,18 +1,17 @@
 # Package And Project Overview
 
-OtsuFire is an R-based burned-area mapping framework organized around a two-stage design. The paper draft describes the scientific rationale: a deterministic Otsu-based seed-and-grow stage produces candidate burned polygons without requiring externally compiled training labels, and an optional supervised stage uses those deterministic outputs to reduce residual commission and omission in spectrally ambiguous settings. The current repository state adds an implementation distinction that matters for users: the project still runs through standalone scripts, while the package layer currently acts as a bridge that delegates to those scripts.
+OtsuFire is an R-based burned-area mapping framework organized around a two-stage design. The paper draft describes the scientific rationale: a deterministic Otsu-based seed-and-grow stage produces candidate burned polygons without requiring externally compiled training labels, and an optional supervised stage uses those deterministic outputs to reduce residual commission and omission in spectrally ambiguous settings.
 
 ## What The Project Currently Contains
 
-Three layers coexist in the current repository state.
+The deterministic and supervised workflows are implemented **entirely inside the package** (`R/`). The exported functions are the runtime, not a bridge to external scripts: there is no `sys.source()` of legacy scripts and no namespace mutation at run time. The usage scripts under `2_SCRIPTS/.../00_USAGE` are thin drivers that build a configuration object and call the package functions.
 
 | Layer | Location | Current role |
 |---|---|---|
-| Legacy project scripts | `2_SCRIPTS/00_USAGE` and `2_SCRIPTS/00_FUNCTIONS` | Active runtime for deterministic and supervised annual mapping |
-| Package design tables | `2_SCRIPTS/PAQUETE` | Structured contracts, inputs, outputs, and implementation maps |
-| Package bridge implementation | `2_SCRIPTS/OtsuFire` | Exported package-facing functions that source and run the active standalone runtime |
+| Package implementation | `OtsuFire/R` | Active runtime for the mosaic, deterministic, and supervised stages |
+| Usage drivers | `2_SCRIPTS/.../00_USAGE` | Example scripts that build a config and call the package functions |
 
-This means that the book has to document both the methodological design and the current operational architecture. For day-to-day use, the standalone deterministic and supervised scripts remain the clearest canonical runtimes. For package-facing use, the bridge functions provide a stable outer API but still depend on the current project layout.
+This book documents both the methodological design and the current operational architecture. The canonical entry points are the package functions (`build_*_config()` plus the `run_*()` / modular stage functions).
 
 ## Why The Workflow Is Split Into Two Stages
 
@@ -30,19 +29,16 @@ The handoff and current code support the following status summary.
 | Component | Current state |
 |---|---|
 | `change_index_mosaic()` | Active package-facing mosaic function |
-| Deterministic standalone runtime | Canonical annual runtime |
-| Deterministic package bridge | Validated against standalone when using the same frozen registry and explicit `deterministic_seed` |
-| Supervised standalone runtime | Canonical annual runtime |
-| Supervised package bridge | Validated against standalone (2026-04-16) under frozen deterministic inputs; exact match across 1002 polygons (that historical validation used the since-removed `deterministic_direct` strategy; `all_sources` is now the only mode) |
+| Deterministic runtime | `build_burned_mapping_config()` + `run_deterministic_pipeline()` (package-internal) |
+| Supervised runtime | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` (package-internal) |
 | `validate_fire_maps()` | Public workflow-independent validation utility shared by deterministic validation and compatible post-threshold supervised outputs |
-| `MASTER_FIRE_MAPPING_PIPELINE.R` | Useful convenience orchestrator, but not a neutral benchmark for supervised defaults |
 
-`validate_fire_maps()` is a workflow-independent validation utility. It may be called inside the deterministic pipeline, but it is also intended for direct use on any compatible burned-area prediction layer, including supervised outputs after thresholding `p_burned`.
+`validate_fire_maps()` is a workflow-independent validation utility. It may be called inside the deterministic pipeline, but it is also intended for direct use on any compatible burned-area prediction layer, including supervised outputs after thresholding `p_burned`. The metrics it reports (omission, commission, F1, IoU) are computed against an external reference (e.g. EFFIS) and are not comparable to the supervised OOF AUC / PR-AUC, which are computed against the deterministic-decision labels.
 
 Two project-state details are especially important for interpretation.
 
-- Scenario-specific registries now live under `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`. The old shared `_REGISTRIES` path is legacy fallback, not the preferred current design.
-- The active supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly: a four-bucket unburned taxonomy with independent capacity caps (Phase 2A, closed 2026-04-17). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05. A registry-based positive-pool augmentation design (`historical_registry_augment`) was fully specified and then rejected on 2026-04-17; it is not an active or pending feature.
+- The deterministic RBR keep-pool registry lives under `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`. This is a deterministic feature; the **supervised** pipeline no longer writes any registry (the supervised burned-like registry and its `historical_registry_augment` augmentation design were removed on 2026-06-05; Mode B had been formally rejected on 2026-04-17).
+- The supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly: a burnable-only, four-bucket unburned taxonomy with independent capacity caps (Phase 2A, closed 2026-04-17). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05.
 
 ## Canonical Inputs And Outputs
 
@@ -51,7 +47,7 @@ The main stages, inputs, and outputs supported by the current sources are summar
 | Stage | Main inputs | Main outputs | Main downstream role |
 |---|---|---|---|
 | Change-index mosaic | Annual raster tiles, AOI mask, naming pattern, output directory | Annual masked mosaic GeoTIFF plus run diagnostics | Common raster base for deterministic and supervised stages |
-| Deterministic stage | Annual mosaic, CORINE and burnable support, ecoregions, hotspots when available, previous-year burned reference when available, optional registry keep pool | `internal_decisions.gpkg`, optional `reference_decisions.gpkg`, validation workbook, timing log | Canonical annual polygon universe and first decision layer |
+| Deterministic stage | Annual mosaic, CORINE and burnable support, ecoregions, hotspots when available, previous-year burned reference when available, optional RBR keep-pool registry | `internal_decisions.gpkg`, optional `reference_decisions.gpkg`, validation workbook, timing log | Canonical annual polygon universe and first decision layer |
 | One-year supervised stage | `internal_decisions`, main change index, delayed change index when available, terrain and land-cover support layers, hotspots when available | Pools, folds, features, OOF diagnostics, final model, `final_map_full`, `final_map` | Probability-based annual refinement |
 
 ## Reproducibility Conventions
@@ -59,17 +55,18 @@ The main stages, inputs, and outputs supported by the current sources are summar
 The current workflow relies on a few repeatability conventions that should be preserved in documentation and in practice.
 
 - Results are organized by year, `result_name`, stage, and scenario.
-- Deterministic reproducibility depends on both fixed code and fixed registry state. The handoff confirms that deterministic equivalence was achieved only after freezing the registry snapshot and exposing `deterministic_seed`.
+- Deterministic reproducibility depends on both fixed code and fixed RBR keep-pool registry state, achieved by freezing the registry snapshot and exposing `deterministic_seed`.
+- Supervised reproducibility additionally depends on the content-aware negative-pool fingerprint (`neg_pool_fingerprint`), which invalidates stale cached pools, and on the canonical seeds in `cfg$train_control`.
 - The supervised workflow writes intermediate objects to disk rather than hiding them in memory. Pools, folds, feature layers, OOF diagnostics, and final outputs are therefore part of the documented workflow, not incidental side effects.
-- Scenario names matter beyond reporting. In the current design they determine output folders, registry locations, and in the supervised bridge they also influence the default negative-pool policy.
+- Scenario names matter beyond reporting: they determine output folders and (for the deterministic stage) registry locations. The supervised negative-pool strategy is no longer scenario-dependent — it is always `all_sources`.
 
 ## What This Book Does Not Yet Claim
 
 Two topics remain deliberately conservative in this pass.
 
-1. LOYO is described only conceptually. The archived `YEAR_OOF_PIPELINE.R` confirms that a new dedicated multiyear script is still needed.
-2. Historical application is documented only at the level supported by the paper draft and the current registry design. The dedicated operational tutorial for that workflow is still pending.
+1. LOYO is described only conceptually; a new dedicated multiyear runtime is still needed.
+2. Historical application is documented only at the level supported by the paper draft. There is no current package entry point, and the supervised registry that would have supported temporal transfer was removed on 2026-06-05.
 
-::: {.callout-warning}
-The package-facing documentation tables under `PAQUETE` are broadly aligned with the current one-year deterministic and supervised design, but some API details in those tables are more forward-looking than the current bridge implementation. Where that happens, this book follows the active bridge signatures and standalone runtime behavior.
+::: {.callout-note}
+This book follows the active package function signatures and runtime behaviour. Where any older design table is more forward-looking than the current package, the package is authoritative.
 :::

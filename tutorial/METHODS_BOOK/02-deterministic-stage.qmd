@@ -108,5 +108,5 @@ Analysis of validated runs (2025/balanced and 2012/balanced) shows that the `rev
 `review` polygons are spectrally plausible candidates that passed `filter_1` and `filter_3` but lack hotspot support (`filter_2 = review`). They are not downgraded because spectral evidence is weak; they are downgraded because independent hotspot confirmation is absent. In practice, nearly all `review` polygons pass the supervised spectral model and receive high `p_burned` scores when hotspot data are simply unavailable for a given year.
 
 ::: {.callout-note}
-The handoff confirms that deterministic package-vs-standalone equivalence is valid when the same frozen burned-like registry snapshot and the same explicit `deterministic_seed` are used. If either changes, the deterministic output can legitimately change even when the code does not.
+Deterministic reproducibility requires the same frozen RBR keep-pool registry snapshot and the same explicit `deterministic_seed`. If either changes, the deterministic output can legitimately change even when the code does not.
 :::

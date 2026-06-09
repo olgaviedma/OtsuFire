@@ -1,5 +1,16 @@
 # Package and Quarto Book Plan
 
+> **HISTORICAL PLANNING DOCUMENT (superseded).** This file captured an early
+> packaging/book plan and does **not** describe the current package. Several
+> items here are obsolete: the proposed API names (`run_supervised_pipeline()`,
+> `run_master_pipeline()`, `run_loyo_pipeline()`, `build_burned_like_registry()`)
+> are not the shipped API; the supervised burned-like registry and the
+> `registry.R` module were removed (2026-06-05); ecoregions are not a supervised
+> feature; and the supervised stage is a fully package-internal runtime, not a
+> bridge to standalone scripts. For the authoritative API see the package
+> `NAMESPACE`, the function reference, the METHODS_BOOK chapters, and `NEWS.md`.
+> This file is retained only for historical traceability.
+
 ## Recommendation
 
 Use the existing `OtsuFire` package as the starting scaffold, but treat the current

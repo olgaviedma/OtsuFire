@@ -18,113 +18,22 @@
 # legacy and nested_refit protocols yield the SAME feature space.
 # ============================================================================
 
+# Gate 1D.8 (2026-06-09): the upstream-frame builder + the per-stage column
+# resolvers (OOF / FINAL / scoring) and the `_isNA` / base partition utilities
+# now live in helper-supervised-contracts.R as `sc_*` builders, shared with the
+# 18-point contract suite (test-oof-final-recipe-parity-18.R) so there is ONE
+# definition. This file keeps short local aliases for readability of the
+# historical assertions below.
 ns_ip <- asNamespace("OtsuFire")
 g_ip  <- function(nm) get(nm, envir = ns_ip)
 
-# One upstream feature frame == the analogue of a single
-# extract_supervised_features() GPKG feeding BOTH stages. Carries the canonical
-# whitelist features (some with injected NA so `_isNA` companions are
-# meaningful) + the admin / fold-assignment columns both stages preserve. NO
-# `_isNA` columns are pre-written (extract_supervised_features() does not write
-# them), so each stage's synthesis behaviour is what's under test.
-make_isna_upstream_df <- function(n = 60L, seed = 7L) {
-  set.seed(seed)
-  wl <- g_ip(".supervised_feature_cols")
-  feat <- as.data.frame(
-    matrix(stats::runif(n * length(wl)), nrow = n,
-           dimnames = list(NULL, wl)))
-  # Inject NA into a spread of features (RBR / topo / hotspot) so the synthesised
-  # companions are non-degenerate and any asymmetry would be visible.
-  for (t in c("rbr_med", "elev_med", "slope_med", "hs_conf_mean", "hs_frp_sum")) {
-    feat[[t]][sample.int(n, 12L)] <- NA
-  }
-  admin <- data.frame(
-    fire_uid  = sprintf("uid_%03d", seq_len(n)),
-    class     = rep(c("burned", "unburned"), length.out = n),
-    source    = rep(c("burned_truth", "random_burnable_background",
-                      "deterministic_drop_hard", "otsu_patch_residual"),
-                    length.out = n),
-    neg_type  = rep(c(NA_character_, "background_cell",
-                      "spectral_reject_medium", "otsu_patch_drop"),
-                    length.out = n),
-    poly_id   = sprintf("p_%03d", seq_len(n)),
-    block_id  = rep(seq_len(12), length.out = n),
-    fold_rep1 = rep(c(1L, 2L, 3L), length.out = n),
-    fold_rep2 = rep(c(2L, 3L, 1L), length.out = n),
-    stringsAsFactors = FALSE)
-  cbind(admin, feat)
-}
-
-# Resolve the OOF deployed design-matrix model_cols (what the OOF per-fold core
-# trains on) from one upstream frame, replicating the OOF wrapper's whitelist
-# filter + deferred design-matrix build.
-oof_model_cols_from <- function(df) {
-  wl <- g_ip(".supervised_feature_cols")
-  allowed <- c(wl, paste0(wl, "_isNA"))
-  id_cols <- c("fire_uid", "poly_id", "block_id", "fold_rep1", "fold_rep2",
-               "class", "source", "neg_type")
-  apply_wl <- function(d) {
-    keep <- unique(c(intersect(names(d), id_cols),
-                     intersect(names(d), allowed)))
-    d[, keep, drop = FALSE]
-  }
-  labelled    <- apply_wl(df)
-  burned_like <- labelled[labelled$class == "unburned", , drop = FALSE]
-  dm <- g_ip("build_design_matrix_patches")(
-    labelled = labelled, burned_like = burned_like, id_cols = id_cols,
-    defer_impute = TRUE, save_dir = NULL, verbose = FALSE)
-  dm$model_cols
-}
-
-# Resolve the FINAL deployed design-matrix x_cols (what the FINAL refit model is
-# trained on + the recipe$cols$x_cols scoring aligns to) from the SAME upstream
-# frame, replicating train_final_model_direct()'s feat_cols derivation + the
-# shared nested-refit core.
-final_fit_from <- function(df) {
-  wl <- g_ip(".supervised_feature_cols")
-  feat_cols <- g_ip(".filter_to_supervised_whitelist")(names(df), whitelist = wl)
-  params_fn <- function(spw) {
-    p <- g_ip(".of_canonical_xgb_params")(spw); p$nthread <- 1L; p
-  }
-  suppressMessages(suppressWarnings(g_ip(".of_nested_refit_fit")(
-    train_df = df, feature_cols = feat_cols, label_col = "class",
-    group_col = "block_id", block_col = "block_id", val_frac = 0.2,
-    params_fn = params_fn, sampling_seed = 42L, fold_seed = 42L,
-    nrounds_max = 8L, early_stopping_rounds = 4L,
-    impute_numeric = "median", impute_factor_missing = "MISSING",
-    verbose = FALSE)))
-}
-final_x_cols_from <- function(df) final_fit_from(df)$x_cols
-
-# Resolve the SCORING deployed x_cols from the SAME upstream frame: build the
-# saved-recipe shape from the FINAL fit, then drive the production scoring build
-# (.of_reconcile_scoring_schema -> .of_nested_coerce_features ->
-# .of_nested_apply_medians -> .of_nested_build_matrix(ref = x_cols)) on the raw
-# (no `_isNA`) feature frame.
-scoring_x_cols_from <- function(df, fit) {
-  medians <- fit$medians[!vapply(fit$medians,
-                                 function(z) is.null(z) || is.na(z), logical(1))]
-  recipe <- list(
-    cols = list(id_col = "fire_uid", class_col = "class", group_col = "block_id",
-                feature_cols = fit$feature_cols,
-                base_features = fit$base_features,
-                missing_indicator_features = fit$missing_indicator_features,
-                final_feature_order = fit$final_feature_order,
-                x_cols = fit$x_cols),
-    impute = list(impute_numeric = "median", numeric_medians = medians,
-                  impute_factor_missing = "MISSING"))
-  wl <- g_ip(".supervised_feature_cols")
-  # Raw scoring frame: ONLY the base whitelist features (NO `_isNA`), + admin.
-  x_df <- df[, intersect(names(df), c("fire_uid", wl)), drop = FALSE]
-  rec <- g_ip(".of_reconcile_scoring_schema")(x_df, recipe)
-  X_raw <- g_ip(".of_nested_coerce_features")(rec$df, "MISSING")
-  X_imp <- g_ip(".of_nested_apply_medians")(X_raw, medians)
-  M <- g_ip(".of_nested_build_matrix")(X_imp, ref_cols = recipe$cols$x_cols)
-  colnames(M)
-}
-
-isna_of <- function(v) sort(grep("_isNA$", v, value = TRUE))
-base_of <- function(v) v[!grepl("_isNA$", v)]
+make_isna_upstream_df <- sc_isna_upstream_df
+oof_model_cols_from   <- sc_oof_model_cols_from
+final_fit_from        <- sc_final_fit_from
+final_x_cols_from     <- sc_final_x_cols_from
+scoring_x_cols_from   <- sc_scoring_x_cols_from
+isna_of               <- sc_isna_of
+base_of               <- sc_base_of
 
 # ---------------------------------------------------------------------------
 # (1) BASE-FEATURE parity (load-bearing 1D.4 guarantee): stripped of `_isNA`,

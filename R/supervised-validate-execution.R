@@ -91,8 +91,7 @@
 #' For ONE year-specific input, attempt to determine its year, IN ORDER:
 #'   1. a `year` / `fire_year` (case-insensitive) COLUMN for vector inputs;
 #'   2. explicit layer/raster METADATA that records a year (best-effort);
-#'   3. an UNAMBIGUOUS standalone 4-digit FILENAME token;
-#'   4. a cfg-registered DECLARED year for the input (`spec$declared_year`).
+#'   3. an UNAMBIGUOUS standalone 4-digit FILENAME token.
 #' The FIRST level that yields year(s) decides the outcome:
 #'   - the resolved year(s) MATCH the expected year -> `status = "match"`;
 #'   - they DIFFER -> `status = "mismatch"` (blocking FAIL in the caller);
@@ -101,16 +100,25 @@
 #' Honesty rule: absence of evidence is recorded as NOT_VERIFIABLE, NEVER as a
 #' PASS — the function does not fabricate certainty.
 #'
+#' NOT IMPLEMENTED (future extension): a fourth hierarchy level — a
+#' cfg-registered DECLARED year per input (`spec$declared_year`) — was scoped
+#' (Gate 1D.3) but never wired: the config builder
+#' [build_supervised_burned_config()] does NOT populate a `declared_year` on any
+#' `cfg$inputs[[*]]` spec, so the branch could never fire. It is REMOVED from
+#' the active flow (1E.5, 2026-06-09) rather than left as a dormant branch that
+#' would imply a capability the package does not have. If a per-input declared
+#' year is ever needed, (a) have the builder record `spec$declared_year`, and
+#' (b) re-add a level-4 branch here that consults it; until then the hierarchy
+#' is column -> metadata -> filename only.
+#'
 #' @param name character input name.
 #' @param path resolved on-disk path (or `NULL`).
 #' @param expected_year integer expected (resolved cfg target) year.
-#' @param declared optional cfg-registered declared year (`spec$declared_year`).
 #' @return list(status, years, evidence, checked) where `evidence` names the
 #'   hierarchy level used (or, for not_verifiable, the levels checked).
 #' @keywords internal
 #' @noRd
-.of_vse_resolve_input_year <- function(name, path, expected_year,
-                                       declared = NULL) {
+.of_vse_resolve_input_year <- function(name, path, expected_year) {
   ty <- suppressWarnings(as.integer(expected_year)[1L])
   decide <- function(years, evidence) {
     years <- sort(unique(years[!is.na(years)]))
@@ -167,16 +175,14 @@
     }
   }
 
-  # --- level 4: cfg-registered declared year --------------------------------
-  if (!is.null(declared)) {
-    dy <- suppressWarnings(as.integer(declared))
-    d <- decide(dy, "cfg_declared_year")
-    if (!is.null(d)) return(c(d, list(checked = "cfg_declared_year")))
-  }
+  # NOTE (1E.5): a level-4 "cfg-registered declared year" (`spec$declared_year`)
+  # is NOT IMPLEMENTED — the builder never records one, so it is intentionally
+  # absent from this hierarchy (see the function header). The hierarchy is
+  # column -> metadata -> filename only.
 
   list(status = "not_verifiable", years = integer(0),
-       evidence = "no year via column/metadata/filename/cfg_declared_year",
-       checked = "column,metadata,filename,cfg_declared_year")
+       evidence = "no year via column/metadata/filename",
+       checked = "column,metadata,filename")
 }
 
 # ----------------------------------------------------------------------------
@@ -458,9 +464,10 @@
   #       (2) explicit layer/raster metadata (if present);
   #       (3) an UNAMBIGUOUS standalone 4-digit filename token of the right
   #           magnitude (CORINE epoch / resolution numbers are excluded by
-  #           construction — those inputs are ATEMPORAL and never reach here);
-  #       (4) a cfg-registered declared year per input (`spec$declared_year`),
-  #           if the cfg records one.
+  #           construction — those inputs are ATEMPORAL and never reach here).
+  #     (A level-4 cfg-registered declared year was scoped but is NOT
+  #      IMPLEMENTED — the builder records no `spec$declared_year`; it was
+  #      removed from the active flow in 1E.5. See .of_vse_resolve_input_year().)
   #   * MATCH    -> PASS, evidence names the hierarchy level used.
   #   * MISMATCH -> FAIL (blocking), naming input + found year + expected year.
   #   * NO EVIDENCE at any level -> NOT_VERIFIABLE (verifiable = FALSE), NOT a
@@ -487,9 +494,7 @@
     rows <- list()
     for (nm in names(year_targets)) {
       yr <- .of_vse_resolve_input_year(
-        nm, year_targets[[nm]], expected_year = ty,
-        declared = tryCatch(config$inputs[[nm]]$declared_year,
-                            error = function(e) NULL))
+        nm, year_targets[[nm]], expected_year = ty)
       if (yr$status == "mismatch") {
         stop(sprintf(paste0("validate_supervised_execution() [input='%s']: ",
                             "resolved year %s (evidence: %s) does NOT match the ",
@@ -531,8 +536,8 @@
       add(.of_vse_record(
         "wrong_year", "NOT_VERIFIABLE",
         sprintf(paste0("No year-specific input carried verifiable year ",
-                       "evidence (checked column -> metadata -> filename token ",
-                       "-> cfg declared_year). Cannot confirm agreement with ",
+                       "evidence (checked column -> metadata -> filename ",
+                       "token). Cannot confirm agreement with ",
                        "cfg$target_year = %d; recorded NOT_VERIFIABLE rather ",
                        "than a false PASS. Inputs: %s."),
                 ty, paste(unverif, collapse = ", ")),
@@ -848,7 +853,10 @@
 #'     (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
 #'     (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
 #'     filename token (CORINE epochs / resolution numbers are excluded by
-#'     construction); (4) a cfg-registered declared year (`spec$declared_year`).
+#'     construction). (A fourth level — a cfg-registered declared year
+#'     (`spec$declared_year`) — was scoped but is \strong{NOT IMPLEMENTED}: the
+#'     builder records no such field, so it was removed from the active flow in
+#'     1E.5 and is reserved as a future extension.)
 #'     A determinable year that DIFFERS from the expected year FAILs (blocking,
 #'     naming input + found + expected); a MATCH PASSes with evidence of the
 #'     level used; and an input with NO verifiable year at ANY level is recorded

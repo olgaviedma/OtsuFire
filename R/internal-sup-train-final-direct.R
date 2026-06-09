@@ -60,6 +60,14 @@ train_final_model_direct <- function(
     out_dir = NULL,
     prefix = "2022_patch_certified_v2",
     overwrite = TRUE,
+    # Gate 1E (2026-06-09): the CANONICAL OOF structural feature-schema
+    # fingerprint (a feature_schema_fingerprint() result, or its bare hash
+    # string), threaded from the OOF stage by the orchestrator. When supplied,
+    # the FINAL refit ASSERTS its OWN structural fingerprint == this canonical
+    # OOF contract BEFORE training/saving the FINAL model; a mismatch is an ERROR
+    # (stop). NULL means FINAL runs standalone (no OOF in the run): it still
+    # computes and persists its own fingerprint into the recipe.
+    canonical_oof_fingerprint = NULL,
     verbose = TRUE,
     ...
 ) {
@@ -585,6 +593,31 @@ train_final_model_direct <- function(
     final_feature_order        <- feat_cols
   }
 
+  # Gate 1E (2026-06-09): runtime feature-schema parity guard, FINAL leg. Compute
+  # the STRUCTURAL fingerprint of the FINAL refit recipe and, BEFORE saving the
+  # FINAL model / recipe (the model object is built above but nothing is
+  # persisted yet), ASSERT it equals the CANONICAL OOF contract when the run
+  # supplied one. Mismatch = ERROR (stop). When FINAL runs standalone (no OOF in
+  # the run, canonical_oof_fingerprint = NULL) it still computes + persists its
+  # own fingerprint so scoring can round-trip it. The fingerprint is STRUCTURAL
+  # only (names/order/counts/encoding/weights-policy/contract-version); it
+  # excludes the FINAL medians / spw / best_iteration that legitimately differ
+  # from any OOF fold.
+  final_schema_fp <- feature_schema_fingerprint(list(
+    base_features              = base_features,
+    missing_indicator_features = missing_indicator_features,
+    final_feature_order        = final_feature_order,
+    feature_cols               = feat_cols,
+    x_cols                     = if (exists("fit")) fit$x_cols else colnames(X)
+  ))
+  if (!is.null(canonical_oof_fingerprint)) {
+    .of_assert_schema_fingerprints_equal(
+      where    = "FINAL refit vs canonical OOF contract (pre-train/save)",
+      expected = canonical_oof_fingerprint,
+      produced = final_schema_fp
+    )
+  }
+
   files <- list()
   if (!is.null(out_dir)) {
     dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -701,7 +734,22 @@ train_final_model_direct <- function(
       # tell whether a non-default feature space or weight vector was
       # used for this final-model fit.
       feature_whitelist_override = feature_whitelist_override,
-      feature_weights = feature_weights_applied
+      feature_weights = feature_weights_applied,
+      # Gate 1E (2026-06-09): persist the STRUCTURAL feature-schema fingerprint
+      # WITH the recipe so the scoring path can assert the schema it PRODUCES
+      # round-trips to the schema the FINAL model expects. `payload` lets a
+      # manifest / audit show the structure; `hash` is the load-bearing identity;
+      # `canonical_oof_fingerprint` records the OOF contract this FINAL was
+      # checked against (NA when FINAL ran standalone).
+      schema_fingerprint = list(
+        hash    = final_schema_fp$hash,
+        payload = final_schema_fp$payload,
+        contract_version = final_schema_fp$payload$contract_version,
+        canonical_oof_fingerprint =
+          if (is.null(canonical_oof_fingerprint)) NA_character_
+          else if (is.list(canonical_oof_fingerprint)) canonical_oof_fingerprint$hash
+          else as.character(canonical_oof_fingerprint)
+      )
     )
     .write_if_allowed(rds_rec, saveRDS(recipe, rds_rec))
 
@@ -896,6 +944,9 @@ train_final_model_direct <- function(
     params = params,
     # B1 (2026-06-07): NULL for legacy; one-row data.frame for nested_refit.
     nested_refit_audit = nested_audit,
+    # Gate 1E (2026-06-09): the FINAL structural feature-schema fingerprint
+    # (asserted == canonical OOF when one was supplied; persisted in the recipe).
+    schema_fingerprint = final_schema_fp,
     files = files
   ))
 }

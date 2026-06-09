@@ -162,6 +162,12 @@ train_final_burned_model <- function(
     training_protocol = NULL,
     labelled_layer = "train_features",
     out_dir = NULL,
+    # Gate 1E (2026-06-09): the CANONICAL OOF structural feature-schema
+    # fingerprint, threaded by the orchestrator from the OOF stage. Forwarded to
+    # the engine, which asserts the FINAL refit's structural fingerprint equals
+    # it BEFORE training/saving (ERROR on mismatch). NULL = FINAL runs standalone
+    # (still computes + persists its own fingerprint).
+    canonical_oof_fingerprint = NULL,
     overwrite = TRUE,
     verbose = TRUE,
     # Precision 1 (2026-06-07): internal sentinel set TRUE by the orchestrator,
@@ -323,6 +329,9 @@ train_final_burned_model <- function(
     impute_numeric                         = impute_numeric,
     impute_factor_missing                  = impute_factor_missing,
     training_protocol                      = training_protocol,
+    # Gate 1E (2026-06-09): the canonical OOF structural fingerprint to assert
+    # the FINAL refit against (pre-train/save). NULL = standalone FINAL.
+    canonical_oof_fingerprint              = canonical_oof_fingerprint,
     # Gate 1B (2026-06-07): hand cfg$model_params (the single source of truth,
     # WITHOUT scale_pos_weight) to the engine, which merges the site-specific
     # spw computed from its own training split. The engine no longer carries
@@ -369,6 +378,9 @@ train_final_burned_model <- function(
       file.path(out_dir, paste0(prefix, "_training_ok.csv")),
     training_ok_gpkg       = files$training_ok_gpkg %||%
       file.path(out_dir, paste0(prefix, "_training_ok.gpkg")),
+    # Gate 1E (2026-06-09): the FINAL structural feature-schema fingerprint
+    # (also persisted in the recipe under recipe$schema_fingerprint).
+    schema_fingerprint     = m2$schema_fingerprint,
     direct                 = m2
   )
 }

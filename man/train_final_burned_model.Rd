@@ -25,6 +25,7 @@ train_final_burned_model(
   training_protocol = NULL,
   labelled_layer = "train_features",
   out_dir = NULL,
+  canonical_oof_fingerprint = NULL,
   overwrite = TRUE,
   verbose = TRUE,
   .internal_resolved = FALSE

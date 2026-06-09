@@ -1,0 +1,19 @@
+canonical_script,git_blob_sha1,md5_lf,purpose,role
+01_supervised_oneyear_legacy.R,b0b79728650654f37ab4280570d043f5dbd99e46,f5aeca8f93646781169ec1e25b483e45,One-year supervised pipeline (legacy protocol; full 6-stage modular chain),source-of-truth
+02_supervised_phaseB_config.R,475b789eb1d0e9908c5e80600d99c79248b9a596,ef25075aeb87f68fec63a8d59dd4df9c,Phase B config (cap_spectral=2.0 + nested_refit + cap-mismatch guard + schema parity guard),source-of-truth
+03_supervised_protocol_legacy.R,30dd7f4bf392c8784a85df2ef9d139a07fd76104,522e1b9a36206cb0db61c08ee2da4d3e,Minimal training_protocol=legacy example,source-of-truth
+04_supervised_protocol_nested_refit.R,84097134f5b18ee4cb9e35d29eceff190d4b3c03,a8d7f4b5fe1e23010ad174d2a544d390,Minimal training_protocol=nested_refit example,source-of-truth
+05_supervised_effis_validation.R,1e31252686cf891077d4198aa5bd825b012ada16,9b1279739c4db944e89a04d0bfe7a6c3,EFFIS validation via validate_fire_maps() on a thresholded map,source-of-truth
+06_supervised_no_hotspots_reduced_historical.R,b6dc59b594c6643f1e31f87ed4d9abd73fe56d8e,ec16c9bd7b5124455c4ecc637bef9cc1,No-hotspots / reduced-historical (pre-MODIS) run (hotspots=NULL),source-of-truth
+#
+# SYNC CONTRACT
+#   Direction: inst/scripts/ (canonical, source-of-truth) -> external WORKING
+#     COPIES under 00_USAGE/02_SUPERVISED_USAGE/. NEVER the reverse.
+#   git_blob_sha1: `git hash-object <file>` of the in-repo canonical bytes
+#     (stable identity; survives CRLF normalization). Recompute and compare to
+#     detect divergence:  git hash-object inst/scripts/<file>
+#   md5_lf: md5 of the LF-authored bytes (informational; tools::md5sum on a
+#     freshly-written LF checkout). May differ from a CRLF working-tree md5;
+#     prefer git_blob_sha1 for divergence checks.
+#   To refresh after an intentional edit: rerun the two hashes above and update
+#     this row. The external working copies must then be re-synced FROM here.

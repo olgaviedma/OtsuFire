@@ -1,5 +1,34 @@
 # OtsuFire (development version)
 
+# OtsuFire 0.6.1
+
+Patch release. A pure geometry-sanitization **bug fix**: **no methodology,
+training parameters, caps, recipe, or configuration changed**. This release only
+makes supervised polygon sanitization robust against empty geometries. The defect
+was caught by the real-2017 smoke run against the v0.6.0 snapshot (reference HEAD
+`bf612a7` / `GATE1_FINAL_v0.6.0_20260609_141533`).
+
+## BUG FIX (geometry sanitization)
+
+* **Supervised polygon sanitize is now empty-geometry-safe.**
+  `st_collection_extract(..., "POLYGON")` is applied ONLY to real
+  `GEOMETRYCOLLECTION` rows, never to a whole layer already made of
+  `POLYGON`/`MULTIPOLYGON`. Previously, under sf 1.0-20, a single empty geometry
+  in `internal_decisions` zeroed the entire layer and aborted pool construction
+  ("internal_sf is empty"). The fix drops pre-existing empties before
+  `make_valid`, repairs, drops post-`make_valid` empties, then extracts polygonal
+  parts only from `GEOMETRYCOLLECTION`s (discarding and counting collections with
+  no polygonal component), preserving attributes / IDs / order; it errors
+  informatively only if nothing usable remains. For 2017: 1278 -> 1274 (4 empties
+  dropped).
+
+## VALIDATION
+
+* **`validate_supervised_execution()` gains a non-destructive sanitize dry-run on
+  `internal_decisions`.** Empties are reported as `PASS_WITH_SANITIZATION` with
+  explicit counts (e.g. 1278 -> 1274); it is blocking only if sanitization would
+  leave the layer completely empty.
+
 # OtsuFire 0.6.0
 
 Supervised-closure milestone (Gate 1B–1E). This release unifies the supervised

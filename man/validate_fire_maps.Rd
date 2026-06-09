@@ -295,7 +295,7 @@ summaries. The field `Detected_Definition` records the rule used to
 count detected polygons, namely
 `coverage_ref >= threshold_min_detected`.
 
-By default, `threshold_min_detected = 10`, meaning that at least 10%
+By default, `threshold_min_detected = 10`, meaning that at least 10\%
 of a reference polygon must overlap the prediction to be counted as
 detected. This is stricter than the earlier legacy behaviour, which
 counted any non-zero overlap as detection. To recover that older

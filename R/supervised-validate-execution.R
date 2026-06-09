@@ -949,7 +949,7 @@
 #'   column names, for check (8). `NULL` skips the schema check.
 #' @param data_base,composite_base,result_name Character or `NULL`. The resolved
 #'   convention roots, so the validator resolves the SAME input paths the
-#'   orchestrator will consume (cfg path %||% convention).
+#'   orchestrator will consume (cfg path \%||\% convention).
 #'
 #' @return A `data.frame` — the structured report (see \strong{Structured
 #'   report}). Returned invisibly when `strict = TRUE` and all blocking checks

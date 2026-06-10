@@ -98,12 +98,37 @@
 #' @param overwrite Logical. Forwarded to the engine. Default `TRUE`.
 #' @param verbose Logical. Forwarded to the engine. Default `TRUE`.
 #'
+#' @section Output-layer contract (Gate 2):
+#' The written `<prefix>_final_map.gpkg` carries three layers with DIFFERENT,
+#' deliberate contracts, so they are NOT expected to have equal row counts:
+#' \itemize{
+#'   \item `deterministic_scored` and `final_map_full` (identical content) — the
+#'     COMPLETE scored deterministic universe: every candidate the FINAL model
+#'     scored, one row per input polygon, all IDs/geometries preserved (the
+#'     authoritative "no candidate is lost" layers; `nrow ==` the scoring
+#'     universe size, asserted).
+#'   \item `final_map` — the CURRENT-YEAR PUBLIC burned map: `final_map_full`
+#'     with the public column subset AND the current-year temporal filter
+#'     applied. It DROPS exactly the rows flagged `current_year_public_drop`
+#'     (a current-year temporal conflict — pre-year overlap
+#'     `>= preyear_overlap_threshold` or `preyear_action == "drop"` — with WEAK
+#'     current-year hotspot support: a polygon almost certainly re-detecting the
+#'     PRE-YEAR fire with no current-year evidence). Such polygons are
+#'     legitimately excluded from the current-year public map while remaining in
+#'     the full scored layers, so
+#'     `nrow(final_map) == nrow(final_map_full) -`
+#'     `sum(final_map_full$current_year_public_drop %in% TRUE)`. This is a
+#'     documented methodological exclusion, NOT a silent row loss.
+#' }
+#'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{
 #'     \item `deterministic_scored` — the full scored deterministic universe
-#'       (sf, == `final_map_full`).
+#'       (sf, == `final_map_full`). ALL scored candidates (no row dropped).
 #'     \item `final_map_full` — same as `deterministic_scored`.
-#'     \item `final_map` — the current-year public final map (sf).
+#'     \item `final_map` — the current-year public final map (sf); the
+#'       temporally-filtered, public-column subset (see the output-layer
+#'       contract above): `nrow <= nrow(final_map_full)`.
 #'     \item `burned_like_scored` — the burned-like subset (sf), or `NULL` when
 #'       `export_burned_like = FALSE`.
 #'     \item `deterministic_scored_gpkg`, `final_map_gpkg`,

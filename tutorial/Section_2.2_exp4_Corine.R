@@ -32,15 +32,14 @@
 # 3.4.1 Setup and execution
 # ---------------------------------------------------------------------
 
-# Whitelist: identical to E1 (51 canonical minus 13 hotspot)
+# Whitelist: identical to E1 (50 canonical minus 12 hotspot)
 canonical <- OtsuFire:::.supervised_feature_cols
 HOTSPOT_BLOCK <- c(
   "hotspot_available",
   "hs_in_poly", "hs_in_buffer", "hs_used_n", "hs_min_dist_m",
   "hs_frp_sum", "hs_frp_max", "hs_conf_mean", "hs_hiConf_n",
   "hs_support_present", "hs_no_support_when_available",
-  "hs_only_buffer_support",
-  "hs_any"
+  "hs_only_buffer_support"
 )
 E4_whitelist <- setdiff(canonical, HOTSPOT_BLOCK)
 

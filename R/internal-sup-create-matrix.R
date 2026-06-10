@@ -85,13 +85,11 @@ build_design_matrix_patches <- function(
   }
   
   # ---- 1) hotspots rules ----
-  # Derived helper feature: hs_any = 1 if at least one hotspot detected
-  # in the polygon, 0 otherwise. Synthesised from hs_used_n. Included
-  # in `.supervised_feature_cols` whitelist for historical parity.
-  # Restored in 0.4.1 after temporary removal in 0.4.0.
-  if (!is.na(hs_n_col) && hs_n_col %in% names(X_all)) {
-    X_all$hs_any <- as.integer(X_all[[hs_n_col]] > 0)
-  }
+  # 0.6.2 (2026-06-10): the `hs_any` synthesis block was REMOVED here.
+  # `hs_any` (= as.integer(hs_used_n > 0)) was a redundant helper, never
+  # whitelisted as of 0.6.2 and never a base GPKG feature, so it never
+  # reaches the recipe. Removing the synthesis leaves the resolved
+  # feature space unchanged (per Natalia's decision).
 
   # Gate 1D.8 (2026-06-09): the `_isNA` companions for hs_conf / hs_frp are no
   # longer synthesised inline here -- they are produced by the SHARED helper

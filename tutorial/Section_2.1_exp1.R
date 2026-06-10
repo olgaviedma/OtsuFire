@@ -32,15 +32,15 @@ library(sf)
 PKG_ROOT <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS/OtsuFire_v02_rebuild"
 suppressMessages(pkgload::load_all(PKG_ROOT, quiet = TRUE))
 
-# Define the override: canonical 51 features minus the 13 of G6
+# Define the override: canonical 50 features minus the 12 hotspot ones
+# (0.6.2: hs_any removed from the whitelist, so the hotspot block is 12).
 canonical <- OtsuFire:::.supervised_feature_cols
 HOTSPOT_BLOCK <- c(
   "hotspot_available",
   "hs_in_poly", "hs_in_buffer", "hs_used_n", "hs_min_dist_m",
   "hs_frp_sum", "hs_frp_max", "hs_conf_mean", "hs_hiConf_n",
   "hs_support_present", "hs_no_support_when_available",
-  "hs_only_buffer_support",
-  "hs_any"
+  "hs_only_buffer_support"
 )
 E1_whitelist <- setdiff(canonical, HOTSPOT_BLOCK)
 

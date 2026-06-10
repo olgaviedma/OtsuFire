@@ -27,8 +27,7 @@ HOTSPOT_BLOCK <- c(
   "hs_in_poly", "hs_in_buffer", "hs_used_n", "hs_min_dist_m",
   "hs_frp_sum", "hs_frp_max", "hs_conf_mean", "hs_hiConf_n",
   "hs_support_present", "hs_no_support_when_available",
-  "hs_only_buffer_support",
-  "hs_any"
+  "hs_only_buffer_support"
 )
 
 stopifnot(all(HOTSPOT_BLOCK %in% canonical))

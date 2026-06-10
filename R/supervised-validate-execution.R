@@ -802,7 +802,7 @@
                               "configuration -- feature_whitelist_override ",
                               "contains name(s) not in the canonical whitelist: ",
                               "%s. The override can only RESTRICT the canonical ",
-                              "51-feature list."),
+                              "50-feature list."),
                        paste(utils::head(extra, 10L), collapse = ", ")),
                call. = FALSE)
         }

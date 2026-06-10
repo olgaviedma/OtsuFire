@@ -1129,7 +1129,8 @@ print(table(twf$fold_rep2, twf$class))
 #     Hotspots:     hs_in_poly, hs_in_buffer, hs_used_n, hs_min_dist_m,
 #                   hs_frp_sum, hs_frp_max, hs_conf_mean, hs_hiConf_n,
 #                   hs_support_present, hs_no_support_when_available,
-#                   hs_only_buffer_support, hs_any, hotspot_available (13)
+#                   hs_only_buffer_support, hotspot_available (12)
+#                   [0.6.2: hs_any removed from the canonical whitelist]
 #     Validez:      otras (4)
 #
 # DECISIONES METODOLOGICAS

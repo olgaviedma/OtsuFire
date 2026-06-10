@@ -28,6 +28,46 @@
 #'     Supports `hotspots = NULL` / all-NA hotspot features.
 #' }
 #'
+#' @section OUTPUT-LAYER CONTRACT (Gate 2, 2026-06-10):
+#' The exported `<prefix>_final_map.gpkg` carries THREE layers with DIFFERENT,
+#' deliberate contracts. They are NOT expected to have equal row counts; a
+#' polygon present in the full layers but absent from `final_map` is a
+#' DOCUMENTED, intentional methodological exclusion (the current-year temporal
+#' filter), not a silent loss.
+#' \itemize{
+#'   \item \strong{`deterministic_scored`} and \strong{`final_map_full`}
+#'     (IDENTICAL content): the COMPLETE scored deterministic universe — EVERY
+#'     candidate the FINAL model scored, exactly one row per input polygon, ALL
+#'     IDs / geometries preserved, carrying `p_burned`, `p_burned_model`,
+#'     `p_burned_current_year`, `temporal_penalty`, `temporal_conflict_flag` and
+#'     the per-row `current_year_public_drop` flag. This is the authoritative
+#'     "no candidate is lost" layer; `nrow == nrow(scoring universe)` (asserted).
+#'   \item \strong{`final_map`}: the CURRENT-YEAR PUBLIC burned map — the public,
+#'     trimmed view. It is `final_map_full` with `make_public_final_map()`
+#'     (column subset) AND `filter_to_current_year_map()` applied, which DROPS
+#'     exactly the rows flagged `current_year_public_drop == TRUE` by
+#'     `add_temporal_adjustment()`. A row is flagged iff it has a current-year
+#'     TEMPORAL CONFLICT (pre-year overlap `>= preyear_overlap_threshold`, or a
+#'     `preyear_action == "drop"`) AND WEAK current-year support (no usable
+#'     hotspots, or hotspot density `< hotspot_density_threshold`): i.e. a
+#'     polygon that looks burned spectrally but is almost certainly the PRE-YEAR
+#'     fire re-detected, with no current-year (hotspot) evidence it burned again.
+#'     Such a polygon is legitimately excluded from the CURRENT-YEAR public map
+#'     while remaining in the full scored layers. Therefore:
+#'     `nrow(final_map) == nrow(final_map_full) -`
+#'     `sum(final_map_full$current_year_public_drop %in% TRUE)`.
+#' }
+#' Worked example (LONG 2017 BALANCED FULL): `final_map_full` = 1274 candidates,
+#' `final_map` = 1273. The single excluded polygon is `fire_uid`
+#' `2017_2017_balanced_D_102` (`poly_id`/`source_poly_id` 102): valid non-empty
+#' geometry, `area_ha ~= 4.79`, deterministic `class_final = "drop"`,
+#' `preyear_overlap_frac ~= 0.93` (>= 0.70) with `preyear_action = "review"` and
+#' `hs_used_n = 0` -> `temporal_conflict_flag = TRUE` + weak support ->
+#' `current_year_public_drop = TRUE`; its `p_burned` was further penalised from
+#' `0.00560` to `0.00174` (`temporal_penalty ~= 0.31`). It is correctly retained
+#' in `deterministic_scored` / `final_map_full` and correctly excluded from the
+#' current-year public `final_map`.
+#'
 #' @keywords internal
 #' @noRd
 score_burnedlike_and_export_final_map <- function(

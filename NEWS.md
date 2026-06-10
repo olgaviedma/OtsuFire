@@ -1,5 +1,42 @@
 # OtsuFire (development version)
 
+# OtsuFire 0.6.2
+
+Cleanup + documentation + tooling release. **No methodology, caps, thresholds,
+recipe, model, or prediction behaviour changed.** The RESOLVED supervised feature
+space (50 base + 50 `_isNA` = 100) and the `feature_schema_fingerprint` are
+UNCHANGED, so this release is **NON-BREAKING**: no model, recipe, or scoring
+output changes.
+
+## CLEANUP / WHITELIST
+
+* **`hs_any` removed from the canonical supervised whitelist.**
+  `.supervised_feature_cols` now lists **50** names (was 51). `hs_any` was a
+  redundant derived helper (= `hs_used_n > 0`): it was never materialised as a
+  base GPKG feature and never entered the recipes, so the RESOLVED feature space
+  (50 base + 50 `_isNA` = 100) and the `feature_schema_fingerprint` are
+  **UNCHANGED**. The `hs_any` synthesis block was removed. This is a pure
+  cleanup — **no model / recipe / prediction change**.
+
+## DOCS / TESTS
+
+* **Final-map output-layer contract documented and regression-tested.**
+  `deterministic_scored` / `final_map_full` carries ALL scored candidates
+  (1274 for 2017); `final_map` is the current-year public/thresholded map
+  (1273). The 1-row difference is the intentional `current_year_public_drop`
+  temporal filter (the current-year public split), **not** a silent loss. The
+  contract is now asserted by a dedicated regression test.
+
+## SCRIPTS
+
+* **Canonical versioned long-run runners** under `inst/scripts/long_run/`
+  (explicit cfg routes, no junctions; `validate_shared_inputs` fail-fast).
+* **Function-by-function manual script**
+  `inst/scripts/manual/SUPERVISED_2017_FUNCTION_BY_FUNCTION.R` (FULL /
+  NO_HOTSPOT profiles via explicit feature config).
+* **Low-memory EFFIS modes** (`STANDARD_90M` default; `NATIVE_HIGH_MEMORY`
+  guarded).
+
 # OtsuFire 0.6.1
 
 Patch release. A pure geometry-sanitization **bug fix**: **no methodology,

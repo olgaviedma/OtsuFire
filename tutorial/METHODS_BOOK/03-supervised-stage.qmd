@@ -73,7 +73,7 @@ Feature extraction (`03_FEATURES/features_geometry.gpkg`) aligns every support r
 
 ## Shared Feature Recipe And `_isNA` Indicators
 
-The supervised stage uses ONE feature recipe / builder, shared across the three places a feature space is constructed: the OOF diagnostics, the FINAL refit, and scoring. The recipe defines the **51 base features**, and — critically — **before imputation** it creates a `<feature>_isNA` missing-indicator companion for each base feature (the B5 indicators). The result is **51 base + 51 indicators = 102 columns**, identical across OOF, FINAL and scoring.
+The supervised stage uses ONE feature recipe / builder, shared across the three places a feature space is constructed: the OOF diagnostics, the FINAL refit, and scoring. The recipe defines the **50 base features**, and — critically — **before imputation** it creates a `<feature>_isNA` missing-indicator companion for each base feature (the B5 indicators). The result is **50 base + 50 indicators = 100 columns**, identical across OOF, FINAL and scoring.
 
 This shared recipe is the source of the scoring feature schema: feature names and order, types, the `_isNA` companions, the imputation medians, and the categorical levels all come from the saved FINAL recipe. The scoring matrix is **never** reconstructed from the scoring-year data. The reconciliation policy is recipe-driven and recorded (no silent corrections): a missing feature is created as `NA_real_` (xgboost-missing) plus its `_isNA`; an extra column is dropped; a column-order change is realigned to recipe order; a new categorical level maps to the recipe sentinel.
 

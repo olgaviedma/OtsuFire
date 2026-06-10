@@ -51,7 +51,7 @@
 #'   supervised stages (OOF + final model) are allowed to see. Names
 #'   not in `.supervised_feature_cols` are rejected with an error: the
 #'   canonical list is fixed and this argument can only RESTRICT it,
-#'   never extend it. Default `NULL` reproduces the canonical 51-feature
+#'   never extend it. Default `NULL` reproduces the canonical 50-feature
 #'   behaviour. The OOF wrapper and the final model both consume the
 #'   same active whitelist, so OOF metrics and final-model behaviour
 #'   stay symmetric. Phase B Exp4b example: pass

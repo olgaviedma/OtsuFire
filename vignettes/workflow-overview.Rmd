@@ -143,8 +143,8 @@ other value errors. The pipeline is entirely package-internal: no
 external `sys.source()` of legacy scripts and no namespace mutation.
 
 The OOF diagnostics, the FINAL refit, and scoring share ONE feature
-recipe (51 base features plus the matching `<feature>_isNA` indicators
-created before imputation = 102 columns). A runtime feature-schema
+recipe (50 base features plus the matching `<feature>_isNA` indicators
+created before imputation = 100 columns). A runtime feature-schema
 parity guard aborts the run if the three feature spaces diverge. The
 training procedure is selected by `cfg$train_control$training_protocol`
 (`"legacy"` or `"nested_refit"`); this is a choice of training

@@ -34,16 +34,28 @@
 #     helper synthesised from `hs_used_n > 0`; reverted to maintain
 #     historical parity with Phase B and the 30 production runs,
 #     and for cleaner reading in feature-importance tables.
+#   * 0.6.2 (2026-06-10): `hs_any` REMOVED again from the whitelist
+#     (Natalia's final decision). Rationale: it is redundant with
+#     `hs_used_n > 0` / `hs_in_poly > 0`, it is NEVER materialised as a
+#     base GPKG feature, and it never entered the resolved FULL recipe
+#     (the resolved base was already 50 because `hs_any` was never a
+#     GPKG column). The whitelist declared 51 but only 50 ever
+#     resolved; in NO-HOTSPOT it appeared as a fictitious 13th removed
+#     feature. Its synthesis block in `internal-sup-create-matrix.R`
+#     was removed. The whitelist is now 50 names; the resolved FULL
+#     feature space (50 base + 50 `_isNA` = 100) and its
+#     feature-schema fingerprint are UNCHANGED by this removal.
 #
 # NOT exported.
 
-#' Canonical supervised-model feature whitelist (OtsuFire 0.4.1).
+#' Canonical supervised-model feature whitelist (OtsuFire 0.6.2).
 #'
-#' The 51 columns the supervised XGBoost model sees, plus their
+#' The 50 columns the supervised XGBoost model sees, plus their
 #' auto-generated `<col>_isNA` missingness companions when the matrix
-#' builder synthesises them. Decided by Natalia on 2026-05-09. This list
-#' is FIXED — additions or removals are an explicit methodological
-#' decision and require a major-version bump and Natalia's approval.
+#' builder synthesises them. Decided by Natalia on 2026-05-09; `hs_any`
+#' removed in 0.6.2 (see History above). This list is FIXED — additions
+#' or removals are an explicit methodological decision and require a
+#' major-version bump and Natalia's approval.
 #'
 #' Notes:
 #'   * `block_id`, `fold_rep1`, `fold_rep2` are NOT features — they are
@@ -52,7 +64,7 @@
 #'   * No ecoregion features (`eco_*`) in this build. Ecoregions were
 #'     removed entirely from the supervised phase on 2026-06-05; they
 #'     belong to the deterministic delineation stage only.
-#'   * Hotspot block (13 columns): `hotspot_available` is a real
+#'   * Hotspot block (12 columns): `hotspot_available` is a real
 #'     structural flag (0 = no MODIS hotspot data for this year, 1 =
 #'     available) and is ALWAYS observed (never NA). When the year has
 #'     no hotspot data (`hotspot_available == 0`), the features
@@ -70,10 +82,11 @@
 #'     stays 0 when `hotspot_available == 0` (its semantics are
 #'     conditioned on availability), so its `_isNA` companion is
 #'     degenerate and the builder skips it.
-#'   * `hs_any` is a binary helper feature synthesised in
-#'     `internal-sup-create-matrix.R` from `hs_used_n > 0`. It is
-#'     included in the whitelist for historical parity with prior
-#'     Phase B runs.
+#'   * `hs_any` (a binary `hs_used_n > 0` helper) was REMOVED from this
+#'     whitelist in 0.6.2 as a redundant, never-materialised helper
+#'     (equivalent to `hs_used_n > 0` / `hs_in_poly > 0`), per Natalia's
+#'     decision. It was never a base GPKG feature and never entered the
+#'     resolved recipe, so the resolved feature space is unchanged.
 #'
 #' @keywords internal
 #' @noRd
@@ -101,11 +114,11 @@
   "rbr_aw_valid_frac", "rbr_aw_p10", "rbr_aw_med", "rbr_aw_p90",
   "rbr_aw_iqr", "persist_delta", "persist_ratio",
 
-  # Hotspots (13)
+  # Hotspots (12)
   "hotspot_available", "hs_in_poly", "hs_in_buffer", "hs_used_n",
   "hs_min_dist_m", "hs_frp_sum", "hs_frp_max", "hs_conf_mean",
   "hs_hiConf_n", "hs_support_present", "hs_no_support_when_available",
-  "hs_only_buffer_support", "hs_any"
+  "hs_only_buffer_support"
 )
 
 # Legacy deny list — RETAINED as an audit log of historically known

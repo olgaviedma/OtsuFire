@@ -102,15 +102,16 @@ make_whitelist_fixture_gpkg <- function(n_burned = 14, n_neg_random = 7,
 }
 
 # --- T_whitelist_complete ----------------------------------------
-# `.supervised_feature_cols` has the 51 entries Natalia approved on
-# 2026-05-09 (50 in 0.4.0; hs_any restored in 0.4.1). The constant
-# is the contract; this test guards inadvertent edits.
-test_that(".supervised_feature_cols has the 51 approved entries", {
+# `.supervised_feature_cols` has the 50 entries Natalia approved on
+# 2026-05-09 (50 in 0.4.0; hs_any restored in 0.4.1, then REMOVED again
+# in 0.6.2 as a redundant, never-materialised helper). The constant is
+# the contract; this test guards inadvertent edits.
+test_that(".supervised_feature_cols has the 50 approved entries", {
   whitelist <- whitelist_internal()
-  expect_equal(length(whitelist), 51L)
+  expect_equal(length(whitelist), 50L)
 
   # Block tally: 5 (RBR sw) + 7 (CORINE) + 7 (elev) + 7 (slope) +
-  # 5 (DOY) + 7 (RBR aw + persistence) + 13 (hotspots) = 51.
+  # 5 (DOY) + 7 (RBR aw + persistence) + 12 (hotspots) = 50.
   expect_true(all(c("rbr_valid_frac", "rbr_med", "rbr_iqr") %in% whitelist))
   expect_true(all(c("cor_open_frac", "cor_forest_frac",
                     "cor_water_frac") %in% whitelist))
@@ -120,7 +121,11 @@ test_that(".supervised_feature_cols has the 51 approved entries", {
   expect_true(all(c("rbr_aw_med", "persist_delta",
                     "persist_ratio") %in% whitelist))
   expect_true(all(c("hotspot_available", "hs_in_poly",
-                    "hs_used_n", "hs_any") %in% whitelist))
+                    "hs_used_n") %in% whitelist))
+
+  # 0.6.2: hs_any was removed from the whitelist (redundant with
+  # hs_used_n > 0; never materialised as a base GPKG feature).
+  expect_false("hs_any" %in% whitelist)
 
   # No ecoregion features in this build.
   expect_false(any(grepl("^eco_", whitelist)))
@@ -196,13 +201,13 @@ test_that("recipe$cols$feature_cols and x_cols are within the whitelist", {
                             paste(setdiff(x_cols, allowed),
                                   collapse = ", ")))
 
-  # 0.4.1: hs_any is synthesised in the matrix builder from
-  # hs_used_n > 0 and is part of the whitelist. The fixture supplies
-  # hs_used_n, so hs_any must appear in the recipe column set.
-  expect_true("hs_any" %in% feat_cols,
-              info = "hs_any not synthesised into feature_cols")
-  expect_true("hs_any" %in% x_cols,
-              info = "hs_any not present in x_cols")
+  # 0.6.2: hs_any was REMOVED from the whitelist (redundant with
+  # hs_used_n > 0; never a base GPKG feature) and its synthesis block
+  # was deleted, so it must NOT appear in the recipe column set.
+  expect_false("hs_any" %in% feat_cols,
+               info = "hs_any leaked into feature_cols after 0.6.2 removal")
+  expect_false("hs_any" %in% x_cols,
+               info = "hs_any leaked into x_cols after 0.6.2 removal")
 
   # Specific assertions: known administrative / residual columns
   # are NOT in the recipe column set.

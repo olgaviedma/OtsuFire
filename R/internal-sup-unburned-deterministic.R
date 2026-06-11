@@ -320,7 +320,6 @@ build_unburned_from_deterministic_decisions <- function(
         filter_1 == "drop" & reason_1 == "corine_na_high"   ~ "geo_excluded_hot",
         filter_1 == "drop" & !is.na(reason_1) ~ paste0("drop_", reason_1),
         filter_2 == "drop" & !is.na(reason_2) ~ paste0("drop_", reason_2),
-        filter_3 == "drop" & reason_3 == "rbr_far_from_model" ~ "spectral_reject_medium",
         filter_3 == "drop" & !is.na(reason_3) ~ paste0("drop_", reason_3),
         TRUE ~ "drop_hard"
       ),

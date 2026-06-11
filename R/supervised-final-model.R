@@ -30,14 +30,14 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (contextual, spectral, random, otsu) enter training;
+#' valid negative bucket (contextual, random, otsu) enter training;
 #' review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
 #' share one internal eligibility resolver and one capping helper, so the two
 #' stages cannot diverge on eligibility or capping. OOF uses the same capped
 #' negative-sampling policy as the final model, applied independently within
 #' each training fold.
 #'
-#' The four `*_to_burned_ratio` caps, `feature_whitelist_override`, and
+#' The three `*_to_burned_ratio` caps, `feature_whitelist_override`, and
 #' `feature_weights` are forwarded verbatim to [train_final_model_direct()].
 #' Their defaults reproduce the historical behaviour byte-for-byte. The
 #' whitelist override / weights are part of the signature for the same reason
@@ -66,8 +66,6 @@
 #'   `NULL`. Forwarded as the engine's `qa` argument (summary enrichment only).
 #' @param contextual_exclusion_to_burned_ratio Numeric. Cap on the
 #'   contextual-exclusion negative pool. Default `0.25`.
-#' @param spectral_hard_negative_to_burned_ratio Numeric. Cap on the
-#'   spectral-hard-negative pool. Default `1.0`.
 #' @param random_to_burned_ratio Numeric. Cap on random-burnable-background
 #'   negatives. Default `1.0`.
 #' @param otsu_unburned_to_burned_ratio Numeric. Cap on Otsu current-year
@@ -172,7 +170,6 @@ train_final_burned_model <- function(
     # non-NULL value overrides cfg for standalone use. No literal methodological
     # numbers live here.
     contextual_exclusion_to_burned_ratio   = NULL,
-    spectral_hard_negative_to_burned_ratio = NULL,
     random_to_burned_ratio                 = NULL,
     otsu_unburned_to_burned_ratio          = NULL,
     feature_whitelist_override = NULL,
@@ -244,7 +241,6 @@ train_final_burned_model <- function(
     }
   }
   contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
-  spectral_hard_negative_to_burned_ratio <- .shim(spectral_hard_negative_to_burned_ratio, .tc$caps$spectral,   "cap_spectral",   "spectral_hard_negative_to_burned_ratio")
   random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
   otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
   feature_whitelist_override <- .shim(feature_whitelist_override, .tc$feature_whitelist_override, "feature_whitelist_override")
@@ -262,7 +258,6 @@ train_final_burned_model <- function(
     stop("'oof_agg' must be NULL or a single CSV path.", call. = FALSE)
   }
   for (nm in c("contextual_exclusion_to_burned_ratio",
-               "spectral_hard_negative_to_burned_ratio",
                "random_to_burned_ratio",
                "otsu_unburned_to_burned_ratio")) {
     v <- get(nm)
@@ -336,7 +331,6 @@ train_final_burned_model <- function(
     overwrite      = overwrite,
     verbose        = verbose,
     contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
-    spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio                 = random_to_burned_ratio,
     otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
     feature_whitelist_override             = feature_whitelist_override,

@@ -126,7 +126,6 @@ test_that("OOF design bundle columns are within the whitelist", {
     val_frac = 0.15,
     impute_numeric = "median", impute_factor_missing = "MISSING",
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     verbose     = 0,
     save_prefix = "oof_smoke",

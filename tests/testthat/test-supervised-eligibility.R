@@ -17,7 +17,6 @@ resolve_elig <- get(".of_resolve_supervised_eligibility", envir = ns_elig)
 
 # Canonical bucket-definition params (the production defaults).
 DET_SRC   <- "deterministic_drop_hard"
-SPEC_NGT  <- "spectral_reject_medium"
 RAND_SRC  <- "random_burnable_background"
 OTSU_SRC  <- "otsu_patch_residual"
 OTSU_EXCL <- c("otsu_patch_review", "otsu_patch_keep")
@@ -26,7 +25,6 @@ resolve_default <- function(df, origin = "TEST") {
   resolve_elig(
     id = df$id, class = df$class, source = df$source, neg_type = df$neg_type,
     deterministic_drop_source        = DET_SRC,
-    spectral_hard_negative_neg_types = SPEC_NGT,
     random_background_source         = RAND_SRC,
     otsu_unburned_source             = OTSU_SRC,
     otsu_unburned_exclude_neg_types  = OTSU_EXCL,
@@ -34,7 +32,8 @@ resolve_default <- function(df, origin = "TEST") {
   )
 }
 
-# A row builder mirroring the 2017 balanced DEFAULT structure.
+# A row builder mirroring the 2017 balanced DEFAULT structure. All det-drop rows
+# route to the contextual bucket (the spectral bucket was removed in GATE 6.1).
 mk_default_pool <- function() {
   rows <- list()
   add <- function(k, cls, src, ngt) for (i in seq_len(k)) {
@@ -43,8 +42,7 @@ mk_default_pool <- function() {
                                              stringsAsFactors = FALSE)
   }
   add(20, "burned",   "burned_truth",               NA_character_)
-  add(16, "unburned", DET_SRC,                      "geo_excluded_hot")        # contextual
-  add( 8, "unburned", DET_SRC,                      SPEC_NGT)                  # spectral
+  add(24, "unburned", DET_SRC,                      "geo_excluded_hot")        # contextual
   add(24, "unburned", RAND_SRC,                     "background_cell")         # random
   add(12, "unburned", OTSU_SRC,                     "otsu_patch_drop")         # otsu
   d <- do.call(rbind, rows)
@@ -58,23 +56,33 @@ test_that("burned -> positive; each unburned bucket -> the right negative bucket
   e <- resolve_default(d)
   expect_equal(length(e$positive_idx), 20L)
   expect_true(all(d$class[e$positive_idx] == "burned"))
-  expect_equal(length(e$negatives_by_bucket$contextual), 16L)
-  expect_equal(length(e$negatives_by_bucket$spectral),    8L)
+  expect_equal(length(e$negatives_by_bucket$contextual), 24L)
   expect_equal(length(e$negatives_by_bucket$random),     24L)
   expect_equal(length(e$negatives_by_bucket$otsu),       12L)
+  # Spectral bucket no longer exists.
+  expect_null(e$negatives_by_bucket$spectral)
+  expect_setequal(names(e$negatives_by_bucket),
+                  c("contextual", "random", "otsu"))
   # No excluded / error in the clean default pool.
   expect_equal(nrow(e$excluded), 0L)
   # Audit table has the canonical rows + actions.
   expect_true(all(c("keep positive", "eligible", "excluded") %in% e$audit$action))
   expect_equal(e$audit$n[e$audit$class == "burned"], 20L)
+  # No spectral row in the audit table.
+  expect_false("spectral" %in% e$audit$bucket)
 })
 
-test_that("the four bucket index sets are DISJOINT and cover all eligible negatives", {
+test_that("the three bucket index sets are DISJOINT and cover all eligible negatives", {
   d <- mk_default_pool()
   e <- resolve_default(d)
   all_neg <- unlist(e$negatives_by_bucket, use.names = FALSE)
   expect_equal(anyDuplicated(all_neg), 0L)
   expect_setequal(sort(all_neg), sort(e$negative_idx))
+})
+
+test_that("ONLY three negative buckets exist (contextual, random, otsu)", {
+  expect_equal(get(".of_valid_negative_buckets", envir = ns_elig)(),
+               c("contextual", "random", "otsu"))
 })
 
 test_that("otsu review/keep are EXCLUDED + logged, never negatives, never error", {
@@ -142,16 +150,19 @@ test_that("unburned with neg_type NA but a VALID source still buckets (random/ot
   expect_equal(length(e$negatives_by_bucket$otsu), 1L)
 })
 
-test_that("det-drop without spectral neg_type -> contextual; with it -> spectral (upstream classification)", {
+test_that("ALL det-drop rows route to contextual regardless of neg_type (spectral bucket removed)", {
+  # GATE 6.1: the spectral bucket is dead. A det-drop carrying the former
+  # spectral neg_type ("spectral_reject_medium") is now a plain contextual
+  # negative -- NOT a spectral bucket member, and NOT an error.
   d <- data.frame(
     class    = c("burned", "unburned", "unburned"),
     source   = c("burned_truth", DET_SRC, DET_SRC),
-    neg_type = c(NA_character_, "geo_excluded_hot", SPEC_NGT),
+    neg_type = c(NA_character_, "geo_excluded_hot", "spectral_reject_medium"),
     id       = c("b1", "c1", "s1"), stringsAsFactors = FALSE
   )
   e <- resolve_default(d)
-  expect_equal(d$id[e$negatives_by_bucket$contextual], "c1")
-  expect_equal(d$id[e$negatives_by_bucket$spectral],   "s1")
+  expect_setequal(d$id[e$negatives_by_bucket$contextual], c("c1", "s1"))
+  expect_null(e$negatives_by_bucket$spectral)
 })
 
 test_that("toggling otsu-exclude membership does NOT turn excluded rows into negatives", {

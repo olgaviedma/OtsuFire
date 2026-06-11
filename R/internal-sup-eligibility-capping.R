@@ -4,8 +4,8 @@
 # Methodological fix (2026-06-11): the supervised training population is defined
 # by EXPLICIT class, NEVER by negation. A row is a:
 #   - POSITIVE   iff class == "burned";
-#   - NEGATIVE   iff class == "unburned" AND it maps to exactly ONE of the four
-#                valid negative buckets (contextual, spectral, random, otsu);
+#   - NEGATIVE   iff class == "unburned" AND it maps to exactly ONE of the three
+#                valid negative buckets (contextual, random, otsu);
 #   - EXCLUDED   iff class == "unburned" but its (source, neg_type) is a KNOWN
 #                excluded type (the otsu exclude-list, e.g. otsu_patch_review /
 #                otsu_patch_keep) -> logged, never trained, never an error;
@@ -29,9 +29,9 @@
 
 # Canonical valid negative buckets, in canonical order. Used by BOTH helpers so
 # the ordering of the seeded draws (and therefore the selected ids) is one fixed
-# convention: contextual -> spectral -> random -> otsu.
+# convention: contextual -> random -> otsu.
 .of_valid_negative_buckets <- function() {
-  c("contextual", "spectral", "random", "otsu")
+  c("contextual", "random", "otsu")
 }
 
 # Resolve the supervised training ELIGIBILITY of every row by EXPLICIT class +
@@ -42,9 +42,7 @@
 # @param source    character vector of `source` metadata, length n (NA allowed).
 # @param neg_type  character vector of `neg_type` metadata, length n (NA allowed).
 # @param deterministic_drop_source        sources defining the deterministic-drop
-#        negatives (contextual + spectral live here, split by neg_type).
-# @param spectral_hard_negative_neg_types neg_types (within deterministic-drop)
-#        routed to the SPECTRAL bucket; the rest go to CONTEXTUAL.
+#        negatives (all routed to the CONTEXTUAL bucket).
 # @param random_background_source         sources defining the RANDOM bucket.
 # @param otsu_unburned_source             sources defining the OTSU bucket.
 # @param otsu_unburned_exclude_neg_types  neg_types (within the otsu source) that
@@ -70,7 +68,6 @@
 .of_resolve_supervised_eligibility <- function(
     id, class, source, neg_type,
     deterministic_drop_source,
-    spectral_hard_negative_neg_types,
     random_background_source,
     otsu_unburned_source,
     otsu_unburned_exclude_neg_types,
@@ -90,14 +87,12 @@
 
   # --- bucket predicates (mirror the FINAL pool filters exactly) -------------
   in_det   <- !is.na(src) & (src %in% deterministic_drop_source)
-  is_spec  <- !is.na(ngt) & (ngt %in% spectral_hard_negative_neg_types)
   in_rand  <- !is.na(src) & (src %in% random_background_source)
   in_otsu  <- !is.na(src) & (src %in% otsu_unburned_source)
   otsu_excl <- !is.na(ngt) & (ngt %in% otsu_unburned_exclude_neg_types)
 
   bucket_of <- function(i) {
-    if (in_det[i] && is_spec[i])  return("spectral")
-    if (in_det[i] && !is_spec[i]) return("contextual")
+    if (in_det[i])                return("contextual")
     if (in_rand[i])               return("random")
     if (in_otsu[i] && !otsu_excl[i]) return("otsu")
     NA_character_
@@ -180,9 +175,6 @@
     data.frame(class = "unburned", bucket = "contextual",
                n = length(negatives_by_bucket[["contextual"]]),
                action = "eligible", stringsAsFactors = FALSE),
-    data.frame(class = "unburned", bucket = "spectral",
-               n = length(negatives_by_bucket[["spectral"]]),
-               action = "eligible", stringsAsFactors = FALSE),
     data.frame(class = "unburned", bucket = "random",
                n = length(negatives_by_bucket[["random"]]),
                action = "eligible", stringsAsFactors = FALSE),
@@ -211,9 +203,9 @@
 #
 # @param positive_idx       integer row indices of burned positives (all kept).
 # @param negatives_by_bucket named list(bucket -> integer row indices), buckets
-#        MUST be a subset of the canonical four.
+#        MUST be a subset of the canonical three.
 # @param n_burned           number of burned positives (drives every cap).
-# @param caps               named numeric(contextual, spectral, random, otsu)
+# @param caps               named numeric(contextual, random, otsu)
 #        cap ratios. ceiling(n_burned * cap) is the per-bucket max.
 # @param seed               integer RNG seed (REQUIRED; NULL/invalid -> error;
 #        no silent unseeded draw).
@@ -262,7 +254,7 @@
   bad_bucket <- setdiff(bnames, valid_buckets)
   if (length(bad_bucket) > 0L) {
     stop(".of_cap_negative_buckets(): received bucket(s) outside the canonical ",
-         "four {", paste(valid_buckets, collapse = ", "), "}: ",
+         "three {", paste(valid_buckets, collapse = ", "), "}: ",
          paste(bad_bucket, collapse = ", "),
          ". The caller must resolve eligibility FIRST; this helper performs no ",
          "repair.", call. = FALSE)
@@ -270,7 +262,7 @@
   if (is.null(caps) || is.null(names(caps)) ||
       !all(valid_buckets %in% names(caps))) {
     stop(".of_cap_negative_buckets(): `caps` must be a named numeric with all ",
-         "four buckets {", paste(valid_buckets, collapse = ", "), "}.",
+         "three buckets {", paste(valid_buckets, collapse = ", "), "}.",
          call. = FALSE)
   }
 

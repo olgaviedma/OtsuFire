@@ -126,7 +126,6 @@ test_that("the single FINAL protocol deploys the shared feature space (one upstr
     labelled_gpkg = g, labelled_layer = "train_features",
     out_dir = NULL, overwrite = TRUE, verbose = FALSE, prefix = "nst",
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42L, group_col = "block_id", val_frac = 0.2,
     seed = 42L, nrounds_max = 8L, early_stopping_rounds = 4L,

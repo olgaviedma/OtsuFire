@@ -114,7 +114,7 @@ make_nested_oof_df <- function(n = 60, seed = 5L) {
                       "deterministic_drop_hard", "otsu_patch_residual"),
                     length.out = n),
     neg_type  = rep(c(NA_character_, "background_cell",
-                      "spectral_reject_medium", "otsu_patch_drop"),
+                      "geo_excluded_hot", "otsu_patch_drop"),
                     length.out = n),
     poly_id   = sprintf("p_%03d", seq_len(n)),
     block_id  = rep(seq_len(12), length.out = n),
@@ -163,7 +163,6 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
     overwrite   = TRUE,
     group_col   = "block_id",
     contextual_exclusion_to_burned_ratio   = 0.25,
-    spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
     otsu_unburned_to_burned_ratio          = 1.0,
     # The per-fold core requires these resolved controls.
@@ -219,7 +218,6 @@ test_that("nested OOF capping ALWAYS runs and records the per-fold capping audit
     save_prefix = "nr_cap", prefix = "nr_cap", overwrite = TRUE,
     group_col   = "block_id",
     contextual_exclusion_to_burned_ratio   = 0.25,
-    spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
     otsu_unburned_to_burned_ratio          = 1.0,
     # Gate 1B (2026-06-07): nested path now requires these resolved controls.
@@ -232,8 +230,6 @@ test_that("nested OOF capping ALWAYS runs and records the per-fold capping audit
     "n_burned",
     "contextual_available", "contextual_cap", "contextual_selected",
     "contextual_effective_ratio",
-    "spectral_available", "spectral_cap", "spectral_selected",
-    "spectral_effective_ratio",
     "random_bg_available", "random_bg_cap", "random_bg_selected",
     "random_bg_effective_ratio",
     "otsu_available", "otsu_cap", "otsu_selected", "otsu_effective_ratio"
@@ -242,12 +238,12 @@ test_that("nested OOF capping ALWAYS runs and records the per-fold capping audit
               info = paste("missing per-fold capping audit fields:",
                            paste(setdiff(capping_fields, names(aud)),
                                  collapse = ", ")))
+  # No spectral audit fields remain.
+  expect_false(any(grepl("^spectral", names(aud))))
   # Effective ratio = selected / n_burned (achieved ratio).
   ok <- aud$n_burned > 0
   expect_equal(aud$contextual_effective_ratio[ok],
                aud$contextual_selected[ok] / aud$n_burned[ok])
-  expect_equal(aud$spectral_effective_ratio[ok],
-               aud$spectral_selected[ok] / aud$n_burned[ok])
   # Selected never exceeds the cap (target ceiling) nor the available pool.
   expect_true(all(aud$contextual_selected <= aud$contextual_cap))
   expect_true(all(aud$contextual_selected <= aud$contextual_available))
@@ -274,16 +270,15 @@ test_that("dropped cap arg in run_dm_oof_pipeline(nested_refit) ERRORS", {
       nrounds_max = 8L, early_stop = 4L, seed_base = 7L, verbose = 0,
       save_prefix = "nr_err", prefix = "nr_err", overwrite = TRUE,
       group_col   = "block_id",
-      # Gate 1B: supply the always-needed nested controls so the spectral-cap
+      # Gate 1B: supply the always-needed nested controls so the cap-arg
       # guard (not the val_frac/impute guard) is what surfaces.
       val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
-      # spectral cap DROPPED on purpose.
-      contextual_exclusion_to_burned_ratio   = 0.25,
+      # contextual cap DROPPED on purpose.
       random_to_burned_ratio                 = 1.0,
       otsu_unburned_to_burned_ratio          = 1.0
     ))),
-    regexp = "spectral_hard_negative_to_burned_ratio"
+    regexp = "contextual_exclusion_to_burned_ratio"
   )
 })
 
@@ -320,7 +315,6 @@ test_that("nested OOF errors when outer_train and outer_test share a fire_uid (l
       val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
       contextual_exclusion_to_burned_ratio   = 0.25,
-      spectral_hard_negative_to_burned_ratio = 1.0,
       random_to_burned_ratio                 = 1.0,
       otsu_unburned_to_burned_ratio          = 1.0
     ))),
@@ -328,11 +322,10 @@ test_that("nested OOF errors when outer_train and outer_test share a fire_uid (l
   )
 })
 
-test_that("the 4 cap formals have NO default in run_oof_xgb / run_dm_oof_pipeline", {
+test_that("the 3 cap formals have NO default in run_oof_xgb / run_dm_oof_pipeline", {
   f_xgb <- formals(run_oof_xgb_fn())
   f_dm  <- formals(run_dm_oof_fn())
   for (nm in c("contextual_exclusion_to_burned_ratio",
-               "spectral_hard_negative_to_burned_ratio",
                "random_to_burned_ratio",
                "otsu_unburned_to_burned_ratio")) {
     expect_true(identical(f_xgb[[nm]], quote(expr = )),

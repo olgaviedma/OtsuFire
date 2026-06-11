@@ -30,9 +30,9 @@
 #' @param cfg_value The value already resolved on the cfg
 #'   (cfg$train_control / cfg$model_params).
 #' @param param Character. The user-facing builder field name (the provenance
-#'   key, e.g. "cap_spectral", "nrounds_max", "val_frac"), used in messages.
+#'   key, e.g. "cap_contextual", "nrounds_max", "val_frac"), used in messages.
 #' @param arg_name Character. The function-level argument name (e.g.
-#'   "spectral_hard_negative_to_burned_ratio"), used in messages. Defaults to
+#'   "contextual_exclusion_to_burned_ratio"), used in messages. Defaults to
 #'   `param`.
 #' @param cfg_provenance Character. "user" or "default" — the builder-time
 #'   provenance of the cfg field (from cfg$resolved_params_provenance).
@@ -134,63 +134,6 @@
   e <- new.env(parent = emptyenv())
   e$rows <- list()
   e
-}
-
-# =============================================================================
-# Precision 2 (2026-06-07): PACKAGE-LEVEL spectral-cap parity guard.
-#
-# The Phase B experiments train the supervised model with a spectral
-# hard-negative cap of 2.0 (the general package default is 1.0, set in
-# .of_canonical_train_control()). The methodological requirement is that BOTH
-# the OOF diagnostics stage and the FINAL model train under the SAME spectral
-# cap (otherwise OOF metrics describe a different model family than the deployed
-# one). The B1_PHASE2 runner has a cap-mismatch guard, but that lives in the
-# RUNNER. This guard lives in the PACKAGE so the supervised pipeline itself
-# fails fast on a silent cap reversion, regardless of which runner drives it.
-# =============================================================================
-
-#' Assert the spectral cap reaching OOF and FINAL agree with the resolved cfg.
-#'
-#' Aborts (stop) when the spectral hard-negative cap value about to be handed to
-#' the OOF stage differs from the one about to be handed to the FINAL stage, or
-#' when either differs from the cap resolved on the cfg. This detects a silent
-#' reversion (e.g. a residual default quietly returning the cap to 1.0) on the
-#' capped training path before any model is fit.
-#'
-#' @param oof_spectral Numeric. Spectral cap forwarded to the OOF stage.
-#' @param final_spectral Numeric. Spectral cap forwarded to the FINAL stage.
-#' @param cfg_spectral Numeric. Spectral cap resolved on
-#'   `cfg$train_control$caps$spectral`.
-#' @param tol Numeric tolerance for the floating-point comparison.
-#'
-#' @return Invisibly the agreed spectral cap value (errors otherwise).
-#' @keywords internal
-#' @noRd
-.of_assert_spectral_cap_parity <- function(oof_spectral, final_spectral,
-                                           cfg_spectral, tol = 1e-9) {
-  bad <- function(v) is.null(v) || !is.numeric(v) || length(v) != 1L || is.na(v)
-  if (bad(oof_spectral) || bad(final_spectral) || bad(cfg_spectral)) {
-    stop(".of_assert_spectral_cap_parity(): spectral caps must each be a single ",
-         "finite numeric (OOF / FINAL / cfg).", call. = FALSE)
-  }
-  oof_final_ok <- abs(oof_spectral - final_spectral) <= tol
-  oof_cfg_ok   <- abs(oof_spectral - cfg_spectral)   <= tol
-  final_cfg_ok <- abs(final_spectral - cfg_spectral) <= tol
-  if (!(oof_final_ok && oof_cfg_ok && final_cfg_ok)) {
-    stop(sprintf(
-      paste0(
-        "Spectral-cap parity guard FAILED (silent reversion detected): the ",
-        "spectral hard-negative cap reaching OOF (%s), FINAL (%s) and the ",
-        "resolved cfg (cfg$train_control$caps$spectral=%s) are NOT all equal. ",
-        "OOF and FINAL on the capped training path MUST receive the SAME ",
-        "spectral cap as the cfg. Rebuild the cfg with ",
-        "build_supervised_burned_config(cap_spectral=...) and do not let a ",
-        "function-level override or residual default revert it."),
-      format(oof_spectral, trim = TRUE), format(final_spectral, trim = TRUE),
-      format(cfg_spectral, trim = TRUE)),
-      call. = FALSE)
-  }
-  invisible(oof_spectral)
 }
 
 #' Convert an accumulated shim record into a tidy data.frame for artifacts.

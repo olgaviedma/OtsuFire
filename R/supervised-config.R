@@ -174,12 +174,12 @@
 #'   level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
 #'   Stored in `cfg$train_control` and applied identically at OOF and FINAL.
 #'
-#' @param cap_contextual,cap_spectral,cap_random,cap_otsu Numeric `>= 0`
-#'   (`Inf` disables the cap) or `NULL`. The four negative-bucket caps, each
+#' @param cap_contextual,cap_random,cap_otsu Numeric `>= 0`
+#'   (`Inf` disables the cap) or `NULL`. The three negative-bucket caps, each
 #'   expressed as a multiple of the number of burned labels (`n_burned`). They
-#'   control the size of the contextual, spectral, random-background and Otsu
+#'   control the size of the contextual, random-background and Otsu
 #'   negative buckets respectively (see \strong{Details}). `NULL` uses the
-#'   general package defaults `0.25` / `1.0` / `1.0` / `1.0`. Stored in
+#'   general package defaults `0.25` / `1.0` / `1.0`. Stored in
 #'   `cfg$train_control$caps`.
 #'
 #' @param feature_whitelist_override,feature_weights Optional feature controls,
@@ -197,7 +197,7 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (contextual, spectral, random, otsu) enter training;
+#' valid negative bucket (contextual, random, otsu) enter training;
 #' review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
 #' share one internal eligibility resolver and one capping helper.
 #'
@@ -244,20 +244,17 @@
 #' }
 #'
 #' \subsection{Negative pools}{
-#'   The negative (unburned) training pool is assembled from four buckets:
+#'   The negative (unburned) training pool is assembled from three buckets:
 #'   \itemize{
 #'     \item \strong{contextual} --- deterministic-decision drops and
 #'       context-derived negatives;
-#'     \item \strong{spectral} --- spectrally selected negatives;
 #'     \item \strong{random} --- random burnable-background cells;
 #'     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
 #'   }
-#'   Each bucket is capped by `cap_contextual` / `cap_spectral` / `cap_random` /
+#'   Each bucket is capped by `cap_contextual` / `cap_random` /
 #'   `cap_otsu`, expressed as a multiple of the number of burned labels; an
 #'   `Inf` cap disables capping for that bucket. The general package defaults
-#'   are `0.25` / `1.0` / `1.0` / `1.0`. Specific experiments may use other
-#'   values; for example a Phase B configuration raises the spectral cap to
-#'   `2.0`.
+#'   are `0.25` / `1.0` / `1.0`.
 #' }
 #'
 #' \subsection{OOF and FINAL}{
@@ -396,7 +393,6 @@
 #'   output_dir           = "results/",
 #'   run_name             = "balanced_2017",
 #'   cap_contextual       = 0.25,
-#'   cap_spectral         = 2.0,
 #'   cap_random           = 1.0,
 #'   cap_otsu             = 1.0
 #' )
@@ -485,7 +481,6 @@ build_supervised_burned_config <- function(
     impute_numeric             = NULL,
     impute_factor_missing      = NULL,
     cap_contextual             = NULL,
-    cap_spectral               = NULL,
     cap_random                 = NULL,
     cap_otsu                   = NULL,
     feature_whitelist_override = NULL,
@@ -728,7 +723,6 @@ build_supervised_burned_config <- function(
     impute_numeric             = impute_numeric,
     impute_factor_missing      = impute_factor_missing,
     cap_contextual             = cap_contextual,
-    cap_spectral               = cap_spectral,
     cap_random                 = cap_random,
     cap_otsu                   = cap_otsu,
     feature_whitelist_override = feature_whitelist_override,
@@ -755,7 +749,6 @@ build_supervised_burned_config <- function(
     impute_numeric        = if (is.null(impute_numeric))        "default" else "user",
     impute_factor_missing = if (is.null(impute_factor_missing)) "default" else "user",
     cap_contextual        = if (is.null(cap_contextual))        "default" else "user",
-    cap_spectral          = if (is.null(cap_spectral))          "default" else "user",
     cap_random            = if (is.null(cap_random))            "default" else "user",
     cap_otsu              = if (is.null(cap_otsu))              "default" else "user",
     feature_whitelist_override =
@@ -826,7 +819,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
         " nrounds=", tc$nrounds_max, " early_stop=", tc$early_stop,
         " val_frac=", tc$val_frac, "\n", sep = "")
     cat("    caps          : contextual=", tc$caps$contextual,
-        " spectral=", tc$caps$spectral, " random=", tc$caps$random,
+        " random=", tc$caps$random,
         " otsu=", tc$caps$otsu, "\n", sep = "")
   }
   cat("  inputs          :\n")
@@ -929,7 +922,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 .of_resolve_supervised_train_control <- function(
     nrounds_max, early_stop, oof_seed_base, final_sampling_seed, final_seed,
     val_frac, group_col, impute_numeric, impute_factor_missing,
-    cap_contextual, cap_spectral, cap_random, cap_otsu,
+    cap_contextual, cap_random, cap_otsu,
     feature_whitelist_override, feature_weights) {
 
   tc <- .of_canonical_train_control()
@@ -996,7 +989,6 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     as.numeric(v)
   }
   if (!is.null(cap_contextual)) tc$caps$contextual <- chk_cap(cap_contextual, "cap_contextual")
-  if (!is.null(cap_spectral))   tc$caps$spectral   <- chk_cap(cap_spectral, "cap_spectral")
   if (!is.null(cap_random))     tc$caps$random     <- chk_cap(cap_random, "cap_random")
   if (!is.null(cap_otsu))       tc$caps$otsu       <- chk_cap(cap_otsu, "cap_otsu")
 

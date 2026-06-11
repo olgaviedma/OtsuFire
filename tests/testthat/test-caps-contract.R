@@ -100,37 +100,34 @@ test_that("PART A: effective-cap formula = ceiling(n_burned * ratio); n_selected
   }
 })
 
-test_that("PART A: the production FINAL pool builder uses ceiling(n_burned*ratio)", {
-  # Source-level guard: the recovered formula is what the FINAL engine actually
-  # computes (target_<bucket> <- ceiling(n_burned * <ratio>)), one per bucket,
-  # and the selection is min(target, nrow(pool)).
-  src <- paste(deparse(body(get("train_final_model_direct", envir = ns))),
+test_that("PART A: the SHARED capping helper uses ceiling(n_burned*ratio); min(avail, cap)", {
+  # 2026-06-11 (structural dedup): the cap FORMULA now lives ONCE in the SHARED
+  # helper `.of_cap_negative_buckets()` (called by BOTH FINAL and OOF), not
+  # inline in each engine. Assert the canonical formula + selection rule are in
+  # the shared helper body.
+  src <- paste(deparse(body(get(".of_cap_negative_buckets", envir = ns))),
                collapse = "\n")
-  expect_true(grepl("ceiling(n_burned * contextual_exclusion_to_burned_ratio)",
-                    src, fixed = TRUE))
-  expect_true(grepl("ceiling(n_burned * spectral_hard_negative_to_burned_ratio)",
-                    src, fixed = TRUE))
-  expect_true(grepl("ceiling(n_burned * random_to_burned_ratio)",
-                    src, fixed = TRUE))
-  expect_true(grepl("ceiling(n_burned * otsu_unburned_to_burned_ratio)",
-                    src, fixed = TRUE))
-  # The selection is capped by min(target, nrow(pool)).
-  expect_true(grepl("min(target_contextual, nrow(contextual_exclusion_pool))",
-                    src, fixed = TRUE))
+  # n_cap_max <- ceiling(n_burned * cap_ratio).
+  expect_true(grepl("ceiling(n_burned * cap_ratio)", src, fixed = TRUE))
+  # The under-cap branch takes all available (availability<cap); the cap branch
+  # draws min(available, cap) via sample.int over the available rows.
+  expect_true(grepl("n_cap_max >= length(avail)", src, fixed = TRUE))
+  expect_true(grepl("sample.int(length(avail), n_cap_max)", src, fixed = TRUE))
 })
 
-test_that("PART A: the production OOF cap closure uses the SAME ceiling(n_burned*ratio)", {
-  src <- paste(deparse(body(get("run_oof_xgb", envir = ns))), collapse = "\n")
-  # The pick() closure computes target <- ceiling(n_burned * ratio) and takes
-  # n_take <- min(target, length(avail)) -- byte-identical rule to FINAL.
-  expect_true(grepl("ceiling(n_burned * ratio)", src, fixed = TRUE))
-  expect_true(grepl("min(target, length(avail))", src, fixed = TRUE))
-  # The per-bucket audit records the SAME ceiling formula for each cap, so the
-  # OOF audit's *_cap columns are the effective caps, not the raw ratios.
-  expect_true(grepl("ceiling(n_burned * contextual_exclusion_to_burned_ratio)",
-                    src, fixed = TRUE))
-  expect_true(grepl("ceiling(n_burned * spectral_hard_negative_to_burned_ratio)",
-                    src, fixed = TRUE))
+test_that("PART A: the OOF engine routes capping through the SHARED resolver + helper", {
+  # The inline `pick()` closure / `!is_burned` negative machinery is GONE from
+  # the OOF engine; it now calls `.of_resolve_supervised_eligibility()` +
+  # `.of_cap_negative_buckets()`.
+  oof_src <- paste(deparse(body(get("run_oof_xgb", envir = ns))),
+                   collapse = "\n")
+  expect_true(grepl(".of_cap_negative_buckets", oof_src, fixed = TRUE))
+  expect_true(grepl(".of_resolve_supervised_eligibility", oof_src, fixed = TRUE))
+  # The OOF audit's *_cap columns still use ceiling(n_burned*ratio) (now via the
+  # shared helper's n_cap_max).
+  src <- paste(deparse(body(get(".of_cap_negative_buckets", envir = ns))),
+               collapse = "\n")
+  expect_true(grepl("ceiling(n_burned * cap_ratio)", src, fixed = TRUE))
 })
 
 # =============================================================================

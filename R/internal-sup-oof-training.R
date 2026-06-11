@@ -128,78 +128,79 @@ run_oof_xgb <- function(
     has_block    <- group_col  %in% names(labelled_df)
 
     # Per-fold negative-bucket capping (mirrors FINAL exactly, applied to the
-    # OUTER-TRAIN negatives only).
+    # OUTER-TRAIN negatives only). 2026-06-11: the eligibility + bucket
+    # assignment is delegated to the SHARED PURE resolver
+    # `.of_resolve_supervised_eligibility()` and the capping to the SHARED PURE
+    # helper `.of_cap_negative_buckets()` -- the SAME two helpers the FINAL pool
+    # builder uses, so the two paths cannot diverge. The former `!is_burned`
+    # negative predicate (and its `sel_other` / `other_kept` "5th category") is
+    # REMOVED: a row is a negative ONLY if class=="unburned" AND it maps to one
+    # of the four valid buckets; review / keep / NA / unknown rows can never
+    # silently become negatives (the resolver excludes or ERRORS on them).
     cap_outer_train <- function(tr_idx, fold_seed) {
       cls <- as.character(labelled_df[[class_col]])[tr_idx]
       src <- if (has_source) as.character(labelled_df[["source"]])[tr_idx] else rep(NA_character_, length(tr_idx))
       ngt <- if (has_neg_type) as.character(labelled_df[["neg_type"]])[tr_idx] else rep(NA_character_, length(tr_idx))
+      id_local <- as.character(labelled_df[["fire_uid"]])[tr_idx]
 
-      is_burned <- cls == "burned"
-      n_burned  <- sum(is_burned)
+      # Resolve eligibility over LOCAL row indices (1..length(tr_idx)).
+      elig <- .of_resolve_supervised_eligibility(
+        id = id_local, class = cls, source = src, neg_type = ngt,
+        deterministic_drop_source        = deterministic_drop_source,
+        spectral_hard_negative_neg_types = spectral_hard_negative_neg_types,
+        random_background_source         = random_background_source,
+        otsu_unburned_source             = otsu_unburned_source,
+        otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
+        origin_stage = "OOF"
+      )
+      n_burned <- length(elig$positive_idx)
 
-      pick <- function(mask, ratio) {
-        avail <- which(mask)
-        if (length(avail) == 0L || !is.finite(ratio)) return(avail)
-        target <- ceiling(n_burned * ratio)
-        n_take <- min(target, length(avail))
-        if (n_take <= 0L) return(integer(0))
-        if (n_take >= length(avail)) return(avail)
-        sort(sample(avail, n_take))
+      caps <- c(
+        contextual = contextual_exclusion_to_burned_ratio,
+        spectral   = spectral_hard_negative_to_burned_ratio,
+        random     = random_to_burned_ratio,
+        otsu       = otsu_unburned_to_burned_ratio
+      )
+      capres <- .of_cap_negative_buckets(
+        positive_idx        = elig$positive_idx,
+        negatives_by_bucket = elig$negatives_by_bucket,
+        n_burned            = n_burned,
+        caps                = caps,
+        seed                = fold_seed,
+        id                  = id_local,
+        context             = sprintf("OOF_fold_seed=%d", as.integer(fold_seed))
+      )
+      keep_local <- capres$selected_indices
+
+      # Re-shape the per-bucket capping audit into the flat per-fold audit fields
+      # the Gate-4 OOF audit CSV expects (one number per bucket).
+      cb <- capres$audit
+      bget <- function(b, col) {
+        v <- cb[[col]][cb$bucket == b]
+        if (length(v) == 0L) NA_real_ else v[[1L]]
       }
-
-      ctx_mask <- (!is_burned) & has_source & (src %in% deterministic_drop_source) &
-        !(ngt %in% spectral_hard_negative_neg_types)
-      shn_mask <- (!is_burned) & has_source & (src %in% deterministic_drop_source) &
-        (ngt %in% spectral_hard_negative_neg_types)
-      rb_mask  <- (!is_burned) & has_source & (src %in% random_background_source)
-      otsu_mask <- (!is_burned) & has_source & (src %in% otsu_unburned_source) &
-        !(ngt %in% otsu_unburned_exclude_neg_types)
-
-      set.seed(fold_seed)
-      sel_burned <- which(is_burned)
-      sel_ctx  <- pick(ctx_mask, contextual_exclusion_to_burned_ratio)
-      sel_shn  <- pick(shn_mask, spectral_hard_negative_to_burned_ratio)
-      sel_rb   <- pick(rb_mask,  random_to_burned_ratio)
-      sel_otsu <- pick(otsu_mask, otsu_unburned_to_burned_ratio)
-      # Any negatives not in a known bucket are kept as-is (parity with FINAL,
-      # which only excludes via the otsu exclude-list; unknown-source negatives
-      # would not be in L_ok at all, but here we keep them to avoid silently
-      # dropping rows that FINAL never had a bucket for).
-      known_mask <- ctx_mask | shn_mask | rb_mask | otsu_mask | is_burned
-      sel_other <- which((!known_mask))
-
-      keep_local <- sort(unique(c(sel_burned, sel_ctx, sel_shn, sel_rb, sel_otsu, sel_other)))
-      # Effective caps per bucket = ceiling(n_burned * ratio) (the SAME formula
-      # the FINAL pool builder uses). Computed into short-named locals so the
-      # audit list stays terse and the per-bucket formula is unambiguous.
-      cap_ctx  <- ceiling(n_burned * contextual_exclusion_to_burned_ratio)
-      cap_shn  <- ceiling(n_burned * spectral_hard_negative_to_burned_ratio)
-      cap_rb   <- ceiling(n_burned * random_to_burned_ratio)
-      cap_otsu <- ceiling(n_burned * otsu_unburned_to_burned_ratio)
-      # Effective per-bucket ratio = selected / n_burned (the ACHIEVED ratio,
-      # which equals the configured cap when enough negatives exist, and is
-      # capped by availability otherwise). 0-burned folds cannot happen on the
-      # block-CV path, but guard the division defensively.
-      eff_ratio <- function(n_sel) if (n_burned > 0L) n_sel / n_burned else NA_real_
+      eff <- function(b) {
+        v <- cb$effective_ratio[cb$bucket == b]
+        if (length(v) == 0L) NA_real_ else v[[1L]]
+      }
       audit <- list(
         n_burned             = n_burned,
-        contextual_available = sum(ctx_mask),
-        contextual_cap       = cap_ctx,
-        contextual_selected  = length(sel_ctx),
-        contextual_effective_ratio = eff_ratio(length(sel_ctx)),
-        spectral_available   = sum(shn_mask),
-        spectral_cap         = cap_shn,
-        spectral_selected    = length(sel_shn),
-        spectral_effective_ratio = eff_ratio(length(sel_shn)),
-        random_bg_available  = sum(rb_mask),
-        random_bg_cap        = cap_rb,
-        random_bg_selected   = length(sel_rb),
-        random_bg_effective_ratio = eff_ratio(length(sel_rb)),
-        otsu_available       = sum(otsu_mask),
-        otsu_cap             = cap_otsu,
-        otsu_selected        = length(sel_otsu),
-        otsu_effective_ratio = eff_ratio(length(sel_otsu)),
-        other_kept           = length(sel_other)
+        contextual_available = bget("contextual", "n_available"),
+        contextual_cap       = bget("contextual", "n_cap_max"),
+        contextual_selected  = bget("contextual", "n_selected"),
+        contextual_effective_ratio = eff("contextual"),
+        spectral_available   = bget("spectral", "n_available"),
+        spectral_cap         = bget("spectral", "n_cap_max"),
+        spectral_selected    = bget("spectral", "n_selected"),
+        spectral_effective_ratio = eff("spectral"),
+        random_bg_available  = bget("random", "n_available"),
+        random_bg_cap        = bget("random", "n_cap_max"),
+        random_bg_selected   = bget("random", "n_selected"),
+        random_bg_effective_ratio = eff("random"),
+        otsu_available       = bget("otsu", "n_available"),
+        otsu_cap             = bget("otsu", "n_cap_max"),
+        otsu_selected        = bget("otsu", "n_selected"),
+        otsu_effective_ratio = eff("otsu")
       )
       list(keep = tr_idx[keep_local], audit = audit)
     }

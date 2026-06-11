@@ -3,9 +3,10 @@
 # CANONICAL VERSIONED TEMPLATE (inst/scripts/long_run/).
 # Only runs if FULL closed OK (the master gates on FULL_SUCCESS.marker).
 # OtsuFire always uses ONE training procedure (inner-early-stopping selection +
-# full-data refit); there is no training-protocol choice.
-# DEPLOYED: OOF capped + FINAL + score + map + EFFIS.
-# Optional EXTRA diagnostic: OOF full, reusing the SAME FINAL (no second FINAL).
+# full-data refit); there is no training-protocol choice. The OOF diagnostic uses
+# the SAME capped negative-sampling policy as the FINAL model, applied
+# independently within each training fold (there is no oof_sampling choice).
+# DEPLOYED: OOF (capped) + FINAL + score + map + EFFIS.
 # Difference vs FULL is ONLY explicit configuration:
 #   feature_whitelist_override = NOHS_BASE_38 (38 base = 50 minus 12 hotspot)
 #   use_hotspots = FALSE (belt-and-suspenders; does NOT change pools/labels --
@@ -51,9 +52,8 @@ wh <- function(w) { .warns[[length(.warns) + 1L]] <<- conditionMessage(w); invok
 stopifnot(length(NOHS_BASE_38) == 38L)
 NOHS_ENGINE <- file.path(PROF, "ENGINE_ROUTES")
 dir.create(NOHS_ENGINE, recursive = TRUE, showWarnings = FALSE)
-cfg_B <- .mk_long_cfg("capped", feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
-cfg_C <- .mk_long_cfg("full",   feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
-saveRDS(list(B = cfg_B, C = cfg_C), file.path(PROF, "cfgs_no_hotspot.rds"))
+cfg_B <- .mk_long_cfg(feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
+saveRDS(list(B = cfg_B), file.path(PROF, "cfgs_no_hotspot.rds"))
 stopifnot(identical(sort(cfg_B$train_control$feature_whitelist_override), sort(NOHS_BASE_38)))
 log("[nohs] cfgs built; feature_whitelist_override n=",
     length(cfg_B$train_control$feature_whitelist_override),
@@ -75,17 +75,6 @@ B_model <- withCallingHandlers(train_final_burned_model(
   out_dir = B_fm_dir, overwrite = TRUE, verbose = TRUE), warning = wh)
 saveRDS(B_oof, file.path(PROF, "B_oof.rds")); saveRDS(B_model, file.path(PROF, "B_model.rds"))
 log("[nohs] OOF+FINAL done; FINAL best_iteration=", B_model$recipe$training$best_iteration %||% NA)
-
-# ---- OPTIONAL EXTRA DIAGNOSTIC: OOF full (reuse same FINAL) ------------------
-log("[nohs] EXTRA diagnostic: OOF full (reuses the SAME FINAL) ...")
-C_oof_dir <- dir_of("CONFIG_C_oof_full_diagnostic/05_OOF")
-C_mat_dir <- dir_of("CONFIG_C_oof_full_diagnostic/04_MATRIX")
-C_oof <- withCallingHandlers(run_oof_diagnostics(
-  train_features = feats$train_features, scoring_features = feats$scoring_features,
-  config = cfg_C, fold_cols = FOLD_COLS, out_dir = C_oof_dir, matrix_dir = C_mat_dir,
-  labelled_gpkg = folds$train_with_folds_gpkg, labelled_layer = "train_with_folds"), warning = wh)
-saveRDS(C_oof, file.path(PROF, "C_oof.rds"))
-log("[nohs] EXTRA OOF-full diagnostic done (no FINAL retrain).")
 
 # ---- SCORE + MAP (deploy the FINAL) -----------------------------------------
 # G2.3 route-propagation fix: pass the SHARED labelled-features GPKG EXPLICITLY
@@ -147,7 +136,7 @@ md <- c("# LONG BALANCED — NO-HOTSPOT profile (spectral-historical ablation)",
   sprintf("- Resolved model features: %d base + %d _isNA.", length(base_nohs), length(isna_nohs)),
   sprintf("- feature_schema_fingerprint: %s", fp_nohs),
   sprintf("- Removed (hotspot-lineage): %s", paste(sort(removed), collapse = ", ")),
-  "- DEPLOYED: OOF capped + FINAL; plus OOF-full diagnostic (reuses the DEPLOYED FINAL).",
+  "- DEPLOYED: OOF (capped) + FINAL; OOF uses the same capped policy as FINAL.",
   "", "## EFFIS metrics (validate_fire_maps, metrics_type='all')",
   if (exists("df") && !is.null(df)) paste(utils::capture.output(print(t(df))), collapse = "\n") else "(EFFIS not produced)")
 writeLines(md, file.path(PROF, "SUMMARY.md"))

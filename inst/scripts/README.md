@@ -28,9 +28,11 @@ working copies can be detected. Prefer the blob SHA-1 for divergence checks:
 
 1. **Public API only** + `build_supervised_burned_config()` as the
    **single source of truth** for all methodological params (the 4 negative-pool
-   caps, `oof_sampling`, seeds). OtsuFire always uses one training procedure
+   caps, seeds). OtsuFire always uses one training procedure
    (inner-early-stopping selection + full-data refit) — there is no
-   training-protocol choice. No deprecated function-level parameter shims are
+   training-protocol choice, and OOF always uses the same capped negative-sampling
+   policy as the FINAL model (applied independently within each training fold).
+   No deprecated function-level parameter shims are
    used (those emit `otsufire_deprecated_param` warnings).
 2. **Portable.** A clearly-marked `CONFIG` block at the top holds `<PATH_TO_...>`
    placeholders and a `paths <- list(...)` / `tool_paths <- list(...)` block with

@@ -21,9 +21,9 @@ carry a banner pointing back here; **this folder is the source of truth**.
         +-----------------+------------------+
         |                                    |
    20_full.R                          30_no_hotspot.R   (gated on FULL_SUCCESS)
-   DEPLOYED OOF capped + FINAL        feature_whitelist_override = 38 non-hotspot
-   OOF-full diagnostic (reuses FINAL) use_hotspots = FALSE
-   score + map + EFFIS                DEPLOYED OOF capped + FINAL + OOF-full diag
+   DEPLOYED OOF (capped) + FINAL      feature_whitelist_override = 38 non-hotspot
+   score + map + EFFIS                use_hotspots = FALSE
+                                      DEPLOYED OOF (capped) + FINAL
                                       score + map + EFFIS
 ```
 
@@ -79,7 +79,7 @@ the **same** metric definitions.
 | `00_common.R` | Sourced by every stage: CONFIG block (placeholders), version pin, paths/caps/seeds, feature lineage, explicit SHARED routes + `validate_shared_inputs()`, cfg builders, `run_long_effis()`. |
 | `05_env_snapshot.R` | Provenance snapshot (disk/mem, version pin, tarball + input SHA256) before any heavy step. |
 | `10_shared_upstream.R` | Builds the SHARED upstream ONCE (pools/folds/features, FULL feature set). |
-| `20_full.R` | FULL profile: DEPLOYED OOF capped + FINAL + OOF-full diagnostic, deploy FINAL, score + map + EFFIS. |
+| `20_full.R` | FULL profile: DEPLOYED OOF (capped) + FINAL, deploy FINAL, score + map + EFFIS. OOF uses the same capped policy as FINAL. |
 | `30_no_hotspot.R` | NO-HOTSPOT profile (38-feature override), gated on FULL success. |
 | `98_dry_verify_routes.R` | Config-level dry verify of the explicit-route resolution (no heavy compute, no junctions). |
 | `MASTER_RUN.bat` | Unattended orchestrator: env -> SHARED -> FULL -> (gate) -> NO-HOTSPOT. |

@@ -212,8 +212,9 @@ B01_cfg <- build_supervised_burned_config(
   cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
   oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
   # OtsuFire always uses inner-early-stopping selection + full-data refit
-  # (no protocol choice). oof_sampling controls OOF negative sampling only.
-  oof_sampling = "capped",
+  # (no protocol choice). OOF always uses the SAME capped negative-sampling policy
+  # as the FINAL model, applied independently within each training fold; there is
+  # no oof_sampling argument.
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
   options = list(
     data_base = data_base, composite_base = composite_base, result_name = result_name,
@@ -229,7 +230,8 @@ cat("\n================= 01_BUILD_CFG CHECK =================\n")
 .caps <- B01_cfg$train_control$caps
 cat("resolved caps:\n"); print(unlist(.caps))
 cat("training          : early-stopping selection + full-data refit (fixed)\n")
-cat(sprintf("oof_sampling      : %s\n", B01_cfg$train_control$oof_sampling %||% "?"))
+cat(sprintf("oof_sampling (fixed): %s  (same capped policy as FINAL; not a knob)\n",
+            B01_cfg$train_control$oof_sampling %||% "capped"))
 .ovr <- B01_cfg$train_control$feature_whitelist_override
 cat(sprintf("feature_whitelist_override n : %s\n", if (is.null(.ovr)) "NULL (FULL 50)" else length(.ovr)))
 .prov <- B01_cfg$resolved_params_provenance
@@ -251,7 +253,6 @@ cat("=====================================================\n")
 B02_validation <- validate_supervised_execution(
   config = B01_cfg, strict = TRUE,
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
-  oof_sampling = "capped",
   data_base = data_base, composite_base = composite_base, result_name = result_name)
 
 cat("\n================= 02_VALIDATE_INPUTS CHECK =================\n")
@@ -442,7 +443,8 @@ B08_oof <- run_oof_diagnostics(
 
 cat("\n================= 08_RUN_OOF CHECK =================\n")
 cat("training          : early-stopping selection + full-data refit (fixed)\n")
-cat(sprintf("oof_sampling      : %s\n", B01_cfg$train_control$oof_sampling %||% "?"))
+cat(sprintf("oof_sampling (fixed): %s  (same capped policy as FINAL; not a knob)\n",
+            B01_cfg$train_control$oof_sampling %||% "capped"))
 cat(sprintf("scale_pos_weight  : %s\n", B08_oof$scale_pos_weight %||% B08_oof$spw %||% "(see audit)"))
 cat(sprintf("best_iteration    : %s\n", B08_oof$best_iteration %||% "(see audit)"))
 cat(sprintf("schema fingerprint: %s\n", B08_oof$feature_schema_fingerprint %||% "(see fingerprints CSV)"))

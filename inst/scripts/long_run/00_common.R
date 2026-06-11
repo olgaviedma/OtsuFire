@@ -314,8 +314,7 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
 # Both use the single canonical training procedure (inner-early-stopping
 # selection + full-data refit), identical caps/seeds. The ONLY difference is
 # feature_whitelist_override (NO-HOTSPOT) + use_hotspots flag.
-.mk_long_cfg <- function(oof_sampling,
-                         feature_whitelist_override = NULL,
+.mk_long_cfg <- function(feature_whitelist_override = NULL,
                          out_base = LONG_RESULTS_BASE) {
   cfg <- build_supervised_burned_config(
     scenario             = scenario,
@@ -332,7 +331,9 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
     cap_contextual = CAP_CONTEXTUAL, cap_spectral = CAP_SPECTRAL,
     cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
     oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
-    oof_sampling = oof_sampling,
+    # OOF always uses the same capped negative-sampling policy as the FINAL model
+    # (applied independently within each training fold). There is no oof_sampling
+    # choice: capped is the single policy.
     feature_whitelist_override = feature_whitelist_override,
     options = list(
       data_base = data_base, composite_base = composite_base, result_name = result_name,

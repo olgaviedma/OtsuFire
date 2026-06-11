@@ -1,6 +1,6 @@
 canonical_script,git_blob_sha1,md5_lf,purpose,role
-01_supervised_oneyear_legacy.R,d1f37271fcb85bb009591261df70ee85df591809,13fd45ff3d17dedb21f44480ffbc3978,One-year supervised pipeline (full 6-stage modular chain),source-of-truth
-02_supervised_phaseB_config.R,13d152231a180035449859531963d4e720f58515,4a73b9e03468fde6a68ec6c55f077f6d,Phase B config (cap_spectral=2.0 + cap-mismatch guard + schema parity guard),source-of-truth
+01_supervised_oneyear_legacy.R,642cbb7eab020abb89d0b12f3acf08112fab4505,094a5ef79bea61ea17c4c7fbe66a0f6b,One-year supervised pipeline (full 6-stage modular chain),source-of-truth
+02_supervised_phaseB_config.R,fba4e37e44c88a9d9333b9907308d9b01eba8ee6,76086e441429381dcbfd4c58d4f596ca,Phase B config (cap_spectral=2.0 + cap-mismatch guard + schema parity guard),source-of-truth
 05_supervised_effis_validation.R,2d13ce58cb4ff1a24e59f7c7f46d09eee673c5ac,b6086ba3556385b38d81965f57932afa,EFFIS validation via validate_fire_maps() on a thresholded map,source-of-truth
 06_supervised_no_hotspots_reduced_historical.R,7894c8b448a2c177a8b640272f92350825d47758,d90d8e3f3ae33550659bba8c89b4aa76,No-hotspots / reduced-historical (pre-MODIS) run (hotspots=NULL),source-of-truth
 #

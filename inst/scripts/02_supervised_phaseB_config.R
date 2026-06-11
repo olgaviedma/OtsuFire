@@ -82,7 +82,9 @@ main <- function() {
     cap_spectral         = caps$spectral,   # 2.0 (PHASE B; default 1.0)
     cap_random           = caps$random,
     cap_otsu             = caps$otsu,
-    oof_sampling         = "capped",        # OOF diagnostic negative sampling
+    # OOF always uses the same capped negative-sampling policy as the FINAL model
+    # (applied independently within each training fold); there is no oof_sampling
+    # argument.
     options = list(
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,

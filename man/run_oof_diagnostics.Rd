@@ -15,7 +15,6 @@ run_oof_diagnostics(
   nrounds_max = NULL,
   early_stop = NULL,
   seed_base = NULL,
-  oof_sampling = NULL,
   contextual_exclusion_to_burned_ratio = NULL,
   spectral_hard_negative_to_burned_ratio = NULL,
   random_to_burned_ratio = NULL,
@@ -75,15 +74,6 @@ per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
 \item{seed_base}{Integer. Base RNG seed for the repeated block-CV OOF runs.
 Default `42` (the canonical seed; the FINAL stage seeds were moved
 `999` -> `42` to match). User-overridable.}
-
-\item{oof_sampling}{Character. `"capped"` (default) or `"full"`. Controls the
-OOF diagnostic negative sampling: `"capped"` applies the four bucket caps to
-each fold's outer-train negatives; `"full"` keeps them all. OtsuFire always
-uses a single training procedure: each OUTER fold runs through the shared
-leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
-`scale_pos_weight` fit on the outer-train only, an inner-validation split as
-the sole early-stopping set, a refit on all outer-train rows at
-`best_iteration`, then prediction of the untouched outer-test fold.}
 
 \item{contextual_exclusion_to_burned_ratio, spectral_hard_negative_to_burned_ratio, random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric. The four negative-bucket caps forwarded to the OOF chain so OOF
 sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
@@ -178,13 +168,20 @@ training labels.
 [run_dm_oof_pipeline()] so the OOF stage trains under the SAME feature space
 and per-feature weights as the final model (KB1/KB2 symmetry); this is why
 both knobs are part of the signature.
+
+OOF uses the same capped negative-sampling policy as the final model, applied
+independently within each training fold. Each OUTER fold runs through the
+shared leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
+`scale_pos_weight` fit on the outer-train only, an inner-validation split as
+the sole early-stopping set, a refit on all outer-train rows at
+`best_iteration`, then prediction of the untouched outer-test fold.
 }
 \section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
 
 The methodological / training-control arguments here (`nrounds_max`,
 `early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
 `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
-`group_col`, `oof_sampling`) are DEPRECATED COMPATIBILITY
+`group_col`) are DEPRECATED COMPATIBILITY
 SHIMS. Set these in [build_supervised_burned_config()] instead
 (`cfg$train_control`, the single source of truth). A non-`NULL` override of a
 canonical-default field emits a deprecation warning of class

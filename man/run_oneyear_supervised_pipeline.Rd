@@ -26,7 +26,6 @@ run_oneyear_supervised_pipeline(
   final_early_stopping_rounds = NULL,
   final_impute_numeric = NULL,
   final_impute_factor_missing = NULL,
-  oof_sampling = NULL,
   ...
 )
 }
@@ -140,17 +139,6 @@ FINAL model: `"median"` (default) or `"zero"`.}
 \item{final_impute_factor_missing}{Character. Sentinel level for missing
 factor/character values in the FINAL model. Default `"MISSING"`.}
 
-\item{oof_sampling}{Character. OOF per-fold negative sampling mode, one of
-`"capped"` (default) or `"full"`: `"capped"` applies the SAME four bucket
-caps the FINAL model uses to the outer-train negatives of each fold;
-`"full"` uses all outer-train rows. This controls only the OOF diagnostic
-negative sampling, not the training procedure. OtsuFire always uses a single
-training procedure (no protocol toggle): the OOF and FINAL stages share one
-internal core — medians and `scale_pos_weight` are fit on the training rows
-only, an inner validation split is the sole early-stopping set, and a fresh
-model is refit on all training rows at the selected `best_iteration` before
-deployment.}
-
 \item{...}{Migration trap for removed arguments. Reserved for
 detecting calls that still pass the OtsuFire 0.4.x deny-list
 arguments `additional_drop_cols` / `extra_drop_cols`, which were
@@ -186,11 +174,19 @@ NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
 Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
 be passed to [validate_fire_maps()] for external validation.
 }
+\details{
+OOF uses the same capped negative-sampling policy as the final model, applied
+independently within each training fold. The OOF and FINAL stages share one
+internal core — medians and `scale_pos_weight` are fit on the training rows
+only, an inner validation split is the sole early-stopping set, and a fresh
+model is refit on all training rows at the selected `best_iteration` before
+deployment.
+}
 \section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
 
 The methodological / training-control arguments of this function (the four
 `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
-`oof_*` / `final_*` training knobs, `oof_sampling`) are
+`oof_*` / `final_*` training knobs) are
 DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
 methodological parameter is [build_supervised_burned_config()]
 (`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
@@ -226,8 +222,8 @@ exactly ONE place: the cfg object built by
 [build_supervised_burned_config()] (`cfg$model_params` and
 `cfg$train_control`). Every methodological argument of this function (the
 four `*_to_burned_ratio` caps, `feature_whitelist_override`,
-`feature_weights`, the `oof_*` / `final_*` training knobs
-and `oof_sampling`) now DEFAULTS TO `NULL`, meaning "use the value resolved on
+`feature_weights`, the `oof_*` / `final_*` training knobs)
+now DEFAULTS TO `NULL`, meaning "use the value resolved on
 the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
 explicit argument > cfg) and is written through to BOTH the OOF and FINAL
 stages identically. The canonical numeric defaults are no longer duplicated in

@@ -127,9 +127,6 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
-    # Per-fold diagnostic negative-sampling mode: "capped" applies the FINAL
-    # bucket caps to the outer-train negatives; "full" uses all outer-train rows.
-    oof_sampling = c("capped", "full"),
     # The 4 cap ratios are REQUIRED formals (no defaults) so a dropped argument
     # cannot silently revert a bucket to ratio 1.0. Forwarded to run_oof_xgb.
     contextual_exclusion_to_burned_ratio,
@@ -152,7 +149,6 @@ run_dm_oof_pipeline <- function(
     group_col,
     ...
 ) {
-  oof_sampling <- match.arg(oof_sampling)
   if (!exists("build_design_matrix_patches")) stop("No encuentro build_design_matrix_patches() cargada en el entorno.")
   if (!exists("run_oof_xgb")) stop("No encuentro run_oof_xgb() cargada en el entorno.")
 
@@ -386,8 +382,8 @@ run_dm_oof_pipeline <- function(
     verbose     = verbose,
     feature_weights_vector = feature_weights_vector,
     overwrite   = overwrite,
-    # Per-fold negative-sampling mode + deferred-impute inputs for the core.
-    oof_sampling      = oof_sampling,
+    # Deferred-impute inputs for the per-fold leakage-free core. OOF always uses
+    # the same capped negative-sampling policy as FINAL (no toggle).
     prepared_labelled = dm_defer$prepared_labelled,
     model_cols        = dm_defer$model_cols,
     # Gate 1B (2026-06-07): threaded from cfg$train_control$group_col via

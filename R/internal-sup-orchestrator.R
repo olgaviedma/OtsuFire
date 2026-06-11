@@ -341,7 +341,6 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     final_early_stopping_rounds,
                                     final_impute_numeric,
                                     final_impute_factor_missing,
-                                    oof_sampling,
                                     # Precision 2 (2026-06-07): spectral cap
                                     # resolved at the public boundary, used by the
                                     # package-level parity guard before modeling.
@@ -357,8 +356,7 @@ run_supervised_pipeline <- function(target_year, scenario,
             "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
             "final_sampling_seed", "final_seed", "final_val_frac",
             "final_group_col", "final_nrounds_max", "final_early_stopping_rounds",
-            "final_impute_numeric", "final_impute_factor_missing",
-            "oof_sampling")
+            "final_impute_numeric", "final_impute_factor_missing")
   for (.nm in .req) {
     if (eval(call("missing", as.name(.nm)))) {
       stop("run_supervised_pipeline(): required resolved arg '", .nm,
@@ -367,7 +365,6 @@ run_supervised_pipeline <- function(target_year, scenario,
            call. = FALSE)
     }
   }
-  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
 
   # BUG 3 Phase 1b (2026-06-05): explicit engine bindings.
   # The dispatcher previously re-environmented this function so its ~40
@@ -701,7 +698,6 @@ run_supervised_pipeline <- function(target_year, scenario,
       target_year                = target_year,
       reuse_upstream             = reuse_upstream,
       feature_whitelist_override = feature_whitelist_override,
-      oof_sampling               = oof_sampling,
       data_base                  = data_base,
       composite_base             = composite_base,
       result_name                = result_name
@@ -1075,9 +1071,8 @@ run_supervised_pipeline <- function(target_year, scenario,
         # Precision 1 (2026-06-07): shims already resolved at the public
         # boundary; suppress a second deprecation warning here.
         .internal_resolved = TRUE,
-        # Per-fold sampling mode + the SAME 4 cap ratios forwarded to FINAL
-        # (so OOF and FINAL see identical caps).
-        oof_sampling      = oof_sampling,
+        # The SAME 4 cap ratios forwarded to FINAL (so OOF and FINAL see
+        # identical caps). OOF always uses the capped negative-sampling policy.
         contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
         spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
         random_to_burned_ratio                 = random_to_burned_ratio,

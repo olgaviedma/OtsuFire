@@ -228,7 +228,6 @@
     target_year = config$target_year,
     reuse_upstream = FALSE,
     feature_whitelist_override = NULL,
-    oof_sampling = "capped",
     model = NULL,
     recipe = NULL,
     scoring_feature_names = NULL,
@@ -780,7 +779,10 @@
   # ===========================================================================
   # (9) Contradictory configuration.
   # ===========================================================================
-  oof_sampling      <- oof_sampling      %||% "capped"
+  # OOF always uses the capped negative-sampling policy (the SAME one the FINAL
+  # model uses), applied independently within each training fold. Read the FIXED
+  # traceability constant from the cfg (never a user value).
+  oof_sampling      <- config$train_control$oof_sampling %||% "capped"
   run_check("contradictory_config", "blocking", {
     if (!is.null(feature_whitelist_override)) {
       canon <- tryCatch(get(".supervised_feature_cols",
@@ -1014,8 +1016,6 @@
 #'   contradictory-config and cache-belonging checks.
 #' @param feature_whitelist_override Character or `NULL`. The RESOLVED whitelist
 #'   override, validated as a subset of the canonical whitelist.
-#' @param oof_sampling Character. The resolved OOF diagnostic negative-sampling
-#'   mode (`"capped"` or `"full"`).
 #' @param model,recipe Optional fitted model / recipe. When supplied, check (8)
 #'   asserts the scoring feature schema is compatible.
 #' @param scoring_feature_names Character or `NULL`. The available scoring-feature
@@ -1039,7 +1039,6 @@ validate_supervised_execution <- function(config,
                                           target_year = config$target_year,
                                           reuse_upstream = FALSE,
                                           feature_whitelist_override = NULL,
-                                          oof_sampling = "capped",
                                           model = NULL,
                                           recipe = NULL,
                                           scoring_feature_names = NULL,
@@ -1051,7 +1050,6 @@ validate_supervised_execution <- function(config,
     target_year                = target_year,
     reuse_upstream             = reuse_upstream,
     feature_whitelist_override = feature_whitelist_override,
-    oof_sampling               = oof_sampling,
     model                      = model,
     recipe                     = recipe,
     scoring_feature_names      = scoring_feature_names,

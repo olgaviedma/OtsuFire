@@ -10,7 +10,6 @@ validate_supervised_execution(
   target_year = config$target_year,
   reuse_upstream = FALSE,
   feature_whitelist_override = NULL,
-  oof_sampling = "capped",
   model = NULL,
   recipe = NULL,
   scoring_feature_names = NULL,
@@ -34,9 +33,6 @@ contradictory-config and cache-belonging checks.}
 
 \item{feature_whitelist_override}{Character or `NULL`. The RESOLVED whitelist
 override, validated as a subset of the canonical whitelist.}
-
-\item{oof_sampling}{Character. The resolved OOF diagnostic negative-sampling
-mode (`"capped"` or `"full"`).}
 
 \item{model, recipe}{Optional fitted model / recipe. When supplied, check (8)
 asserts the scoring feature schema is compatible.}

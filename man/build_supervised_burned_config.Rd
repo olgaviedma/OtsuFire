@@ -36,7 +36,6 @@ build_supervised_burned_config(
   cap_otsu = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
-  oof_sampling = NULL,
   model_params = NULL,
   options = list()
 )
@@ -180,13 +179,6 @@ example, dropping the hotspot block to define a no-hotspot profile).
 are stored in `cfg$train_control` and consumed identically by the OOF and
 FINAL stages. `NULL` uses the full feature set with equal weights.}
 
-\item{oof_sampling}{Character or `NULL`. Selects the per-fold negative
-sampling mode used by the OOF diagnostics (`"capped"` or `"full"`). `NULL`
-uses `"capped"`. Stored in `cfg$train_control`. This controls only the OOF
-diagnostic negative sampling: OtsuFire always uses a single training
-procedure (inner early-stopping selection + full-data refit) for both the
-OOF folds and the FINAL model.}
-
 \item{model_params}{Named list or `NULL`. Optional \emph{partial} override of
 the canonical XGBoost hyper-parameter block stored in `cfg$model_params`
 (the canonical block without `scale_pos_weight`, which is computed at train
@@ -225,7 +217,7 @@ An S3 object of class `otsufire_supervised_burned_config`.
 
   `cfg$model_params` (the XGBoost block, without `scale_pos_weight`) and
   `cfg$train_control` (caps, seeds, rounds, validation fraction, grouping,
-  imputation rules, feature whitelist/weights, and `oof_sampling`) are the
+  imputation rules, feature whitelist/weights) are the
   resolved methodological parameters read by every downstream stage.
   Internal implementation details beyond these stable public fields are not a
   stable API and should not be relied upon by downstream user code.
@@ -283,6 +275,10 @@ stays `NULL` and is resolved later by the stage that needs it. See the
 per-argument notes for the exact `NULL` behaviour.
 }
 \details{
+OOF uses the same capped negative-sampling policy as the final model, applied
+independently within each training fold (inner early-stopping selection +
+full-data refit for both the OOF folds and the FINAL model).
+
 \subsection{Workflow structure}{
   The supervised workflow is organised as a sequence of stages, each driven
   by the configuration object this builder produces:
@@ -434,7 +430,6 @@ cfg <- build_supervised_burned_config(
   target_year          = 2017,
   output_dir           = "results/",
   run_name             = "balanced_2017",
-  oof_sampling         = "capped",
   cap_contextual       = 0.25,
   cap_spectral         = 2.0,
   cap_random           = 1.0,

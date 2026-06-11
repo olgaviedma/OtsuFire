@@ -56,8 +56,9 @@ test_that("Gate 1B: cfg carries model_params + train_control with the canonical 
   expect_equal(tc$val_frac, 0.15)
   expect_equal(tc$group_col, "block_id")
   expect_equal(unname(unlist(tc$caps)), c(0.25, 1.0, 1.0, 1.0))
-  # Fixed internal constant (traceability only; not user-settable).
+  # Fixed internal constants (traceability only; not user-settable).
   expect_equal(tc$training_protocol, "nested_refit")
+  # oof_sampling is now a FIXED constant, not a user-settable toggle.
   expect_equal(tc$oof_sampling, "capped")
 })
 
@@ -296,6 +297,7 @@ test_that("Gate 1B: current defaults equal the documented legacy recipe (params 
   expect_equal(tc$caps$random, 1.0)
   expect_equal(tc$caps$otsu, 1.0)
   expect_equal(tc$training_protocol, "nested_refit")
+  # oof_sampling is now a FIXED constant, not a user-settable toggle.
   expect_equal(tc$oof_sampling, "capped")
 })
 
@@ -394,7 +396,8 @@ test_that("Gate 1B: builder validates the resolved-param overrides", {
   # training_protocol is no longer a builder argument -> R "unused argument".
   expect_error(mk_ss_cfg(training_protocol = "nested_refit"),
                regexp = "unused argument")
-  expect_error(mk_ss_cfg(oof_sampling = "bad"), regexp = "should be one of")
+  # oof_sampling is no longer a builder argument -> R "unused argument".
+  expect_error(mk_ss_cfg(oof_sampling = "capped"), regexp = "unused argument")
   expect_error(mk_ss_cfg(model_params = list(scale_pos_weight = 3)),
                regexp = "scale_pos_weight")
 })

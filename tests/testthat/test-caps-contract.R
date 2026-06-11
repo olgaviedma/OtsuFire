@@ -334,7 +334,6 @@ test_that("PART A: dropping a required cap ERRORS on the OOF path (no silent 1.0
       params = list(), nrounds_max = 4L, early_stop = 3L, seed_base = 42L,
       group_col = "block_id", val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
-      oof_sampling = "capped",
       prepared_labelled = data.frame(x = c(0, 1)), model_cols = "x",
       contextual_exclusion_to_burned_ratio = 1,
       # spectral_hard_negative_to_burned_ratio DROPPED on purpose.

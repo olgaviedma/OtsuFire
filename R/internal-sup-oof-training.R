@@ -7,8 +7,10 @@
 #     imputed-from);
 #   - ASSERTS no fire_uid / block_id overlap between train and test;
 #   - applies bucket caps to the outer_train NEGATIVES only (replicating the
-#     FINAL bucketing exactly), under fold_seed = seed_base + 1000*r + k
-#     (skipped when oof_sampling == "full");
+#     FINAL bucketing exactly), under fold_seed = seed_base + 1000*r + k;
+#     OtsuFire OOF ALWAYS uses the SAME capped negative-sampling policy as the
+#     FINAL model, applied independently within each training fold (there is no
+#     sampling-policy toggle);
 #   - calls the SHARED core .of_nested_refit_fit() on the capped outer_train ->
 #     refit model + refit medians (fit inner-train only; inner-val is the only
 #     early-stopping set; refit on all outer_train at best_iteration);
@@ -40,9 +42,6 @@ run_oof_xgb <- function(
     # long/agg CSV sidecars. overwrite=TRUE writes exactly as before
     # (byte-identical); overwrite=FALSE skips when the target already exists.
     overwrite = TRUE,
-    # "capped" applies the FINAL bucket caps to the outer-train negatives;
-    # "full" uses all outer-train rows. Diagnostic negative-sampling toggle.
-    oof_sampling = c("capped", "full"),
     # Prepared (deferred-impute) labelled feature frame + model column set,
     # produced by build_design_matrix_patches(defer_impute=TRUE). REQUIRED.
     prepared_labelled = NULL,
@@ -85,7 +84,6 @@ run_oof_xgb <- function(
            "cfg$train_control via run_dm_oof_pipeline()).", call. = FALSE)
     }
   }
-  oof_sampling <- match.arg(oof_sampling)
   # val_frac / impute_* are consumed by the per-fold leakage-free core; always
   # required (no methodological default), mirroring the cap-ratio pattern below.
   for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
@@ -132,9 +130,6 @@ run_oof_xgb <- function(
     # Per-fold negative-bucket capping (mirrors FINAL exactly, applied to the
     # OUTER-TRAIN negatives only).
     cap_outer_train <- function(tr_idx, fold_seed) {
-      if (identical(oof_sampling, "full")) {
-        return(list(keep = tr_idx, audit = NULL))
-      }
       cls <- as.character(labelled_df[[class_col]])[tr_idx]
       src <- if (has_source) as.character(labelled_df[["source"]])[tr_idx] else rep(NA_character_, length(tr_idx))
       ngt <- if (has_neg_type) as.character(labelled_df[["neg_type"]])[tr_idx] else rep(NA_character_, length(tr_idx))
@@ -174,12 +169,36 @@ run_oof_xgb <- function(
       sel_other <- which((!known_mask))
 
       keep_local <- sort(unique(c(sel_burned, sel_ctx, sel_shn, sel_rb, sel_otsu, sel_other)))
+      # Effective caps per bucket = ceiling(n_burned * ratio) (the SAME formula
+      # the FINAL pool builder uses). Computed into short-named locals so the
+      # audit list stays terse and the per-bucket formula is unambiguous.
+      cap_ctx  <- ceiling(n_burned * contextual_exclusion_to_burned_ratio)
+      cap_shn  <- ceiling(n_burned * spectral_hard_negative_to_burned_ratio)
+      cap_rb   <- ceiling(n_burned * random_to_burned_ratio)
+      cap_otsu <- ceiling(n_burned * otsu_unburned_to_burned_ratio)
+      # Effective per-bucket ratio = selected / n_burned (the ACHIEVED ratio,
+      # which equals the configured cap when enough negatives exist, and is
+      # capped by availability otherwise). 0-burned folds cannot happen on the
+      # block-CV path, but guard the division defensively.
+      eff_ratio <- function(n_sel) if (n_burned > 0L) n_sel / n_burned else NA_real_
       audit <- list(
-        n_burned            = n_burned,
-        contextual_available = sum(ctx_mask), contextual_cap = ceiling(n_burned * contextual_exclusion_to_burned_ratio), contextual_selected = length(sel_ctx),
-        spectral_available   = sum(shn_mask), spectral_cap = ceiling(n_burned * spectral_hard_negative_to_burned_ratio), spectral_selected = length(sel_shn),
-        random_bg_available  = sum(rb_mask),  random_bg_cap = ceiling(n_burned * random_to_burned_ratio), random_bg_selected = length(sel_rb),
-        otsu_available       = sum(otsu_mask), otsu_cap = ceiling(n_burned * otsu_unburned_to_burned_ratio), otsu_selected = length(sel_otsu),
+        n_burned             = n_burned,
+        contextual_available = sum(ctx_mask),
+        contextual_cap       = cap_ctx,
+        contextual_selected  = length(sel_ctx),
+        contextual_effective_ratio = eff_ratio(length(sel_ctx)),
+        spectral_available   = sum(shn_mask),
+        spectral_cap         = cap_shn,
+        spectral_selected    = length(sel_shn),
+        spectral_effective_ratio = eff_ratio(length(sel_shn)),
+        random_bg_available  = sum(rb_mask),
+        random_bg_cap        = cap_rb,
+        random_bg_selected   = length(sel_rb),
+        random_bg_effective_ratio = eff_ratio(length(sel_rb)),
+        otsu_available       = sum(otsu_mask),
+        otsu_cap             = cap_otsu,
+        otsu_selected        = length(sel_otsu),
+        otsu_effective_ratio = eff_ratio(length(sel_otsu)),
         other_kept           = length(sel_other)
       )
       list(keep = tr_idx[keep_local], audit = audit)
@@ -315,28 +334,39 @@ run_oof_xgb <- function(
         a$prefix             <- prefix
         a$rep                <- r
         a$fold               <- k
-        a$oof_sampling       <- oof_sampling
+        # OtsuFire OOF always uses the capped negative-sampling policy (the SAME
+        # one the FINAL model uses), applied independently within each training
+        # fold. Stamped as a FIXED constant for manifest/audit traceability; it
+        # is no longer a user-settable choice.
+        a$oof_sampling       <- "capped"
         a$n_outer_train_pre  <- length(idx_tr)
         a$n_outer_train_post <- length(keep_tr)
         a$n_outer_test       <- n_te_before
         a$outer_test_capped       <- FALSE
         a$outer_test_used_for_fit <- FALSE
         a$outer_test_rows_unchanged <- (n_te_before == length(idx_te))
+        # The capped policy ALWAYS runs now, so capped$audit is always present.
+        # Record, PER FOLD: n_burned, available-per-bucket, max cap, selected,
+        # and the effective (achieved) ratio per bucket.
         if (!is.null(capped$audit)) {
           ca <- capped$audit
           a$n_burned             <- ca$n_burned
           a$contextual_available <- ca$contextual_available
           a$contextual_cap       <- ca$contextual_cap
           a$contextual_selected  <- ca$contextual_selected
+          a$contextual_effective_ratio <- ca$contextual_effective_ratio
           a$spectral_available   <- ca$spectral_available
           a$spectral_cap         <- ca$spectral_cap
           a$spectral_selected    <- ca$spectral_selected
+          a$spectral_effective_ratio <- ca$spectral_effective_ratio
           a$random_bg_available  <- ca$random_bg_available
           a$random_bg_cap        <- ca$random_bg_cap
           a$random_bg_selected   <- ca$random_bg_selected
+          a$random_bg_effective_ratio <- ca$random_bg_effective_ratio
           a$otsu_available       <- ca$otsu_available
           a$otsu_cap             <- ca$otsu_cap
           a$otsu_selected        <- ca$otsu_selected
+          a$otsu_effective_ratio <- ca$otsu_effective_ratio
         }
         audit_rows[[length(audit_rows) + 1]] <- a
       }

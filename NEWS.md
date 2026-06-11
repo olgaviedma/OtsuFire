@@ -1,4 +1,4 @@
-# OtsuFire (development version)
+# OtsuFire 0.9.0 (2026-06-11)
 
 ## Methodological fix — supervised eligibility defined by EXPLICIT class
 

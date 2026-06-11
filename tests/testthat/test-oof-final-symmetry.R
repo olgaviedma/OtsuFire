@@ -102,7 +102,7 @@ make_sym_oof_df <- function(n = 60, seed = 5L) {
                       "deterministic_drop_hard", "otsu_patch_residual"),
                     length.out = n),
     neg_type  = rep(c(NA_character_, "background_cell",
-                      "spectral_reject_medium", "otsu_patch_drop"),
+                      "geo_excluded_hot", "otsu_patch_drop"),
                     length.out = n),
     poly_id   = sprintf("p_%03d", seq_len(n)),
     block_id  = rep(seq_len(12), length.out = n),
@@ -231,8 +231,8 @@ test_that("train_control: both stages draw the same nrounds/early_stop/val_frac/
   expect_equal(tc$group_col, "block_id")
   expect_equal(tc$impute_numeric, "median")
   expect_equal(tc$impute_factor_missing, "MISSING")
-  # The 4 caps come from the same canonical source too.
-  expect_equal(unname(unlist(tc$caps)), c(0.25, 1.0, 1.0, 1.0))
+  # The 3 caps come from the same canonical source too.
+  expect_equal(unname(unlist(tc$caps)), c(0.25, 1.0, 1.0))
 })
 
 # ---------------------------------------------------------------------------
@@ -275,7 +275,6 @@ run_capture_pair <- function() {
       labelled_gpkg = g, labelled_layer = "train_features",
       out_dir = NULL, prefix = "sym_final", overwrite = TRUE, verbose = FALSE,
       contextual_exclusion_to_burned_ratio   = 0.25,
-      spectral_hard_negative_to_burned_ratio = 1.0,
       random_to_burned_ratio                 = 1.0,
       otsu_unburned_to_burned_ratio          = 1.0,
       sampling_seed = 42L, group_col = "block_id", val_frac = 0.15,
@@ -301,7 +300,6 @@ run_capture_pair <- function() {
       save_prefix = "sym_oof", prefix = "sym_oof", overwrite = TRUE,
       group_col   = "block_id",
       contextual_exclusion_to_burned_ratio   = 0.25,
-      spectral_hard_negative_to_burned_ratio = 1.0,
       random_to_burned_ratio                 = 1.0,
       otsu_unburned_to_burned_ratio          = 1.0,
       val_frac = 0.15, impute_numeric = "median",
@@ -457,7 +455,7 @@ test_that("symmetry (L2): OOF per-fold effective bucket ratios match the configu
   result_dir <- tempfile("sym_oof_caps_")
   dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
   on.exit(unlink(result_dir, recursive = TRUE, force = TRUE), add = TRUE)
-  caps_cfg <- list(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
+  caps_cfg <- list(contextual = 0.25, random = 1.0, otsu = 1.0)
   res <- suppressMessages(suppressWarnings(oof_engine(
     labelled    = df,
     burned_like = df[df$class == "unburned", , drop = FALSE],
@@ -469,7 +467,6 @@ test_that("symmetry (L2): OOF per-fold effective bucket ratios match the configu
     save_prefix = "sym_caps", prefix = "sym_caps", overwrite = TRUE,
     group_col   = "block_id",
     contextual_exclusion_to_burned_ratio   = caps_cfg$contextual,
-    spectral_hard_negative_to_burned_ratio = caps_cfg$spectral,
     random_to_burned_ratio                 = caps_cfg$random,
     otsu_unburned_to_burned_ratio          = caps_cfg$otsu,
     val_frac = 0.15, impute_numeric = "median",
@@ -485,7 +482,6 @@ test_that("symmetry (L2): OOF per-fold effective bucket ratios match the configu
     expect_equal(selected[!enough], avail[!enough])
   }
   chk_bucket(aud$contextual_available, aud$contextual_cap, aud$contextual_selected)
-  chk_bucket(aud$spectral_available,   aud$spectral_cap,   aud$spectral_selected)
   chk_bucket(aud$random_bg_available,  aud$random_bg_cap,  aud$random_bg_selected)
   chk_bucket(aud$otsu_available,       aud$otsu_cap,       aud$otsu_selected)
 })

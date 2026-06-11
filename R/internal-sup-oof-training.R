@@ -62,12 +62,10 @@ run_oof_xgb <- function(
     # B1: bucket cap ratios. REQUIRED on the nested path (no defaults) so a
     # dropped argument cannot silently revert a bucket to ratio 1.0.
     contextual_exclusion_to_burned_ratio,
-    spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio,
     otsu_unburned_to_burned_ratio,
     # B1: bucket source / neg_type definitions, mirroring the FINAL stage.
     deterministic_drop_source = c("deterministic_drop_hard"),
-    spectral_hard_negative_neg_types = c("spectral_reject_medium"),
     random_background_source = c("random_burnable_background"),
     otsu_unburned_source = c("otsu_patch_residual"),
     otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep")
@@ -104,14 +102,11 @@ run_oof_xgb <- function(
            "required (from build_design_matrix_patches(defer_impute=TRUE)).",
            call. = FALSE)
     }
-    # Force the 4 cap ratios: required formals -> a dropped arg ERRORS here
+    # Force the 3 cap ratios: required formals -> a dropped arg ERRORS here
     # (cannot silently revert a bucket to ratio 1.0). missing() must be called
     # directly on each formal name.
     if (missing(contextual_exclusion_to_burned_ratio)) {
       stop("run_oof_xgb(nested_refit): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
-    }
-    if (missing(spectral_hard_negative_to_burned_ratio)) {
-      stop("run_oof_xgb(nested_refit): required cap 'spectral_hard_negative_to_burned_ratio' is missing.", call. = FALSE)
     }
     if (missing(random_to_burned_ratio)) {
       stop("run_oof_xgb(nested_refit): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
@@ -135,7 +130,7 @@ run_oof_xgb <- function(
     # builder uses, so the two paths cannot diverge. The former `!is_burned`
     # negative predicate (and its `sel_other` / `other_kept` "5th category") is
     # REMOVED: a row is a negative ONLY if class=="unburned" AND it maps to one
-    # of the four valid buckets; review / keep / NA / unknown rows can never
+    # of the three valid buckets; review / keep / NA / unknown rows can never
     # silently become negatives (the resolver excludes or ERRORS on them).
     cap_outer_train <- function(tr_idx, fold_seed) {
       cls <- as.character(labelled_df[[class_col]])[tr_idx]
@@ -147,7 +142,6 @@ run_oof_xgb <- function(
       elig <- .of_resolve_supervised_eligibility(
         id = id_local, class = cls, source = src, neg_type = ngt,
         deterministic_drop_source        = deterministic_drop_source,
-        spectral_hard_negative_neg_types = spectral_hard_negative_neg_types,
         random_background_source         = random_background_source,
         otsu_unburned_source             = otsu_unburned_source,
         otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
@@ -157,7 +151,6 @@ run_oof_xgb <- function(
 
       caps <- c(
         contextual = contextual_exclusion_to_burned_ratio,
-        spectral   = spectral_hard_negative_to_burned_ratio,
         random     = random_to_burned_ratio,
         otsu       = otsu_unburned_to_burned_ratio
       )
@@ -189,10 +182,6 @@ run_oof_xgb <- function(
         contextual_cap       = bget("contextual", "n_cap_max"),
         contextual_selected  = bget("contextual", "n_selected"),
         contextual_effective_ratio = eff("contextual"),
-        spectral_available   = bget("spectral", "n_available"),
-        spectral_cap         = bget("spectral", "n_cap_max"),
-        spectral_selected    = bget("spectral", "n_selected"),
-        spectral_effective_ratio = eff("spectral"),
         random_bg_available  = bget("random", "n_available"),
         random_bg_cap        = bget("random", "n_cap_max"),
         random_bg_selected   = bget("random", "n_selected"),
@@ -356,10 +345,6 @@ run_oof_xgb <- function(
           a$contextual_cap       <- ca$contextual_cap
           a$contextual_selected  <- ca$contextual_selected
           a$contextual_effective_ratio <- ca$contextual_effective_ratio
-          a$spectral_available   <- ca$spectral_available
-          a$spectral_cap         <- ca$spectral_cap
-          a$spectral_selected    <- ca$spectral_selected
-          a$spectral_effective_ratio <- ca$spectral_effective_ratio
           a$random_bg_available  <- ca$random_bg_available
           a$random_bg_cap        <- ca$random_bg_cap
           a$random_bg_selected   <- ca$random_bg_selected

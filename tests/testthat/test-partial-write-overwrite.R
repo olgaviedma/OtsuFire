@@ -68,7 +68,6 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     impute_numeric = "median", impute_factor_missing = "MISSING",
     prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
@@ -95,7 +94,6 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     impute_numeric = "median", impute_factor_missing = "MISSING",
     prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = FALSE
   )))
@@ -114,7 +112,6 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
     impute_numeric = "median", impute_factor_missing = "MISSING",
     prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
@@ -195,7 +192,6 @@ test_that("run_dm_oof_pipeline does not clobber CSV/TXT sidecars when overwrite=
     val_frac = 0.15,
     impute_numeric = "median", impute_factor_missing = "MISSING",
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     verbose     = 0, prefix = prefix, save_prefix = prefix,
     overwrite   = FALSE

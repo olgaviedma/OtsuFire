@@ -116,8 +116,8 @@
 #'
 #' @return Named list with: nrounds_max, early_stop, seeds (list of
 #'   oof_seed_base / final_sampling_seed / final_seed), val_frac, group_col,
-#'   impute_numeric, impute_factor_missing, caps (list of contextual / spectral
-#'   / random / otsu), feature_whitelist_override, feature_weights,
+#'   impute_numeric, impute_factor_missing, caps (list of contextual / random
+#'   / otsu), feature_whitelist_override, feature_weights,
 #'   training_protocol (fixed internal constant "nested_refit"), oof_sampling.
 #' @keywords internal
 #' @noRd
@@ -136,7 +136,6 @@
     impute_factor_missing = "MISSING",
     caps = list(
       contextual = 0.25,
-      spectral   = 1.0,
       random     = 1.0,
       otsu       = 1.0
     ),

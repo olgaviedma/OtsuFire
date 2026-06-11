@@ -127,10 +127,9 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
-    # The 4 cap ratios are REQUIRED formals (no defaults) so a dropped argument
+    # The 3 cap ratios are REQUIRED formals (no defaults) so a dropped argument
     # cannot silently revert a bucket to ratio 1.0. Forwarded to run_oof_xgb.
     contextual_exclusion_to_burned_ratio,
-    spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio,
     otsu_unburned_to_burned_ratio,
     # Gate 1B (2026-06-07): FINAL train/val split + imputation controls are
@@ -193,14 +192,11 @@ run_dm_oof_pipeline <- function(
            "' is missing (no methodological default).", call. = FALSE)
     }
   }
-  # The 4 cap ratios are formals WITHOUT defaults and are REQUIRED: a dropped
+  # The 3 cap ratios are formals WITHOUT defaults and are REQUIRED: a dropped
   # argument ERRORS here (so the OOF chain can never silently revert a bucket to
   # ratio 1.0).
   if (missing(contextual_exclusion_to_burned_ratio)) {
     stop("run_dm_oof_pipeline(): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
-  }
-  if (missing(spectral_hard_negative_to_burned_ratio)) {
-    stop("run_dm_oof_pipeline(): required cap 'spectral_hard_negative_to_burned_ratio' is missing.", call. = FALSE)
   }
   if (missing(random_to_burned_ratio)) {
     stop("run_dm_oof_pipeline(): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
@@ -398,9 +394,6 @@ run_dm_oof_pipeline <- function(
   if (!missing(impute_factor_missing)) oof_args$impute_factor_missing <- impute_factor_missing
   if (!missing(contextual_exclusion_to_burned_ratio)) {
     oof_args$contextual_exclusion_to_burned_ratio <- contextual_exclusion_to_burned_ratio
-  }
-  if (!missing(spectral_hard_negative_to_burned_ratio)) {
-    oof_args$spectral_hard_negative_to_burned_ratio <- spectral_hard_negative_to_burned_ratio
   }
   if (!missing(random_to_burned_ratio)) {
     oof_args$random_to_burned_ratio <- random_to_burned_ratio

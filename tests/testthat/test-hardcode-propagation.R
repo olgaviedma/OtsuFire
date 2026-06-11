@@ -42,7 +42,7 @@ test_that("Gate 1B: canonical train_control holds the UNIFIED canonical values",
   expect_equal(.canon_tc$impute_numeric, "median")
   expect_equal(.canon_tc$impute_factor_missing, "MISSING")
   expect_equal(.canon_tc$caps$contextual, 0.25)
-  expect_equal(.canon_tc$caps$spectral, 1.0)
+  expect_null(.canon_tc$caps$spectral)
   expect_equal(.canon_tc$caps$random, 1.0)
   expect_equal(.canon_tc$caps$otsu, 1.0)
   expect_equal(.canon_tc$training_protocol, "nested_refit")

@@ -16,7 +16,6 @@ run_oof_diagnostics(
   early_stop = NULL,
   seed_base = NULL,
   contextual_exclusion_to_burned_ratio = NULL,
-  spectral_hard_negative_to_burned_ratio = NULL,
   random_to_burned_ratio = NULL,
   otsu_unburned_to_burned_ratio = NULL,
   val_frac = NULL,
@@ -75,9 +74,9 @@ per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
 Default `42` (the canonical seed; the FINAL stage seeds were moved
 `999` -> `42` to match). User-overridable.}
 
-\item{contextual_exclusion_to_burned_ratio, spectral_hard_negative_to_burned_ratio, random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric. The four negative-bucket caps forwarded to the OOF chain so OOF
+\item{contextual_exclusion_to_burned_ratio, random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric. The three negative-bucket caps forwarded to the OOF chain so OOF
 sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
-(`0.25`, `1.0`, `1.0`, `1.0`).}
+(`0.25`, `1.0`, `1.0`).}
 
 \item{val_frac}{Numeric. Inner validation fraction for the nested-refit
 per-fold split. Default `0.15`.}
@@ -178,7 +177,7 @@ the sole early-stopping set, a refit on all outer-train rows at
 
 Training eligibility is defined by EXPLICIT class, never by negation: only
 rows with `class == "burned"` (positives) and rows with `class == "unburned"`
-that resolve to one of the four valid negative buckets (contextual, spectral,
+that resolve to one of the three valid negative buckets (contextual,
 random, otsu) enter training. Review / keep / `NA` / unknown rows never become
 negatives. OOF and FINAL share one internal eligibility resolver and one
 capping helper, so the two stages cannot diverge on which rows are eligible

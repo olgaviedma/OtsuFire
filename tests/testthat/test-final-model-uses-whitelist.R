@@ -175,7 +175,6 @@ test_that("recipe$cols$feature_cols and x_cols are within the whitelist", {
     nrounds_max = 8L,
     early_stopping_rounds = 4L,
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1,
     otsu_unburned_to_burned_ratio = 1,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.

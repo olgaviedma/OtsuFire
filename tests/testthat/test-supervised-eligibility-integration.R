@@ -52,10 +52,10 @@ test_that("no productive sel_other / other_kept / !is_burned negative definition
 # SYMMETRY: the resolver gives the SAME eligible population to OOF and FINAL for
 # the same subset, and the helper gives the same negatives for same subset+seed.
 # ---------------------------------------------------------------------------
-DET_SRC <- "deterministic_drop_hard"; SPEC_NGT <- "spectral_reject_medium"
+DET_SRC <- "deterministic_drop_hard"
 RAND_SRC <- "random_burnable_background"; OTSU_SRC <- "otsu_patch_residual"
 OTSU_EXCL <- c("otsu_patch_review", "otsu_patch_keep")
-CAPS <- c(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
+CAPS <- c(contextual = 0.25, random = 1.0, otsu = 1.0)
 
 mk_pool <- function(seed = 3L) {
   set.seed(seed)
@@ -63,8 +63,7 @@ mk_pool <- function(seed = 3L) {
     rows[[length(rows) + 1L]] <<- data.frame(class = cls, source = src,
                                              neg_type = ngt, stringsAsFactors = FALSE)
   add(30, "burned",   "burned_truth", NA_character_)
-  add(50, "unburned", DET_SRC,        "geo_excluded_hot")
-  add(40, "unburned", DET_SRC,        SPEC_NGT)
+  add(90, "unburned", DET_SRC,        "geo_excluded_hot")
   add(45, "unburned", RAND_SRC,       "background_cell")
   add(38, "unburned", OTSU_SRC,       "otsu_patch_drop")
   d <- do.call(rbind, rows)
@@ -76,7 +75,7 @@ mk_pool <- function(seed = 3L) {
 resolve_pool <- function(d, origin) {
   g_int(".of_resolve_supervised_eligibility")(
     id = d$id, class = d$class, source = d$source, neg_type = d$neg_type,
-    deterministic_drop_source = DET_SRC, spectral_hard_negative_neg_types = SPEC_NGT,
+    deterministic_drop_source = DET_SRC,
     random_background_source = RAND_SRC, otsu_unburned_source = OTSU_SRC,
     otsu_unburned_exclude_neg_types = OTSU_EXCL, origin_stage = origin)
 }
@@ -110,7 +109,7 @@ test_that("positives are ALWAYS kept regardless of caps", {
   e <- resolve_pool(d, "FINAL")
   nb <- length(e$positive_idx)
   capf <- g_int(".of_cap_negative_buckets")
-  caps0 <- c(contextual = 0, spectral = 0, random = 0, otsu = 0)
+  caps0 <- c(contextual = 0, random = 0, otsu = 0)
   out <- capf(e$positive_idx, e$negatives_by_bucket, nb, caps0, seed = 1L, id = d$id)
   expect_true(all(e$positive_idx %in% out$selected_indices))
   # With all caps 0, ONLY positives survive.

@@ -43,7 +43,6 @@ test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
     early_stopping_rounds = 4L,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",
@@ -109,7 +108,6 @@ test_that("scoring path feature selection yields whitelist-only cols", {
     early_stopping_rounds = 4L,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",

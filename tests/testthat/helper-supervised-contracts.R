@@ -70,7 +70,7 @@ sc_decisions_gpkg <- function() {
 
 # A minimal resolved supervised cfg built from fresh on-disk inputs. Forwards
 # `...` to build_supervised_burned_config() so a single override (e.g.
-# cap_spectral = 2.0, nrounds_max = 10L) can be threaded through. target_year
+# cap_contextual = 1.0, nrounds_max = 10L) can be threaded through. target_year
 # defaults to 2025L (the value the caps / single-source suites used).
 sc_min_cfg <- function(...) {
   build_supervised_burned_config(
@@ -155,7 +155,7 @@ sc_isna_upstream_df <- function(n = 60L, seed = 7L,
                       "deterministic_drop_hard", "otsu_patch_residual"),
                     length.out = n),
     neg_type  = rep(c(NA_character_, "background_cell",
-                      "spectral_reject_medium", "otsu_patch_drop"),
+                      "geo_excluded_hot", "otsu_patch_drop"),
                     length.out = n),
     poly_id   = sprintf("p_%03d", seq_len(n)),
     block_id  = rep(seq_len(12), length.out = n),
@@ -272,7 +272,6 @@ sc_train_persist_fit <- function(prefix = "sc18",
     out_dir = out_dir, prefix = prefix, overwrite = TRUE, verbose = FALSE,
     nrounds_max = 12L, early_stopping_rounds = 6L,
     contextual_exclusion_to_burned_ratio = 1,
-    spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.2, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",

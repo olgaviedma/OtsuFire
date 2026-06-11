@@ -152,7 +152,6 @@
                                        # and passes them here. A dropped arg ERRORS
                                        # in the guard block below.
                                        contextual_exclusion_to_burned_ratio,
-                                       spectral_hard_negative_to_burned_ratio,
                                        random_to_burned_ratio,
                                        otsu_unburned_to_burned_ratio,
                                        feature_whitelist_override,
@@ -168,18 +167,9 @@
                                        final_nrounds_max,
                                        final_early_stopping_rounds,
                                        final_impute_numeric,
-                                       final_impute_factor_missing,
-                                       # Precision 2 (2026-06-07): the spectral
-                                       # cap resolved at the public boundary,
-                                       # forwarded to the orchestrator's
-                                       # package-level parity guard. NULL only on
-                                       # legacy internal callers; the guard
-                                       # tolerates NULL by falling back to the
-                                       # cfg cap.
-                                       spectral_cap_resolved = NULL) {
+                                       final_impute_factor_missing) {
   # Gate 1B: required-arg guard (no silent methodological defaults).
   .req <- c("contextual_exclusion_to_burned_ratio",
-            "spectral_hard_negative_to_burned_ratio",
             "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
             "feature_whitelist_override", "feature_weights",
             "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
@@ -254,7 +244,6 @@
     # (previously dropped here; the engine hardcoded overwrite=TRUE).
     overwrite         = overwrite,
     contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
-    spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio                 = random_to_burned_ratio,
     otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
     feature_whitelist_override             = feature_whitelist_override,
@@ -272,9 +261,6 @@
     final_early_stopping_rounds            = final_early_stopping_rounds,
     final_impute_numeric                   = final_impute_numeric,
     final_impute_factor_missing            = final_impute_factor_missing,
-    # Precision 2 (2026-06-07): forward the boundary-resolved spectral cap to the
-    # orchestrator's package-level parity guard.
-    spectral_cap_resolved                  = spectral_cap_resolved,
     internal_decisions_path                = eff_internal_decisions,
     engine_bindings                        = bindings,
     # BUG 3 Phase 2 PILOT (2026-06-05): thread the supervised config S3 object

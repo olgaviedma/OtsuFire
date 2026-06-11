@@ -354,9 +354,9 @@ test_that("a cfg field change produces a DIFFERENT fingerprint", {
     topo = OtsuFire:::.of_sup_input_path(cfgB, "topo"),
     corine_raster = OtsuFire:::.of_sup_input_path(cfgB, "corine_raster"),
     burnable_mask = OtsuFire:::.of_sup_input_path(cfgB, "burnable_mask"),
-    cap_spectral = 2.0)   # the ONE methodological change
+    cap_contextual = 1.0)   # the ONE methodological change
   expect_false(identical(cfp_fn()(cfgA)$checksum, cfp_fn()(cfgB2)$checksum))
-  # Changing only the spectral cap on the SAME cfg also moves the fingerprint.
+  # Changing only the contextual cap on the SAME cfg also moves the fingerprint.
   expect_false(identical(cfp_fn()(cfgB)$checksum, cfp_fn()(cfgB2)$checksum))
 })
 

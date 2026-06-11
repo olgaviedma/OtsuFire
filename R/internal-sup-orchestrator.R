@@ -92,7 +92,7 @@ CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 #
 #   "all_sources"  - Full operational mode (used in MASTER pipeline).
 #       Combines all three current-year unburned sources into the training pool:
-#         (1) Deterministic drop polygons  -> contextual_exclusion / spectral_hard_negative
+#         (1) Deterministic drop polygons  -> contextual_exclusion
 #         (2) Random burnable-background cells -> random_background_sampled
 #         (3) Otsu current-year unburned patches -> otsu_unburned_sampled
 #       Each source routes to its own training_group in train_final_model_direct()
@@ -324,7 +324,6 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     # .of_run_supervised_oneyear(). A dropped arg
                                     # ERRORS in the guard block below.
                                     contextual_exclusion_to_burned_ratio,
-                                    spectral_hard_negative_to_burned_ratio,
                                     random_to_burned_ratio,
                                     otsu_unburned_to_burned_ratio,
                                     feature_whitelist_override,
@@ -341,16 +340,11 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     final_early_stopping_rounds,
                                     final_impute_numeric,
                                     final_impute_factor_missing,
-                                    # Precision 2 (2026-06-07): spectral cap
-                                    # resolved at the public boundary, used by the
-                                    # package-level parity guard before modeling.
-                                    spectral_cap_resolved                  = NULL,
                                     internal_decisions_path                = NULL,
                                     engine_bindings                        = NULL,
                                     config                                 = NULL) {
   # Gate 1B: required-arg guard (no silent methodological defaults).
   .req <- c("contextual_exclusion_to_burned_ratio",
-            "spectral_hard_negative_to_burned_ratio",
             "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
             "feature_whitelist_override", "feature_weights",
             "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
@@ -962,27 +956,6 @@ run_supervised_pipeline <- function(target_year, scenario,
   schema_parity_manifest <- NULL
   if (isTRUE(DO_MODEL)) {
 
-    # Precision 2 (2026-06-07): PACKAGE-LEVEL spectral-cap parity guard. The
-    # orchestrator forwards a SINGLE resolved spectral cap
-    # (spectral_hard_negative_to_burned_ratio) to BOTH the OOF stage (below) and
-    # the FINAL stage. Before any model is fit, assert that this value matches
-    # the cap resolved at the public boundary (spectral_cap_resolved) AND the cap
-    # carried on the cfg. This fails fast on a silent reversion (e.g. a residual
-    # default quietly returning the cap to 1.0 on the capped training path). The
-    # reference is the boundary-resolved value when available (it already folds
-    # in any deliberate function-level override), else the cfg cap.
-    .cfg_spectral_cap <- tryCatch(config$train_control$caps$spectral,
-                                  error = function(e) NULL)
-    .spectral_ref <- spectral_cap_resolved %||% .cfg_spectral_cap %||%
-      spectral_hard_negative_to_burned_ratio
-    .of_assert_spectral_cap_parity(
-      oof_spectral   = spectral_hard_negative_to_burned_ratio,
-      final_spectral = spectral_hard_negative_to_burned_ratio,
-      cfg_spectral   = .spectral_ref
-    )
-    msg(sprintf("[guard] spectral-cap parity OK: OOF=FINAL=%s (resolved).",
-                format(spectral_hard_negative_to_burned_ratio, trim = TRUE)))
-
     msg("STEP C0 - Read features_geometry.gpkg (03_FEATURES)")
     gpkg_features <- file.path(dirs$`03_FEATURES`, "features_geometry.gpkg")
     stopifnot(file.exists(gpkg_features))
@@ -1071,10 +1044,9 @@ run_supervised_pipeline <- function(target_year, scenario,
         # Precision 1 (2026-06-07): shims already resolved at the public
         # boundary; suppress a second deprecation warning here.
         .internal_resolved = TRUE,
-        # The SAME 4 cap ratios forwarded to FINAL (so OOF and FINAL see
+        # The SAME 3 cap ratios forwarded to FINAL (so OOF and FINAL see
         # identical caps). OOF always uses the capped negative-sampling policy.
         contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
-        spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
         random_to_burned_ratio                 = random_to_burned_ratio,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         val_frac          = final_val_frac,
@@ -1099,13 +1071,12 @@ run_supervised_pipeline <- function(target_year, scenario,
 
       # ---- D) TRAIN final model (07_FINAL_MODEL_V2) -------------------------
       # Faithful split of the former fused wrapper: same engine args/values
-      # (the 4 caps, whitelist/weights, the OOF `qa` aggregate, overwrite).
+      # (the 3 caps, whitelist/weights, the OOF `qa` aggregate, overwrite).
       tm <- train_final_burned_model(
         train_features = gpkg_features,
         config         = config,
         oof_agg        = oof_agg_csv,
         contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
-        spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
         random_to_burned_ratio                 = random_to_burned_ratio,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         # 0.5.0: same feature space + weights as the OOF stage (KB1/KB2).

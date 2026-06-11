@@ -162,7 +162,6 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
     prefix      = "nr_smoke",
     overwrite   = TRUE,
     group_col   = "block_id",
-    oof_sampling      = "capped",
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
@@ -182,6 +181,8 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
                     "outer_test_capped", "outer_test_used_for_fit",
                     "n_outer_test", "n_outer_train_pre",
                     "n_outer_train_post") %in% names(aud)))
+  # OOF always uses the capped policy (constant stamped in the audit).
+  expect_true(all(aud$oof_sampling == "capped"))
   # outer_test never capped / never used for fitting.
   expect_true(all(aud$outer_test_capped == FALSE))
   expect_true(all(aud$outer_test_used_for_fit == FALSE))
@@ -191,13 +192,18 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
   expect_equal(aud$fold_seed, 100L + 1000L * aud$rep + aud$fold)
 })
 
-test_that("nested OOF 'full' sampling keeps the whole outer-train (no caps)", {
+# ---------------------------------------------------------------------------
+# Per-fold capping LOG: the OOF audit records, PER FOLD: n_burned,
+# available-per-bucket, max cap, selected, and effective (achieved) ratio.
+# (Replaces the deleted "full"=no-capping test: capping ALWAYS runs now.)
+# ---------------------------------------------------------------------------
+test_that("nested OOF capping ALWAYS runs and records the per-fold capping audit", {
   skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")
   skip_if_not_installed("dplyr")
 
   df <- make_nested_oof_df(seed = 9L)
-  result_dir <- tempfile("nested_oof_full_")
+  result_dir <- tempfile("nested_oof_cap_")
   dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
   on.exit(unlink(result_dir, recursive = TRUE, force = TRUE), add = TRUE)
 
@@ -210,9 +216,8 @@ test_that("nested OOF 'full' sampling keeps the whole outer-train (no caps)", {
     result_dir  = result_dir,
     target_year = 2017L,
     nrounds_max = 10L, early_stop = 5L, seed_base = 50L, verbose = 0,
-    save_prefix = "nr_full", prefix = "nr_full", overwrite = TRUE,
+    save_prefix = "nr_cap", prefix = "nr_cap", overwrite = TRUE,
     group_col   = "block_id",
-    oof_sampling      = "full",
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
@@ -222,7 +227,30 @@ test_that("nested OOF 'full' sampling keeps the whole outer-train (no caps)", {
     impute_factor_missing = "MISSING"
   )))
   aud <- res$oof$oof_audit
-  expect_true(all(aud$n_outer_train_post == aud$n_outer_train_pre))
+  # The capping always runs: the audit carries the per-fold, per-bucket schema.
+  capping_fields <- c(
+    "n_burned",
+    "contextual_available", "contextual_cap", "contextual_selected",
+    "contextual_effective_ratio",
+    "spectral_available", "spectral_cap", "spectral_selected",
+    "spectral_effective_ratio",
+    "random_bg_available", "random_bg_cap", "random_bg_selected",
+    "random_bg_effective_ratio",
+    "otsu_available", "otsu_cap", "otsu_selected", "otsu_effective_ratio"
+  )
+  expect_true(all(capping_fields %in% names(aud)),
+              info = paste("missing per-fold capping audit fields:",
+                           paste(setdiff(capping_fields, names(aud)),
+                                 collapse = ", ")))
+  # Effective ratio = selected / n_burned (achieved ratio).
+  ok <- aud$n_burned > 0
+  expect_equal(aud$contextual_effective_ratio[ok],
+               aud$contextual_selected[ok] / aud$n_burned[ok])
+  expect_equal(aud$spectral_effective_ratio[ok],
+               aud$spectral_selected[ok] / aud$n_burned[ok])
+  # Selected never exceeds the cap (target ceiling) nor the available pool.
+  expect_true(all(aud$contextual_selected <= aud$contextual_cap))
+  expect_true(all(aud$contextual_selected <= aud$contextual_available))
 })
 
 # ---------------------------------------------------------------------------
@@ -246,7 +274,6 @@ test_that("dropped cap arg in run_dm_oof_pipeline(nested_refit) ERRORS", {
       nrounds_max = 8L, early_stop = 4L, seed_base = 7L, verbose = 0,
       save_prefix = "nr_err", prefix = "nr_err", overwrite = TRUE,
       group_col   = "block_id",
-      oof_sampling      = "capped",
       # Gate 1B: supply the always-needed nested controls so the spectral-cap
       # guard (not the val_frac/impute guard) is what surfaces.
       val_frac = 0.15, impute_numeric = "median",
@@ -290,7 +317,6 @@ test_that("nested OOF errors when outer_train and outer_test share a fire_uid (l
       nrounds_max = 8L, early_stop = 4L, seed_base = 3L, verbose = 0,
       save_prefix = "nr_leak", prefix = "nr_leak", overwrite = TRUE,
       group_col   = "block_id",
-      oof_sampling      = "capped",
       val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
       contextual_exclusion_to_burned_ratio   = 0.25,
@@ -360,6 +386,68 @@ test_that("Contract #9: no engine carries a training_protocol formal", {
 test_that("training_protocol survives only as a fixed internal cfg constant", {
   tc <- get(".of_canonical_train_control", envir = ns)()
   expect_equal(tc$training_protocol, "nested_refit")
+})
+
+# ---------------------------------------------------------------------------
+# Single capped-policy contract: no public function accepts oof_sampling, no
+# OOF engine carries an oof_sampling formal, passing oof_sampling ERRORS, and
+# the cfg/audit constant is the fixed traceability label "capped".
+# ---------------------------------------------------------------------------
+test_that("no PUBLIC function accepts oof_sampling", {
+  for (f in c("run_oneyear_supervised_pipeline", "run_oof_diagnostics",
+              "build_supervised_burned_config", "validate_supervised_execution")) {
+    fm <- formals(get(f, envir = ns))
+    expect_false("oof_sampling" %in% names(fm),
+                 info = paste("public still has oof_sampling formal:", f))
+  }
+})
+
+test_that("no OOF engine carries an oof_sampling formal", {
+  for (f in c("run_dm_oof_pipeline", "run_oof_xgb")) {
+    fm <- formals(get(f, envir = ns))
+    expect_false("oof_sampling" %in% names(fm),
+                 info = paste("engine still has oof_sampling formal:", f))
+  }
+})
+
+test_that("passing oof_sampling to a public fn ERRORS", {
+  # build_supervised_burned_config / run_oof_diagnostics / validate_supervised_execution
+  # have no `...`, so R raises "unused argument".
+  expect_error(
+    build_supervised_burned_config(scenario = "balanced",
+                                   internal_decisions = tempfile(fileext = ".gpkg"),
+                                   change_index = tempfile(fileext = ".tif"),
+                                   target_year = 2017L,
+                                   oof_sampling = "full"),
+    regexp = "unused argument|oof_sampling")
+  # run_oneyear_supervised_pipeline has a `...` -> explicit guard message.
+  expect_error(
+    run_oneyear_supervised_pipeline(config = structure(list(),
+      class = "otsufire_supervised_burned_config"),
+      oof_sampling = "full"),
+    regexp = "oof_sampling is no longer an argument")
+})
+
+test_that("no source-level oof_sampling 'full' branch / validator survives in R/", {
+  r_dir <- system.file("R", package = "OtsuFire")
+  # Fall back to the source tree when not installed (load_all dev workflow).
+  src_files <- list.files(
+    file.path(testthat::test_path("..", ".."), "R"),
+    pattern = "\\.R$", full.names = TRUE)
+  if (length(src_files) == 0L && nzchar(r_dir)) {
+    src_files <- list.files(r_dir, pattern = "\\.R$", full.names = TRUE)
+  }
+  skip_if(length(src_files) == 0L, "no R/ source files visible to grep")
+  body_txt <- unlist(lapply(src_files, readLines, warn = FALSE))
+  # No "full"-branch logic for oof sampling anywhere.
+  expect_false(any(grepl('oof_sampling\\s*==\\s*"full"', body_txt)))
+  expect_false(any(grepl('identical\\(\\s*oof_sampling\\s*,\\s*"full"', body_txt)))
+  expect_false(any(grepl('match\\.arg\\([^)]*oof_sampling', body_txt)))
+})
+
+test_that("oof_sampling survives only as a fixed internal cfg/audit constant", {
+  tc <- get(".of_canonical_train_control", envir = ns)()
+  expect_equal(tc$oof_sampling, "capped")
 })
 
 test_that("Contract #9: NO legacy training branch/validator remains in R/", {

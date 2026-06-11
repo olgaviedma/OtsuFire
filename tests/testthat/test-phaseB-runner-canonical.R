@@ -69,7 +69,6 @@ build_runner_phaseB_cfg <- function() {
          envir = helper_env)
   sys.source(.b1_helper, envir = helper_env)
   helper_env$build_b1_phase2_cfg(
-    oof_sampling      = "capped",
     scenario          = "balanced",
     internal_decisions = mk_pb_gpkg(),
     change_index       = mk_pb_tif(),

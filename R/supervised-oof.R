@@ -77,14 +77,13 @@
 #'   explicit argument rather than a config route).
 #' @param labelled_layer Character. Layer name inside `labelled_gpkg`. Default
 #'   `"train_with_folds"`.
-#' @param oof_sampling Character. `"capped"` (default) or `"full"`. Controls the
-#'   OOF diagnostic negative sampling: `"capped"` applies the four bucket caps to
-#'   each fold's outer-train negatives; `"full"` keeps them all. OtsuFire always
-#'   uses a single training procedure: each OUTER fold runs through the shared
-#'   leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
-#'   `scale_pos_weight` fit on the outer-train only, an inner-validation split as
-#'   the sole early-stopping set, a refit on all outer-train rows at
-#'   `best_iteration`, then prediction of the untouched outer-test fold.
+#' @details
+#' OOF uses the same capped negative-sampling policy as the final model, applied
+#' independently within each training fold. Each OUTER fold runs through the
+#' shared leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
+#' `scale_pos_weight` fit on the outer-train only, an inner-validation split as
+#' the sole early-stopping set, a refit on all outer-train rows at
+#' `best_iteration`, then prediction of the untouched outer-test fold.
 #' @param contextual_exclusion_to_burned_ratio,spectral_hard_negative_to_burned_ratio,random_to_burned_ratio,otsu_unburned_to_burned_ratio
 #'   Numeric. The four negative-bucket caps forwarded to the OOF chain so OOF
 #'   sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
@@ -129,7 +128,7 @@
 #' The methodological / training-control arguments here (`nrounds_max`,
 #' `early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
 #' `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
-#' `group_col`, `oof_sampling`) are DEPRECATED COMPATIBILITY
+#' `group_col`) are DEPRECATED COMPATIBILITY
 #' SHIMS. Set these in [build_supervised_burned_config()] instead
 #' (`cfg$train_control`, the single source of truth). A non-`NULL` override of a
 #' canonical-default field emits a deprecation warning of class
@@ -172,7 +171,6 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 nrounds_max = NULL,
                                 early_stop = NULL,
                                 seed_base = NULL,
-                                oof_sampling = NULL,
                                 contextual_exclusion_to_burned_ratio   = NULL,
                                 spectral_hard_negative_to_burned_ratio = NULL,
                                 random_to_burned_ratio                 = NULL,
@@ -253,8 +251,6 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   # hardcoded "block_id" literal in run_dm_oof_pipeline(); that literal is
   # removed and group_col is now threaded from here.
   group_col             <- .shim(group_col,            .tc$group_col,       "group_col")
-  oof_sampling      <- .shim(oof_sampling,      .tc$oof_sampling,      "oof_sampling")
-  oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   if (!is.character(fold_cols) || length(fold_cols) < 1L) {
     stop("'fold_cols' must be a non-empty character vector.", call. = FALSE)
   }
@@ -387,9 +383,9 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     feature_whitelist_override = feature_whitelist_override,
     feature_weights            = feature_weights,
 
-    # Per-fold sampling mode + the 4 cap ratios (the SAME variables forwarded to
-    # FINAL) so the OOF chain carries identical values.
-    oof_sampling      = oof_sampling,
+    # The 4 cap ratios (the SAME variables forwarded to FINAL) so the OOF chain
+    # carries identical values. OOF always uses the capped negative-sampling
+    # policy, applied independently within each training fold (no toggle).
     contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
     spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio                 = random_to_burned_ratio,

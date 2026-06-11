@@ -62,8 +62,11 @@
 # LEGITIMATE (by-design) DIFFERENCES — the contract DOCUMENTS + ALLOWS exactly:
 #   (L1) OOF holds out an OUTER test fold (never in any watchlist / imputation /
 #        selection); FINAL has no outer test fold.
-#   (L2) oof_sampling (capped/full) affects ONLY OOF; FINAL always trains on its
-#        capped L_ok pool (no "full" knob).
+#   (L2) NEGATIVE SAMPLING is shared: OOF uses the SAME capped negative-sampling
+#        policy as FINAL, applied independently within each training fold. There
+#        is NO oof_sampling toggle on any public function or OOF engine (passing
+#        oof_sampling ERRORS); the cfg/audit constant is the fixed label
+#        "capped".
 #   (L3) function-specific SEEDS differ by design: OOF fold_seed =
 #        seed_base + 1000*rep + fold (oof_seed_base); FINAL fold_seed =
 #        final_seed, sampling_seed = final_sampling_seed. The DERIVATION rule is
@@ -297,7 +300,6 @@ run_capture_pair <- function() {
       nrounds_max = 12L, early_stop = 6L, seed_base = 42L, verbose = 0,
       save_prefix = "sym_oof", prefix = "sym_oof", overwrite = TRUE,
       group_col   = "block_id",
-      oof_sampling      = "capped",
       contextual_exclusion_to_burned_ratio   = 0.25,
       spectral_hard_negative_to_burned_ratio = 1.0,
       random_to_burned_ratio                 = 1.0,
@@ -426,11 +428,66 @@ test_that("legitimate difference (L1/L4): OOF holds out an outer fold; FINAL ref
   }
 })
 
-test_that("legitimate difference (L2): oof_sampling is an OOF-only knob (FINAL has no such formal)", {
-  # FINAL engine has NO oof_sampling formal; OOF chain does.
+test_that("symmetry (L2): negative sampling is the SAME capped policy for OOF and FINAL (no oof_sampling toggle)", {
+  # NEITHER the FINAL engine NOR the OOF chain carries an oof_sampling formal:
+  # both apply the SAME capped negative-sampling policy (OOF per training fold).
   expect_false("oof_sampling" %in% names(formals(g_sym("train_final_model_direct"))))
-  expect_true("oof_sampling" %in% names(formals(g_sym("run_dm_oof_pipeline"))))
-  expect_true("oof_sampling" %in% names(formals(g_sym("run_oof_xgb"))))
+  expect_false("oof_sampling" %in% names(formals(g_sym("run_dm_oof_pipeline"))))
+  expect_false("oof_sampling" %in% names(formals(g_sym("run_oof_xgb"))))
+  # No public function exposes the knob, and passing it ERRORS.
+  for (f in c("run_oneyear_supervised_pipeline", "run_oof_diagnostics",
+              "build_supervised_burned_config", "validate_supervised_execution")) {
+    expect_false("oof_sampling" %in% names(formals(g_sym(f))),
+                 info = paste("public still has oof_sampling formal:", f))
+  }
+  # The cfg/audit constant is the fixed traceability label "capped".
+  expect_equal(canon_tc()()$oof_sampling, "capped")
+})
+
+test_that("symmetry (L2): OOF per-fold effective bucket ratios match the configured caps when enough negatives exist", {
+  skip_if_not_installed("xgboost")
+  skip_if_not_installed("Matrix")
+  skip_if_not_installed("dplyr")
+
+  # Run the OOF chain and inspect the per-fold capping audit. The effective
+  # (achieved) ratio per bucket equals the configured cap whenever the available
+  # pool is at least the cap target -- the SAME cap semantics FINAL uses.
+  df <- make_sym_oof_df()
+  oof_engine <- g_sym("run_dm_oof_pipeline")
+  result_dir <- tempfile("sym_oof_caps_")
+  dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(result_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  caps_cfg <- list(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
+  res <- suppressMessages(suppressWarnings(oof_engine(
+    labelled    = df,
+    burned_like = df[df$class == "unburned", , drop = FALSE],
+    labelled_df = df,
+    params      = NULL,
+    result_dir  = result_dir,
+    target_year = 2017L,
+    nrounds_max = 10L, early_stop = 5L, seed_base = 42L, verbose = 0,
+    save_prefix = "sym_caps", prefix = "sym_caps", overwrite = TRUE,
+    group_col   = "block_id",
+    contextual_exclusion_to_burned_ratio   = caps_cfg$contextual,
+    spectral_hard_negative_to_burned_ratio = caps_cfg$spectral,
+    random_to_burned_ratio                 = caps_cfg$random,
+    otsu_unburned_to_burned_ratio          = caps_cfg$otsu,
+    val_frac = 0.15, impute_numeric = "median",
+    impute_factor_missing = "MISSING"
+  )))
+  aud <- res$oof$oof_audit
+  # For each bucket: when the available pool >= ceil(n_burned*cap), the selected
+  # count equals the cap target (effective ratio matches the cap). Otherwise the
+  # whole pool is taken (selected == available). Same semantics as FINAL.
+  chk_bucket <- function(avail, cap_target, selected) {
+    enough <- avail >= cap_target
+    expect_equal(selected[enough],  cap_target[enough])
+    expect_equal(selected[!enough], avail[!enough])
+  }
+  chk_bucket(aud$contextual_available, aud$contextual_cap, aud$contextual_selected)
+  chk_bucket(aud$spectral_available,   aud$spectral_cap,   aud$spectral_selected)
+  chk_bucket(aud$random_bg_available,  aud$random_bg_cap,  aud$random_bg_selected)
+  chk_bucket(aud$otsu_available,       aud$otsu_cap,       aud$otsu_selected)
 })
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# OtsuFire (development version)
+# OtsuFire 0.7.0 (2026-06-11)
 
 ## BREAKING CHANGE — single supervised training procedure
 

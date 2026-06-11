@@ -78,7 +78,7 @@ test_that("PART A: full valid Otsu drop pool flows on (legacy_unburned_sampled =
     legacy_patches_path = lp,
     internal_decisions_path = ip,
     out_gpkg = NULL,
-    use_drop = TRUE, use_review = FALSE, use_keep = FALSE,
+    use_drop = TRUE,
     drop_max_s_patch = 0.15, exclude_buffer_m = 0,
     verbose = FALSE
   )

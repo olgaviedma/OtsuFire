@@ -131,7 +131,6 @@ make_corine_reclass_matrix_unb_legacy <- function() {
 }
 
 source_legacy_unburned_helpers <- function(
-  legacy_code_dir = NULL,
   data_base = NULL,
   result_name = "Min_Min",
   target_year = NULL,
@@ -313,18 +312,15 @@ build_unburned_from_legacy_decisions <- function(
   internal_decisions_path,
   out_gpkg = NULL,
   internal_layer = "internal_decisions",
+  # GATE 6.4 (2026-06-11): `use_drop` is the ONLY Otsu legacy decision that ever
+  # enters the negative pool. The dead `use_review` / `use_keep` /
+  # `review_max_s_patch` / `keep_max_s_patch` parameters were REMOVED: the policy
+  # is fixed (Otsu review/keep are NEVER negatives — they were already excluded
+  # by train_final_model_direct()'s otsu_unburned_exclude_neg_types). `use_drop`
+  # is retained as the live path; it is effectively always TRUE (there is no
+  # alternative decision to enter the pool).
   use_drop = TRUE,
-  # AS12 (0.3.0): defaults for review/keep flipped to FALSE so the
-  # legacy pool only carries patches that the training stage actually
-  # consumes. Review and keep rows are excluded by
-  # `train_final_model_direct()`'s
-  # `otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep")`,
-  # so any sampling budget spent on them was wasted.
-  use_review = FALSE,
-  use_keep = FALSE,
   drop_max_s_patch = 0.15,
-  review_max_s_patch = 0.45,
-  keep_max_s_patch = 0.70,
   exclude_buffer_m = 0,
   min_area_ha = 0,
   # D4a (2026-06-05): when the Otsu legacy pool is empty after sanitisation,
@@ -389,20 +385,12 @@ build_unburned_from_legacy_decisions <- function(
 
   pieces <- list()
 
+  # GATE 6.4 (2026-06-11): only the `drop` decision enters the negative pool.
+  # The review/keep branches were removed (Otsu review/keep are never negatives).
   if (isTRUE(use_drop)) {
     pieces$drop <- legacy |>
       dplyr::filter(.data$DECISION == "drop") |>
       dplyr::filter(is.finite(.data$S_PATCH_PA), .data$S_PATCH_PA <= drop_max_s_patch)
-  }
-  if (isTRUE(use_review)) {
-    pieces$review <- legacy |>
-      dplyr::filter(.data$DECISION == "review") |>
-      dplyr::filter(is.finite(.data$S_PATCH_PA), .data$S_PATCH_PA <= review_max_s_patch)
-  }
-  if (isTRUE(use_keep)) {
-    pieces$keep <- legacy |>
-      dplyr::filter(.data$DECISION == "keep") |>
-      dplyr::filter(is.finite(.data$S_PATCH_PA), .data$S_PATCH_PA <= keep_max_s_patch)
   }
 
   pieces <- pieces[vapply(pieces, nrow, integer(1)) > 0]
@@ -503,8 +491,6 @@ build_unburned_from_legacy_decisions <- function(
     legacy_path = legacy_patches_path,
     internal_path = internal_decisions_path,
     drop_max_s_patch = drop_max_s_patch,
-    review_max_s_patch = review_max_s_patch,
-    keep_max_s_patch = keep_max_s_patch,
     exclude_buffer_m = exclude_buffer_m,
     min_area_ha = min_area_ha,
     n_unburned_pool = nrow(combined),
@@ -713,7 +699,6 @@ build_unburned_from_legacy_pipeline <- function(
   composite_base = NULL,
   severity_raster_path = NULL,
   internal_decisions_path = NULL,
-  legacy_code_dir = NULL,
   otsu_mode = c("burnable_only", "corine"),
   # AS01 (0.3.0): NULL by default. Plumbed from config$tool_paths via the
   # dispatcher. The downstream `process_otsu_rasters_()` call asserts
@@ -736,12 +721,11 @@ build_unburned_from_legacy_pipeline <- function(
   drop_lo = 0.15,
   dist_mode = "centroid",
   near_mode = "centroid",
+  # GATE 6.4 (2026-06-11): only `use_drop` enters the negative pool; the dead
+  # use_review / use_keep / review_max_s_patch / keep_max_s_patch params were
+  # removed (Otsu review/keep are never negatives).
   use_drop = TRUE,
-  use_review = TRUE,
-  use_keep = TRUE,
   drop_max_s_patch = 0.15,
-  review_max_s_patch = 0.45,
-  keep_max_s_patch = 0.70,
   exclude_buffer_m = 0,
   min_area_ha = 0,
   reuse_existing = TRUE,
@@ -795,7 +779,6 @@ build_unburned_from_legacy_pipeline <- function(
   }
 
   helper_files <- source_legacy_unburned_helpers(
-    legacy_code_dir = legacy_code_dir,
     data_base = data_base,
     result_name = result_name,
     target_year = target_year,
@@ -959,11 +942,7 @@ build_unburned_from_legacy_pipeline <- function(
     dist_mode                = dist_mode,
     near_mode                = near_mode,
     use_drop                 = use_drop,
-    use_review               = use_review,
-    use_keep                 = use_keep,
     drop_max_s_patch         = drop_max_s_patch,
-    review_max_s_patch       = review_max_s_patch,
-    keep_max_s_patch         = keep_max_s_patch,
     exclude_buffer_m         = exclude_buffer_m,
     min_area_ha              = min_area_ha,
     one_year_tif             = one_year_tif,
@@ -1115,11 +1094,7 @@ build_unburned_from_legacy_pipeline <- function(
     internal_decisions_path = internal_decisions_path,
     out_gpkg = if (isTRUE(write_unburned)) unburned_out_gpkg else NULL,
     use_drop = use_drop,
-    use_review = use_review,
-    use_keep = use_keep,
     drop_max_s_patch = drop_max_s_patch,
-    review_max_s_patch = review_max_s_patch,
-    keep_max_s_patch = keep_max_s_patch,
     exclude_buffer_m = exclude_buffer_m,
     min_area_ha = min_area_ha,
     allow_empty_otsu_pool = allow_empty_otsu_pool,

@@ -114,7 +114,8 @@ CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 # the dispatcher no longer injects it.
 
 UNB_VERBOSE  <- TRUE
-UNB_LEGACY_CODE_DIR <- NULL  # injected by dispatcher
+# GATE 6.4 (2026-06-11): `UNB_LEGACY_CODE_DIR` placeholder removed (legacy
+# helpers are in-package; no live consumer).
 
 # Shared deterministic-decision negative parameters (det drops + random background;
 # used by all_sources' build_unburned_from_deterministic_decisions() call).
@@ -138,15 +139,11 @@ UNB_LEGACY_DIST_POWER <- 1
 UNB_LEGACY_KEEP_HI <- 0.45
 UNB_LEGACY_DROP_LO <- 0.15
 UNB_LEGACY_USE_DROP <- TRUE
-# AS12 (0.3.0): defaults flipped to FALSE so review/keep rows do not
-# enter the legacy pool. They were unconditionally excluded by
-# `train_final_model_direct()` anyway, so the previous TRUE defaults
-# wasted budget on rows the trainer dropped.
-UNB_LEGACY_USE_REVIEW <- FALSE
-UNB_LEGACY_USE_KEEP <- FALSE
+# GATE 6.4 (2026-06-11): the dead `UNB_LEGACY_USE_REVIEW` / `UNB_LEGACY_USE_KEEP`
+# / `UNB_LEGACY_REVIEW_MAX_S_PATCH` / `UNB_LEGACY_KEEP_MAX_S_PATCH` placeholders
+# were removed (Otsu review/keep are never negatives — they were already excluded
+# by train_final_model_direct()). Only the `drop` path remains.
 UNB_LEGACY_DROP_MAX_S_PATCH <- 0.15
-UNB_LEGACY_REVIEW_MAX_S_PATCH <- 0.45
-UNB_LEGACY_KEEP_MAX_S_PATCH <- 0.70
 # GATE 6.2 (2026-06-11): `UNB_LEGACY_SAMPLE_N` / `UNB_LEGACY_SAMPLE_PROPS` /
 # `UNB_LEGACY_RANDOM_SEED` placeholders removed with the Otsu generation-side
 # pre-thinning. cap_otsu (otsu_unburned_to_burned_ratio) is the sole Otsu
@@ -781,9 +778,9 @@ run_supervised_pipeline <- function(target_year, scenario,
   #     dispatcher). The stage resolves the deterministic decisions path, every
   #     UNB_* / UNB_LEGACY_* parameter and the four tool paths straight from
   #     config (same defaults as .of_supervised_engine_bindings()), so the two
-  #     unburned-builder calls, their seeds (UNB_RANDOM_SEED /
-  #     UNB_LEGACY_RANDOM_SEED, both 42) and the det-then-legacy call ordering
-  #     are unchanged -> identical RNG stream + sampled negatives.
+  #     unburned-builder calls, the random-background seed (UNB_RANDOM_SEED = 42;
+  #     GATE 6.2 removed the legacy-Otsu sampling seed) and the det-then-legacy
+  #     call ordering are unchanged -> identical RNG stream + random negatives.
   #   * deterministic_decisions = NULL so the stage uses the canonical
   #     config$inputs$internal_decisions path (== the orchestrator's
   #     internal_decisions_gpkg, the single source of truth).

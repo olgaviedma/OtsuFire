@@ -59,7 +59,8 @@
     # only former reader, the common_unb_dir selection, is hardwired to the
     # all_sources path), so nothing needs to be threaded here.
     UNB_VERBOSE              = config$options$unb_verbose %||% TRUE,
-    UNB_LEGACY_CODE_DIR      = config$options$legacy_code_dir,
+    # GATE 6.4 (2026-06-11): `UNB_LEGACY_CODE_DIR` (legacy_code_dir) binding
+    # removed — the legacy helpers are in-package, so it had no live consumer.
     # B2 (2026-06-05): shared deterministic-decision negative parameters
     # (det drops + random burnable background). Previously pinned at the
     # orchestrator placeholders; now overridable via config$options with the
@@ -99,16 +100,16 @@
     # selector; the full valid Otsu drop pool flows into the negative pool.
     UNB_LEGACY_REUSE_EXISTING = config$options$legacy_reuse_existing %||% TRUE,
     UNB_LEGACY_WRITE_OUTPUT   = config$options$legacy_write_output %||% TRUE,
+    # GATE 6.4 (2026-06-11): only `legacy_use_drop` (the live path) is exposed.
+    # The dead `legacy_use_review` / `legacy_use_keep` / `legacy_review_max_s_patch`
+    # / `legacy_keep_max_s_patch` bindings were removed (Otsu review/keep are
+    # never negatives).
     UNB_LEGACY_USE_DROP      = config$options$legacy_use_drop   %||% TRUE,
-    UNB_LEGACY_USE_REVIEW    = config$options$legacy_use_review %||% FALSE,
-    UNB_LEGACY_USE_KEEP      = config$options$legacy_use_keep   %||% FALSE,
-    # AS03 (0.3.0): expose the three S_PATCH caps. Other UNB_LEGACY_* parameters
+    # AS03 (0.3.0): expose the drop S_PATCH cap. Other UNB_LEGACY_* parameters
     # remain pinned at orchestrator defaults. GATE 6.2 (2026-06-11):
     # `UNB_LEGACY_RANDOM_SEED` (legacy_random_seed) removed — it seeded ONLY the
     # now-deleted Otsu generation-side pre-thinning.
     UNB_LEGACY_DROP_MAX_S_PATCH   = config$options$legacy_drop_max_s_patch   %||% 0.15,
-    UNB_LEGACY_REVIEW_MAX_S_PATCH = config$options$legacy_review_max_s_patch %||% 0.45,
-    UNB_LEGACY_KEEP_MAX_S_PATCH   = config$options$legacy_keep_max_s_patch   %||% 0.70,
     # AS01 (0.3.0): plumb external-tool paths from config$tool_paths.
     # Default NULL — the legacy pipeline stops with a clear message if a
     # path it needs is missing, instead of falling through to a hard-coded

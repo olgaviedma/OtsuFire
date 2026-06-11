@@ -73,8 +73,6 @@ test_that("AS09: legacy pool keeps a single canonical area_ha column", {
     internal_decisions_path = internal_path,
     out_gpkg                = NULL,
     use_drop                = TRUE,
-    use_review              = FALSE,
-    use_keep                = FALSE,
     exclude_buffer_m        = 0,
     verbose                 = FALSE
   )

@@ -341,7 +341,6 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     final_early_stopping_rounds,
                                     final_impute_numeric,
                                     final_impute_factor_missing,
-                                    training_protocol,
                                     oof_sampling,
                                     # Precision 2 (2026-06-07): spectral cap
                                     # resolved at the public boundary, used by the
@@ -359,7 +358,7 @@ run_supervised_pipeline <- function(target_year, scenario,
             "final_sampling_seed", "final_seed", "final_val_frac",
             "final_group_col", "final_nrounds_max", "final_early_stopping_rounds",
             "final_impute_numeric", "final_impute_factor_missing",
-            "training_protocol", "oof_sampling")
+            "oof_sampling")
   for (.nm in .req) {
     if (eval(call("missing", as.name(.nm)))) {
       stop("run_supervised_pipeline(): required resolved arg '", .nm,
@@ -368,7 +367,6 @@ run_supervised_pipeline <- function(target_year, scenario,
            call. = FALSE)
     }
   }
-  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
 
   # BUG 3 Phase 1b (2026-06-05): explicit engine bindings.
@@ -703,7 +701,6 @@ run_supervised_pipeline <- function(target_year, scenario,
       target_year                = target_year,
       reuse_upstream             = reuse_upstream,
       feature_whitelist_override = feature_whitelist_override,
-      training_protocol          = training_protocol,
       oof_sampling               = oof_sampling,
       data_base                  = data_base,
       composite_base             = composite_base,
@@ -1078,9 +1075,8 @@ run_supervised_pipeline <- function(target_year, scenario,
         # Precision 1 (2026-06-07): shims already resolved at the public
         # boundary; suppress a second deprecation warning here.
         .internal_resolved = TRUE,
-        # B1 (2026-06-07): protocol + per-fold sampling + the SAME 4 cap ratios
-        # forwarded to FINAL (so OOF and FINAL see identical caps).
-        training_protocol = training_protocol,
+        # Per-fold sampling mode + the SAME 4 cap ratios forwarded to FINAL
+        # (so OOF and FINAL see identical caps).
         oof_sampling      = oof_sampling,
         contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
         spectral_hard_negative_to_burned_ratio = spectral_hard_negative_to_burned_ratio,
@@ -1129,13 +1125,9 @@ run_supervised_pipeline <- function(target_year, scenario,
         early_stopping_rounds      = final_early_stopping_rounds,
         impute_numeric             = final_impute_numeric,
         impute_factor_missing      = final_impute_factor_missing,
-        # B1 (2026-06-07): same protocol toggle as the OOF stage.
-        training_protocol          = training_protocol,
         # Gate 1E (2026-06-09): thread the CANONICAL OOF structural feature-schema
         # fingerprint into the FINAL refit so it ASSERTS its own structural
         # contract == the OOF contract BEFORE training/saving (ERROR on mismatch).
-        # NULL on the legacy OOF path (no per-fold recipe to fingerprint), in
-        # which case FINAL still computes + persists its own fingerprint.
         canonical_oof_fingerprint  =
           if (!is.null(pipe1$schema_guard)) pipe1$schema_guard$canonical else NULL,
         labelled_layer = "train_features",
@@ -1177,9 +1169,9 @@ run_supervised_pipeline <- function(target_year, scenario,
     # Gate 1E (2026-06-09): runtime feature-schema PARITY MANIFEST + Phase B
     # abort. Assemble the OOF (per-fold + canonical) / FINAL / scoring structural
     # fingerprints, the n_base/n_indicators/n_total counts, the contract version
-    # and the guard RESULT into the run summary the package writes. For the
-    # Phase B (nested_refit) path the run ABORTS here if the three legs are not
-    # compatible. The OOF (per-fold equality + canonical), FINAL (vs canonical)
+    # and the guard RESULT into the run summary the package writes. The run
+    # ABORTS here if the three legs are not compatible. The OOF (per-fold
+    # equality + canonical), FINAL (vs canonical)
     # and scoring (vs saved FINAL) assertions already fired upstream; this is the
     # consolidated record + the cross-leg Phase B gate.
     schema_parity_manifest <- time_step("C3 feature-schema parity manifest", {
@@ -1187,7 +1179,9 @@ run_supervised_pipeline <- function(target_year, scenario,
         oof_guard  = pipe1$schema_guard,
         final_fp   = pipe2$train$schema_fingerprint,
         scoring_fp = pipe2$score$scoring_schema_fingerprint,
-        phase_b    = identical(training_protocol, "nested_refit")
+        # OtsuFire always runs the leakage-free protocol (per-fold refit recipe
+        # fingerprints), so the cross-leg schema-parity gate is always enforced.
+        phase_b    = TRUE
       )
       manifest_path <- file.path(dirs$`07_FINAL_MODEL_V2`,
                                  paste0(prefix_oof, "_feature_schema_parity.txt"))
@@ -1207,7 +1201,7 @@ run_supervised_pipeline <- function(target_year, scenario,
           if (length(mani$oof_per_fold_fingerprints)) {
             paste0(names(mani$oof_per_fold_fingerprints), ": ",
                    mani$oof_per_fold_fingerprints)
-          } else "none (legacy OOF path)"
+          } else "none"
         ), con = manifest_path)
       }
       mani$manifest_path <- manifest_path

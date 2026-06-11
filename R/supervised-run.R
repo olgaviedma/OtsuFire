@@ -108,25 +108,21 @@
 #'   FINAL model: `"median"` (default) or `"zero"`.
 #' @param final_impute_factor_missing Character. Sentinel level for missing
 #'   factor/character values in the FINAL model. Default `"MISSING"`.
-#' @param training_protocol Character. Supervised training protocol, one of
-#'   `"legacy"` (default) or `"nested_refit"`. `"legacy"` reproduces the
-#'   historical OOF + FINAL behaviour byte-for-byte. `"nested_refit"` opts into
-#'   the leakage-free protocol (B1, 2026-06-07) used IDENTICALLY by the OOF and
-#'   FINAL stages via one shared internal core: medians and `scale_pos_weight`
-#'   are fit on the training rows only, an inner validation split is the sole
-#'   early-stopping set, and a fresh model is refit on all training rows at the
-#'   selected `best_iteration` before deployment. Opt-in; the production default
-#'   is unchanged.
 #' @param oof_sampling Character. OOF per-fold negative sampling mode, one of
-#'   `"capped"` (default) or `"full"`. Only active under
-#'   `training_protocol = "nested_refit"`: `"capped"` applies the SAME four
-#'   bucket caps the FINAL model uses to the outer-train negatives of each fold;
-#'   `"full"` uses all outer-train rows. Ignored on the legacy path.
+#'   `"capped"` (default) or `"full"`: `"capped"` applies the SAME four bucket
+#'   caps the FINAL model uses to the outer-train negatives of each fold;
+#'   `"full"` uses all outer-train rows. This controls only the OOF diagnostic
+#'   negative sampling, not the training procedure. OtsuFire always uses a single
+#'   training procedure (no protocol toggle): the OOF and FINAL stages share one
+#'   internal core — medians and `scale_pos_weight` are fit on the training rows
+#'   only, an inner validation split is the sole early-stopping set, and a fresh
+#'   model is refit on all training rows at the selected `best_iteration` before
+#'   deployment.
 #'
 #' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
 #' The methodological / training-control arguments of this function (the four
 #' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
-#' `oof_*` / `final_*` training knobs, `training_protocol`, `oof_sampling`) are
+#' `oof_*` / `final_*` training knobs, `oof_sampling`) are
 #' DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
 #' methodological parameter is [build_supervised_burned_config()]
 #' (`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
@@ -160,7 +156,7 @@
 #' [build_supervised_burned_config()] (`cfg$model_params` and
 #' `cfg$train_control`). Every methodological argument of this function (the
 #' four `*_to_burned_ratio` caps, `feature_whitelist_override`,
-#' `feature_weights`, the `oof_*` / `final_*` training knobs, `training_protocol`
+#' `feature_weights`, the `oof_*` / `final_*` training knobs
 #' and `oof_sampling`) now DEFAULTS TO `NULL`, meaning "use the value resolved on
 #' the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
 #' explicit argument > cfg) and is written through to BOTH the OOF and FINAL
@@ -260,7 +256,6 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
                                             final_early_stopping_rounds            = NULL,
                                             final_impute_numeric                   = NULL,
                                             final_impute_factor_missing            = NULL,
-                                            training_protocol                      = NULL,
                                             oof_sampling                           = NULL,
                                             ...) {
   if (!inherits(config, "otsufire_supervised_burned_config")) {
@@ -273,6 +268,10 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
   # migration message. Checked BEFORE the Gate 1B cfg resolution so the
   # migration message wins over the train_control validation for stale calls.
   .dots <- list(...)
+  if ("training_protocol" %in% names(.dots)) {
+    stop("training_protocol is no longer an argument; OtsuFire always uses ",
+         "inner-early-stopping selection + full-data refit.", call. = FALSE)
+  }
   if ("additional_drop_cols" %in% names(.dots) ||
       "extra_drop_cols" %in% names(.dots)) {
     stop(
@@ -328,9 +327,7 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
   final_early_stopping_rounds            <- .shim(final_early_stopping_rounds,            .tc$early_stop,      "early_stop",     "final_early_stopping_rounds")
   final_impute_numeric                   <- .shim(final_impute_numeric,                   .tc$impute_numeric,  "impute_numeric", "final_impute_numeric")
   final_impute_factor_missing            <- .shim(final_impute_factor_missing,            .tc$impute_factor_missing, "impute_factor_missing", "final_impute_factor_missing")
-  training_protocol                      <- .shim(training_protocol,                      .tc$training_protocol, "training_protocol", "training_protocol")
   oof_sampling                           <- .shim(oof_sampling,                           .tc$oof_sampling,    "oof_sampling",   "oof_sampling")
-  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   # Precision 1 condition 6: the resolved-params provenance record (cfg value /
   # requested override / resolved value / provenance label per methodological
@@ -396,9 +393,7 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
                                      final_early_stopping_rounds            = final_early_stopping_rounds,
                                      final_impute_numeric                   = final_impute_numeric,
                                      final_impute_factor_missing            = final_impute_factor_missing,
-                                     # B1 (2026-06-07): forward the protocol
-                                     # toggle + OOF sampling mode.
-                                     training_protocol                      = training_protocol,
+                                     # Forward the OOF diagnostic sampling mode.
                                      oof_sampling                           = oof_sampling,
                                      # Precision 2 (2026-06-07): the spectral cap
                                      # RESOLVED at this boundary (cfg value with

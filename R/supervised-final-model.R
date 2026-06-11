@@ -19,6 +19,15 @@
 #' run.
 #'
 #' @details
+#' OtsuFire uses a single training procedure (no protocol toggle): the FINAL
+#' model is selected via an inner train/validation split with xgboost early
+#' stopping to choose `best_iteration`, then a fresh model is REFIT on ALL
+#' labelled rows at that `best_iteration`. The deployed/saved model, recipe,
+#' feature order, fingerprint and effective params are always the REFIT model
+#' (never the selection-time model). The OOF diagnostics stage applies the SAME
+#' procedure per outer fold, so OOF and FINAL share the identical training core
+#' ([.of_nested_refit_fit()]).
+#'
 #' The four `*_to_burned_ratio` caps, `feature_whitelist_override`, and
 #' `feature_weights` are forwarded verbatim to [train_final_model_direct()].
 #' Their defaults reproduce the historical behaviour byte-for-byte. The
@@ -80,11 +89,6 @@
 #'   [train_final_model_direct()]: `"median"` (default) or `"zero"`.
 #' @param impute_factor_missing Character. Sentinel level used for missing
 #'   factor/character values. Default `"MISSING"`.
-#' @param training_protocol Character. `"legacy"` (default) or `"nested_refit"`.
-#'   Forwarded to [train_final_model_direct()]. `"legacy"` reproduces the
-#'   historical FINAL model byte-for-byte; `"nested_refit"` routes through the
-#'   shared leakage-free core (B1, 2026-06-07) and DEPLOYS the model refit on
-#'   all training rows at the selected `best_iteration`.
 #' @param labelled_layer Character. Layer name read from `train_features` when
 #'   it is a GPKG path. Default `"train_features"`.
 #' @param out_dir Character or `NULL`. Output folder for the
@@ -126,7 +130,7 @@
 #' The methodological / training-control arguments here (the four
 #' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`,
 #' `sampling_seed`, `seed`, `val_frac`, `group_col`, `nrounds_max`,
-#' `early_stopping_rounds`, `impute_*`, `training_protocol`) are DEPRECATED
+#' `early_stopping_rounds`, `impute_*`) are DEPRECATED
 #' COMPATIBILITY SHIMS. Set these in [build_supervised_burned_config()] instead
 #' (`cfg$train_control` / `cfg$model_params`, the single source of truth). A
 #' non-`NULL` override of a canonical-default field emits a deprecation warning
@@ -172,7 +176,6 @@ train_final_burned_model <- function(
     early_stopping_rounds = NULL,
     impute_numeric = NULL,
     impute_factor_missing = NULL,
-    training_protocol = NULL,
     labelled_layer = "train_features",
     out_dir = NULL,
     # Gate 1E (2026-06-09): the CANONICAL OOF structural feature-schema
@@ -245,8 +248,6 @@ train_final_burned_model <- function(
   early_stopping_rounds <- .shim(early_stopping_rounds, .tc$early_stop,      "early_stop", "early_stopping_rounds")
   impute_numeric        <- .shim(impute_numeric,        .tc$impute_numeric,  "impute_numeric")
   impute_factor_missing <- .shim(impute_factor_missing, .tc$impute_factor_missing, "impute_factor_missing")
-  training_protocol     <- .shim(training_protocol,     .tc$training_protocol, "training_protocol")
-  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   if (!is.null(oof_agg) &&
       !(is.character(oof_agg) && length(oof_agg) == 1L)) {
     stop("'oof_agg' must be NULL or a single CSV path.", call. = FALSE)
@@ -341,7 +342,6 @@ train_final_burned_model <- function(
     early_stopping_rounds                  = early_stopping_rounds,
     impute_numeric                         = impute_numeric,
     impute_factor_missing                  = impute_factor_missing,
-    training_protocol                      = training_protocol,
     # Gate 1E (2026-06-09): the canonical OOF structural fingerprint to assert
     # the FINAL refit against (pre-train/save). NULL = standalone FINAL.
     canonical_oof_fingerprint              = canonical_oof_fingerprint,

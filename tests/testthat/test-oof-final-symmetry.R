@@ -278,8 +278,7 @@ run_capture_pair <- function() {
       sampling_seed = 42L, group_col = "block_id", val_frac = 0.15,
       seed = 42L, nrounds_max = 12L, early_stopping_rounds = 6L,
       impute_numeric = "median", impute_factor_missing = "MISSING",
-      model_params_base = canon_mp()(),
-      training_protocol = "nested_refit"
+      model_params_base = canon_mp()()
     )))
   })
 
@@ -298,7 +297,6 @@ run_capture_pair <- function() {
       nrounds_max = 12L, early_stop = 6L, seed_base = 42L, verbose = 0,
       save_prefix = "sym_oof", prefix = "sym_oof", overwrite = TRUE,
       group_col   = "block_id",
-      training_protocol = "nested_refit",
       oof_sampling      = "capped",
       contextual_exclusion_to_burned_ratio   = 0.25,
       spectral_hard_negative_to_burned_ratio = 1.0,

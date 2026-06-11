@@ -29,8 +29,7 @@
 #   12 an UNKNOWN categorical level -> recipe policy (not silently invented)
 #   13 save/load/predict round-trip (persist model+recipe, reload, identical)
 #   14 EXACT row + ID preservation (predictions == polygons; order/ids kept)
-#   15 parity with training_protocol = "legacy"
-#   16 parity with training_protocol = "nested_refit"
+#   15 the single FINAL protocol deploys the SAME shared feature space as OOF
 #   17 SAME feature-weights policy for `_isNA` indicators in OOF and FINAL
 #   18 the OUTER TEST is excluded from the recipe fit (medians/levels/indicators
 #      fit on outer_train only)
@@ -408,11 +407,11 @@ test_that("[14] EXACT row + ID preservation (predictions == polygons; order/ids 
 })
 
 # ---------------------------------------------------------------------------
-# (15)+(16) PROTOCOL PARITY: legacy AND nested_refit deploy the SAME shared
-#      feature space (base + `_isNA`); only the training PROCEDURE differs.
-#      Driven through the REAL FINAL engine on a GPKG built from one raw frame.
+# (15) The single FINAL training procedure deploys the SAME shared feature space
+#      (base + `_isNA`) as the standalone core / OOF. Driven through the REAL
+#      FINAL engine on a GPKG built from one raw frame.
 # ---------------------------------------------------------------------------
-test_that("[15][16] legacy and nested_refit FINAL protocols share the SAME feature space", {
+test_that("[15] the single FINAL protocol shares the SAME feature space as OOF", {
   skip_if_not_installed("sf"); skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix"); skip_if_not_installed("dplyr")
   df <- sc_isna_upstream_df(n = 60L, seed = 11L)
@@ -427,29 +426,20 @@ test_that("[15][16] legacy and nested_refit FINAL protocols share the SAME featu
                quiet = TRUE, delete_dsn = TRUE)
 
   engine <- ip("train_final_model_direct")
-  common <- list(
+  res_nst <- suppressMessages(suppressWarnings(engine(
     labelled_gpkg = g, labelled_layer = "train_features",
-    out_dir = NULL, overwrite = TRUE, verbose = FALSE,
+    out_dir = NULL, overwrite = TRUE, verbose = FALSE, prefix = "nst",
     contextual_exclusion_to_burned_ratio = 1,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42L, group_col = "block_id", val_frac = 0.2,
     seed = 42L, nrounds_max = 8L, early_stopping_rounds = 4L,
     impute_numeric = "median", impute_factor_missing = "MISSING",
-    model_params_base = ip(".of_canonical_model_params")())
+    model_params_base = ip(".of_canonical_model_params")())))
 
-  res_leg <- suppressMessages(suppressWarnings(do.call(engine,
-    c(common, list(prefix = "leg", training_protocol = "legacy")))))      # (15)
-  res_nst <- suppressMessages(suppressWarnings(do.call(engine,
-    c(common, list(prefix = "nst", training_protocol = "nested_refit")))))# (16)
-
-  # SAME deployed feature space (base + `_isNA`), SAME order.
-  expect_identical(res_leg$x_cols, res_nst$x_cols)
-  expect_identical(res_leg$feature_cols, res_nst$feature_cols)
-  expect_true(length(sc_isna_of(res_leg$x_cols)) > 0L)
+  # Deployed feature space (base + `_isNA`).
   expect_true(length(sc_isna_of(res_nst$x_cols)) > 0L)
-  # And both match the standalone-core / OOF feature space from the same frame.
-  expect_identical(res_leg$x_cols, sc_oof_model_cols_from(df))
+  # Matches the standalone-core / OOF feature space from the same frame.
   expect_identical(res_nst$x_cols, sc_oof_model_cols_from(df))
 })
 

@@ -69,7 +69,6 @@ build_runner_phaseB_cfg <- function() {
          envir = helper_env)
   sys.source(.b1_helper, envir = helper_env)
   helper_env$build_b1_phase2_cfg(
-    training_protocol = "nested_refit",
     oof_sampling      = "capped",
     scenario          = "balanced",
     internal_decisions = mk_pb_gpkg(),
@@ -124,13 +123,13 @@ test_that("Phase B runner cfg: spectral cap 2.0 with provenance 'user'", {
   expect_equal(cfg$train_control$caps$contextual, 0.25)
   expect_equal(cfg$train_control$caps$random, 1.0)
   expect_equal(cfg$train_control$caps$otsu, 1.0)
-  # protocol + sampling are the Config B axes, set via the builder.
+  # sampling is a Config B axis, set via the builder. training_protocol is now a
+  # fixed internal constant (single training procedure, not a builder argument).
   expect_equal(cfg$train_control$training_protocol, "nested_refit")
   expect_equal(cfg$train_control$oof_sampling, "capped")
-  # provenance: the cap + protocol came from the builder (user), not a default.
+  # provenance: the cap came from the builder (user), not a default.
   prov <- cfg$resolved_params_provenance$train_control
   expect_equal(prov$cap_spectral, "user")
-  expect_equal(prov$training_protocol, "user")
 })
 
 # ---------------------------------------------------------------------------

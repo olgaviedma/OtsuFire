@@ -102,11 +102,11 @@ test_that("_isNA companion set + x_cols are IDENTICAL across OOF, FINAL and SCOR
 })
 
 # ---------------------------------------------------------------------------
-# (3) legacy == nested_refit feature space: the two TRAINING PROTOCOLS share the
-#     SAME shared recipe / feature space (only the training procedure differs).
-#     Driven through the real FINAL engine on a GPKG built from the raw frame.
+# (3) The single FINAL training procedure deploys the SAME shared recipe /
+#     feature space (base + `_isNA`) as the standalone core. Driven through the
+#     real FINAL engine on a GPKG built from the raw frame.
 # ---------------------------------------------------------------------------
-test_that("legacy and nested_refit FINAL protocols yield the SAME feature space (one upstream frame)", {
+test_that("the single FINAL protocol deploys the shared feature space (one upstream frame)", {
   skip_if_not_installed("sf"); skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix"); skip_if_not_installed("dplyr")
 
@@ -122,29 +122,21 @@ test_that("legacy and nested_refit FINAL protocols yield the SAME feature space 
                quiet = TRUE, delete_dsn = TRUE)
 
   engine <- g_ip("train_final_model_direct")
-  common <- list(
+  res_nst <- suppressMessages(suppressWarnings(engine(
     labelled_gpkg = g, labelled_layer = "train_features",
-    out_dir = NULL, overwrite = TRUE, verbose = FALSE,
+    out_dir = NULL, overwrite = TRUE, verbose = FALSE, prefix = "nst",
     contextual_exclusion_to_burned_ratio = 1,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42L, group_col = "block_id", val_frac = 0.2,
     seed = 42L, nrounds_max = 8L, early_stopping_rounds = 4L,
     impute_numeric = "median", impute_factor_missing = "MISSING",
-    model_params_base = g_ip(".of_canonical_model_params")())
+    model_params_base = g_ip(".of_canonical_model_params")())))
 
-  res_leg <- suppressMessages(suppressWarnings(do.call(engine,
-    c(common, list(prefix = "leg", training_protocol = "legacy")))))
-  res_nst <- suppressMessages(suppressWarnings(do.call(engine,
-    c(common, list(prefix = "nst", training_protocol = "nested_refit")))))
-
-  # Both protocols deploy the SAME shared feature space (base + `_isNA`).
-  expect_setequal(res_leg$x_cols, res_nst$x_cols)
-  expect_setequal(res_leg$feature_cols, res_nst$feature_cols)
-  expect_true(length(isna_of(res_leg$x_cols)) > 0L)
+  # The FINAL model deploys the SAME shared feature space (base + `_isNA`).
   expect_true(length(isna_of(res_nst$x_cols)) > 0L)
   # And it matches the standalone-core feature space derived above.
-  expect_setequal(res_leg$x_cols, final_x_cols_from(df))
+  expect_setequal(res_nst$x_cols, final_x_cols_from(df))
 })
 
 # ---------------------------------------------------------------------------

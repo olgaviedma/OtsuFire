@@ -15,7 +15,6 @@ run_oof_diagnostics(
   nrounds_max = NULL,
   early_stop = NULL,
   seed_base = NULL,
-  training_protocol = NULL,
   oof_sampling = NULL,
   contextual_exclusion_to_burned_ratio = NULL,
   spectral_hard_negative_to_burned_ratio = NULL,
@@ -77,17 +76,14 @@ per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
 Default `42` (the canonical seed; the FINAL stage seeds were moved
 `999` -> `42` to match). User-overridable.}
 
-\item{training_protocol}{Character. `"legacy"` (default) or `"nested_refit"`.
-Forwarded to [run_dm_oof_pipeline()]. `"legacy"` reproduces the historical
-OOF byte-for-byte; `"nested_refit"` runs each OUTER fold through the shared
-leakage-free core (B1, 2026-06-07): per-fold medians + `scale_pos_weight`
-fit on the outer-train only, an inner-validation split as the sole
-early-stopping set, a refit on all outer-train rows at `best_iteration`,
-and prediction of the untouched outer-test fold.}
-
-\item{oof_sampling}{Character. `"capped"` (default) or `"full"`. Only active
-under `training_protocol = "nested_refit"`: `"capped"` applies the four
-bucket caps to each fold's outer-train negatives; `"full"` keeps them all.}
+\item{oof_sampling}{Character. `"capped"` (default) or `"full"`. Controls the
+OOF diagnostic negative sampling: `"capped"` applies the four bucket caps to
+each fold's outer-train negatives; `"full"` keeps them all. OtsuFire always
+uses a single training procedure: each OUTER fold runs through the shared
+leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
+`scale_pos_weight` fit on the outer-train only, an inner-validation split as
+the sole early-stopping set, a refit on all outer-train rows at
+`best_iteration`, then prediction of the untouched outer-test fold.}
 
 \item{contextual_exclusion_to_burned_ratio, spectral_hard_negative_to_burned_ratio, random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric. The four negative-bucket caps forwarded to the OOF chain so OOF
 sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
@@ -188,7 +184,7 @@ both knobs are part of the signature.
 The methodological / training-control arguments here (`nrounds_max`,
 `early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
 `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
-`group_col`, `training_protocol`, `oof_sampling`) are DEPRECATED COMPATIBILITY
+`group_col`, `oof_sampling`) are DEPRECATED COMPATIBILITY
 SHIMS. Set these in [build_supervised_burned_config()] instead
 (`cfg$train_control`, the single source of truth). A non-`NULL` override of a
 canonical-default field emits a deprecation warning of class

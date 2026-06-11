@@ -49,14 +49,6 @@ train_final_model_direct <- function(
     # spw it computes from its own training split. The engine no longer holds
     # its own methodological xgb defaults.
     model_params_base,
-    # B1 (2026-06-07): training protocol toggle. "legacy" (default) keeps the
-    # EXACT historical behaviour byte-identical (impute over all L_ok, group
-    # split, ONE xgb.train with early stopping on dval, deploy the tr_idx-only
-    # model). "nested_refit" routes through the shared leakage-free core
-    # (.of_nested_refit_fit): medians fit on the inner-train only, inner-val is
-    # the only early-stopping set, then a fresh model is REFIT on ALL of L_ok at
-    # best_iteration and deployed with the refit medians. Opt-in only.
-    training_protocol = c("legacy", "nested_refit"),
     out_dir = NULL,
     prefix = "2022_patch_certified_v2",
     overwrite = TRUE,
@@ -71,12 +63,14 @@ train_final_model_direct <- function(
     verbose = TRUE,
     ...
 ) {
-  training_protocol <- match.arg(training_protocol)
-
   # 0.5.0 hard removal: `extra_drop_cols` / `additional_drop_cols`
   # are no longer accepted. Catch them via `...` so old callers get
   # a clear migration message instead of an "unused argument" error.
   .dots <- list(...)
+  if ("training_protocol" %in% names(.dots)) {
+    stop("training_protocol is no longer an argument; OtsuFire always uses ",
+         "inner-early-stopping selection + full-data refit.", call. = FALSE)
+  }
   if ("extra_drop_cols" %in% names(.dots) ||
       "additional_drop_cols" %in% names(.dots)) {
     stop(
@@ -364,148 +358,11 @@ train_final_model_direct <- function(
          paste(forbidden, collapse = ", "))
   }
 
-  # B1 (2026-06-07): nested_refit audit record (NULL for legacy). Populated in
-  # the nested branch; written alongside the model artifacts below.
-  nested_audit <- NULL
-
-  if (identical(training_protocol, "legacy")) {
-  # ---- LEGACY path ----
-  # Gate 1D.8 (2026-06-09): the legacy path now ALSO synthesises the SHARED
-  # `<feature>_isNA` companions (via the same .of_nested_coerce_features ->
-  # .of_synthesize_isna_companions used by nested_refit + scoring), so the
-  # corrected legacy baseline trains on the SAME feature space as OOF / scoring
-  # (base + `_isNA`). Only the TRAINING PROCEDURE differs between legacy and
-  # nested_refit, NOT the feature space. This is an intentional, result-affecting
-  # change vs the old defective 51-column legacy model.
-  X_df <- .of_nested_coerce_features(L_df[, feat_cols, drop = FALSE],
-                                     impute_factor_missing,
-                                     synthesize_isna = TRUE)
-  # The recipe feature space is now the FULL post-synthesis set (base + `_isNA`),
-  # in canonical order -- identical to the nested_refit / scoring feature space.
-  feat_cols <- names(X_df)
-
-  numeric_medians <- list()
-  for (nm in names(X_df)) {
-    if (is.numeric(X_df[[nm]]) || is.integer(X_df[[nm]])) {
-      v <- X_df[[nm]]
-      bad_nonfinite <- !is.finite(v)
-      if (any(bad_nonfinite, na.rm = TRUE)) {
-        v[bad_nonfinite] <- NA
-      }
-      if (anyNA(v)) {
-        fill <- if (impute_numeric == "zero") 0 else stats::median(v, na.rm = TRUE)
-        if (!is.finite(fill)) fill <- 0
-        v[is.na(v)] <- fill
-        X_df[[nm]] <- v
-        numeric_medians[[nm]] <- fill
-      }
-    }
-  }
-
-  row_id <- seq_len(nrow(X_df))
-  # Carry the sequential row identity through `sparse.model.matrix` via row
-  # names so that, if rows are dropped (NA handling), the survivors can be
-  # recovered from `rownames(X)` below. Row names cannot be set on a tibble
-  # (deprecated), so coerce to a base data.frame first -- behaviour-identical
-  # for `sparse.model.matrix`, which reads the columns the same way.
-  X_df <- as.data.frame(X_df, stringsAsFactors = FALSE)
-  rownames(X_df) <- as.character(row_id)
-  X <- Matrix::sparse.model.matrix(~ . - 1, data = X_df)
-  if (nrow(X) != length(row_id)) {
-    kept <- rownames(X)
-    kept <- suppressWarnings(as.integer(kept))
-    kept <- kept[!is.na(kept)]
-    msg("WARNING: sparse.model.matrix devolvio %d filas (esperaba %d). Realineando...", nrow(X), length(row_id))
-    L_ok <- L_ok[kept, ]
-    y <- y[kept]
-  }
-
-  set.seed(seed)
-  n <- nrow(X)
-  if (!is.null(group_col) && group_col %in% names(L_ok)) {
-    g <- as.character(L_ok[[group_col]])
-    ug <- unique(g)
-    ug <- ug[!is.na(ug)]
-    nval_g <- max(1, floor(val_frac * length(ug)))
-    val_g <- sample(ug, nval_g)
-    val_idx <- which(g %in% val_g)
-    tr_idx <- setdiff(seq_len(n), val_idx)
-    if (length(val_idx) < 10 || length(tr_idx) < 10) {
-      idx <- sample.int(n)
-      nval <- max(1, floor(val_frac * n))
-      val_idx <- idx[1:nval]
-      tr_idx <- idx[(nval + 1):n]
-      split_mode <- "row_split_fallback"
-    } else {
-      split_mode <- "group_split"
-    }
-  } else {
-    idx <- sample.int(n)
-    nval <- max(1, floor(val_frac * n))
-    val_idx <- idx[1:nval]
-    tr_idx <- idx[(nval + 1):n]
-    split_mode <- "row_split"
-  }
-
-  dtrain <- xgboost::xgb.DMatrix(X[tr_idx, , drop = FALSE], label = y[tr_idx])
-  dval <- xgboost::xgb.DMatrix(X[val_idx, , drop = FALSE], label = y[val_idx])
-
-  # 0.5.0: apply per-feature weights via xgboost's `feature_weights`
-  # info vector. Names not in the active feature space (after the
-  # whitelist filter and override) are silently dropped with a
-  # warning. Features the user did not name implicitly receive 1.0.
-  feature_weights_applied <- list()
-  if (!is.null(feature_weights)) {
-    active_cols <- colnames(X)
-    unknown_weighted <- setdiff(names(feature_weights), active_cols)
-    if (length(unknown_weighted) > 0) {
-      warning(
-        "Names in `feature_weights` not present in the active feature ",
-        "space (silently dropped): ",
-        paste(unknown_weighted, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    fw_vector <- rep(1.0, length(active_cols))
-    names(fw_vector) <- active_cols
-    in_both <- intersect(names(feature_weights), active_cols)
-    if (length(in_both) > 0L) {
-      fw_vector[in_both] <- as.numeric(feature_weights[in_both])
-    }
-    xgboost::setinfo(dtrain, "feature_weights", fw_vector)
-    xgboost::setinfo(dval,   "feature_weights", fw_vector)
-    feature_weights_applied <- list(
-      requested = as.list(feature_weights),
-      applied = as.list(fw_vector[fw_vector != 1.0]),
-      unknown_dropped = unknown_weighted
-    )
-  }
-
-  if (is.null(params)) {
-    spw <- sum(y[tr_idx] == 0) / max(1, sum(y[tr_idx] == 1))
-    # Gate 1B (2026-06-07): build the params from cfg$model_params
-    # (model_params_base, the SINGLE SOURCE OF TRUTH WITHOUT scale_pos_weight),
-    # merging the site-specific spw computed from this fit's training-split
-    # labels. cfg$model_params is itself sourced from .of_canonical_model_params(),
-    # so FINAL and OOF can never diverge.
-    params <- .params_from_cfg(scale_pos_weight = spw)
-  }
-
-  set.seed(seed)
-  model <- xgboost::xgb.train(
-    params = params,
-    data = dtrain,
-    nrounds = nrounds_max,
-    watchlist = list(train = dtrain, val = dval),
-    early_stopping_rounds = early_stopping_rounds,
-    verbose = if (isTRUE(verbose)) 1 else 0
-  )
-
-  } else {
-  # ---- NESTED_REFIT path (B1, 2026-06-07) ----
-  # L_ok is already CAPPED above (the bucket caps applied to the negative pool
-  # are the SAME ones the legacy path uses). Hand the un-imputed training frame
-  # to the SHARED core so FINAL and OOF cannot diverge. The core:
+  # ---- Canonical FINAL training: inner-ES selection + full-data refit -------
+  # OtsuFire's single training protocol. L_ok is already CAPPED above (the
+  # bucket caps applied to the negative pool). Hand the un-imputed training
+  # frame to the SHARED core (.of_nested_refit_fit) so FINAL and OOF cannot
+  # diverge. The core:
   #   - inner-splits L_ok (group split by group_col, val_frac) under `seed`,
   #   - fits medians ONLY on the inner-train, early-stops on the inner-val only,
   #   - REFITS a fresh model on ALL of L_ok at best_iteration (no watchlist),
@@ -556,10 +413,21 @@ train_final_model_direct <- function(
     names(fw_vector) <- fit$x_cols
     in_both <- intersect(names(feature_weights), fit$x_cols)
     if (length(in_both) > 0L) fw_vector[in_both] <- as.numeric(feature_weights[in_both])
+    # 0.5.0: names not in the active feature space are silently dropped, with a
+    # warning (parity with the OOF stage feedback).
+    unknown_weighted <- setdiff(names(feature_weights), fit$x_cols)
+    if (length(unknown_weighted) > 0L) {
+      warning(
+        "Names in `feature_weights` not present in the active feature ",
+        "space (silently dropped): ",
+        paste(unknown_weighted, collapse = ", "),
+        call. = FALSE
+      )
+    }
     list(
       requested = as.list(feature_weights),
       applied = as.list(fw_vector[fw_vector != 1.0]),
-      unknown_dropped = setdiff(names(feature_weights), fit$x_cols)
+      unknown_dropped = unknown_weighted
     )
   } else {
     list()
@@ -583,21 +451,12 @@ train_final_model_direct <- function(
   nested_audit$otsu_selected              <- nrow(sampled_otsu)
   nested_audit$outer_test_capped          <- FALSE  # no outer test in FINAL
   nested_audit$outer_test_used_for_fit    <- FALSE
-  }
 
   # Gate 1D.8: the recipe records the base / `_isNA` partition + canonical order
-  # of the SHARED feature space, identical for legacy and nested_refit. For
-  # nested the partition comes from the shared core; for legacy it is derived
-  # from the post-synthesis feature set (feat_cols == names(X_df)).
-  if (identical(training_protocol, "nested_refit")) {
-    base_features              <- fit$base_features
-    missing_indicator_features <- fit$missing_indicator_features
-    final_feature_order        <- fit$final_feature_order
-  } else {
-    missing_indicator_features <- feat_cols[grepl("_isNA$", feat_cols)]
-    base_features              <- setdiff(feat_cols, missing_indicator_features)
-    final_feature_order        <- feat_cols
-  }
+  # of the SHARED feature space. The partition comes from the shared core.
+  base_features              <- fit$base_features
+  missing_indicator_features <- fit$missing_indicator_features
+  final_feature_order        <- fit$final_feature_order
 
   # Gate 1E (2026-06-09): runtime feature-schema parity guard, FINAL leg. Compute
   # the STRUCTURAL fingerprint of the FINAL refit recipe and, BEFORE saving the
@@ -662,9 +521,7 @@ train_final_model_direct <- function(
     .write_if_allowed(rds_spl,
       saveRDS(list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode), rds_spl))
 
-    # B1 (2026-06-07): emit the per-model nested-refit audit CSV. Only written
-    # under training_protocol == "nested_refit" (nested_audit non-NULL), so the
-    # legacy path writes no new artifact and stays byte-identical.
+    # Emit the per-model refit audit CSV (always present on the canonical path).
     if (!is.null(nested_audit)) {
       csv_audit <- file.path(out_dir, paste0(prefix, "_nested_refit_audit.csv"))
       .write_if_allowed(csv_audit,
@@ -727,11 +584,12 @@ train_final_model_direct <- function(
         nrounds_max = nrounds_max,
         early_stopping_rounds = early_stopping_rounds,
         best_iteration = model$best_iteration %||% NA_integer_,
-        # B1 (2026-06-07): protocol provenance. For legacy these are
-        # NA/identical to the historical recipe; for nested_refit they record
-        # both scale_pos_weight values (selection vs refit) so a downstream
-        # audit can confirm the refit model was deployed.
-        training_protocol = training_protocol,
+        # Fixed internal constant (traceability only; never user-settable):
+        # OtsuFire always uses inner-early-stopping selection + full-data refit.
+        # spw_selection / spw_refit record both scale_pos_weight values
+        # (selection vs refit) so a downstream audit can confirm the refit model
+        # was deployed.
+        training_method = "inner_early_stopping_full_refit",
         spw_selection = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_selection,
         spw_refit = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_refit
       ),
@@ -948,7 +806,7 @@ train_final_model_direct <- function(
     x_cols = colnames(X),
     split = list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode),
     params = params,
-    # B1 (2026-06-07): NULL for legacy; one-row data.frame for nested_refit.
+    # One-row data.frame audit of the refit (selection vs refit spw, caps).
     nested_refit_audit = nested_audit,
     # Gate 1E (2026-06-09): the FINAL structural feature-schema fingerprint
     # (asserted == canonical OOF when one was supplied; persisted in the recipe).

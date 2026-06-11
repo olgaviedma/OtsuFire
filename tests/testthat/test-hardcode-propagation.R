@@ -45,7 +45,7 @@ test_that("Gate 1B: canonical train_control holds the UNIFIED canonical values",
   expect_equal(.canon_tc$caps$spectral, 1.0)
   expect_equal(.canon_tc$caps$random, 1.0)
   expect_equal(.canon_tc$caps$otsu, 1.0)
-  expect_equal(.canon_tc$training_protocol, "legacy")
+  expect_equal(.canon_tc$training_protocol, "nested_refit")
   expect_equal(.canon_tc$oof_sampling, "capped")
 })
 

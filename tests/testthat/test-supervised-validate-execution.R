@@ -204,10 +204,11 @@ test_that("(8) incompatible feature schema (model expects missing cols) fails fa
 test_that("(9) contradictory configuration fails fast", {
   td <- tempfile("vse9_"); dir.create(td)
   cfg <- mk_vse_cfg(out_dir = td)
-  # legacy protocol + oof_sampling='full' is mutually exclusive.
+  # A feature_whitelist_override that is not a subset of the canonical list is a
+  # contradictory configuration (training_protocol is no longer a validator arg).
   expect_error(
     vse_fn()(cfg, strict = TRUE, target_year = 2017L,
-             training_protocol = "legacy", oof_sampling = "full"),
+             feature_whitelist_override = c("definitely_not_a_real_feature_xyz")),
     regexp = "contradictory")
   expect_no_heavy_artifact(cfg)
 })

@@ -169,7 +169,6 @@
                                        final_early_stopping_rounds,
                                        final_impute_numeric,
                                        final_impute_factor_missing,
-                                       training_protocol,
                                        oof_sampling,
                                        # Precision 2 (2026-06-07): the spectral
                                        # cap resolved at the public boundary,
@@ -188,7 +187,7 @@
             "final_sampling_seed", "final_seed", "final_val_frac",
             "final_group_col", "final_nrounds_max", "final_early_stopping_rounds",
             "final_impute_numeric", "final_impute_factor_missing",
-            "training_protocol", "oof_sampling")
+            "oof_sampling")
   for (.nm in .req) {
     if (eval(call("missing", as.name(.nm)))) {
       stop(".of_run_supervised_oneyear(): required resolved arg '", .nm,
@@ -197,7 +196,6 @@
            call. = FALSE)
     }
   }
-  training_protocol <- match.arg(training_protocol, c("legacy", "nested_refit"))
   oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   ns <- asNamespace("OtsuFire")
 
@@ -277,8 +275,7 @@
     final_early_stopping_rounds            = final_early_stopping_rounds,
     final_impute_numeric                   = final_impute_numeric,
     final_impute_factor_missing            = final_impute_factor_missing,
-    # B1 (2026-06-07): forward the protocol toggle + OOF sampling mode.
-    training_protocol                      = training_protocol,
+    # Forward the OOF diagnostic sampling mode.
     oof_sampling                           = oof_sampling,
     # Precision 2 (2026-06-07): forward the boundary-resolved spectral cap to the
     # orchestrator's package-level parity guard.

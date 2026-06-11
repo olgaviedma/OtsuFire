@@ -54,6 +54,11 @@ A named list with both the objects and the written paths:
       whose fingerprint predates the burnable-domain restriction is
       INVALIDATED rather than silently reused. Also written as a sidecar
       `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
+    \item `otsu_random_dedup_audit` — GATE 6.2 Otsu>random spatial-dedup
+      record: `random_before`, `random_removed_by_otsu`, `random_final`,
+      `area_removed` and `removed_ids_hash`. Random rows whose polygon
+      intersects any Otsu patch are removed (Otsu has priority) BEFORE
+      capping; this is also folded into `neg_pool_fingerprint`.
   }
 }
 \description{
@@ -90,12 +95,26 @@ user-supplied path (`config$inputs$internal_decisions`), exactly as the
 dispatcher resolves it.
 
 **RNG determinism.** The random burnable-background sampling
-(`UNB_RANDOM_SEED = 42`) and the legacy Otsu sampling
-(`UNB_LEGACY_RANDOM_SEED = 42`) are forwarded verbatim and the two builders
+(`UNB_RANDOM_SEED = 42`) is forwarded verbatim and the two unburned builders
 are invoked in the SAME order (deterministic-decisions first, legacy second)
-so the RNG stream — and therefore the sampled negatives — are identical to a
-full orchestrator run.
+so the RNG stream — and therefore the sampled random negatives — are identical
+to a full orchestrator run. GATE 6.2 (2026-06-11): the legacy Otsu builder no
+longer performs any generation-side stratified sampling (the `legacy_sample_n`
+/ `legacy_random_seed` pre-thinning was removed); the FULL valid Otsu drop
+pool flows on and the per-bucket cap `cap_otsu`
+(`otsu_unburned_to_burned_ratio`) is the sole, seeded Otsu selector.
 }
+\section{Otsu > random spatial dedup (GATE 6.2)}{
+
+A location must not enter the negative pool as BOTH a random background cell
+AND an Otsu residual patch. After both unburned builders run, every random
+burnable-background row whose polygon intersects ANY Otsu patch (exact
+polygon-intersection unit, same CRS/grid, no extra buffer) is removed; Otsu
+rows are never removed. The dedup runs BEFORE `train_labeled` assembly and
+BEFORE the per-bucket capping, and is registered in
+`otsu_random_dedup_audit` + the `neg_pool_fingerprint`.
+}
+
 \section{Burnable-domain restriction (Gate 1C.2, INTENTIONAL pool change)}{
 
 The B4 random burnable-background bucket now computes its change-index

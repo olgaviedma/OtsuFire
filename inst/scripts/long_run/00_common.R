@@ -338,7 +338,7 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
     options = list(
       data_base = data_base, composite_base = composite_base, result_name = result_name,
       legacy_otsu_mode = "burnable_only", legacy_otsu_threshold = 0,
-      legacy_reference_otsu_threshold = 100, legacy_sample_n = 2000L,
+      legacy_reference_otsu_threshold = 100,
       legacy_reuse_existing = TRUE, legacy_write_output = TRUE, unb_verbose = TRUE)
   )
   cfg$tool_paths$python_exe             <- python_exe

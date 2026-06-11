@@ -141,17 +141,18 @@ UNB_LEGACY_USE_DROP <- TRUE
 # AS12 (0.3.0): defaults flipped to FALSE so review/keep rows do not
 # enter the legacy pool. They were unconditionally excluded by
 # `train_final_model_direct()` anyway, so the previous TRUE defaults
-# wasted ~30% of UNB_LEGACY_SAMPLE_N on rows the trainer dropped.
+# wasted budget on rows the trainer dropped.
 UNB_LEGACY_USE_REVIEW <- FALSE
 UNB_LEGACY_USE_KEEP <- FALSE
 UNB_LEGACY_DROP_MAX_S_PATCH <- 0.15
 UNB_LEGACY_REVIEW_MAX_S_PATCH <- 0.45
 UNB_LEGACY_KEEP_MAX_S_PATCH <- 0.70
-UNB_LEGACY_SAMPLE_N <- 2000
-UNB_LEGACY_SAMPLE_PROPS <- c(drop = 0.70, review = 0.25, keep = 0.05)
+# GATE 6.2 (2026-06-11): `UNB_LEGACY_SAMPLE_N` / `UNB_LEGACY_SAMPLE_PROPS` /
+# `UNB_LEGACY_RANDOM_SEED` placeholders removed with the Otsu generation-side
+# pre-thinning. cap_otsu (otsu_unburned_to_burned_ratio) is the sole Otsu
+# selector; the full valid Otsu drop pool flows on.
 UNB_LEGACY_EXCL_BUFFER_M <- 0
 UNB_LEGACY_MIN_AREA_HA <- 0
-UNB_LEGACY_RANDOM_SEED <- 42
 UNB_LEGACY_REUSE_EXISTING <- TRUE
 UNB_LEGACY_WRITE_OUTPUT <- TRUE
 

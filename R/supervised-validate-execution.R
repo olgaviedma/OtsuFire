@@ -1163,8 +1163,9 @@ validate_supervised_execution <- function(config,
     b4_n_random_cells       = o$unb_n_random_cells %||% 1500,
     b4_random_patch_size    = o$unb_random_patch_size_cells %||% 3,
     b4_exclude_buffer_m     = o$unb_excl_buffer_m %||% 500,
-    legacy_random_seed      = o$legacy_random_seed %||% 42L,
-    legacy_sample_n         = o$legacy_sample_n %||% 2000,
+    # GATE 6.2 (2026-06-11): `legacy_random_seed` / `legacy_sample_n` dropped to
+    # stay in lockstep with the build-time neg-pool fingerprint (the Otsu
+    # generation-side pre-thinning was removed; cap_otsu is the sole selector).
     legacy_otsu_mode        = o$legacy_otsu_mode %||% "burnable_only",
     target_year             = as.integer(target_year),
     scenario                = config$scenario,

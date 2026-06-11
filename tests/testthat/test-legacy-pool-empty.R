@@ -56,8 +56,6 @@ test_that("D4a: empty Otsu pool ERRORS by default (no silent degradation)", {
       internal_decisions_path = inp$internal_path,
       out_gpkg = out_gpkg,
       use_drop = TRUE,
-      use_review = FALSE,
-      use_keep = FALSE,
       drop_max_s_patch = 0.15,
       exclude_buffer_m = 50,
       # allow_empty_otsu_pool defaults to FALSE
@@ -95,8 +93,6 @@ test_that("T19: empty pool with opt-in -> warning + _LEGACY_POOL_EMPTY.txt", {
       internal_decisions_path = inp$internal_path,
       out_gpkg = out_gpkg,
       use_drop = TRUE,
-      use_review = FALSE,
-      use_keep = FALSE,
       drop_max_s_patch = 0.15,
       exclude_buffer_m = 50,
       allow_empty_otsu_pool = TRUE,
@@ -109,12 +105,18 @@ test_that("T19: empty pool with opt-in -> warning + _LEGACY_POOL_EMPTY.txt", {
   expect_true(file.exists(audit_path))
 })
 
-# --- AS12 -----------------------------------------------------------
-test_that("AS12: build_unburned_from_legacy_decisions defaults use_review/use_keep to FALSE", {
+# --- GATE 6.4 (2026-06-11): supersedes AS12 -------------------------
+# Otsu review/keep are NEVER negatives, so the use_review / use_keep /
+# review_max_s_patch / keep_max_s_patch parameters were removed entirely. Only
+# the live `use_drop` path remains (effectively always TRUE).
+test_that("GATE 6.4: build_unburned_from_legacy_decisions dropped the dead review/keep params; use_drop kept", {
   fn <- get("build_unburned_from_legacy_decisions",
             envir = asNamespace("OtsuFire"))
-  fmls <- formals(fn)
-  expect_false(eval(fmls$use_review))
-  expect_false(eval(fmls$use_keep))
-  expect_true(eval(fmls$use_drop))
+  fmls <- names(formals(fn))
+  expect_false("use_review" %in% fmls)
+  expect_false("use_keep" %in% fmls)
+  expect_false("review_max_s_patch" %in% fmls)
+  expect_false("keep_max_s_patch" %in% fmls)
+  expect_true("use_drop" %in% fmls)
+  expect_true(eval(formals(fn)$use_drop))
 })

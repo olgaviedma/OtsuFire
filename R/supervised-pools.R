@@ -299,7 +299,8 @@ build_supervised_training_pools <- function(config,
     config$options$unb_random_patch_size_cells %||% 3
 
   # legacy Otsu builder
-  UNB_LEGACY_CODE_DIR      <- config$options$legacy_code_dir
+  # GATE 6.4 (2026-06-11): `legacy_code_dir` read removed — the legacy helpers
+  # are in-package, so the option had no live consumer.
   UNB_LEGACY_OTSU_MODE     <- config$options$legacy_otsu_mode %||% "burnable_only"
   UNB_LEGACY_OTSU_THRESHOLD <- config$options$legacy_otsu_threshold %||% 0
   UNB_LEGACY_REFERENCE_OTSU_THRESHOLD <-
@@ -322,12 +323,11 @@ build_supervised_training_pools <- function(config,
   # (otsu_unburned_to_burned_ratio) is the sole Otsu selector.
   UNB_LEGACY_REUSE_EXISTING <- config$options$legacy_reuse_existing %||% TRUE
   UNB_LEGACY_WRITE_OUTPUT   <- config$options$legacy_write_output %||% TRUE
+  # GATE 6.4 (2026-06-11): only `legacy_use_drop` (the live path) is read. The
+  # dead `legacy_use_review` / `legacy_use_keep` / `legacy_review_max_s_patch` /
+  # `legacy_keep_max_s_patch` were removed (Otsu review/keep are never negatives).
   UNB_LEGACY_USE_DROP      <- config$options$legacy_use_drop   %||% TRUE
-  UNB_LEGACY_USE_REVIEW    <- config$options$legacy_use_review %||% FALSE
-  UNB_LEGACY_USE_KEEP      <- config$options$legacy_use_keep   %||% FALSE
   UNB_LEGACY_DROP_MAX_S_PATCH   <- config$options$legacy_drop_max_s_patch   %||% 0.15
-  UNB_LEGACY_REVIEW_MAX_S_PATCH <- config$options$legacy_review_max_s_patch %||% 0.45
-  UNB_LEGACY_KEEP_MAX_S_PATCH   <- config$options$legacy_keep_max_s_patch   %||% 0.70
   # D4a (2026-06-05): default FALSE -> empty Otsu legacy pool ERRORS instead of
   # silently degrading to deterministic_direct. Opt back in via
   # config$options$allow_empty_otsu_pool = TRUE.
@@ -518,9 +518,10 @@ build_supervised_training_pools <- function(config,
   # A4. Generate unburned datasets (all_sources policy):
   #   build_unburned_from_deterministic_decisions() -> det drops + random bg
   #   build_unburned_from_legacy_pipeline()         -> Otsu current-year patches
-  # RNG: forwarded UNB_RANDOM_SEED / UNB_LEGACY_RANDOM_SEED; det builder runs
-  # BEFORE the legacy builder, identical to the orchestrator, so the random
-  # stream is preserved.
+  # RNG: forwarded UNB_RANDOM_SEED for the random background; the det builder
+  # runs BEFORE the legacy builder, identical to the orchestrator, so the random
+  # stream is preserved. GATE 6.2: the legacy builder no longer samples
+  # (UNB_LEGACY_RANDOM_SEED removed); the full Otsu drop pool flows on.
   # ===========================================================================
   msg("STEP A4 - Generate unburned datasets [all_sources]")
   unb <- time_step("A4 Generate unburned datasets", {
@@ -575,7 +576,6 @@ build_supervised_training_pools <- function(config,
       burnable_mask_path       = cfg_burnable_mask_path,
       corine_raster_path       = cfg_corine_raster_path,
       peninsula_shapefile      = cfg_peninsula_shapefile,
-      legacy_code_dir          = UNB_LEGACY_CODE_DIR,
       python_exe               = python_exe,
       gdal_polygonize_script   = gdal_polygonize_script,
       gdalwarp_path            = gdalwarp_path,
@@ -593,11 +593,7 @@ build_supervised_training_pools <- function(config,
       keep_hi                  = UNB_LEGACY_KEEP_HI,
       drop_lo                  = UNB_LEGACY_DROP_LO,
       use_drop                 = UNB_LEGACY_USE_DROP,
-      use_review               = UNB_LEGACY_USE_REVIEW,
-      use_keep                 = UNB_LEGACY_USE_KEEP,
       drop_max_s_patch         = UNB_LEGACY_DROP_MAX_S_PATCH,
-      review_max_s_patch       = UNB_LEGACY_REVIEW_MAX_S_PATCH,
-      keep_max_s_patch         = UNB_LEGACY_KEEP_MAX_S_PATCH,
       exclude_buffer_m         = UNB_LEGACY_EXCL_BUFFER_M,
       min_area_ha              = UNB_LEGACY_MIN_AREA_HA,
       reuse_existing           = UNB_LEGACY_REUSE_EXISTING,
@@ -608,15 +604,11 @@ build_supervised_training_pools <- function(config,
     )
     otsu_pool    <- to_crs_safe(res_otsu$unburned$legacy_unburned_pool, crs_master)
     otsu_sampled <- to_crs_safe(res_otsu$unburned$legacy_unburned_sampled, crs_master)
-    # AS08 (0.5.0): the former defensive fallback
-    #   if (nrow(otsu_sampled) == 0L && nrow(otsu_pool) > 0L) otsu_sampled <- otsu_pool
-    # was DEAD: sample_stratified_legacy_unburned() returns its input `x`
-    # unchanged when target_n <= 0 or nrow(x) == 0, and otherwise returns a
-    # non-empty subset of x. So `otsu_sampled` is empty only when `otsu_pool`
-    # (the same `combined` pool) is also empty -> the branch condition
-    # (sampled empty AND pool non-empty) can never hold. Replaced with the
-    # invariant assertion the audit recommended; never fires on any run, so
-    # behaviour is byte-identical.
+    # GATE 6.2 (2026-06-11): there is no generation-side sampling anymore, so
+    # `legacy_unburned_sampled` is exactly the full `legacy_unburned_pool` (the
+    # `sampled` alias). The AS08 invariant therefore holds trivially (the two are
+    # the same object); kept as a guard so a future regression that makes them
+    # diverge fails loud.
     stopifnot(nrow(otsu_sampled) > 0L || nrow(otsu_pool) == 0L)
 
     otsu_raw <- otsu_sampled |>

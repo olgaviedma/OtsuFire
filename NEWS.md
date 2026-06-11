@@ -1,3 +1,23 @@
+# OtsuFire 0.8.0 (2026-06-11)
+
+## BREAKING CHANGE — single capped OOF negative-sampling policy
+
+* **`oof_sampling` removed from the public API.** It is no longer an argument of
+  `build_supervised_burned_config()`, `run_oof_diagnostics()`,
+  `run_oneyear_supervised_pipeline()` or `validate_supervised_execution()`, and
+  the OOF "full" negative-sampling path was deleted. **Passing `oof_sampling` now
+  errors** (R's "unused argument" on the plain functions; an explicit guard on
+  the `...`-bearing entry point `run_oneyear_supervised_pipeline()`). OOF now
+  ALWAYS uses the same capped negative-sampling policy as the FINAL model,
+  applied independently within each training fold. The policy survives
+  internally only as a fixed, non-settable provenance constant
+  (`cfg$train_control$oof_sampling = "capped"`). New per-fold capping audit
+  fields record the policy applied to each training fold. **Bucket definitions,
+  caps, features, thresholds, and model params are unchanged.**
+* In-package scripts and docs updated accordingly: the long-run runners no
+  longer build a "capped vs full" OOF comparison — there is one capped OOF
+  negative-sampling policy, identical to the FINAL model's, applied per fold.
+
 # OtsuFire 0.7.0 (2026-06-11)
 
 ## BREAKING CHANGE — single supervised training procedure
@@ -21,20 +41,10 @@
   recipe records `training_method = "inner_early_stopping_full_refit"`. The
   user-facing `print()` shows `training = early-stopping selection + full-data
   refit`.
-* **`oof_sampling` removed from the public API.** It is no longer an argument of
-  `build_supervised_burned_config()`, `run_oof_diagnostics()`,
-  `run_oneyear_supervised_pipeline()` or `validate_supervised_execution()`, and
-  the OOF "full" negative-sampling path was deleted. **Passing `oof_sampling` now
-  errors.** OOF now ALWAYS uses the same capped negative-sampling policy as the
-  FINAL model, applied independently within each training fold. The policy
-  survives internally only as a fixed, non-settable provenance constant
-  (`cfg$train_control$oof_sampling = "capped"`). **Bucket definitions, caps,
-  features, thresholds, and model params are unchanged.**
 * In-package scripts and docs updated accordingly: the protocol-pair example
   scripts (`03_supervised_protocol_legacy.R` /
   `04_supervised_protocol_nested_refit.R`) were removed; the long-run runners no
-  longer build "Config A legacy vs B nested" or a "capped vs full" OOF comparison
-  — there is one training procedure and one capped OOF negative-sampling policy.
+  longer build "Config A legacy vs B nested" — there is one training procedure.
 
 # OtsuFire 0.6.2
 

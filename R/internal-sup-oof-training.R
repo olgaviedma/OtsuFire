@@ -1,9 +1,8 @@
 # =============================================================================
 # OOF per-fold trainer.
 #
-# B1 (2026-06-07): adds the `training_protocol = "nested_refit"` path. For
-# "legacy" (default) the per-fold body is byte-identical to the historical
-# implementation. For "nested_refit" each OUTER fold:
+# OtsuFire's single OOF protocol (inner-ES selection + full-outer-train refit).
+# Each OUTER fold:
 #   - takes outer_train = idx_tr, outer_test = idx_te (never sub-sampled, never
 #     imputed-from);
 #   - ASSERTS no fire_uid / block_id overlap between train and test;
@@ -15,8 +14,8 @@
 #     early-stopping set; refit on all outer_train at best_iteration);
 #   - transforms the FULL outer_test with the REFIT medians and predicts it;
 #   - records a per-fold audit row.
-# The 4 cap ratios are REQUIRED formals (no defaults) on the nested path so a
-# dropped argument cannot silently revert a bucket to ratio 1.0.
+# The 4 cap ratios are REQUIRED formals (no defaults) so a dropped argument
+# cannot silently revert a bucket to ratio 1.0.
 # =============================================================================
 run_oof_xgb <- function(
     XL_mat, y, labelled_df,
@@ -41,15 +40,11 @@ run_oof_xgb <- function(
     # long/agg CSV sidecars. overwrite=TRUE writes exactly as before
     # (byte-identical); overwrite=FALSE skips when the target already exists.
     overwrite = TRUE,
-    # B1 (2026-06-07): protocol toggle. "legacy" (default) = historical OOF.
-    # "nested_refit" = leakage-free per-fold protocol (see header).
-    training_protocol = c("legacy", "nested_refit"),
-    # B1: "capped" applies the FINAL bucket caps to the outer-train negatives;
-    # "full" uses all outer-train rows. Only consulted on the nested path.
+    # "capped" applies the FINAL bucket caps to the outer-train negatives;
+    # "full" uses all outer-train rows. Diagnostic negative-sampling toggle.
     oof_sampling = c("capped", "full"),
-    # B1: prepared (deferred-impute) labelled feature frame + model column set,
-    # produced by build_design_matrix_patches(defer_impute=TRUE). REQUIRED on
-    # the nested path; ignored on the legacy path.
+    # Prepared (deferred-impute) labelled feature frame + model column set,
+    # produced by build_design_matrix_patches(defer_impute=TRUE). REQUIRED.
     prepared_labelled = NULL,
     model_cols = NULL,
     class_col = "class",
@@ -90,91 +85,24 @@ run_oof_xgb <- function(
            "cfg$train_control via run_dm_oof_pipeline()).", call. = FALSE)
     }
   }
-  training_protocol <- match.arg(training_protocol)
   oof_sampling <- match.arg(oof_sampling)
-  # val_frac / impute_* are consumed ONLY on the nested_refit path (the per-fold
-  # leakage-free core); required there, mirroring the cap-ratio pattern below.
-  if (identical(training_protocol, "nested_refit")) {
-    for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
-      if (eval(call("missing", as.name(.nm)))) {
-        stop("run_oof_xgb(nested_refit): required resolved arg '", .nm,
-             "' is missing (no methodological default).", call. = FALSE)
-      }
+  # val_frac / impute_* are consumed by the per-fold leakage-free core; always
+  # required (no methodological default), mirroring the cap-ratio pattern below.
+  for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("run_oof_xgb(): required resolved arg '", .nm,
+           "' is missing (no methodological default).", call. = FALSE)
     }
   }
 
   stopifnot("fire_uid" %in% names(labelled_df), "class" %in% names(labelled_df))
 
-  if (identical(training_protocol, "legacy")) {
+  {
     # -------------------------------------------------------------------------
-    # LEGACY path (byte-identical to the historical implementation).
-    # -------------------------------------------------------------------------
-    stopifnot(length(y) == nrow(XL_mat))
-
-    if (!is.null(feature_weights_vector)) {
-      stopifnot(length(feature_weights_vector) == ncol(XL_mat))
-    }
-
-    oof_rows <- list()
-
-    for (r in seq_along(fold_cols)) {
-      fold_col <- fold_cols[r]
-      stopifnot(fold_col %in% names(labelled_df))
-
-      folds <- as.integer(labelled_df[[fold_col]])
-      stopifnot(!anyNA(folds))
-
-      for (k in sort(unique(folds))) {
-        idx_te <- which(folds == k)
-        idx_tr <- which(folds != k)
-
-        dtrain <- xgboost::xgb.DMatrix(XL_mat[idx_tr, , drop=FALSE], label = y[idx_tr])
-        dtest  <- xgboost::xgb.DMatrix(XL_mat[idx_te, , drop=FALSE], label = y[idx_te])
-
-        if (!is.null(feature_weights_vector)) {
-          xgboost::setinfo(dtrain, "feature_weights", feature_weights_vector)
-          xgboost::setinfo(dtest,  "feature_weights", feature_weights_vector)
-        }
-
-        set.seed(seed_base + 1000*r + k)
-
-        m <- xgboost::xgb.train(
-          params = params,
-          data = dtrain,
-          nrounds = nrounds_max,
-          watchlist = list(train = dtrain, val = dtest),
-          early_stopping_rounds = early_stop,
-          verbose = ifelse(verbose > 0, 1, 0)
-        )
-
-        p <- predict(m, dtest)
-
-        oof_rows[[length(oof_rows) + 1]] <- data.frame(
-          fire_uid = labelled_df$fire_uid[idx_te],
-          class    = labelled_df$class[idx_te],
-          rep      = r,
-          fold     = k,
-          p_burned = p,
-          best_iter = m$best_iteration,
-          stringsAsFactors = FALSE
-        )
-      }
-    }
-
-    oof_long <- do.call(rbind, oof_rows)
-    oof_audit <- NULL
-    # Gate 1E: the structural parity guard is wired into the nested_refit path
-    # (the leakage-free protocol the Phase B run uses). The legacy path predates
-    # the shared recipe and trains on a single globally-imputed matrix (one
-    # feature space by construction), so it carries no per-fold recipe to
-    # fingerprint.
-    schema_guard <- NULL
-  } else {
-    # -------------------------------------------------------------------------
-    # NESTED_REFIT path (B1).
+    # Canonical per-fold OOF: inner-ES selection + full-outer-train refit.
     # -------------------------------------------------------------------------
     if (is.null(prepared_labelled) || is.null(model_cols)) {
-      stop("run_oof_xgb(nested_refit): 'prepared_labelled' and 'model_cols' are ",
+      stop("run_oof_xgb(): 'prepared_labelled' and 'model_cols' are ",
            "required (from build_design_matrix_patches(defer_impute=TRUE)).",
            call. = FALSE)
     }
@@ -283,15 +211,16 @@ run_oof_xgb <- function(
         uid_tr <- as.character(labelled_df$fire_uid[idx_tr])
         uid_te <- as.character(labelled_df$fire_uid[idx_te])
         if (length(intersect(uid_tr, uid_te)) > 0L) {
-          stop(sprintf("run_oof_xgb(nested_refit): fire_uid overlap between outer ",
-                       "train/test (rep %d fold %d).", r, k), call. = FALSE)
+          stop(sprintf(paste0("run_oof_xgb(): fire_uid overlap between outer ",
+                              "train/test (rep %d fold %d)."), r, k),
+               call. = FALSE)
         }
         if (has_block) {
           blk_tr <- as.character(labelled_df[[group_col]][idx_tr])
           blk_te <- as.character(labelled_df[[group_col]][idx_te])
           if (length(intersect(blk_tr, blk_te)) > 0L) {
-            stop(sprintf("run_oof_xgb(nested_refit): %s overlap between outer ",
-                         "train/test (rep %d fold %d).", group_col, r, k),
+            stop(sprintf(paste0("run_oof_xgb(): %s overlap between outer ",
+                               "train/test (rep %d fold %d)."), group_col, r, k),
                  call. = FALSE)
           }
         }

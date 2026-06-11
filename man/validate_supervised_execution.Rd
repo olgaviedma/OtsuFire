@@ -10,7 +10,6 @@ validate_supervised_execution(
   target_year = config$target_year,
   reuse_upstream = FALSE,
   feature_whitelist_override = NULL,
-  training_protocol = "legacy",
   oof_sampling = "capped",
   model = NULL,
   recipe = NULL,
@@ -36,7 +35,8 @@ contradictory-config and cache-belonging checks.}
 \item{feature_whitelist_override}{Character or `NULL`. The RESOLVED whitelist
 override, validated as a subset of the canonical whitelist.}
 
-\item{training_protocol, oof_sampling}{Character. The resolved protocol toggles.}
+\item{oof_sampling}{Character. The resolved OOF diagnostic negative-sampling
+mode (`"capped"` or `"full"`).}
 
 \item{model, recipe}{Optional fitted model / recipe. When supplied, check (8)
 asserts the scoring feature schema is compatible.}
@@ -124,8 +124,7 @@ The 10 checks:
     building the scoring matrix, so it is no longer best-effort on the main
     path.
   \item \strong{Contradictory configuration} -- mutually exclusive cfg
-    settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
-    `training_protocol = "legacy"` with `oof_sampling = "full"`; a
+    settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts; a
     `feature_whitelist_override` that is not a subset of the canonical list).
   \item \strong{Cache belonging to ANOTHER cfg} -- a persisted negative-pool
     fingerprint sidecar (Gate 1C.2) whose checksum disagrees with the

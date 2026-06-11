@@ -55,7 +55,6 @@ train_persist_fixture <- function() {
     verbose = FALSE,
     nrounds_max = 12L,
     early_stopping_rounds = 6L,
-    training_protocol = "nested_refit",
     contextual_exclusion_to_burned_ratio = 1,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,

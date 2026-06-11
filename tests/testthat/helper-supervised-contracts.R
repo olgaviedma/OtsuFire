@@ -259,7 +259,6 @@ sc_score_via_recipe <- function(model, recipe, x_df) {
 # builder. Returns model/recipe paths + the scoring sf (admin + features).
 # Keep it tiny (few rows, nthread via canonical params) for points 13/14/15/16.
 sc_train_persist_fit <- function(prefix = "sc18",
-                                 training_protocol = "nested_refit",
                                  n_burned = 18L, n_neg_random = 9L,
                                  n_neg_drop = 9L, seed = 31L) {
   fixture_path <- testthat::test_path("test-final-model-uses-whitelist.R")
@@ -272,7 +271,6 @@ sc_train_persist_fit <- function(prefix = "sc18",
     labelled_gpkg = gpkg, labelled_layer = "train_features",
     out_dir = out_dir, prefix = prefix, overwrite = TRUE, verbose = FALSE,
     nrounds_max = 12L, early_stopping_rounds = 6L,
-    training_protocol = training_protocol,
     contextual_exclusion_to_burned_ratio = 1,
     spectral_hard_negative_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,

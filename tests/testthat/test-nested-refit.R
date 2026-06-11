@@ -162,13 +162,12 @@ test_that("nested OOF runs, predicts every labelled unit, and emits a per-fold a
     prefix      = "nr_smoke",
     overwrite   = TRUE,
     group_col   = "block_id",
-    training_protocol = "nested_refit",
     oof_sampling      = "capped",
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
     random_to_burned_ratio                 = 1.0,
     otsu_unburned_to_burned_ratio          = 1.0,
-    # Gate 1B (2026-06-07): nested path now requires these resolved controls.
+    # The per-fold core requires these resolved controls.
     val_frac = 0.15, impute_numeric = "median",
     impute_factor_missing = "MISSING"
   )))
@@ -213,7 +212,6 @@ test_that("nested OOF 'full' sampling keeps the whole outer-train (no caps)", {
     nrounds_max = 10L, early_stop = 5L, seed_base = 50L, verbose = 0,
     save_prefix = "nr_full", prefix = "nr_full", overwrite = TRUE,
     group_col   = "block_id",
-    training_protocol = "nested_refit",
     oof_sampling      = "full",
     contextual_exclusion_to_burned_ratio   = 0.25,
     spectral_hard_negative_to_burned_ratio = 1.0,
@@ -247,7 +245,7 @@ test_that("dropped cap arg in run_dm_oof_pipeline(nested_refit) ERRORS", {
       target_year = 2017L,
       nrounds_max = 8L, early_stop = 4L, seed_base = 7L, verbose = 0,
       save_prefix = "nr_err", prefix = "nr_err", overwrite = TRUE,
-      training_protocol = "nested_refit",
+      group_col   = "block_id",
       oof_sampling      = "capped",
       # Gate 1B: supply the always-needed nested controls so the spectral-cap
       # guard (not the val_frac/impute guard) is what surfaces.
@@ -292,7 +290,6 @@ test_that("nested OOF errors when outer_train and outer_test share a fire_uid (l
       nrounds_max = 8L, early_stop = 4L, seed_base = 3L, verbose = 0,
       save_prefix = "nr_leak", prefix = "nr_leak", overwrite = TRUE,
       group_col   = "block_id",
-      training_protocol = "nested_refit",
       oof_sampling      = "capped",
       val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
@@ -320,25 +317,72 @@ test_that("the 4 cap formals have NO default in run_oof_xgb / run_dm_oof_pipelin
 })
 
 # ---------------------------------------------------------------------------
-# legacy default + neg_type in id_cols.
+# Single-protocol contract (Contract #9 + #10): no public function accepts
+# training_protocol, no engine carries a training_protocol formal, and the cfg
+# constant is the fixed traceability label.
 # ---------------------------------------------------------------------------
-test_that("training_protocol default is 'legacy' end-to-end (Gate 1B: public via cfg)", {
-  # Gate 1B (2026-06-07): the PUBLIC functions default training_protocol to NULL
-  # (= "read from cfg"); the cfg's canonical default IS "legacy". The
-  # internal-pure engines keep the c("legacy","nested_refit") match.arg default.
+test_that("Contract #10: no PUBLIC function accepts training_protocol", {
   for (f in c("run_oneyear_supervised_pipeline", "run_oof_diagnostics",
-              "train_final_burned_model")) {
-    expect_null(formals(get(f, envir = ns))$training_protocol,
-                info = paste("public default not NULL:", f))
+              "train_final_burned_model", "build_supervised_burned_config",
+              "validate_supervised_execution")) {
+    fm <- formals(get(f, envir = ns))
+    expect_false("training_protocol" %in% names(fm),
+                 info = paste("public still has training_protocol formal:", f))
   }
-  # cfg's canonical default training_protocol == "legacy".
-  expect_equal(get(".of_canonical_train_control", envir = ns)()$training_protocol,
-               "legacy")
-  # The internal engines keep their match.arg enum (first value = legacy).
+})
+
+test_that("Contract #10: passing training_protocol to a public fn ERRORS", {
+  # build_supervised_burned_config / train_final_burned_model / run_oof_diagnostics
+  # have no `...`, so R raises "unused argument".
+  expect_error(
+    build_supervised_burned_config(scenario = "balanced",
+                                   internal_decisions = tempfile(fileext = ".gpkg"),
+                                   change_index = tempfile(fileext = ".tif"),
+                                   target_year = 2017L,
+                                   training_protocol = "legacy"),
+    regexp = "unused argument|training_protocol")
+  # run_oneyear_supervised_pipeline has a `...` -> explicit guard message.
+  expect_error(
+    run_oneyear_supervised_pipeline(config = structure(list(),
+      class = "otsufire_supervised_burned_config"),
+      training_protocol = "nested_refit"),
+    regexp = "training_protocol is no longer an argument")
+})
+
+test_that("Contract #9: no engine carries a training_protocol formal", {
   for (f in c("run_dm_oof_pipeline", "run_oof_xgb", "train_final_model_direct")) {
-    tp <- eval(formals(get(f, envir = ns))$training_protocol)
-    expect_equal(tp[1], "legacy", info = paste("engine default not legacy:", f))
+    fm <- formals(get(f, envir = ns))
+    expect_false("training_protocol" %in% names(fm),
+                 info = paste("engine still has training_protocol formal:", f))
   }
+})
+
+test_that("training_protocol survives only as a fixed internal cfg constant", {
+  tc <- get(".of_canonical_train_control", envir = ns)()
+  expect_equal(tc$training_protocol, "nested_refit")
+})
+
+test_that("Contract #9: NO legacy training branch/validator remains in R/", {
+  r_dir <- testthat::test_path("..", "..", "R")
+  skip_if(!dir.exists(r_dir), "R/ source dir not available")
+  files <- list.files(r_dir, pattern = "\\.R$", full.names = TRUE)
+  src <- unlist(lapply(files, function(f) readLines(f, warn = FALSE)))
+  # No legacy training-protocol gating: no `training_protocol == "legacy"`, no
+  # match.arg(training_protocol, ...), no c("legacy","nested_refit") enum.
+  expect_false(any(grepl('training_protocol\\s*==\\s*"legacy"', src)))
+  expect_false(any(grepl('identical\\(training_protocol', src)))
+  expect_false(any(grepl('match\\.arg\\(training_protocol', src)))
+  expect_false(any(grepl('c\\("legacy",\\s*"nested_refit"\\)', src)))
+})
+
+# ---------------------------------------------------------------------------
+# Contract #7 (source-level): OOF and FINAL share the SAME training core.
+# ---------------------------------------------------------------------------
+test_that("Contract #7: OOF and FINAL both call .of_nested_refit_fit (shared core)", {
+  oof_src   <- deparse(get("run_oof_xgb", envir = ns))
+  final_src <- deparse(get("train_final_model_direct", envir = ns))
+  expect_true(any(grepl("\\.of_nested_refit_fit", oof_src)))
+  expect_true(any(grepl("\\.of_nested_refit_fit", final_src)))
 })
 
 test_that("neg_type is in the OOF id_cols default (per-fold bucketing)", {

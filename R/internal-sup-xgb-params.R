@@ -118,7 +118,7 @@
 #'   oof_seed_base / final_sampling_seed / final_seed), val_frac, group_col,
 #'   impute_numeric, impute_factor_missing, caps (list of contextual / spectral
 #'   / random / otsu), feature_whitelist_override, feature_weights,
-#'   training_protocol, oof_sampling.
+#'   training_protocol (fixed internal constant "nested_refit"), oof_sampling.
 #' @keywords internal
 #' @noRd
 .of_canonical_train_control <- function() {
@@ -142,7 +142,11 @@
     ),
     feature_whitelist_override = NULL,
     feature_weights            = NULL,
-    training_protocol = "legacy",
+    # Fixed internal constant (traceability / provenance only; NOT user-settable
+    # and NOT an argument). OtsuFire always uses inner-early-stopping selection +
+    # full-data refit. Kept as a constant so manifests / run fingerprints stay
+    # self-documenting and stable.
+    training_protocol = "nested_refit",
     oof_sampling      = "capped"
   )
 }

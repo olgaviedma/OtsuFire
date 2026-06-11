@@ -189,11 +189,12 @@
 #'   are stored in `cfg$train_control` and consumed identically by the OOF and
 #'   FINAL stages. `NULL` uses the full feature set with equal weights.
 #'
-#' @param training_protocol,oof_sampling Character or `NULL`. `training_protocol`
-#'   selects the FINAL training protocol (`"legacy"` or `"nested_refit"`);
-#'   `oof_sampling` selects the per-fold negative sampling mode used by the OOF
-#'   diagnostics (`"capped"` or `"full"`). `NULL` uses `"legacy"` / `"capped"`.
-#'   Stored in `cfg$train_control`.
+#' @param oof_sampling Character or `NULL`. Selects the per-fold negative
+#'   sampling mode used by the OOF diagnostics (`"capped"` or `"full"`). `NULL`
+#'   uses `"capped"`. Stored in `cfg$train_control`. This controls only the OOF
+#'   diagnostic negative sampling: OtsuFire always uses a single training
+#'   procedure (inner early-stopping selection + full-data refit) for both the
+#'   OOF folds and the FINAL model.
 #'
 #' @param model_params Named list or `NULL`. Optional \emph{partial} override of
 #'   the canonical XGBoost hyper-parameter block stored in `cfg$model_params`
@@ -378,7 +379,6 @@
 #'   target_year          = 2017,
 #'   output_dir           = "results/",
 #'   run_name             = "balanced_2017",
-#'   training_protocol    = "nested_refit",
 #'   oof_sampling         = "capped",
 #'   cap_contextual       = 0.25,
 #'   cap_spectral         = 2.0,
@@ -475,7 +475,6 @@ build_supervised_burned_config <- function(
     cap_otsu                   = NULL,
     feature_whitelist_override = NULL,
     feature_weights            = NULL,
-    training_protocol          = NULL,
     oof_sampling               = NULL,
     model_params               = NULL,
     options = list()
@@ -720,7 +719,6 @@ build_supervised_burned_config <- function(
     cap_otsu                   = cap_otsu,
     feature_whitelist_override = feature_whitelist_override,
     feature_weights            = feature_weights,
-    training_protocol          = training_protocol,
     oof_sampling               = oof_sampling
   )
 
@@ -750,7 +748,6 @@ build_supervised_burned_config <- function(
     feature_whitelist_override =
       if (is.null(feature_whitelist_override)) "default" else "user",
     feature_weights       = if (is.null(feature_weights))       "default" else "user",
-    training_protocol     = if (is.null(training_protocol))     "default" else "user",
     oof_sampling          = if (is.null(oof_sampling))          "default" else "user",
     model_params          = if (.model_params_user_set)         "user"    else "default"
   )
@@ -813,7 +810,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
   cat("  min_burned_pool :", x$min_burned_pool_n, "\n")
   if (!is.null(x$train_control)) {
     tc <- x$train_control
-    cat("  train_control   : protocol=", tc$training_protocol,
+    cat("  train_control   : training=early-stopping selection + full-data refit",
         " nrounds=", tc$nrounds_max, " early_stop=", tc$early_stop,
         " val_frac=", tc$val_frac, "\n", sep = "")
     cat("    caps          : contextual=", tc$caps$contextual,
@@ -922,7 +919,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     val_frac, group_col, impute_numeric, impute_factor_missing,
     cap_contextual, cap_spectral, cap_random, cap_otsu,
     feature_whitelist_override, feature_weights,
-    training_protocol, oof_sampling) {
+    oof_sampling) {
 
   tc <- .of_canonical_train_control()
 
@@ -1010,11 +1007,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     tc$feature_weights <- feature_weights
   }
 
-  # --- protocol toggles ------------------------------------------------------
-  if (!is.null(training_protocol)) {
-    tc$training_protocol <- match.arg(training_protocol,
-                                      c("legacy", "nested_refit"))
-  }
+  # --- OOF diagnostic sampling toggle ----------------------------------------
   if (!is.null(oof_sampling)) {
     tc$oof_sampling <- match.arg(oof_sampling, c("capped", "full"))
   }

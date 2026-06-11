@@ -127,16 +127,11 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
-    # B1 (2026-06-07): protocol toggle + per-fold sampling mode. "legacy"
-    # (default) reproduces the historical OOF byte-for-byte; "nested_refit"
-    # routes each outer fold through the shared leakage-free core. oof_sampling
-    # only matters on the nested path ("capped" applies the FINAL bucket caps to
-    # the outer-train negatives; "full" uses all outer-train rows).
-    training_protocol = c("legacy", "nested_refit"),
+    # Per-fold diagnostic negative-sampling mode: "capped" applies the FINAL
+    # bucket caps to the outer-train negatives; "full" uses all outer-train rows.
     oof_sampling = c("capped", "full"),
-    # B1: the 4 cap ratios are REQUIRED formals (no defaults) so a dropped
-    # argument cannot silently revert a bucket to ratio 1.0. They are forwarded
-    # to run_oof_xgb on the nested path; ignored (but still required) otherwise.
+    # The 4 cap ratios are REQUIRED formals (no defaults) so a dropped argument
+    # cannot silently revert a bucket to ratio 1.0. Forwarded to run_oof_xgb.
     contextual_exclusion_to_burned_ratio,
     spectral_hard_negative_to_burned_ratio,
     random_to_burned_ratio,
@@ -157,26 +152,7 @@ run_dm_oof_pipeline <- function(
     group_col,
     ...
 ) {
-  training_protocol <- match.arg(training_protocol)
   oof_sampling <- match.arg(oof_sampling)
-  # B1: the 4 cap ratios are formals WITHOUT defaults. On the nested_refit path
-  # they are REQUIRED: a dropped argument ERRORS here (so the OOF chain can
-  # never silently revert a bucket to ratio 1.0). On the legacy path they are
-  # never used, so omitting them is fine and the legacy behaviour is unchanged.
-  if (identical(training_protocol, "nested_refit")) {
-    if (missing(contextual_exclusion_to_burned_ratio)) {
-      stop("run_dm_oof_pipeline(nested_refit): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
-    }
-    if (missing(spectral_hard_negative_to_burned_ratio)) {
-      stop("run_dm_oof_pipeline(nested_refit): required cap 'spectral_hard_negative_to_burned_ratio' is missing.", call. = FALSE)
-    }
-    if (missing(random_to_burned_ratio)) {
-      stop("run_dm_oof_pipeline(nested_refit): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
-    }
-    if (missing(otsu_unburned_to_burned_ratio)) {
-      stop("run_dm_oof_pipeline(nested_refit): required cap 'otsu_unburned_to_burned_ratio' is missing.", call. = FALSE)
-    }
-  }
   if (!exists("build_design_matrix_patches")) stop("No encuentro build_design_matrix_patches() cargada en el entorno.")
   if (!exists("run_oof_xgb")) stop("No encuentro run_oof_xgb() cargada en el entorno.")
 
@@ -212,16 +188,29 @@ run_dm_oof_pipeline <- function(
            "cfg$train_control via run_oof_diagnostics()).", call. = FALSE)
     }
   }
-  # Gate 1B: val_frac / impute_* are consumed ONLY on the nested_refit path
-  # (forwarded to the per-fold leakage-free core); required there, mirroring the
-  # cap-ratio pattern.
-  if (identical(training_protocol, "nested_refit")) {
-    for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
-      if (eval(call("missing", as.name(.nm)))) {
-        stop("run_dm_oof_pipeline(nested_refit): required resolved arg '", .nm,
-             "' is missing (no methodological default).", call. = FALSE)
-      }
+  # Gate 1B: val_frac / impute_* are forwarded to the per-fold leakage-free core
+  # and are always required (no methodological default), mirroring the cap-ratio
+  # pattern.
+  for (.nm in c("val_frac", "impute_numeric", "impute_factor_missing")) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("run_dm_oof_pipeline(): required resolved arg '", .nm,
+           "' is missing (no methodological default).", call. = FALSE)
     }
+  }
+  # The 4 cap ratios are formals WITHOUT defaults and are REQUIRED: a dropped
+  # argument ERRORS here (so the OOF chain can never silently revert a bucket to
+  # ratio 1.0).
+  if (missing(contextual_exclusion_to_burned_ratio)) {
+    stop("run_dm_oof_pipeline(): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
+  }
+  if (missing(spectral_hard_negative_to_burned_ratio)) {
+    stop("run_dm_oof_pipeline(): required cap 'spectral_hard_negative_to_burned_ratio' is missing.", call. = FALSE)
+  }
+  if (missing(random_to_burned_ratio)) {
+    stop("run_dm_oof_pipeline(): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
+  }
+  if (missing(otsu_unburned_to_burned_ratio)) {
+    stop("run_dm_oof_pipeline(): required cap 'otsu_unburned_to_burned_ratio' is missing.", call. = FALSE)
   }
 
   dir.create(save_dir_dm, recursive = TRUE, showWarnings = FALSE)
@@ -330,29 +319,25 @@ run_dm_oof_pipeline <- function(
     overwrite   = overwrite
   )
 
-  # B1 (2026-06-07): for the nested_refit protocol, ALSO build a deferred-impute
-  # version (same hotspot rules, _isNA companions, factor handling, but NO
-  # median imputation and NO global matrix) so run_oof_xgb can fit medians per
-  # outer fold (B1b leakage fix). The saved `dm` bundle above is unchanged
-  # (still globally imputed) so the downstream final-model stage and any bundle
-  # consumers are unaffected.
-  dm_defer <- NULL
-  if (identical(training_protocol, "nested_refit")) {
-    dm_defer <- build_design_matrix_patches(
-      labelled    = labelled,
-      burned_like = burned_like,
-      id_cols     = id_cols,
-      drop_regex  = drop_regex,
-      cat_cols    = cat_cols,
-      hs_n_col    = hs_n_col,
-      hs_conf_col = hs_conf_col,
-      hs_frp_col  = hs_frp_col,
-      median_from = median_from,
-      defer_impute = TRUE,
-      save_dir    = NULL,
-      verbose     = FALSE
-    )
-  }
+  # ALSO build a deferred-impute version (same hotspot rules, _isNA companions,
+  # factor handling, but NO median imputation and NO global matrix) so
+  # run_oof_xgb can fit medians per outer fold (leakage fix). The saved `dm`
+  # bundle above is unchanged (still globally imputed) so the downstream
+  # final-model stage and any bundle consumers are unaffected.
+  dm_defer <- build_design_matrix_patches(
+    labelled    = labelled,
+    burned_like = burned_like,
+    id_cols     = id_cols,
+    drop_regex  = drop_regex,
+    cat_cols    = cat_cols,
+    hs_n_col    = hs_n_col,
+    hs_conf_col = hs_conf_col,
+    hs_frp_col  = hs_frp_col,
+    median_from = median_from,
+    defer_impute = TRUE,
+    save_dir    = NULL,
+    verbose     = FALSE
+  )
 
   # 0.5.0: build the per-fold feature_weights vector aligned to the
   # design matrix that `build_design_matrix_patches` actually
@@ -385,10 +370,8 @@ run_dm_oof_pipeline <- function(
     )
   }
 
-  # B1: build the run_oof_xgb argument list. The cap ratios are forwarded ONLY
-  # when supplied (they have no defaults); on the legacy path they are unused,
-  # so forwarding a missing cap (which would trigger R's "argument missing"
-  # error on evaluation) is avoided.
+  # Build the run_oof_xgb argument list. The cap ratios have no defaults and are
+  # always required by run_oof_xgb; they were validated as present above.
   oof_args <- list(
     XL_mat      = dm$XL_mat,
     y           = dm$y,
@@ -403,19 +386,17 @@ run_dm_oof_pipeline <- function(
     verbose     = verbose,
     feature_weights_vector = feature_weights_vector,
     overwrite   = overwrite,
-    # B1 (2026-06-07): protocol + per-fold knobs.
-    training_protocol = training_protocol,
+    # Per-fold negative-sampling mode + deferred-impute inputs for the core.
     oof_sampling      = oof_sampling,
-    prepared_labelled = if (!is.null(dm_defer)) dm_defer$prepared_labelled else NULL,
-    model_cols        = if (!is.null(dm_defer)) dm_defer$model_cols else NULL,
+    prepared_labelled = dm_defer$prepared_labelled,
+    model_cols        = dm_defer$model_cols,
     # Gate 1B (2026-06-07): threaded from cfg$train_control$group_col via
     # run_oof_diagnostics() (was a hardcoded "block_id" literal).
     group_col         = group_col,
     feature_weights   = feature_weights
   )
-  # Gate 1B: val_frac / impute_* are used by run_oof_xgb only on the nested path
-  # and are required there; forward them only when supplied (avoids evaluating a
-  # missing formal on the legacy path, mirroring the cap-ratio forwarding below).
+  # val_frac / impute_* / caps are required by run_oof_xgb (validated present
+  # above); forward each (the missing() guards are always TRUE here).
   if (!missing(val_frac))              oof_args$val_frac <- val_frac
   if (!missing(impute_numeric))        oof_args$impute_numeric <- impute_numeric
   if (!missing(impute_factor_missing)) oof_args$impute_factor_missing <- impute_factor_missing
@@ -625,10 +606,10 @@ run_dm_oof_pipeline <- function(
     dm = dm,
     oof = oof,
     # Gate 1E (2026-06-09): the structural feature-schema parity guard payload
-    # from run_oof_xgb() (nested_refit path): per-fold + canonical fingerprints,
-    # asserted identical across folds inside run_oof_xgb(). The orchestrator
-    # threads `schema_guard$canonical` into the FINAL / scoring cross-checks and
-    # the run manifest. NULL on the legacy path.
+    # from run_oof_xgb(): per-fold + canonical fingerprints, asserted identical
+    # across folds inside run_oof_xgb(). The orchestrator threads
+    # `schema_guard$canonical` into the FINAL / scoring cross-checks and the run
+    # manifest.
     schema_guard = oof$schema_guard,
     files = list(
       dm_dir = save_dir_dm,

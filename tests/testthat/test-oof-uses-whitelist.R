@@ -45,9 +45,11 @@ make_oof_fixture <- function(n = 30, seed = 23L) {
     neg_type                 = rep(c(NA_character_, "background_cell"),
                                     length.out = n),
     poly_id                  = sprintf("p_%03d", seq_len(n)),
-    block_id                 = rep(seq_len(5), length.out = n),
-    fold_rep1                = rep(c(1L, 2L, 3L), length.out = n),
-    fold_rep2                = rep(c(2L, 1L, 3L), length.out = n),
+    # block_id -> fold mapping so no block spans two folds within a rep (the
+    # canonical OOF path asserts no outer train/test block overlap).
+    block_id                 = rep(seq_len(6), length.out = n),
+    fold_rep1                = rep(c(1L, 2L, 3L), length.out = 6)[rep(seq_len(6), length.out = n)],
+    fold_rep2                = rep(c(3L, 1L, 2L), length.out = 6)[rep(seq_len(6), length.out = n)],
     cell_id                  = seq_len(n) + 9000L,
     intersects_deterministic = sample(c(TRUE, FALSE), n, replace = TRUE),
     legacy_decision          = sample(c("keep", "drop"), n, replace = TRUE),
@@ -121,6 +123,11 @@ test_that("OOF design bundle columns are within the whitelist", {
     early_stop  = 4L,
     seed_base   = 11L,
     group_col   = "block_id",
+    oof_sampling = "capped", val_frac = 0.15,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     verbose     = 0,
     save_prefix = "oof_smoke",
     overwrite   = TRUE

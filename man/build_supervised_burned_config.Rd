@@ -36,7 +36,6 @@ build_supervised_burned_config(
   cap_otsu = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
-  training_protocol = NULL,
   oof_sampling = NULL,
   model_params = NULL,
   options = list()
@@ -180,11 +179,12 @@ example, dropping the hotspot block to define a no-hotspot profile).
 are stored in `cfg$train_control` and consumed identically by the OOF and
 FINAL stages. `NULL` uses the full feature set with equal weights.}
 
-\item{training_protocol, oof_sampling}{Character or `NULL`. `training_protocol`
-selects the FINAL training protocol (`"legacy"` or `"nested_refit"`);
-`oof_sampling` selects the per-fold negative sampling mode used by the OOF
-diagnostics (`"capped"` or `"full"`). `NULL` uses `"legacy"` / `"capped"`.
-Stored in `cfg$train_control`.}
+\item{oof_sampling}{Character or `NULL`. Selects the per-fold negative
+sampling mode used by the OOF diagnostics (`"capped"` or `"full"`). `NULL`
+uses `"capped"`. Stored in `cfg$train_control`. This controls only the OOF
+diagnostic negative sampling: OtsuFire always uses a single training
+procedure (inner early-stopping selection + full-data refit) for both the
+OOF folds and the FINAL model.}
 
 \item{model_params}{Named list or `NULL`. Optional \emph{partial} override of
 the canonical XGBoost hyper-parameter block stored in `cfg$model_params`
@@ -422,7 +422,6 @@ cfg <- build_supervised_burned_config(
   target_year          = 2017,
   output_dir           = "results/",
   run_name             = "balanced_2017",
-  training_protocol    = "nested_refit",
   oof_sampling         = "capped",
   cap_contextual       = 0.25,
   cap_spectral         = 2.0,

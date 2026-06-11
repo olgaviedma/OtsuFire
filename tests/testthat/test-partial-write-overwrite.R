@@ -14,24 +14,35 @@ whitelist_internal2 <- function() {
   get(".supervised_feature_cols", envir = asNamespace("OtsuFire"))
 }
 
-# Minimal self-contained OOF input for run_oof_xgb(): a tiny sparse matrix, a
-# binary label, a labelled_df carrying fire_uid/class + the two fold columns.
-make_run_oof_xgb_fixture <- function(n = 24L, seed = 7L) {
+# Minimal self-contained OOF input for the canonical run_oof_xgb() path: a tiny
+# sparse matrix, a binary label, a labelled_df carrying fire_uid/class +
+# source/neg_type/block_id + the two fold columns, plus the deferred-impute
+# prepared frame + model column set the per-fold core consumes.
+make_run_oof_xgb_fixture <- function(n = 60L, seed = 7L) {
   set.seed(seed)
+  feat_cols <- c("rbr_med", "elev_med", "slope_med")
   X <- Matrix::Matrix(
-    matrix(stats::runif(n * 3L), nrow = n,
-           dimnames = list(NULL, c("rbr_med", "elev_med", "slope_med"))),
+    matrix(stats::runif(n * 3L), nrow = n, dimnames = list(NULL, feat_cols)),
     sparse = TRUE
   )
   y <- rep(c(1L, 0L), length.out = n)
+  # block_id -> fold mapping so no block spans two folds within a rep.
+  blk <- rep(seq_len(12), length.out = n)
+  blk_to_fold1 <- rep(c(1L, 2L, 3L), length.out = 12)
+  blk_to_fold2 <- rep(c(3L, 1L, 2L), length.out = 12)
   labelled_df <- data.frame(
     fire_uid  = sprintf("uid_%03d", seq_len(n)),
     class     = ifelse(y == 1L, "burned", "unburned"),
-    fold_rep1 = rep(c(1L, 2L), length.out = n),
-    fold_rep2 = rep(c(2L, 1L), length.out = n),
+    source    = ifelse(y == 1L, "burned_truth", "random_burnable_background"),
+    neg_type  = ifelse(y == 1L, NA_character_, "background_cell"),
+    block_id  = blk,
+    fold_rep1 = blk_to_fold1[blk],
+    fold_rep2 = blk_to_fold2[blk],
     stringsAsFactors = FALSE
   )
-  list(X = X, y = y, labelled_df = labelled_df)
+  prepared_labelled <- as.data.frame(as.matrix(X))
+  list(X = X, y = y, labelled_df = labelled_df,
+       prepared_labelled = prepared_labelled, model_cols = feat_cols)
 }
 
 test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
@@ -53,6 +64,12 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
     nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
+    oof_sampling = "capped", val_frac = 0.15,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
 
@@ -74,6 +91,12 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
     nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
+    oof_sampling = "capped", val_frac = 0.15,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = FALSE
   )))
   expect_identical(readLines(agg_csv),  sentinel)
@@ -87,6 +110,12 @@ test_that("run_oof_xgb honors overwrite for its CSV sidecars", {
                   eval_metric = "logloss", eta = 0.1, max_depth = 2,
                   nthread = 1),
     nrounds_max = 4L, early_stop = 3L, seed_base = 1L, group_col = "block_id",
+    oof_sampling = "capped", val_frac = 0.15,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    prepared_labelled = fx$prepared_labelled, model_cols = fx$model_cols,
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     out_dir = out_dir, prefix = "smoke", verbose = 0, overwrite = TRUE
   )))
   expect_false(identical(readLines(agg_csv), sentinel))
@@ -109,15 +138,19 @@ make_oof_pipeline_fixture <- function(n = 30L, seed = 31L) {
                "hs_no_support_when_available", "hs_only_buffer_support")) {
     if (nm %in% names(feat_df)) feat_df[[nm]] <- as.integer(round(feat_df[[nm]]))
   }
+  blk <- rep(seq_len(6), length.out = n)
+  blk_to_fold1 <- rep(c(1L, 2L, 3L), length.out = 6)
+  blk_to_fold2 <- rep(c(3L, 1L, 2L), length.out = 6)
   admin_df <- data.frame(
     fire_uid  = sprintf("uid_%03d", seq_len(n)),
     class     = rep(c("burned", "unburned"), length.out = n),
     source    = rep(c("burned_truth", "random_burnable_background"),
                     length.out = n),
+    neg_type  = rep(c(NA_character_, "background_cell"), length.out = n),
     poly_id   = sprintf("p_%03d", seq_len(n)),
-    block_id  = rep(seq_len(5), length.out = n),
-    fold_rep1 = rep(c(1L, 2L, 3L), length.out = n),
-    fold_rep2 = rep(c(2L, 1L, 3L), length.out = n),
+    block_id  = blk,
+    fold_rep1 = blk_to_fold1[blk],
+    fold_rep2 = blk_to_fold2[blk],
     stringsAsFactors = FALSE
   )
   full_df <- cbind(admin_df, feat_df)
@@ -159,6 +192,11 @@ test_that("run_dm_oof_pipeline does not clobber CSV/TXT sidecars when overwrite=
     result_dir  = result_dir,
     target_year = 2005L,
     nrounds_max = 6L, early_stop = 4L, seed_base = 11L, group_col = "block_id",
+    oof_sampling = "capped", val_frac = 0.15,
+    impute_numeric = "median", impute_factor_missing = "MISSING",
+    contextual_exclusion_to_burned_ratio = 1,
+    spectral_hard_negative_to_burned_ratio = 1,
+    random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     verbose     = 0, prefix = prefix, save_prefix = prefix,
     overwrite   = FALSE
   )))

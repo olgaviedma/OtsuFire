@@ -318,12 +318,12 @@ test_that("PART A: dropping a required cap ERRORS in the FINAL pool boundary (no
   )
 })
 
-test_that("PART A: dropping a required cap ERRORS on the OOF nested path (no silent 1.0 revert)", {
+test_that("PART A: dropping a required cap ERRORS on the OOF path (no silent 1.0 revert)", {
   skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")
   fn <- get("run_oof_xgb", envir = ns)
-  # On the nested_refit path the four cap ratios are REQUIRED formals; a dropped
-  # one ERRORS rather than reverting the bucket to 1.0.
+  # The four cap ratios are REQUIRED formals; a dropped one ERRORS rather than
+  # reverting the bucket to 1.0.
   expect_error(
     suppressMessages(suppressWarnings(fn(
       XL_mat = Matrix::Matrix(matrix(0, 2, 1), sparse = TRUE), y = c(1L, 0L),
@@ -334,7 +334,7 @@ test_that("PART A: dropping a required cap ERRORS on the OOF nested path (no sil
       params = list(), nrounds_max = 4L, early_stop = 3L, seed_base = 42L,
       group_col = "block_id", val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
-      training_protocol = "nested_refit", oof_sampling = "capped",
+      oof_sampling = "capped",
       prepared_labelled = data.frame(x = c(0, 1)), model_cols = "x",
       contextual_exclusion_to_burned_ratio = 1,
       # spectral_hard_negative_to_burned_ratio DROPPED on purpose.

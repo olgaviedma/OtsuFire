@@ -228,7 +228,6 @@
     target_year = config$target_year,
     reuse_upstream = FALSE,
     feature_whitelist_override = NULL,
-    training_protocol = "legacy",
     oof_sampling = "capped",
     model = NULL,
     recipe = NULL,
@@ -781,16 +780,8 @@
   # ===========================================================================
   # (9) Contradictory configuration.
   # ===========================================================================
-  training_protocol <- training_protocol %||% "legacy"
   oof_sampling      <- oof_sampling      %||% "capped"
   run_check("contradictory_config", "blocking", {
-    if (identical(training_protocol, "legacy") &&
-        identical(oof_sampling, "full")) {
-      stop("validate_supervised_execution(): contradictory configuration -- ",
-           "oof_sampling = 'full' is only meaningful under training_protocol = ",
-           "'nested_refit', but training_protocol = 'legacy'. Set oof_sampling = ",
-           "'capped' or switch to nested_refit.", call. = FALSE)
-    }
     if (!is.null(feature_whitelist_override)) {
       canon <- tryCatch(get(".supervised_feature_cols",
                             envir = asNamespace("OtsuFire")),
@@ -825,8 +816,8 @@
     }
     add(.of_vse_record("contradictory_config", "PASS",
                        "No contradictory cfg setting detected.",
-                       evidence = sprintf("protocol=%s; oof=%s; reuse=%s",
-                                          training_protocol, oof_sampling,
+                       evidence = sprintf("oof=%s; reuse=%s",
+                                          oof_sampling,
                                           isTRUE(reuse_upstream)),
                        severity = "blocking"))
   })
@@ -951,8 +942,7 @@
 #'     building the scoring matrix, so it is no longer best-effort on the main
 #'     path.
 #'   \item \strong{Contradictory configuration} -- mutually exclusive cfg
-#'     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts;
-#'     `training_protocol = "legacy"` with `oof_sampling = "full"`; a
+#'     settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts; a
 #'     `feature_whitelist_override` that is not a subset of the canonical list).
 #'   \item \strong{Cache belonging to ANOTHER cfg} -- a persisted negative-pool
 #'     fingerprint sidecar (Gate 1C.2) whose checksum disagrees with the
@@ -1024,7 +1014,8 @@
 #'   contradictory-config and cache-belonging checks.
 #' @param feature_whitelist_override Character or `NULL`. The RESOLVED whitelist
 #'   override, validated as a subset of the canonical whitelist.
-#' @param training_protocol,oof_sampling Character. The resolved protocol toggles.
+#' @param oof_sampling Character. The resolved OOF diagnostic negative-sampling
+#'   mode (`"capped"` or `"full"`).
 #' @param model,recipe Optional fitted model / recipe. When supplied, check (8)
 #'   asserts the scoring feature schema is compatible.
 #' @param scoring_feature_names Character or `NULL`. The available scoring-feature
@@ -1048,7 +1039,6 @@ validate_supervised_execution <- function(config,
                                           target_year = config$target_year,
                                           reuse_upstream = FALSE,
                                           feature_whitelist_override = NULL,
-                                          training_protocol = "legacy",
                                           oof_sampling = "capped",
                                           model = NULL,
                                           recipe = NULL,
@@ -1061,7 +1051,6 @@ validate_supervised_execution <- function(config,
     target_year                = target_year,
     reuse_upstream             = reuse_upstream,
     feature_whitelist_override = feature_whitelist_override,
-    training_protocol          = training_protocol,
     oof_sampling               = oof_sampling,
     model                      = model,
     recipe                     = recipe,
@@ -1245,7 +1234,7 @@ validate_supervised_execution <- function(config,
     group_col               = tc$group_col %||% "",
     impute_numeric          = tc$impute_numeric %||% "",
     impute_factor_missing   = tc$impute_factor_missing %||% "",
-    training_protocol       = tc$training_protocol %||% "legacy",
+    training_protocol       = tc$training_protocol %||% "nested_refit",
     oof_sampling            = tc$oof_sampling %||% "capped",
     model_params            = config$model_params %||% list()
   ))

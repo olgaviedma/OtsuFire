@@ -1,5 +1,5 @@
 # =============================================================================
-# CANONICAL versioned supervised usage script  (05 / 6)
+# CANONICAL versioned supervised usage script  (03 / 4)
 # OtsuFire — EFFIS external validation of a supervised burned map
 # =============================================================================
 # *** CANONICAL, VERSIONED COPY (inst/scripts/). External 00_USAGE copies are
@@ -8,7 +8,7 @@
 # WHAT THIS SCRIPT DEMONSTRATES — TWO DISTINCT validators, do not confuse them:
 #   * validate_supervised_execution(cfg, strict = TRUE)
 #       PRE-RUN structural check of the cfg/inputs/schema (no external truth).
-#       Used as the fail-fast gate before heavy compute (shown in scripts 01-04).
+#       Used as the fail-fast gate before heavy compute (shown in scripts 01-02).
 #   * validate_fire_maps(input_shapefile, ref_shapefile, ...)
 #       POST-RUN ACCURACY validation of the thresholded supervised map against
 #       an EFFIS reference burned layer (pixel/area metrics). This is what THIS
@@ -82,7 +82,6 @@ main <- function() {
     cap_spectral         = caps$spectral,
     cap_random           = caps$random,
     cap_otsu             = caps$otsu,
-    training_protocol    = "legacy",
     options = list(
       data_base = paths$data_base, composite_base = paths$composite_base,
       result_name = run_name, legacy_otsu_mode = "burnable_only",

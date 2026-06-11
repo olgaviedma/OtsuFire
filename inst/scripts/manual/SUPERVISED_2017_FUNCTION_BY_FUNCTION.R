@@ -211,7 +211,9 @@ B01_cfg <- build_supervised_burned_config(
   cap_contextual = CAP_CONTEXTUAL, cap_spectral = CAP_SPECTRAL,
   cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
   oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
-  training_protocol = "nested_refit", oof_sampling = "capped",
+  # OtsuFire always uses inner-early-stopping selection + full-data refit
+  # (no protocol choice). oof_sampling controls OOF negative sampling only.
+  oof_sampling = "capped",
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
   options = list(
     data_base = data_base, composite_base = composite_base, result_name = result_name,
@@ -226,7 +228,7 @@ B01_cfg$tool_paths$ogr2ogr_exe            <- ogr2ogr_exe
 cat("\n================= 01_BUILD_CFG CHECK =================\n")
 .caps <- B01_cfg$train_control$caps
 cat("resolved caps:\n"); print(unlist(.caps))
-cat(sprintf("training_protocol : %s\n", B01_cfg$train_control$training_protocol %||% "?"))
+cat("training          : early-stopping selection + full-data refit (fixed)\n")
 cat(sprintf("oof_sampling      : %s\n", B01_cfg$train_control$oof_sampling %||% "?"))
 .ovr <- B01_cfg$train_control$feature_whitelist_override
 cat(sprintf("feature_whitelist_override n : %s\n", if (is.null(.ovr)) "NULL (FULL 50)" else length(.ovr)))
@@ -249,7 +251,7 @@ cat("=====================================================\n")
 B02_validation <- validate_supervised_execution(
   config = B01_cfg, strict = TRUE,
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
-  training_protocol = "nested_refit", oof_sampling = "capped",
+  oof_sampling = "capped",
   data_base = data_base, composite_base = composite_base, result_name = result_name)
 
 cat("\n================= 02_VALIDATE_INPUTS CHECK =================\n")
@@ -428,7 +430,7 @@ cat("=======================================================\n")
 
 # #############################################################################
 # 08_RUN_OOF — run_oof_diagnostics. Keeps B08_oof.
-#   Prints protocol, caps, scale_pos_weight, best_iteration, schema fingerprint,
+#   Prints caps, scale_pos_weight, best_iteration, schema fingerprint,
 #   refit, predicted rows, OOF metrics (with the hotspot-label-circularity caveat).
 # #############################################################################
 .oof_dir <- file.path(MANUAL_OUT, "B08_oof/05_OOF"); dir.create(.oof_dir, showWarnings = FALSE, recursive = TRUE)
@@ -439,7 +441,7 @@ B08_oof <- run_oof_diagnostics(
   labelled_gpkg = B07_folds$train_with_folds_gpkg, labelled_layer = "train_with_folds")
 
 cat("\n================= 08_RUN_OOF CHECK =================\n")
-cat(sprintf("training_protocol : %s\n", B01_cfg$train_control$training_protocol %||% "?"))
+cat("training          : early-stopping selection + full-data refit (fixed)\n")
 cat(sprintf("oof_sampling      : %s\n", B01_cfg$train_control$oof_sampling %||% "?"))
 cat(sprintf("scale_pos_weight  : %s\n", B08_oof$scale_pos_weight %||% B08_oof$spw %||% "(see audit)"))
 cat(sprintf("best_iteration    : %s\n", B08_oof$best_iteration %||% "(see audit)"))

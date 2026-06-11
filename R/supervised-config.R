@@ -161,8 +161,9 @@
 #'   each. Stored in `cfg$train_control$seeds`.
 #'
 #' @param val_frac Numeric in `(0, 1)` or `NULL`. Inner validation fraction used
-#'   by the FINAL / nested-refit train/validation split. `NULL` uses `0.15`.
-#'   Stored in `cfg$train_control`.
+#'   by the inner train/validation split that selects the number of boosting
+#'   rounds (early stopping) before the full-data refit, at both the OOF and
+#'   FINAL stages. `NULL` uses `0.15`. Stored in `cfg$train_control`.
 #'
 #' @param group_col Character or `NULL`. Grouping column for the grouped
 #'   train/validation split (keeps spatially grouped observations together).
@@ -256,13 +257,24 @@
 #' }
 #'
 #' \subsection{OOF and FINAL}{
-#'   The out-of-fold (OOF) stage trains on outer held-out spatial folds with an
-#'   inner validation split and early stopping, producing cross-validated
-#'   diagnostics and a `best_iteration` per fold. The FINAL stage selects the
-#'   feature set and refits the model on all labelled data, again with an inner
-#'   validation split and early stopping. The OOF and FINAL stages share the
-#'   same feature contract and the same recipe, so the diagnostics describe the
-#'   same model family that is ultimately fit.
+#'   OtsuFire uses a single supervised training procedure: the number of
+#'   boosting rounds is selected using an inner validation split and early
+#'   stopping, and the recipe and model are then refitted on all available
+#'   training observations before prediction. There is no protocol choice.
+#'
+#'   In the out-of-fold (OOF) stage this procedure is applied per spatial fold:
+#'   each outer fold selects `best_iteration` on an inner validation split
+#'   drawn from the outer-train rows, then the recipe and model are refit on
+#'   ALL outer-train rows at that `best_iteration` before predicting the
+#'   held-out outer-test fold. The outer-test fold never enters imputation,
+#'   feature selection, factor levels, weights, round selection or the refit,
+#'   so the cross-validated diagnostics are leakage-free.
+#'
+#'   The FINAL stage applies the same procedure once to the whole labelled set:
+#'   it selects the feature set, picks `best_iteration` on an inner validation
+#'   split, and refits the recipe and model on all labelled observations. The
+#'   OOF and FINAL stages share the same feature contract and the same recipe,
+#'   so the diagnostics describe the same model family that is ultimately fit.
 #' }
 #'
 #' \subsection{Feature recipe}{
@@ -358,14 +370,14 @@
 #'
 #'   `cfg$model_params` (the XGBoost block, without `scale_pos_weight`) and
 #'   `cfg$train_control` (caps, seeds, rounds, validation fraction, grouping,
-#'   imputation rules, feature whitelist/weights, and protocol toggles) are the
+#'   imputation rules, feature whitelist/weights, and `oof_sampling`) are the
 #'   resolved methodological parameters read by every downstream stage.
 #'   Internal implementation details beyond these stable public fields are not a
 #'   stable API and should not be relied upon by downstream user code.
 #'
 #' @examples
 #' \dontrun{
-#' ## Full configuration: balanced scenario, all inputs, nested-refit protocol.
+#' ## Full configuration: balanced scenario, all inputs.
 #' cfg <- build_supervised_burned_config(
 #'   scenario             = "balanced",
 #'   internal_decisions   = "2017/internal_decisions.gpkg",

@@ -311,9 +311,10 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
 }
 
 # ---- CFG BUILDERS (FULL vs NO-HOTSPOT differ ONLY via explicit config) -------
-# Both use canonical full training, identical caps/seeds/protocol. The ONLY
-# difference is feature_whitelist_override (NO-HOTSPOT) + use_hotspots flag.
-.mk_long_cfg <- function(training_protocol, oof_sampling,
+# Both use the single canonical training procedure (inner-early-stopping
+# selection + full-data refit), identical caps/seeds. The ONLY difference is
+# feature_whitelist_override (NO-HOTSPOT) + use_hotspots flag.
+.mk_long_cfg <- function(oof_sampling,
                          feature_whitelist_override = NULL,
                          out_base = LONG_RESULTS_BASE) {
   cfg <- build_supervised_burned_config(
@@ -331,7 +332,7 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
     cap_contextual = CAP_CONTEXTUAL, cap_spectral = CAP_SPECTRAL,
     cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
     oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
-    training_protocol = training_protocol, oof_sampling = oof_sampling,
+    oof_sampling = oof_sampling,
     feature_whitelist_override = feature_whitelist_override,
     options = list(
       data_base = data_base, composite_base = composite_base, result_name = result_name,

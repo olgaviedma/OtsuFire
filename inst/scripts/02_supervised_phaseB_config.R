@@ -1,5 +1,5 @@
 # =============================================================================
-# CANONICAL versioned supervised usage script  (02 / 6)
+# CANONICAL versioned supervised usage script  (02 / 4)
 # OtsuFire supervised burned-area mapping — PHASE B configuration
 # =============================================================================
 # *** CANONICAL, VERSIONED COPY (inst/scripts/ of the OtsuFire package). The
@@ -10,7 +10,8 @@
 #   * cap_spectral = 2.0 set THROUGH the builder (Natalia's Phase B value; the
 #     PACKAGE DEFAULT is 1.0). It lands in cfg$train_control$caps$spectral with
 #     builder provenance "user".
-#   * training_protocol = "nested_refit" (the Phase B candidate protocol).
+#   * OtsuFire always uses the single training procedure (inner-early-stopping
+#     selection + full-data refit); there is no training-protocol choice.
 #   * The ABORT-ON-CAP-MISMATCH guard: the caps reaching OOF and FINAL MUST be
 #     identical; both read cfg$train_control$caps. We assert this before running.
 #   * The runtime FEATURE-SCHEMA PARITY guard is inherited from the package: the
@@ -66,7 +67,7 @@ main <- function() {
   suppressMessages(pkgload::load_all(paths$pkg_root, quiet = TRUE))
   stopifnot(utils::packageVersion("OtsuFire") >= "0.5.0")
 
-  # ---- Build the PHASE B cfg: cap_spectral = 2.0 + nested_refit via builder. --
+  # ---- Build the PHASE B cfg: cap_spectral = 2.0 via the builder. ------------
   cfg <- build_supervised_burned_config(
     scenario             = scenario,
     internal_decisions   = paths$internal_decisions,
@@ -81,8 +82,7 @@ main <- function() {
     cap_spectral         = caps$spectral,   # 2.0 (PHASE B; default 1.0)
     cap_random           = caps$random,
     cap_otsu             = caps$otsu,
-    training_protocol    = "nested_refit",  # PHASE B candidate protocol
-    oof_sampling         = "capped",
+    oof_sampling         = "capped",        # OOF diagnostic negative sampling
     options = list(
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,
@@ -108,15 +108,14 @@ main <- function() {
   #      fast otherwise (regression tripwire). ---------------------------------
   stopifnot(
     isTRUE(all.equal(cfg$train_control$caps$spectral, caps$spectral)),
-    identical(cfg$resolved_params_provenance$train_control$cap_spectral, "user"),
-    identical(cfg$resolved_params_provenance$train_control$training_protocol, "user")
+    identical(cfg$resolved_params_provenance$train_control$cap_spectral, "user")
   )
   cat("[OK] Phase B cap_spectral = 2.0 reached cfg$train_control (provenance user).\n")
 
   # ---- PRE-RUN CHECK: blocking inputs / runtime feature-schema parity guard.  -
   validate_supervised_execution(cfg, strict = TRUE)
 
-  # ---- Run the modular chain (caps + nested_refit all read from cfg). --------
+  # ---- Run the modular chain (caps + sampling all read from cfg). ------------
   pools <- build_supervised_training_pools(config = cfg, write_outputs = TRUE, overwrite = TRUE)
   folds <- make_spatial_folds(train_labelled = pools$train_labeled, config = cfg,
                               split_unit = "fire", write_outputs = TRUE, overwrite = TRUE)

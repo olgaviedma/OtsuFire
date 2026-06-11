@@ -1,5 +1,36 @@
 # OtsuFire (development version)
 
+## BREAKING CHANGE — single supervised training procedure
+
+* **`training_protocol` removed from the public API.** It is no longer a formal
+  argument of `build_supervised_burned_config()`, `run_oof_diagnostics()`,
+  `train_final_burned_model()`, `run_oneyear_supervised_pipeline()` or
+  `validate_supervised_execution()`. **Passing `training_protocol` now errors**
+  (R's "unused argument" on the plain functions; an explicit guard on the two
+  `...`-bearing entry points).
+* **The `legacy` training path was deleted.** OtsuFire now always uses ONE
+  training procedure: the number of boosting rounds is selected with an inner
+  validation split and early stopping, then the recipe and model are refitted on
+  all available training observations before prediction. In OOF, each outer fold
+  selects `best_iteration` on an inner validation split and refits on all
+  outer-train rows before predicting the untouched outer-test fold (the
+  outer-test fold never enters imputation, feature selection, levels, weights,
+  round selection or refit). OOF and FINAL share one leakage-free core.
+* The procedure survives internally only as a fixed, non-settable provenance
+  constant (`cfg$train_control$training_protocol = "nested_refit"`); the saved
+  recipe records `training_method = "inner_early_stopping_full_refit"`. The
+  user-facing `print()` shows `training = early-stopping selection + full-data
+  refit`.
+* **`oof_sampling` is unchanged** and remains a separate knob: it controls the
+  OOF diagnostic negative sampling only (`"capped"` / `"full"`); it does not
+  select a training procedure, does not replace the refit and does not change the
+  FINAL model.
+* In-package scripts and docs updated accordingly: the protocol-pair example
+  scripts (`03_supervised_protocol_legacy.R` /
+  `04_supervised_protocol_nested_refit.R`) were removed; the long-run runners no
+  longer build "Config A legacy vs B nested" — there is one training procedure
+  and `oof_sampling` is the only retained OOF-diagnostic axis.
+
 # OtsuFire 0.6.2
 
 Cleanup + documentation + tooling release. **No methodology, caps, thresholds,

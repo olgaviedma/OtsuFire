@@ -138,7 +138,6 @@ main <- function() {
       legacy_otsu_mode                = "burnable_only",
       legacy_otsu_threshold           = 0,
       legacy_reference_otsu_threshold = 100,
-      legacy_sample_n                 = 2000L,
       legacy_reuse_existing           = TRUE,
       legacy_write_output             = TRUE,
       unb_verbose                     = TRUE

@@ -59,8 +59,6 @@ test_that("D4a: empty Otsu pool ERRORS by default (no silent degradation)", {
       use_review = FALSE,
       use_keep = FALSE,
       drop_max_s_patch = 0.15,
-      sample_n = 100L,
-      sample_props = c(drop = 1.0),
       exclude_buffer_m = 50,
       # allow_empty_otsu_pool defaults to FALSE
       verbose = FALSE
@@ -100,8 +98,6 @@ test_that("T19: empty pool with opt-in -> warning + _LEGACY_POOL_EMPTY.txt", {
       use_review = FALSE,
       use_keep = FALSE,
       drop_max_s_patch = 0.15,
-      sample_n = 100L,
-      sample_props = c(drop = 1.0),
       exclude_buffer_m = 50,
       allow_empty_otsu_pool = TRUE,
       verbose = FALSE

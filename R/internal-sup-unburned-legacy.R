@@ -186,50 +186,127 @@ sanitize_decision_pool_unb_legacy <- function(x, internal, exclude_buffer_m = 0)
     dplyr::filter(!.data$intersects_deterministic)
 }
 
-sample_stratified_legacy_unburned <- function(
-  x,
-  target_n = NULL,
-  props = c(drop = 0.70, review = 0.25, keep = 0.05),
-  random_seed = 42
-) {
-  if (!nrow(x)) return(x)
-  if (is.null(target_n) || !is.finite(target_n) || target_n <= 0) return(x)
+# GATE 6.2 (2026-06-11): Otsu > random spatial dedup (Otsu has PRIORITY). A
+# location must not enter the negative pool as BOTH a random background cell AND
+# an Otsu residual patch. This DETERMINISTIC post-hoc dedup removes every random
+# row that spatially coincides with ANY Otsu patch, BEFORE the train_labeled
+# assembly and BEFORE the per-bucket capping (.of_cap_negative_buckets). Otsu
+# rows are NEVER removed (priority direction).
+#
+# OVERLAP UNIT: exact polygon intersection by POSITIVE SHARED AREA. A random row
+# is dropped iff its polygon shares actual area (a non-degenerate 2-D
+# intersection) with the geometry of any Otsu patch. A mere shared BOUNDARY /
+# corner touch (zero intersection area) is NOT a spatial duplicate (the two
+# polygons occupy different locations) and is KEPT. This is the meaningful
+# "same location entering twice" definition; it avoids false positives from
+# grid-adjacent cells that only share an edge. Both inputs MUST already be in the
+# SAME CRS / grid as the rest of the pipeline (the caller passes them in
+# crs_master). NO extra buffer is added beyond what each builder already applied.
+#
+# @param random_sf sf of the random burnable-background rows (polygons).
+# @param otsu_sf   sf of the Otsu residual patches (polygons); the priority set.
+# @return list(
+#   random_kept            : random_sf with overlapping rows removed,
+#   n_random_before        : nrow(random_sf),
+#   n_random_removed       : count removed by positive-area Otsu overlap,
+#   n_random_final         : nrow(random_kept),
+#   area_removed           : total SHARED-overlap area (m^2) between the removed
+#                            random rows and the Otsu patches,
+#   removed_idx            : integer row indices of removed rows (1-based into
+#                            random_sf),
+#   removed_ids_hash       : compact deterministic checksum of the removed
+#                            row signatures (stable identity for the audit)
+# )
+dedup_random_vs_otsu_unb_legacy <- function(random_sf, otsu_sf) {
+  n_before <- if (is.null(random_sf)) 0L else nrow(random_sf)
 
-  target_n <- min(as.integer(target_n), nrow(x))
-  props <- props[names(props) %in% unique(x$legacy_decision)]
-  props <- props[is.finite(props) & props > 0]
-  if (!length(props)) {
-    set.seed(random_seed)
-    return(dplyr::slice_sample(x, n = target_n))
+  empty_audit <- function(kept) list(
+    random_kept      = kept,
+    n_random_before  = n_before,
+    n_random_removed = 0L,
+    n_random_final   = n_before,
+    area_removed     = 0,
+    removed_idx      = integer(0),
+    removed_ids_hash = "00000000"
+  )
+
+  if (n_before == 0L || is.null(otsu_sf) || nrow(otsu_sf) == 0L) {
+    return(empty_audit(random_sf))
   }
-  props <- props / sum(props)
 
-  split_idx <- split(seq_len(nrow(x)), x$legacy_decision)
-  wanted <- setNames(rep(0L, length(split_idx)), names(split_idx))
-  for (nm in names(props)) {
-    if (nm %in% names(split_idx)) {
-      wanted[nm] <- floor(target_n * props[[nm]])
-    }
+  # Align CRS defensively (the caller already passes crs_master, but never trust
+  # the geometry across an sf re-attach round-trip).
+  if (!is.na(sf::st_crs(otsu_sf)) && !is.na(sf::st_crs(random_sf)) &&
+      sf::st_crs(otsu_sf) != sf::st_crs(random_sf)) {
+    otsu_sf <- sf::st_transform(otsu_sf, sf::st_crs(random_sf))
   }
 
-  picked <- integer()
-  set.seed(random_seed)
-  for (nm in names(split_idx)) {
-    idx <- split_idx[[nm]]
-    n_take <- min(length(idx), wanted[[nm]])
-    if (n_take > 0) {
-      picked <- c(picked, sample(idx, n_take))
-    }
+  old_s2 <- sf::sf_use_s2()
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  suppressMessages(sf::sf_use_s2(FALSE))
+
+  # Candidate pairs by bbox/topology first (cheap), then keep only those with a
+  # POSITIVE shared intersection area (drop boundary-only touches). One unioned
+  # Otsu geometry keeps the per-random-row intersection a single polygon.
+  cand <- lengths(sf::st_intersects(random_sf, otsu_sf)) > 0
+  hits <- rep(FALSE, n_before)
+  area_removed <- 0
+  if (any(cand)) {
+    # Union the Otsu patches once so each candidate's shared area is a single
+    # robust st_intersection (boundary-only touches yield an empty / zero-area
+    # result and are therefore NOT flagged as duplicates).
+    otsu_union <- suppressWarnings(sf::st_union(sf::st_geometry(otsu_sf)))
+    cand_idx <- which(cand)
+    shared_area <- vapply(cand_idx, function(i) {
+      gi <- suppressWarnings(
+        sf::st_intersection(sf::st_geometry(random_sf)[i], otsu_union)
+      )
+      if (length(gi) == 0L) return(0)
+      a <- tryCatch(sum(as.numeric(sf::st_area(gi))), error = function(e) 0)
+      if (!is.finite(a)) 0 else a
+    }, numeric(1))
+    pos <- shared_area > 0
+    hits[cand_idx[pos]] <- TRUE
+    area_removed <- sum(shared_area[pos])
+  }
+  removed_idx <- which(hits)
+
+  if (length(removed_idx) == 0L) {
+    return(empty_audit(random_sf))
   }
 
-  remaining <- setdiff(seq_len(nrow(x)), picked)
-  n_left <- target_n - length(picked)
-  if (n_left > 0 && length(remaining) > 0) {
-    picked <- c(picked, sample(remaining, min(n_left, length(remaining))))
-  }
+  # Deterministic compact signature of the removed rows: their sorted row
+  # indices folded through the same base-R rolling checksum the legacy
+  # fingerprint uses, so the audit can record a stable identity without storing
+  # full geometries.
+  sig <- paste(sort(removed_idx), collapse = ",")
+  bytes <- as.numeric(charToRaw(enc2utf8(sig)))
+  chk <- 0
+  for (b in bytes) chk <- (chk * 31 + b) %% 1000000007
+  removed_ids_hash <- sprintf("%09d", as.integer(chk))
 
-  x[sort(unique(picked)), , drop = FALSE]
+  list(
+    random_kept      = random_sf[!hits, , drop = FALSE],
+    n_random_before  = n_before,
+    n_random_removed = length(removed_idx),
+    n_random_final   = n_before - length(removed_idx),
+    area_removed     = area_removed,
+    removed_idx      = removed_idx,
+    removed_ids_hash = removed_ids_hash
+  )
 }
+
+# GATE 6.2 (2026-06-11): the generation-side stratified pre-thinning
+# (`sample_stratified_legacy_unburned()` + `legacy_sample_props` + the
+# `legacy_random_seed` that seeded ONLY it) was REMOVED. The Otsu negative pool
+# is 100% `drop` (use_review = use_keep = FALSE always), so the drop/review/keep
+# stratification served no purpose, and the full valid Otsu `drop` pool now flows
+# into the negative pool. The downstream per-bucket cap `cap_otsu`
+# (otsu_unburned_to_burned_ratio, in .of_cap_negative_buckets) is the SOLE Otsu
+# selector deciding how many residual patches enter training. Removing the
+# pre-thinning changes the Otsu AVAILABILITY (e.g. 2017: 2000 -> full ~2481) and
+# therefore the SELECTED Otsu ids (cap_otsu draws ceiling(n_burned*cap) from the
+# full pool), by design; the selected COUNT is unchanged.
 
 build_unburned_from_legacy_decisions <- function(
   legacy_patches_path,
@@ -250,9 +327,6 @@ build_unburned_from_legacy_decisions <- function(
   keep_max_s_patch = 0.70,
   exclude_buffer_m = 0,
   min_area_ha = 0,
-  sample_n = NULL,
-  sample_props = c(drop = 0.70, review = 0.25, keep = 0.05),
-  random_seed = 42,
   # D4a (2026-06-05): when the Otsu legacy pool is empty after sanitisation,
   # all_sources silently degraded to deterministic_direct semantics (a
   # methodologically different negative pool). That silent degradation is now
@@ -412,12 +486,13 @@ build_unburned_from_legacy_decisions <- function(
     }
   }
 
-  sampled <- sample_stratified_legacy_unburned(
-    x = combined,
-    target_n = sample_n,
-    props = sample_props,
-    random_seed = random_seed
-  )
+  # GATE 6.2 (2026-06-11): no generation-side pre-thinning. The FULL valid Otsu
+  # `drop` pool flows on; cap_otsu (otsu_unburned_to_burned_ratio) is the sole
+  # selector of how many enter training, applied downstream in
+  # .of_cap_negative_buckets(). `legacy_unburned_sampled` is retained as an alias
+  # of the full pool so the persisted GPKG layer + the consumer return field stay
+  # stable (the consumer reads the full pool either way).
+  sampled <- combined
 
   summary_tbl <- combined |>
     sf::st_drop_geometry() |>
@@ -667,11 +742,8 @@ build_unburned_from_legacy_pipeline <- function(
   drop_max_s_patch = 0.15,
   review_max_s_patch = 0.45,
   keep_max_s_patch = 0.70,
-  sample_n = 2000,
-  sample_props = c(drop = 0.70, review = 0.25, keep = 0.05),
   exclude_buffer_m = 0,
   min_area_ha = 0,
-  random_seed = 42,
   reuse_existing = TRUE,
   write_unburned = TRUE,
   out_root_dir = NULL,
@@ -892,11 +964,8 @@ build_unburned_from_legacy_pipeline <- function(
     drop_max_s_patch         = drop_max_s_patch,
     review_max_s_patch       = review_max_s_patch,
     keep_max_s_patch         = keep_max_s_patch,
-    sample_n                 = sample_n,
-    sample_props             = sample_props,
     exclude_buffer_m         = exclude_buffer_m,
     min_area_ha              = min_area_ha,
-    random_seed              = random_seed,
     one_year_tif             = one_year_tif,
     burnable_mask_path       = burnable_mask_path,
     corine_raster_path       = corine_raster_path,
@@ -1053,9 +1122,6 @@ build_unburned_from_legacy_pipeline <- function(
     keep_max_s_patch = keep_max_s_patch,
     exclude_buffer_m = exclude_buffer_m,
     min_area_ha = min_area_ha,
-    sample_n = sample_n,
-    sample_props = sample_props,
-    random_seed = random_seed,
     allow_empty_otsu_pool = allow_empty_otsu_pool,
     verbose = verbose
   )

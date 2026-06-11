@@ -64,7 +64,11 @@ test_that("AS01: legacy pipeline defaults are NULL (no Olga.Viedma path leak)", 
 })
 
 # --- AS03 ------------------------------------------------------------
-test_that("AS03: dispatcher exposes UNB_LEGACY_RANDOM_SEED + 3 max_s_patch caps", {
+# GATE 6.2 (2026-06-11): `UNB_LEGACY_RANDOM_SEED` (legacy_random_seed) binding
+# was removed — it seeded ONLY the now-deleted Otsu generation-side pre-thinning.
+# The drop max_s_patch cap binding is still exposed; the review/keep caps remain
+# until GATE 6.4 removes them.
+test_that("AS03: dispatcher exposes the drop max_s_patch cap", {
   skip_if_not_installed("sf")
   skip_if_not_installed("terra")
 
@@ -77,18 +81,13 @@ test_that("AS03: dispatcher exposes UNB_LEGACY_RANDOM_SEED + 3 max_s_patch caps"
     target_year = 2025,
     output_dir = tempdir(),
     options = list(
-      legacy_random_seed         = 99L,
-      legacy_drop_max_s_patch    = 0.10,
-      legacy_review_max_s_patch  = 0.40,
-      legacy_keep_max_s_patch    = 0.65
+      legacy_drop_max_s_patch    = 0.10
     )
   )
   fn <- get(".of_supervised_engine_bindings", envir = asNamespace("OtsuFire"))
   b <- fn(cfg)
-  expect_equal(b$UNB_LEGACY_RANDOM_SEED, 99L)
+  expect_null(b$UNB_LEGACY_RANDOM_SEED)
   expect_equal(b$UNB_LEGACY_DROP_MAX_S_PATCH, 0.10)
-  expect_equal(b$UNB_LEGACY_REVIEW_MAX_S_PATCH, 0.40)
-  expect_equal(b$UNB_LEGACY_KEEP_MAX_S_PATCH, 0.65)
 })
 
 # --- B2 (2026-06-05) -------------------------------------------------

@@ -76,7 +76,6 @@ test_that("AS09: legacy pool keeps a single canonical area_ha column", {
     use_review              = FALSE,
     use_keep                = FALSE,
     exclude_buffer_m        = 0,
-    sample_n                = NULL,
     verbose                 = FALSE
   )
 

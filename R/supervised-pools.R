@@ -34,11 +34,14 @@
 #' dispatcher resolves it.
 #'
 #' **RNG determinism.** The random burnable-background sampling
-#' (`UNB_RANDOM_SEED = 42`) and the legacy Otsu sampling
-#' (`UNB_LEGACY_RANDOM_SEED = 42`) are forwarded verbatim and the two builders
+#' (`UNB_RANDOM_SEED = 42`) is forwarded verbatim and the two unburned builders
 #' are invoked in the SAME order (deterministic-decisions first, legacy second)
-#' so the RNG stream — and therefore the sampled negatives — are identical to a
-#' full orchestrator run.
+#' so the RNG stream — and therefore the sampled random negatives — are identical
+#' to a full orchestrator run. GATE 6.2 (2026-06-11): the legacy Otsu builder no
+#' longer performs any generation-side stratified sampling (the `legacy_sample_n`
+#' / `legacy_random_seed` pre-thinning was removed); the FULL valid Otsu drop
+#' pool flows on and the per-bucket cap `cap_otsu`
+#' (`otsu_unburned_to_burned_ratio`) is the sole, seeded Otsu selector.
 #'
 #' @param config Required `otsufire_supervised_burned_config` (from
 #'   [build_supervised_burned_config()]). Source of every input path, output
@@ -78,7 +81,21 @@
 #'       whose fingerprint predates the burnable-domain restriction is
 #'       INVALIDATED rather than silently reused. Also written as a sidecar
 #'       `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
+#'     \item `otsu_random_dedup_audit` — GATE 6.2 Otsu>random spatial-dedup
+#'       record: `random_before`, `random_removed_by_otsu`, `random_final`,
+#'       `area_removed` and `removed_ids_hash`. Random rows whose polygon
+#'       intersects any Otsu patch are removed (Otsu has priority) BEFORE
+#'       capping; this is also folded into `neg_pool_fingerprint`.
 #'   }
+#'
+#' @section Otsu > random spatial dedup (GATE 6.2):
+#' A location must not enter the negative pool as BOTH a random background cell
+#' AND an Otsu residual patch. After both unburned builders run, every random
+#' burnable-background row whose polygon intersects ANY Otsu patch (exact
+#' polygon-intersection unit, same CRS/grid, no extra buffer) is removed; Otsu
+#' rows are never removed. The dedup runs BEFORE `train_labeled` assembly and
+#' BEFORE the per-bucket capping, and is registered in
+#' `otsu_random_dedup_audit` + the `neg_pool_fingerprint`.
 #'
 #' @section Burnable-domain restriction (Gate 1C.2, INTENTIONAL pool change):
 #' The B4 random burnable-background bucket now computes its change-index
@@ -299,15 +316,15 @@ build_supervised_training_pools <- function(config,
   UNB_LEGACY_DROP_LO       <- config$options$legacy_drop_lo %||% 0.15
   UNB_LEGACY_EXCL_BUFFER_M <- config$options$legacy_excl_buffer_m %||% 0
   UNB_LEGACY_MIN_AREA_HA   <- config$options$legacy_min_area_ha %||% 0
-  UNB_LEGACY_SAMPLE_N      <- config$options$legacy_sample_n %||% 2000
-  UNB_LEGACY_SAMPLE_PROPS  <- config$options$legacy_sample_props %||%
-    c(drop = 0.70, review = 0.25, keep = 0.05)
+  # GATE 6.2 (2026-06-11): `legacy_sample_n` / `legacy_sample_props` /
+  # `legacy_random_seed` (the Otsu generation-side pre-thinning) were REMOVED.
+  # The full valid Otsu drop pool flows on; cap_otsu
+  # (otsu_unburned_to_burned_ratio) is the sole Otsu selector.
   UNB_LEGACY_REUSE_EXISTING <- config$options$legacy_reuse_existing %||% TRUE
   UNB_LEGACY_WRITE_OUTPUT   <- config$options$legacy_write_output %||% TRUE
   UNB_LEGACY_USE_DROP      <- config$options$legacy_use_drop   %||% TRUE
   UNB_LEGACY_USE_REVIEW    <- config$options$legacy_use_review %||% FALSE
   UNB_LEGACY_USE_KEEP      <- config$options$legacy_use_keep   %||% FALSE
-  UNB_LEGACY_RANDOM_SEED   <- config$options$legacy_random_seed %||% 42L
   UNB_LEGACY_DROP_MAX_S_PATCH   <- config$options$legacy_drop_max_s_patch   %||% 0.15
   UNB_LEGACY_REVIEW_MAX_S_PATCH <- config$options$legacy_review_max_s_patch %||% 0.45
   UNB_LEGACY_KEEP_MAX_S_PATCH   <- config$options$legacy_keep_max_s_patch   %||% 0.70
@@ -581,11 +598,8 @@ build_supervised_training_pools <- function(config,
       drop_max_s_patch         = UNB_LEGACY_DROP_MAX_S_PATCH,
       review_max_s_patch       = UNB_LEGACY_REVIEW_MAX_S_PATCH,
       keep_max_s_patch         = UNB_LEGACY_KEEP_MAX_S_PATCH,
-      sample_n                 = UNB_LEGACY_SAMPLE_N,
-      sample_props             = UNB_LEGACY_SAMPLE_PROPS,
       exclude_buffer_m         = UNB_LEGACY_EXCL_BUFFER_M,
       min_area_ha              = UNB_LEGACY_MIN_AREA_HA,
-      random_seed              = UNB_LEGACY_RANDOM_SEED,
       reuse_existing           = UNB_LEGACY_REUSE_EXISTING,
       write_unburned           = UNB_LEGACY_WRITE_OUTPUT,
       out_root_dir             = legacy_unb_root_dir,
@@ -616,7 +630,26 @@ build_supervised_training_pools <- function(config,
         )
       )
 
-    # ---- Part 3: combine all sources ----
+    # ---- Part 2b: Otsu > random spatial dedup (Otsu has PRIORITY) ----
+    # GATE 6.2 (2026-06-11): a location must not enter the negative pool as BOTH a
+    # random background cell AND an Otsu residual patch. Remove every random row
+    # whose polygon intersects ANY Otsu patch (exact polygon-intersection unit),
+    # BEFORE train_labeled assembly and BEFORE capping. Otsu rows are never
+    # touched (priority direction). The random rows live inside `det_final_raw`
+    # (source == "random_burnable_background") AND in the auxiliary
+    # `unburned_random` layer; both are pruned in lockstep so the persisted
+    # `unburned_random` layer matches what actually flows into the pool.
+    det_random_mask <- as.character(det_final_raw$source) ==
+      "random_burnable_background"
+    det_random_sf   <- det_final_raw[det_random_mask, , drop = FALSE]
+    det_other_sf    <- det_final_raw[!det_random_mask, , drop = FALSE]
+
+    otsu_dedup <- dedup_random_vs_otsu_unb_legacy(
+      random_sf = det_random_sf,
+      otsu_sf   = otsu_raw
+    )
+    det_random_kept <- otsu_dedup$random_kept
+
     # Geometry-safe binding: drop geometry, bind data frames, re-attach.
     .bind_sf_safe <- function(a, b) {
       df_a <- sf::st_drop_geometry(a)
@@ -627,6 +660,47 @@ build_supervised_training_pools <- function(config,
       sf::st_as_sf(combined, sf_column_name = "geometry",
                    crs = sf::st_crs(a))
     }
+
+    # Re-assemble det_final_raw without the random rows the Otsu pool shadowed.
+    det_final_raw <- if (nrow(det_other_sf) > 0L && nrow(det_random_kept) > 0L) {
+      .bind_sf_safe(det_other_sf, det_random_kept)
+    } else if (nrow(det_random_kept) > 0L) {
+      det_random_kept
+    } else {
+      det_other_sf
+    }
+
+    # Prune the auxiliary unburned_random layer by the SAME exact-intersection
+    # rule so the persisted layer reflects the deduplicated pool.
+    if (nrow(unburned_random) > 0L && nrow(otsu_raw) > 0L) {
+      ur_dedup <- dedup_random_vs_otsu_unb_legacy(
+        random_sf = unburned_random,
+        otsu_sf   = otsu_raw
+      )
+      unburned_random <- ur_dedup$random_kept
+    }
+
+    # Dedup audit (registered into the negative-pool fingerprint below + carried
+    # up in the return). NOTE (2026-06-11): on the persisted 2017 balanced pool
+    # the genuine positive-area overlap is 3 random cells fully inside Otsu
+    # patches (plus 4 zero-area boundary touches that are correctly KEPT), i.e.
+    # this dedup is NOT a no-op for 2017 — it removes exactly those 3 location
+    # duplicates. (The Gate-6 brief had expected 0; the persisted geometry shows
+    # 3. Flagged for Natalia.)
+    otsu_random_dedup_audit <- list(
+      random_before        = otsu_dedup$n_random_before,
+      random_removed_by_otsu = otsu_dedup$n_random_removed,
+      random_final         = otsu_dedup$n_random_final,
+      area_removed         = otsu_dedup$area_removed,
+      removed_ids_hash     = otsu_dedup$removed_ids_hash
+    )
+    msg("Otsu>random dedup: before=%d removed=%d final=%d (area_removed=%.1f m^2)",
+        otsu_random_dedup_audit$random_before,
+        otsu_random_dedup_audit$random_removed_by_otsu,
+        otsu_random_dedup_audit$random_final,
+        otsu_random_dedup_audit$area_removed %||% NA_real_)
+
+    # ---- Part 3: combine all sources ----
     unburned_final_raw <- .bind_sf_safe(det_final_raw, otsu_raw)
 
     check_sf(unburned_final_raw, "unburned_final_raw")
@@ -660,7 +734,8 @@ build_supervised_training_pools <- function(config,
       exclusion_buffer   = exclusion_buffer,
       unburned_pool      = unburned_pool,
       b4_audit           = b4_audit,
-      burnable_mask_hash = burnable_mask_hash
+      burnable_mask_hash = burnable_mask_hash,
+      otsu_random_dedup_audit = otsu_random_dedup_audit
     )
   })
 
@@ -671,6 +746,7 @@ build_supervised_training_pools <- function(config,
   unburned_pool      <- unb$unburned_pool
   b4_audit           <- unb$b4_audit
   burnable_mask_hash <- unb$burnable_mask_hash
+  otsu_random_dedup_audit <- unb$otsu_random_dedup_audit
 
   # ===========================================================================
   # A4b. Negative-pool fingerprint (Gate 1C.2). Deterministic identity of the
@@ -700,9 +776,18 @@ build_supervised_training_pools <- function(config,
     b4_exclude_buffer_m      = UNB_EXCL_BUFFER_M,
     b4_n_percentile_domain   = b4_audit$n_percentile_domain %||% NA_integer_,
     b4_n_eligible_cells      = b4_audit$n_eligible_cells %||% NA_integer_,
-    legacy_random_seed       = UNB_LEGACY_RANDOM_SEED,
-    legacy_sample_n          = UNB_LEGACY_SAMPLE_N,
+    # GATE 6.2 (2026-06-11): `legacy_random_seed` / `legacy_sample_n` dropped
+    # from the fingerprint with the removal of the Otsu generation-side
+    # pre-thinning (cap_otsu is the sole Otsu selector). Their omission shifts
+    # the checksum, correctly INVALIDATING any pool built with the old
+    # pre-thinning so it is rebuilt rather than silently reused.
     legacy_otsu_mode         = UNB_LEGACY_OTSU_MODE,
+    # GATE 6.2 (2026-06-11): Otsu>random spatial dedup audit folded in so a pool
+    # built before the dedup (different random_removed / random_final) cannot be
+    # silently reused.
+    otsu_random_removed      = otsu_random_dedup_audit$random_removed_by_otsu %||% 0L,
+    otsu_random_final        = otsu_random_dedup_audit$random_final %||% NA_integer_,
+    otsu_random_removed_hash = otsu_random_dedup_audit$removed_ids_hash %||% "00000000",
     target_year              = target_year,
     scenario                 = scenario,
     change_index             = one_year_tif,
@@ -811,6 +896,9 @@ build_supervised_training_pools <- function(config,
     # domain / mask / percentile / seed / exclusions / inputs differ.
     b4_audit              = b4_audit,
     neg_pool_fingerprint  = neg_pool_fingerprint,
+    # GATE 6.2 (2026-06-11): Otsu>random spatial dedup audit (random_before,
+    # random_removed_by_otsu, random_final, area_removed, removed_ids_hash).
+    otsu_random_dedup_audit = otsu_random_dedup_audit,
     audited_internal_gpkg = file.path(
       dirs$`01_POOLS`, paste0(qa_prefix, "_audited_internal.gpkg")
     ),

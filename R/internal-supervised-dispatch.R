@@ -93,17 +93,19 @@
     UNB_LEGACY_DROP_LO       = config$options$legacy_drop_lo %||% 0.15,
     UNB_LEGACY_EXCL_BUFFER_M = config$options$legacy_excl_buffer_m %||% 0,
     UNB_LEGACY_MIN_AREA_HA   = config$options$legacy_min_area_ha %||% 0,
-    UNB_LEGACY_SAMPLE_N      = config$options$legacy_sample_n %||% 2000,
-    UNB_LEGACY_SAMPLE_PROPS  = config$options$legacy_sample_props %||%
-      c(drop = 0.70, review = 0.25, keep = 0.05),
+    # GATE 6.2 (2026-06-11): `legacy_sample_n` / `legacy_sample_props` /
+    # `legacy_random_seed` bindings removed with the Otsu generation-side
+    # pre-thinning. cap_otsu (otsu_unburned_to_burned_ratio) is the sole Otsu
+    # selector; the full valid Otsu drop pool flows into the negative pool.
     UNB_LEGACY_REUSE_EXISTING = config$options$legacy_reuse_existing %||% TRUE,
     UNB_LEGACY_WRITE_OUTPUT   = config$options$legacy_write_output %||% TRUE,
     UNB_LEGACY_USE_DROP      = config$options$legacy_use_drop   %||% TRUE,
     UNB_LEGACY_USE_REVIEW    = config$options$legacy_use_review %||% FALSE,
     UNB_LEGACY_USE_KEEP      = config$options$legacy_use_keep   %||% FALSE,
-    # AS03 (0.3.0): expose RANDOM_SEED and the three S_PATCH caps. Other
-    # UNB_LEGACY_* parameters remain pinned at orchestrator defaults.
-    UNB_LEGACY_RANDOM_SEED   = config$options$legacy_random_seed %||% 42L,
+    # AS03 (0.3.0): expose the three S_PATCH caps. Other UNB_LEGACY_* parameters
+    # remain pinned at orchestrator defaults. GATE 6.2 (2026-06-11):
+    # `UNB_LEGACY_RANDOM_SEED` (legacy_random_seed) removed — it seeded ONLY the
+    # now-deleted Otsu generation-side pre-thinning.
     UNB_LEGACY_DROP_MAX_S_PATCH   = config$options$legacy_drop_max_s_patch   %||% 0.15,
     UNB_LEGACY_REVIEW_MAX_S_PATCH = config$options$legacy_review_max_s_patch %||% 0.45,
     UNB_LEGACY_KEEP_MAX_S_PATCH   = config$options$legacy_keep_max_s_patch   %||% 0.70,

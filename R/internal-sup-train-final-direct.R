@@ -227,38 +227,57 @@ train_final_model_direct <- function(
   target_random_bg  <- ceiling(n_burned * random_to_burned_ratio)
   target_otsu       <- ceiling(n_burned * otsu_unburned_to_burned_ratio)
 
-  set.seed(sampling_seed)
-  if (target_contextual > 0L && nrow(contextual_exclusion_pool) > 0L) {
-    n_take_ctx <- min(target_contextual, nrow(contextual_exclusion_pool))
-    ctx_idx    <- sample.int(nrow(contextual_exclusion_pool), n_take_ctx)
-    sampled_contextual <- contextual_exclusion_pool[ctx_idx, , drop = FALSE]
-  } else {
-    sampled_contextual <- contextual_exclusion_pool[0, , drop = FALSE]
-  }
+  # 2026-06-11 (structural dedup + eligibility fix): the FINAL negative selection
+  # now flows through the SAME two SHARED PURE helpers the OOF per-fold trainer
+  # uses, so the two paths cannot diverge. `.of_resolve_supervised_eligibility()`
+  # classifies EVERY row of L by EXPLICIT class + (source, neg_type) into
+  # positive / one-of-four-valid-buckets / excluded(otsu review/keep) / ERROR
+  # (unburned with no bucket, NA/unknown class). `.of_cap_negative_buckets()`
+  # then applies the SAME canonical capping (one set.seed(sampling_seed); bucket
+  # order contextual -> spectral -> random -> otsu). The previous per-pool
+  # `sample.int()` blocks (one per bucket) are removed; the `sampled_*` frames
+  # are now derived by sub-setting L to the helper's selected row indices.
+  L_class    <- as.character(L[[class_col]])
+  L_source   <- if ("source"   %in% names(L)) as.character(L[["source"]])   else rep(NA_character_, nrow(L))
+  L_neg_type <- if ("neg_type" %in% names(L)) as.character(L[["neg_type"]]) else rep(NA_character_, nrow(L))
+  L_id       <- as.character(L[[id_col]])
 
-  if (target_spectral > 0L && nrow(spectral_hard_negative_pool) > 0L) {
-    n_take_shn <- min(target_spectral, nrow(spectral_hard_negative_pool))
-    shn_idx    <- sample.int(nrow(spectral_hard_negative_pool), n_take_shn)
-    sampled_spectral <- spectral_hard_negative_pool[shn_idx, , drop = FALSE]
-  } else {
-    sampled_spectral <- spectral_hard_negative_pool[0, , drop = FALSE]
-  }
+  final_elig <- .of_resolve_supervised_eligibility(
+    id = L_id, class = L_class, source = L_source, neg_type = L_neg_type,
+    deterministic_drop_source        = deterministic_drop_source,
+    spectral_hard_negative_neg_types = spectral_hard_negative_neg_types,
+    random_background_source         = random_background_source,
+    otsu_unburned_source             = otsu_unburned_source,
+    otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
+    origin_stage = "FINAL"
+  )
+  final_caps <- c(
+    contextual = contextual_exclusion_to_burned_ratio,
+    spectral   = spectral_hard_negative_to_burned_ratio,
+    random     = random_to_burned_ratio,
+    otsu       = otsu_unburned_to_burned_ratio
+  )
+  final_cap <- .of_cap_negative_buckets(
+    positive_idx        = final_elig$positive_idx,
+    negatives_by_bucket = final_elig$negatives_by_bucket,
+    n_burned            = length(final_elig$positive_idx),
+    caps                = final_caps,
+    seed                = sampling_seed,
+    id                  = L_id,
+    context             = "FINAL"
+  )
 
-  if (target_random_bg > 0L && nrow(random_background_pool) > 0L) {
-    n_take_rb  <- min(target_random_bg, nrow(random_background_pool))
-    rb_idx     <- sample.int(nrow(random_background_pool), n_take_rb)
-    sampled_random_bg <- random_background_pool[rb_idx, , drop = FALSE]
-  } else {
-    sampled_random_bg <- random_background_pool[0, , drop = FALSE]
+  # Per-bucket selected row indices (intersection of the helper's selected set
+  # with each bucket's eligible rows), used to rebuild the `sampled_*` frames.
+  .sel_set <- final_cap$selected_indices
+  .bucket_sel <- function(b) {
+    idx <- intersect(final_elig$negatives_by_bucket[[b]], .sel_set)
+    L[idx, , drop = FALSE]
   }
-
-  if (target_otsu > 0L && nrow(otsu_unburned_pool) > 0L) {
-    n_take_otsu <- min(target_otsu, nrow(otsu_unburned_pool))
-    otsu_idx    <- sample.int(nrow(otsu_unburned_pool), n_take_otsu)
-    sampled_otsu <- otsu_unburned_pool[otsu_idx, , drop = FALSE]
-  } else {
-    sampled_otsu <- otsu_unburned_pool[0, , drop = FALSE]
-  }
+  sampled_contextual <- .bucket_sel("contextual")
+  sampled_spectral   <- .bucket_sel("spectral")
+  sampled_random_bg  <- .bucket_sel("random")
+  sampled_otsu       <- .bucket_sel("otsu")
 
   if (nrow(burned_pool)) {
     burned_pool <- dplyr::mutate(

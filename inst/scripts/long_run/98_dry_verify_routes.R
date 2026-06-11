@@ -37,10 +37,9 @@ FULL_ENGINE <- file.path(LONG_ROOT, "LONG_2017_BALANCED_FULL", "ENGINE_ROUTES")
 NOHS_ENGINE <- file.path(LONG_ROOT, "LONG_2017_BALANCED_NO_HOTSPOT", "ENGINE_ROUTES")
 
 # ---- build each profile's DEPLOYED cfg (OOF capped + FINAL) -----------------
-cfg_full <- .mk_long_cfg("capped",
-                         feature_whitelist_override = NULL, out_base = FULL_ENGINE)
-cfg_nohs <- .mk_long_cfg("capped",
-                         feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
+# OOF always uses the same capped negative-sampling policy as the FINAL model.
+cfg_full <- .mk_long_cfg(feature_whitelist_override = NULL, out_base = FULL_ENGINE)
+cfg_nohs <- .mk_long_cfg(feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
 
 # ---- 1) SHARED explicit features path the score step will read --------------
 cat("\n--- SHARED explicit labelled_features (what the runners now pass) ---\n")

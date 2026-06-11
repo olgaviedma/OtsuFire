@@ -27,7 +27,7 @@
 #
 # METHODOLOGICAL PARAMS LIVE IN THE CFG (NOT in function-level args)
 #   Every methodological / training-control knob (the 4 negative-bucket caps,
-#   oof_sampling, seeds, xgb params, feature whitelist) is set
+#   seeds, xgb params, feature whitelist) is set
 #   ONCE in build_supervised_burned_config(). Passing those same knobs as
 #   function-level arguments to the stage functions is a DEPRECATED shim that
 #   emits an `otsufire_deprecated_param` warning — this script does NOT do that.

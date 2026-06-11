@@ -20,11 +20,11 @@ log("==== SHARED UPSTREAM START ====")
 .assert_version_pin()
 
 # Build the SHARED/upstream cfg. Pools/folds/features are hotspot-INCLUSIVE: use
-# the FULL cfg (capped OOF sampling, no whitelist override, hotspots ON). Training
-# is always inner-early-stopping selection + full-data refit. This is the
-# experimental control reused by both profiles.
-cfg_shared <- .mk_long_cfg(oof_sampling = "capped",
-                           feature_whitelist_override = NULL)
+# the FULL cfg (no whitelist override, hotspots ON). Training is always
+# inner-early-stopping selection + full-data refit, and OOF uses the same capped
+# negative-sampling policy as the FINAL model. This is the experimental control
+# reused by both profiles.
+cfg_shared <- .mk_long_cfg(feature_whitelist_override = NULL)
 stopifnot(all(vapply(cfg_shared$tool_paths, file.exists, logical(1))))
 saveRDS(cfg_shared, file.path(SHARED, "cfg_shared_upstream.rds"))
 log("[shared] cfg built; caps=",

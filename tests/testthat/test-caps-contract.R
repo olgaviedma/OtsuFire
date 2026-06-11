@@ -115,19 +115,27 @@ test_that("PART A: the SHARED capping helper uses ceiling(n_burned*ratio); min(a
   expect_true(grepl("sample.int(length(avail), n_cap_max)", src, fixed = TRUE))
 })
 
-test_that("PART A: the OOF engine routes capping through the SHARED resolver + helper", {
-  # The inline `pick()` closure / `!is_burned` negative machinery is GONE from
-  # the OOF engine; it now calls `.of_resolve_supervised_eligibility()` +
-  # `.of_cap_negative_buckets()`.
-  oof_src <- paste(deparse(body(get("run_oof_xgb", envir = ns))),
-                   collapse = "\n")
-  expect_true(grepl(".of_cap_negative_buckets", oof_src, fixed = TRUE))
-  expect_true(grepl(".of_resolve_supervised_eligibility", oof_src, fixed = TRUE))
-  # The OOF audit's *_cap columns still use ceiling(n_burned*ratio) (now via the
-  # shared helper's n_cap_max).
+test_that("PART A: BOTH the OOF and FINAL engines route capping through the SHARED resolver + helper", {
+  # The inline `pick()` closure / per-pool `sample.int()` / `!is_burned` negative
+  # machinery is GONE from BOTH engines; both now call the SAME
+  # `.of_resolve_supervised_eligibility()` + `.of_cap_negative_buckets()`.
+  oof_src   <- paste(deparse(body(get("run_oof_xgb", envir = ns))),
+                     collapse = "\n")
+  final_src <- paste(deparse(body(get("train_final_model_direct", envir = ns))),
+                     collapse = "\n")
+  for (s in list(oof_src, final_src)) {
+    expect_true(grepl(".of_cap_negative_buckets", s, fixed = TRUE))
+    expect_true(grepl(".of_resolve_supervised_eligibility", s, fixed = TRUE))
+  }
+  # The cap *_cap columns still use ceiling(n_burned*ratio) (now via the shared
+  # helper's n_cap_max).
   src <- paste(deparse(body(get(".of_cap_negative_buckets", envir = ns))),
                collapse = "\n")
   expect_true(grepl("ceiling(n_burned * cap_ratio)", src, fixed = TRUE))
+  # FINAL still computes the per-bucket ceiling target upstream for the
+  # audit/recipe `*_cap` counts.
+  expect_true(grepl("ceiling(n_burned * contextual_exclusion_to_burned_ratio)",
+                    final_src, fixed = TRUE))
 })
 
 # =============================================================================

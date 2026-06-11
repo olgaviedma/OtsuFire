@@ -28,8 +28,10 @@ working copies can be detected. Prefer the blob SHA-1 for divergence checks:
 
 1. **Public API only** + `build_supervised_burned_config()` as the
    **single source of truth** for all methodological params (the 4 negative-pool
-   caps, `training_protocol`, `oof_sampling`, seeds). No deprecated function-level
-   parameter shims are used (those emit `otsufire_deprecated_param` warnings).
+   caps, `oof_sampling`, seeds). OtsuFire always uses one training procedure
+   (inner-early-stopping selection + full-data refit) — there is no
+   training-protocol choice. No deprecated function-level parameter shims are
+   used (those emit `otsufire_deprecated_param` warnings).
 2. **Portable.** A clearly-marked `CONFIG` block at the top holds `<PATH_TO_...>`
    placeholders and a `paths <- list(...)` / `tool_paths <- list(...)` block with
    obvious `# TODO` markers. No project absolute data paths are hardcoded — the
@@ -49,12 +51,16 @@ working copies can be detected. Prefer the blob SHA-1 for divergence checks:
 
 | # | File | Purpose (one line) |
 |---|------|--------------------|
-| 01 | `01_supervised_oneyear_legacy.R` | Corrected common-recipe one-year pipeline (legacy training protocol), full 6-stage modular chain. |
-| 02 | `02_supervised_phaseB_config.R` | Phase B config: `cap_spectral = 2.0` via the builder + `nested_refit`, with the abort-on-cap-mismatch guard and the inherited runtime feature-schema parity guard. |
-| 03 | `03_supervised_protocol_legacy.R` | Minimal `training_protocol = "legacy"` example. |
-| 04 | `04_supervised_protocol_nested_refit.R` | Minimal `training_protocol = "nested_refit"` example (controlled pair with 03). |
-| 05 | `05_supervised_effis_validation.R` | EFFIS validation via `validate_fire_maps()` on a thresholded map (distinct from `validate_supervised_execution()`). |
-| 06 | `06_supervised_no_hotspots_reduced_historical.R` | No-hotspots / reduced-historical (pre-MODIS) run: `hotspots = NULL`, `use_hotspots = FALSE`. |
+| 01 | `01_supervised_oneyear_legacy.R` | Common-recipe one-year pipeline, full 6-stage modular chain. (Filename keeps its historical `legacy` suffix for the sync contract; it no longer refers to any training-protocol choice.) |
+| 02 | `02_supervised_phaseB_config.R` | Phase B config: `cap_spectral = 2.0` via the builder, with the abort-on-cap-mismatch guard and the inherited runtime feature-schema parity guard. |
+| 03 | `05_supervised_effis_validation.R` | EFFIS validation via `validate_fire_maps()` on a thresholded map (distinct from `validate_supervised_execution()`). |
+| 04 | `06_supervised_no_hotspots_reduced_historical.R` | No-hotspots / reduced-historical (pre-MODIS) run: `hotspots = NULL`, `use_hotspots = FALSE`. |
+
+> The single OtsuFire training procedure (inner-validation early stopping to
+> select the number of boosting rounds, then a full-data refit) is fixed; there
+> is no `training_protocol` argument. The former protocol-pair example scripts
+> (`03_supervised_protocol_legacy.R` / `04_supervised_protocol_nested_refit.R`)
+> were removed because they demonstrated a choice that no longer exists.
 
 ## How to run one
 

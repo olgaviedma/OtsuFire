@@ -8,7 +8,10 @@ test_that("all inst/scripts/*.R parse without syntax error", {
     skip("inst/scripts not resolvable in this build context")
   }
   rfiles <- list.files(scripts_dir, pattern = "[.]R$", full.names = TRUE)
-  expect_gte(length(rfiles), 6L)
+  # 4 canonical example scripts after the protocol-pair demos
+  # (03_supervised_protocol_legacy.R / 04_supervised_protocol_nested_refit.R)
+  # were removed: there is one training procedure, no training_protocol choice.
+  expect_gte(length(rfiles), 4L)
   for (f in rfiles) {
     expect_error(parse(file = f), NA,
                  info = paste("parse failed:", basename(f)))

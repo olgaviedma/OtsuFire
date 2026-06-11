@@ -145,7 +145,7 @@ The handoff provides clear guidance for fair comparisons.
 
 - Deterministic comparisons must use the same frozen RBR keep-pool registry snapshot and the same explicit `deterministic_seed`.
 - Supervised comparisons should freeze the deterministic input layer. The unburned-pool strategy is no longer a comparison variable: every run uses `all_sources` implicitly (the former `deterministic_direct` baseline strategy was removed on 2026-06-05).
-- Any supervised baseline produced under the current code must be named the "legacy training protocol under the corrected common feature recipe" — it is not an exact reproduction of the old 51-feature FINAL model, because the `_isNA` indicators are now shared across OOF, FINAL and scoring (see the supervised stage chapter, "Corrected Defect").
+- Any supervised baseline produced under the current code uses the single canonical training procedure (inner-early-stopping selection + full-data refit) over the corrected common feature recipe — it is not an exact reproduction of the old 51-feature FINAL model, because the `_isNA` indicators are now shared across OOF, FINAL and scoring (see the supervised stage chapter, "Corrected Defect").
 
 ::: {.callout-warning}
 LOYO is not part of the current one-year workflow tutorial. A replacement multiyear workflow still needs dedicated documentation.

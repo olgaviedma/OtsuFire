@@ -83,16 +83,15 @@ A runtime feature-schema parity guard (Gate 1E) enforces the shared-recipe contr
 
 The guard asserts that all OOF outer folds share one canonical contract, that the FINAL refit equals that canonical contract before training/saving, and that the scoring matrix equals the saved FINAL schema before predicting. A structural divergence is an **error** (the run aborts), never a silent warning. The fingerprints and the guard result are written to a `_feature_schema_parity.txt` manifest and returned in the run result.
 
-## Training Protocol
+## Training Procedure
 
-The training procedure is selected by `cfg$train_control$training_protocol` and is a choice about the **training procedure, not the feature space** (the feature space is fixed by the shared recipe regardless of protocol):
+OtsuFire uses a **single** supervised training procedure; there is no protocol choice and no `training_protocol` argument. The number of boosting rounds is selected using an inner validation split and early stopping, and the recipe and model are then refitted on all available training observations before prediction.
 
-- **`legacy`** — reproduces the historical single-fit training byte-for-byte.
-- **`nested_refit`** — routes both OOF and the FINAL model through the same leakage-free core: per-fold/per-final imputation medians and `scale_pos_weight` fit on training rows only, an inner-validation split used solely for early stopping, a refit on all training rows at the selected `best_iteration`, and (for OOF) prediction of the untouched outer-test fold.
+Both OOF and the FINAL model go through the same leakage-free core: per-fold/per-final imputation medians and `scale_pos_weight` are fit on training rows only, an inner-validation split is used solely for early stopping, the recipe and model are refit on all training rows at the selected `best_iteration`, and — for OOF — the untouched outer-test fold is then predicted. In the OOF stage the outer-test fold never enters imputation, feature selection, factor levels, weights, round selection or the refit, so the cross-validated diagnostics are leakage-free.
 
-The XGBoost hyperparameters come from `cfg$model_params` and the training controls (caps, seeds, `nrounds_max`, `early_stop`, `val_frac`, imputation rules, `group_col`) from `cfg$train_control` — a single canonical source shared by OOF and FINAL, so the two can never diverge. `scale_pos_weight` is computed per the effective training rows (`n_unburned / n_burned`).
+The XGBoost hyperparameters come from `cfg$model_params` and the training controls (caps, seeds, `nrounds_max`, `early_stop`, `val_frac`, imputation rules, `group_col`, `oof_sampling`) from `cfg$train_control` — a single canonical source shared by OOF and FINAL, so the two can never diverge. `scale_pos_weight` is computed per the effective training rows (`n_unburned / n_burned`). `oof_sampling` (`"capped"` / `"full"`) is a separate knob that affects the OOF diagnostic negative sampling only — it does not select a training procedure, replace the refit or change the FINAL model.
 
-The methodological arguments that still appear on the individual stage functions (`nrounds_max`, `early_stop`, the four `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`, `group_col`, `training_protocol`, `oof_sampling`, seeds) are **deprecated compatibility shims**: the canonical path is to set them in `build_supervised_burned_config()`. A non-`NULL` override of a canonical default warns (`otsufire_deprecated_param`); an override that conflicts with an explicit builder value errors. They will be removed in a future minor version.
+The methodological arguments that still appear on the individual stage functions (`nrounds_max`, `early_stop`, the four `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`, `group_col`, `oof_sampling`, seeds) are **deprecated compatibility shims**: the canonical path is to set them in `build_supervised_burned_config()`. A non-`NULL` override of a canonical default warns (`otsufire_deprecated_param`); an override that conflicts with an explicit builder value errors. They will be removed in a future minor version.
 
 ## Internal Validation (OOF)
 
@@ -151,7 +150,7 @@ A defect was found and corrected during Gate 1D.8, before the smoke run and befo
 - The correction unified all three paths (OOF, FINAL, scoring) on the **same recipe** and was made **before the smoke and before the definitive 2017 run**.
 - **Definitive results require RETRAINING both models** (OOF and FINAL) under the corrected common recipe; results carried over from before the fix do not apply.
 
-Any baseline produced for comparison under the corrected code must be named the **"legacy training protocol under the corrected common feature recipe"**. It is **not** an exact reproduction of the old 51-feature FINAL model, because the feature recipe (and therefore the feature space) changed when the `_isNA` indicators were unified across the three paths.
+Any baseline produced under the current code uses the single canonical training procedure (inner-early-stopping selection + full-data refit) over the corrected common feature recipe. It is **not** an exact reproduction of the old 51-feature FINAL model, because the feature recipe (and therefore the feature space) changed when the `_isNA` indicators were unified across the three paths.
 
 ## LOYO And Historical Application: Current Documented Status
 

@@ -2,9 +2,10 @@
 # LONG <YEAR> BALANCED — NO-HOTSPOT PROFILE (spectral-historical ablation)
 # CANONICAL VERSIONED TEMPLATE (inst/scripts/long_run/).
 # Only runs if FULL closed OK (the master gates on FULL_SUCCESS.marker).
-# OOF nested_refit capped + FINAL nested_refit + score + map + EFFIS.
-# Optional EXTRA diagnostic: OOF nested_refit FULL, reusing the SAME FINAL
-# (no second FINAL). NO legacy config for no-hotspot.
+# OtsuFire always uses ONE training procedure (inner-early-stopping selection +
+# full-data refit); there is no training-protocol choice.
+# DEPLOYED: OOF capped + FINAL + score + map + EFFIS.
+# Optional EXTRA diagnostic: OOF full, reusing the SAME FINAL (no second FINAL).
 # Difference vs FULL is ONLY explicit configuration:
 #   feature_whitelist_override = NOHS_BASE_38 (38 base = 50 minus 12 hotspot)
 #   use_hotspots = FALSE (belt-and-suspenders; does NOT change pools/labels --
@@ -50,8 +51,8 @@ wh <- function(w) { .warns[[length(.warns) + 1L]] <<- conditionMessage(w); invok
 stopifnot(length(NOHS_BASE_38) == 38L)
 NOHS_ENGINE <- file.path(PROF, "ENGINE_ROUTES")
 dir.create(NOHS_ENGINE, recursive = TRUE, showWarnings = FALSE)
-cfg_B <- .mk_long_cfg("nested_refit", "capped", feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
-cfg_C <- .mk_long_cfg("nested_refit", "full",   feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
+cfg_B <- .mk_long_cfg("capped", feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
+cfg_C <- .mk_long_cfg("full",   feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
 saveRDS(list(B = cfg_B, C = cfg_C), file.path(PROF, "cfgs_no_hotspot.rds"))
 stopifnot(identical(sort(cfg_B$train_control$feature_whitelist_override), sort(NOHS_BASE_38)))
 log("[nohs] cfgs built; feature_whitelist_override n=",
@@ -61,8 +62,8 @@ log("[nohs] cfgs built; feature_whitelist_override n=",
 
 dir_of <- function(sub) { d <- file.path(PROF, sub); dir.create(d, recursive = TRUE, showWarnings = FALSE); d }
 
-# ---- OOF nested_refit capped + FINAL nested_refit ---------------------------
-log("[nohs] OOF nested_refit capped + FINAL nested_refit (use_hotspots=FALSE) ...")
+# ---- DEPLOYED: OOF capped + FINAL -------------------------------------------
+log("[nohs] DEPLOYED OOF capped + FINAL (use_hotspots=FALSE) ...")
 B_oof_dir <- dir_of("CONFIG_B/05_OOF"); B_mat_dir <- dir_of("CONFIG_B/04_MATRIX")
 B_fm_dir  <- dir_of("CONFIG_B/07_FINAL_MODEL"); B_sc_dir <- dir_of("CONFIG_B/08_SCORED"); B_map_dir <- dir_of("CONFIG_B/09_FINAL_MAP")
 B_oof <- withCallingHandlers(run_oof_diagnostics(
@@ -75,8 +76,8 @@ B_model <- withCallingHandlers(train_final_burned_model(
 saveRDS(B_oof, file.path(PROF, "B_oof.rds")); saveRDS(B_model, file.path(PROF, "B_model.rds"))
 log("[nohs] OOF+FINAL done; FINAL best_iteration=", B_model$recipe$training$best_iteration %||% NA)
 
-# ---- OPTIONAL EXTRA DIAGNOSTIC: OOF nested FULL (reuse same FINAL) -----------
-log("[nohs] EXTRA diagnostic: OOF nested_refit FULL (reuses the SAME FINAL) ...")
+# ---- OPTIONAL EXTRA DIAGNOSTIC: OOF full (reuse same FINAL) ------------------
+log("[nohs] EXTRA diagnostic: OOF full (reuses the SAME FINAL) ...")
 C_oof_dir <- dir_of("CONFIG_C_oof_full_diagnostic/05_OOF")
 C_mat_dir <- dir_of("CONFIG_C_oof_full_diagnostic/04_MATRIX")
 C_oof <- withCallingHandlers(run_oof_diagnostics(
@@ -86,7 +87,7 @@ C_oof <- withCallingHandlers(run_oof_diagnostics(
 saveRDS(C_oof, file.path(PROF, "C_oof.rds"))
 log("[nohs] EXTRA OOF-full diagnostic done (no FINAL retrain).")
 
-# ---- SCORE + MAP (deploy the nested_refit FINAL) ----------------------------
+# ---- SCORE + MAP (deploy the FINAL) -----------------------------------------
 # G2.3 route-propagation fix: pass the SHARED labelled-features GPKG EXPLICITLY
 # (same as the FULL profile) so the score step does NOT reconstruct the features
 # path under THIS profile's ENGINE_ROUTES. No junctions involved.
@@ -138,7 +139,7 @@ if (!is.null(effis)) {
 writeLines(if (length(.warns)) .warns else "(none)", file.path(PROF, "WARNINGS.txt"))
 md <- c("# LONG BALANCED — NO-HOTSPOT profile (spectral-historical ablation)",
   "", sprintf("- Snapshot: %s (tarball SHA256 %s)", SNAPSHOT_ID, TARBALL_SHA256),
-  sprintf("- Training: nrounds_max=%d early_stop=%d seed=%d nthread=%d (canonical full).",
+  sprintf("- Training: inner-early-stopping selection + full-data refit; nrounds_max=%d early_stop=%d seed=%d nthread=%d.",
           NROUNDS_MAX, EARLY_STOP, SEED_BASE, XGB_NTHREAD),
   sprintf("- Caps: contextual %.2f / spectral %.2f / random %.2f / otsu %.2f.",
           CAP_CONTEXTUAL, CAP_SPECTRAL, CAP_RANDOM, CAP_OTSU),
@@ -146,7 +147,7 @@ md <- c("# LONG BALANCED — NO-HOTSPOT profile (spectral-historical ablation)",
   sprintf("- Resolved model features: %d base + %d _isNA.", length(base_nohs), length(isna_nohs)),
   sprintf("- feature_schema_fingerprint: %s", fp_nohs),
   sprintf("- Removed (hotspot-lineage): %s", paste(sort(removed), collapse = ", ")),
-  "- OOF nested_refit capped + FINAL nested_refit (DEPLOYED) + OOF-full diagnostic (reuses FINAL). No legacy.",
+  "- DEPLOYED: OOF capped + FINAL; plus OOF-full diagnostic (reuses the DEPLOYED FINAL).",
   "", "## EFFIS metrics (validate_fire_maps, metrics_type='all')",
   if (exists("df") && !is.null(df)) paste(utils::capture.output(print(t(df))), collapse = "\n") else "(EFFIS not produced)")
 writeLines(md, file.path(PROF, "SUMMARY.md"))

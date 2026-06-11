@@ -19,10 +19,11 @@ t0 <- Sys.time()
 log("==== SHARED UPSTREAM START ====")
 .assert_version_pin()
 
-# Build the SHARED/upstream cfg. Pools/folds/features are protocol-agnostic and
-# hotspot-INCLUSIVE: use the FULL cfg (nested_refit/capped, no whitelist override,
-# hotspots ON). This is the experimental control reused by both profiles.
-cfg_shared <- .mk_long_cfg(training_protocol = "nested_refit", oof_sampling = "capped",
+# Build the SHARED/upstream cfg. Pools/folds/features are hotspot-INCLUSIVE: use
+# the FULL cfg (capped OOF sampling, no whitelist override, hotspots ON). Training
+# is always inner-early-stopping selection + full-data refit. This is the
+# experimental control reused by both profiles.
+cfg_shared <- .mk_long_cfg(oof_sampling = "capped",
                            feature_whitelist_override = NULL)
 stopifnot(all(vapply(cfg_shared$tool_paths, file.exists, logical(1))))
 saveRDS(cfg_shared, file.path(SHARED, "cfg_shared_upstream.rds"))

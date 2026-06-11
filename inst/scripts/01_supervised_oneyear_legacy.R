@@ -1,6 +1,6 @@
 # =============================================================================
-# CANONICAL versioned supervised usage script  (01 / 6)
-# OtsuFire supervised burned-area mapping — ONE-YEAR pipeline (legacy protocol)
+# CANONICAL versioned supervised usage script  (01 / 4)
+# OtsuFire supervised burned-area mapping — ONE-YEAR pipeline
 # =============================================================================
 # *** THIS IS THE CANONICAL, VERSIONED COPY (lives in inst/scripts/ of the
 #     OtsuFire package). Do NOT treat the external 00_USAGE/02_SUPERVISED_USAGE
@@ -20,11 +20,14 @@
 #       run_oof_diagnostics()             -> 04_MATRIX + 05_OOF  (SANITY signal)
 #       train_final_burned_model()        -> 07_FINAL_MODEL_V2
 #       score_supervised_burned_map()     -> 08_SCORED + 09_FINAL_MAP
-#   The legacy training protocol is the historical reference protocol.
+#   OtsuFire uses a SINGLE training procedure: the number of boosting rounds is
+#   selected with an inner validation split and early stopping, then the recipe
+#   and model are refitted on all available training data before prediction.
+#   There is no training-protocol choice.
 #
 # METHODOLOGICAL PARAMS LIVE IN THE CFG (NOT in function-level args)
 #   Every methodological / training-control knob (the 4 negative-bucket caps,
-#   training_protocol, oof_sampling, seeds, xgb params, feature whitelist) is set
+#   oof_sampling, seeds, xgb params, feature whitelist) is set
 #   ONCE in build_supervised_burned_config(). Passing those same knobs as
 #   function-level arguments to the stage functions is a DEPRECATED shim that
 #   emits an `otsufire_deprecated_param` warning — this script does NOT do that.
@@ -92,7 +95,7 @@ scenario     <- "balanced"     # one of: balanced | original | lax | restrictive
 run_name     <- "Min_Min"      # composite family / run identifier
 use_hotspots <- target_year > 2000   # hotspots are used post-2000
 
-# 4-bucket negative-pool caps (LEGACY-reference values; package defaults).
+# 4-bucket negative-pool caps (package defaults).
 caps <- list(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
 
 
@@ -128,7 +131,6 @@ main <- function() {
     cap_spectral         = caps$spectral,
     cap_random           = caps$random,
     cap_otsu             = caps$otsu,
-    training_protocol    = "legacy",          # legacy reference protocol
     options = list(
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,
@@ -219,5 +221,8 @@ if (isTRUE(RUN)) {
           "Edit the CONFIG block, set RUN <- TRUE, then source again.")
 }
 # =============================================================================
-# End of canonical one-year supervised script (legacy protocol).
+# End of canonical one-year supervised script.
+# (Filename retains the historical "legacy" suffix for the in-repo sync
+#  contract; it no longer refers to any training-protocol choice — OtsuFire
+#  always uses inner-early-stopping selection + full-data refit.)
 # =============================================================================

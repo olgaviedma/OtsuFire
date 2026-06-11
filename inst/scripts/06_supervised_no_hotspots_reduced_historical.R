@@ -1,5 +1,5 @@
 # =============================================================================
-# CANONICAL versioned supervised usage script  (06 / 6)
+# CANONICAL versioned supervised usage script  (04 / 4)
 # OtsuFire — no-hotspots / reduced-historical (pre-MODIS) example
 # =============================================================================
 # *** CANONICAL, VERSIONED COPY (inst/scripts/). External 00_USAGE copies are
@@ -68,7 +68,6 @@ main <- function() {
     cap_spectral       = caps$spectral,
     cap_random         = caps$random,
     cap_otsu           = caps$otsu,
-    training_protocol  = "legacy",
     options = list(
       data_base = paths$data_base, composite_base = paths$composite_base,
       result_name = run_name, legacy_otsu_mode = "burnable_only",

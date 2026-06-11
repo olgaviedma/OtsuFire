@@ -36,10 +36,10 @@ mark <- function(ok) if (ok) "TRUE " else "FALSE"
 FULL_ENGINE <- file.path(LONG_ROOT, "LONG_2017_BALANCED_FULL", "ENGINE_ROUTES")
 NOHS_ENGINE <- file.path(LONG_ROOT, "LONG_2017_BALANCED_NO_HOTSPOT", "ENGINE_ROUTES")
 
-# ---- build each profile's DEPLOYED cfg (Config B) ---------------------------
-cfg_full <- .mk_long_cfg("nested_refit", "capped",
+# ---- build each profile's DEPLOYED cfg (OOF capped + FINAL) -----------------
+cfg_full <- .mk_long_cfg("capped",
                          feature_whitelist_override = NULL, out_base = FULL_ENGINE)
-cfg_nohs <- .mk_long_cfg("nested_refit", "capped",
+cfg_nohs <- .mk_long_cfg("capped",
                          feature_whitelist_override = NOHS_BASE_38, out_base = NOHS_ENGINE)
 
 # ---- 1) SHARED explicit features path the score step will read --------------

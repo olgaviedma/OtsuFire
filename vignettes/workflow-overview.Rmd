@@ -145,10 +145,11 @@ external `sys.source()` of legacy scripts and no namespace mutation.
 The OOF diagnostics, the FINAL refit, and scoring share ONE feature
 recipe (50 base features plus the matching `<feature>_isNA` indicators
 created before imputation = 100 columns). A runtime feature-schema
-parity guard aborts the run if the three feature spaces diverge. The
-training procedure is selected by `cfg$train_control$training_protocol`
-(`"legacy"` or `"nested_refit"`); this is a choice of training
-procedure, not feature space.
+parity guard aborts the run if the three feature spaces diverge.
+OtsuFire uses a single training procedure: the number of boosting
+rounds is selected with an inner validation split and early stopping,
+then the recipe and model are refitted on all available training data
+before prediction. There is no training-protocol choice.
 
 `p_burned` (and the temporally adjusted `p_burned_current_year`) is a
 model score under the training distribution — it must not be treated as

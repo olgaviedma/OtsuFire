@@ -116,6 +116,12 @@
 #' model is refit on all training rows at the selected `best_iteration` before
 #' deployment.
 #'
+#' Training eligibility is defined by EXPLICIT class, never by negation: only
+#' explicit burned rows (positives) and explicit unburned rows that resolve to a
+#' valid negative bucket (contextual, spectral, random, otsu) enter training;
+#' review / keep / `NA` / unknown rows never become negatives. Both stages route
+#' through one internal eligibility resolver and one shared capping helper.
+#'
 #' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
 #' The methodological / training-control arguments of this function (the four
 #' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the

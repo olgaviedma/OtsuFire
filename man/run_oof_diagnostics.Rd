@@ -175,6 +175,14 @@ shared leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
 `scale_pos_weight` fit on the outer-train only, an inner-validation split as
 the sole early-stopping set, a refit on all outer-train rows at
 `best_iteration`, then prediction of the untouched outer-test fold.
+
+Training eligibility is defined by EXPLICIT class, never by negation: only
+rows with `class == "burned"` (positives) and rows with `class == "unburned"`
+that resolve to one of the four valid negative buckets (contextual, spectral,
+random, otsu) enter training. Review / keep / `NA` / unknown rows never become
+negatives. OOF and FINAL share one internal eligibility resolver and one
+capping helper, so the two stages cannot diverge on which rows are eligible
+or on how negatives are capped.
 }
 \section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
 

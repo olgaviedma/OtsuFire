@@ -49,6 +49,31 @@ working copies can be detected. Prefer the blob SHA-1 for divergence checks:
    (structural / schema / inputs). It is distinct from `validate_fire_maps()`,
    which is the **post-run** accuracy validation against an external reference.
 
+## Training eligibility + the single shared capping helper
+
+Training eligibility is defined by **explicit class, never by negation**:
+
+- `class == "burned"` → **positive** (always kept);
+- `class == "unburned"` **and** the row resolves to exactly one of the four
+  valid negative buckets (`contextual`, `spectral`, `random`, `otsu`) →
+  **negative**, eligible for capping;
+- otsu review / keep rows (the otsu exclude-list) → **excluded + logged**, never
+  trained;
+- anything else (`class` `NA` / unknown, or an unburned row with no valid
+  bucket) → **hard error** (strict), surfaced with id / class / source /
+  neg_type / origin-stage.
+
+Review / keep / `NA` / unknown rows can **never** silently become negatives. The
+old "negatives = everything that is not burned" rule (the OOF `!is_burned`
+predicate with its `sel_other` / `other_kept` 5th category) has been removed.
+
+The OOF folds and the FINAL model share **one** internal eligibility resolver
+and **one** capping helper (`cap = ceiling(n_burned * ratio)`, take-all when
+available ≤ cap, all positives kept, negatives sampled without replacement in a
+deterministic bucket order). The only differences between OOF and FINAL are the
+retained outer-test fold (OOF) and the RNG seed. This is behaviour-preserving
+for the default 2017 balanced run.
+
 ## The scripts
 
 | # | File | Purpose (one line) |

@@ -279,6 +279,12 @@ OOF uses the same capped negative-sampling policy as the final model, applied
 independently within each training fold (inner early-stopping selection +
 full-data refit for both the OOF folds and the FINAL model).
 
+Training eligibility is defined by EXPLICIT class, never by negation: only
+explicit burned rows (positives) and explicit unburned rows that resolve to a
+valid negative bucket (contextual, spectral, random, otsu) enter training;
+review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
+share one internal eligibility resolver and one capping helper.
+
 \subsection{Workflow structure}{
   The supervised workflow is organised as a sequence of stages, each driven
   by the configuration object this builder produces:

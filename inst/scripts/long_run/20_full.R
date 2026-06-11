@@ -54,6 +54,12 @@ log("[full] cfg built (DEPLOYED: OOF capped + FINAL).")
 dir_of <- function(sub) { d <- file.path(PROF, sub); dir.create(d, recursive = TRUE, showWarnings = FALSE); d }
 
 # ---- DEPLOYED: OOF capped + FINAL (the deployed model) ----------------------
+# Eligibility (internal, no knob): training rows are chosen by EXPLICIT class,
+# never by negation. burned -> positive; unburned + valid bucket -> negative;
+# otsu review/keep -> excluded+logged; NA/unknown/unbucketed -> error. OOF and
+# FINAL share the SAME internal eligibility resolver + the SAME capping helper,
+# so they cannot diverge on eligibility or caps (only the outer-test fold + seed
+# differ).
 log("[full] DEPLOYED (OOF capped + FINAL) ...")
 B_oof_dir <- dir_of("CONFIG_B/05_OOF"); B_mat_dir <- dir_of("CONFIG_B/04_MATRIX")
 B_fm_dir  <- dir_of("CONFIG_B/07_FINAL_MODEL"); B_sc_dir <- dir_of("CONFIG_B/08_SCORED"); B_map_dir <- dir_of("CONFIG_B/09_FINAL_MAP")

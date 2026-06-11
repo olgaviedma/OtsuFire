@@ -84,6 +84,14 @@
 #' `scale_pos_weight` fit on the outer-train only, an inner-validation split as
 #' the sole early-stopping set, a refit on all outer-train rows at
 #' `best_iteration`, then prediction of the untouched outer-test fold.
+#'
+#' Training eligibility is defined by EXPLICIT class, never by negation: only
+#' rows with `class == "burned"` (positives) and rows with `class == "unburned"`
+#' that resolve to one of the four valid negative buckets (contextual, spectral,
+#' random, otsu) enter training. Review / keep / `NA` / unknown rows never become
+#' negatives. OOF and FINAL share one internal eligibility resolver and one
+#' capping helper, so the two stages cannot diverge on which rows are eligible
+#' or on how negatives are capped.
 #' @param contextual_exclusion_to_burned_ratio,spectral_hard_negative_to_burned_ratio,random_to_burned_ratio,otsu_unburned_to_burned_ratio
 #'   Numeric. The four negative-bucket caps forwarded to the OOF chain so OOF
 #'   sees the SAME caps as the FINAL model. Defaults match the FINAL defaults

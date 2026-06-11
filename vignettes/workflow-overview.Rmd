@@ -142,6 +142,22 @@ user-selectable `negative_pool_policy` knob and its
 other value errors. The pipeline is entirely package-internal: no
 external `sys.source()` of legacy scripts and no namespace mutation.
 
+Training eligibility is defined by **explicit class, never by negation**.
+A row with `class == "burned"` is a positive (always kept). A row with
+`class == "unburned"` is a negative **only** when it resolves to exactly
+one of the four valid buckets above (contextual, spectral, random,
+otsu); Otsu review / keep patches are excluded and logged. Any other
+case — `class` missing or unknown, or an unburned row with no valid
+bucket — is a hard error. Review / keep / `NA` / unknown rows can never
+silently become negatives (the old "negatives = everything that is not
+burned" rule has been removed). The OOF folds and the FINAL model route
+through ONE shared internal eligibility resolver and ONE shared capping
+helper (`cap = ceiling(n_burned * ratio)`, take-all when available is at
+or below the cap, all positives kept, negatives sampled without
+replacement in a deterministic bucket order), so the two stages cannot
+diverge on which rows are eligible or on how negatives are capped. The
+only differences are the retained outer-test fold (OOF) and the seed.
+
 The OOF diagnostics, the FINAL refit, and scoring share ONE feature
 recipe (50 base features plus the matching `<feature>_isNA` indicators
 created before imputation = 100 columns). A runtime feature-schema

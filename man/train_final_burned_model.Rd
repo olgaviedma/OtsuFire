@@ -166,6 +166,15 @@ feature order, fingerprint and effective params are always the REFIT model
 procedure per outer fold, so OOF and FINAL share the identical training core
 ([.of_nested_refit_fit()]).
 
+Training eligibility is defined by EXPLICIT class, never by negation: only
+explicit burned rows (positives) and explicit unburned rows that resolve to a
+valid negative bucket (contextual, spectral, random, otsu) enter training;
+review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
+share one internal eligibility resolver and one capping helper, so the two
+stages cannot diverge on eligibility or capping. OOF uses the same capped
+negative-sampling policy as the final model, applied independently within
+each training fold.
+
 The four `*_to_burned_ratio` caps, `feature_whitelist_override`, and
 `feature_weights` are forwarded verbatim to [train_final_model_direct()].
 Their defaults reproduce the historical behaviour byte-for-byte. The

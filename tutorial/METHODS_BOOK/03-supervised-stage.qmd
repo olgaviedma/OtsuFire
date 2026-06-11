@@ -65,6 +65,19 @@ Every negative pool is summarised by a deterministic, content-aware fingerprint 
 
 The four caps are part of `cfg$train_control$caps` (single source of truth) and are forwarded identically to OOF and FINAL.
 
+## Training Eligibility And The Shared Capping Helper
+
+Training eligibility is defined by **explicit class, never by negation**. Every candidate training row is classified by its explicit `class` plus its `(source, neg_type)` metadata:
+
+- `class == "burned"` → **positive** (always kept, never subsampled);
+- `class == "unburned"` **and** it resolves to exactly one of the four valid negative buckets above (contextual, spectral, random, otsu) → **negative**, eligible for capping;
+- `class == "unburned"` but a known otsu-excluded type (otsu review / keep patches) → **excluded and logged**, never trained, never an error;
+- anything else — `class` `NA` or unknown, or an unburned row with no valid bucket and not a known-excluded type → **hard error** (strict), surfaced with id / class / source / neg_type / origin-stage (OOF or FINAL).
+
+Review / keep / `NA` / unknown / "other" rows can therefore **never** silently become negatives. This replaces the earlier rule that treated negatives as "everything that is not burned" (the OOF `!is_burned` predicate with its `sel_other` / `other_kept` 5th "other" negative category, both removed).
+
+Eligibility resolution and capping live in **two pure internal helpers shared literally by both OOF and FINAL**: an eligibility resolver (`.of_resolve_supervised_eligibility()`, upstream of capping: it assigns buckets, builds the audit table, and logs the excluded ids) and a single canonical capping helper (`.of_cap_negative_buckets()`). The capping helper is the **only** implementation of the cap: `cap = ceiling(n_burned × ratio)`; it takes all available negatives when availability is at or below the cap, keeps every positive, and samples negatives without replacement in a deterministic bucket order, with a per-bucket audit (`bucket, n_burned, n_available, cap_ratio, n_cap_max, n_selected, effective_ratio, seed, context, reason`). The **only** differences between OOF and FINAL are the retained outer-test fold (OOF) and the seed (OOF uses a per-fold fold seed; FINAL uses `cfg$train_control$seeds`). The two stages can no longer diverge on eligibility or capping. This unification is behaviour-preserving for the default 2017 balanced run, where the review/keep/unknown set is empty.
+
 ## Spatial Folds And Feature Extraction
 
 After pool construction the workflow builds spatial block folds (`02_FOLDS`), evaluating candidate block sizes and writing a `train_with_folds` layer for spatially structured resampling.

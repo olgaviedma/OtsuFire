@@ -1,3 +1,47 @@
+# OtsuFire (development version)
+
+## Methodological fix — supervised eligibility defined by EXPLICIT class
+
+* **The supervised training population is now defined by EXPLICIT class, never by
+  negation.** A row is a POSITIVE iff `class == "burned"`; a NEGATIVE iff
+  `class == "unburned"` AND it resolves to exactly one of the four valid negative
+  buckets (`contextual`, `spectral`, `random`, `otsu`). Otsu review / keep
+  patches are EXCLUDED and logged (never trained, never an error). Any other
+  case is a strict ERROR: an `unburned` row with `NA` / unknown / "other" /
+  empty bucket (and not a known-excluded type), or a row whose `class` is `NA`
+  or not in `{burned, unburned}` — each error names the id, class, source,
+  neg_type and origin stage (OOF / FINAL). **Review / keep / `NA` / unknown /
+  "other" rows can therefore never silently become negatives.** The old OOF
+  predicate `is_negative <- !is_burned` and its `sel_other` / `other_kept` 5th
+  "other" negative category have been removed.
+
+## Structural — single shared internal capping helper for OOF and FINAL
+
+* The OOF per-fold trainer and the FINAL pool builder now route their negatives
+  through ONE shared eligibility resolver and ONE shared capping implementation
+  (two PURE internal `@noRd` helpers): `.of_resolve_supervised_eligibility()`
+  (eligibility + bucket assignment + audit table + excluded-ids log, upstream of
+  capping) and `.of_cap_negative_buckets()` (the single canonical cap:
+  `cap = ceiling(n_burned * ratio)`; take-all when available <= cap; all
+  positives kept; negatives sampled without replacement in a deterministic
+  bucket order; per-bucket audit). This deduplicates the two prior parallel
+  capping blocks. The ONLY differences between OOF and FINAL are the retained
+  outer-test fold (OOF) and the seed (OOF per-fold fold seed; FINAL
+  `cfg$train_control$seeds`). **Bucket definitions, caps, features, thresholds,
+  and model params are unchanged.**
+
+## Behaviour-preserving for the default 2017 balanced run
+
+* For the default 2017 balanced run (`use_review = FALSE` / `use_keep = FALSE`),
+  the problematic review/keep/unknown/NA set is empty, so counts, policy,
+  effective ratios and audit are identical and the OOF selected ids are
+  preserved exactly. **Transparency note:** historically OOF and FINAL already
+  produced different negative IDs on take-all buckets (FINAL churned the RNG via
+  `sample.int` even when taking all; OOF short-circuited). The unified helper
+  adopts the deterministic OOF short-circuit, so OOF ids are preserved exactly
+  while a future re-run's FINAL negative IDs (not counts) on take-all buckets may
+  differ — equivalent to a seed reshuffle, not a methodological change.
+
 # OtsuFire 0.8.0 (2026-06-11)
 
 ## BREAKING CHANGE — single capped OOF negative-sampling policy

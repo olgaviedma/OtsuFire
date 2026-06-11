@@ -433,6 +433,15 @@ cat("=======================================================\n")
 # 08_RUN_OOF — run_oof_diagnostics. Keeps B08_oof.
 #   Prints caps, scale_pos_weight, best_iteration, schema fingerprint,
 #   refit, predicted rows, OOF metrics (with the hotspot-label-circularity caveat).
+#
+#   ELIGIBILITY (internal, no functional change to drive here): training rows are
+#   chosen by EXPLICIT class, never by negation. class=="burned" -> positive;
+#   class=="unburned" + a valid bucket (contextual/spectral/random/otsu) ->
+#   negative; otsu review/keep -> excluded+logged; NA/unknown/unbucketed -> error.
+#   Review/keep/NA/unknown can NEVER become negatives. OOF and FINAL (block 09)
+#   share the SAME internal eligibility resolver + the SAME capping helper, so the
+#   two stages cannot diverge on eligibility or caps (they differ only in the
+#   retained outer-test fold and the seed).
 # #############################################################################
 .oof_dir <- file.path(MANUAL_OUT, "B08_oof/05_OOF"); dir.create(.oof_dir, showWarnings = FALSE, recursive = TRUE)
 .mat_dir <- file.path(MANUAL_OUT, "B08_oof/04_MATRIX"); dir.create(.mat_dir, showWarnings = FALSE, recursive = TRUE)
@@ -462,6 +471,11 @@ cat("===================================================\n")
 # #############################################################################
 # 09_TRAIN_FINAL_AND_REFIT — train_final_burned_model with the OOF aggregate.
 #   Keeps B09_final. Prints best_iteration, fingerprint, refit, saved paths.
+#
+#   ELIGIBILITY (internal): the FINAL pool builder selects its negatives through
+#   the SAME shared eligibility resolver + capping helper as OOF (block 08) —
+#   explicit burned positives + explicit unburned-with-valid-bucket negatives;
+#   review/keep/NA/unknown never become negatives. No knob to set here.
 # #############################################################################
 .final_dir <- file.path(MANUAL_OUT, "B09_final/07_FINAL_MODEL"); dir.create(.final_dir, showWarnings = FALSE, recursive = TRUE)
 B09_final <- train_final_burned_model(

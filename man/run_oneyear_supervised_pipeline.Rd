@@ -181,6 +181,12 @@ internal core — medians and `scale_pos_weight` are fit on the training rows
 only, an inner validation split is the sole early-stopping set, and a fresh
 model is refit on all training rows at the selected `best_iteration` before
 deployment.
+
+Training eligibility is defined by EXPLICIT class, never by negation: only
+explicit burned rows (positives) and explicit unburned rows that resolve to a
+valid negative bucket (contextual, spectral, random, otsu) enter training;
+review / keep / `NA` / unknown rows never become negatives. Both stages route
+through one internal eligibility resolver and one shared capping helper.
 }
 \section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
 

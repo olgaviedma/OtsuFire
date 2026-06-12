@@ -22,7 +22,7 @@
 #                                      R/internal-sup-make-folds.R:563
 #       -> EXCLUDES timestamp; created_at kept SEPARATE, not hashed
 #                                      R/internal-sup-make-folds.R:499-505,553
-#   neg-pool fingerprint (1C.2)      legacy_param_fingerprint_unb_legacy()
+#   neg-pool fingerprint (1C.2)      otsu_negative_param_fingerprint()
 #                                      R/supervised-pools.R:690
 #       cfg-preview of that pool fp  .of_cfg_neg_pool_fingerprint_preview()
 #                                      R/supervised-validate-execution.R:1075
@@ -39,8 +39,8 @@
 #                                      R/internal-sup-train-final-direct.R:618-623
 #   observation/row order            preserved by score_with_final_model()
 #                                      R/internal-sup-final-map.R:307-311
-#   base fingerprinter (no time)     legacy_param_fingerprint_unb_legacy()
-#                                      R/internal-sup-unburned-legacy.R:88
+#   base fingerprinter (no time)     otsu_negative_param_fingerprint()
+#                                      R/internal-sup-otsu-negative.R
 #
 # Every fingerprint above is a deterministic function of CONTENT only; none
 # folds in Sys.time(). The fold/pool/run fingerprints document this explicitly

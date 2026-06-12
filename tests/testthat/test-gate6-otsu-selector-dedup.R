@@ -1,6 +1,6 @@
 # GATE 6.2 (2026-06-11):
 #   PART A - cap_otsu (otsu_unburned_to_burned_ratio) is the SOLE Otsu selector;
-#            the generation-side `legacy_sample_n` pre-thinning was removed, so
+#            the generation-side `otsu_negative_sample_n` pre-thinning was removed, so
 #            the FULL valid Otsu drop pool flows into the negative pool and the
 #            per-bucket capping draws from it. Removing the pre-thinning changes
 #            the Otsu AVAILABILITY (e.g. 2017: 2000 -> full pool) and therefore
@@ -25,11 +25,11 @@ mk_sq_g6 <- function(xmin, ymin, side = 90) {
 }
 
 # =====================================================================
-# PART A - legacy_sample_n removed; cap_otsu is the sole Otsu selector.
+# PART A - otsu_negative_sample_n removed; cap_otsu is the sole Otsu selector.
 # =====================================================================
 
-test_that("PART A: build_unburned_from_legacy_decisions no longer accepts sample_n / sample_props / random_seed", {
-  fn <- get("build_unburned_from_legacy_decisions",
+test_that("PART A: build_otsu_negative_from_decisions no longer accepts sample_n / sample_props / random_seed", {
+  fn <- get("build_otsu_negative_from_decisions",
             envir = asNamespace("OtsuFire"))
   fmls <- names(formals(fn))
   expect_false("sample_n" %in% fmls)
@@ -37,8 +37,8 @@ test_that("PART A: build_unburned_from_legacy_decisions no longer accepts sample
   expect_false("random_seed" %in% fmls)
 })
 
-test_that("PART A: build_unburned_from_legacy_pipeline no longer accepts sample_n / sample_props / random_seed", {
-  fn <- get("build_unburned_from_legacy_pipeline",
+test_that("PART A: build_otsu_negative_pipeline no longer accepts sample_n / sample_props / random_seed", {
+  fn <- get("build_otsu_negative_pipeline",
             envir = asNamespace("OtsuFire"))
   fmls <- names(formals(fn))
   expect_false("sample_n" %in% fmls)
@@ -48,13 +48,13 @@ test_that("PART A: build_unburned_from_legacy_pipeline no longer accepts sample_
 
 test_that("PART A: the stratified pre-thinning helper was removed (no zombie)", {
   ns <- asNamespace("OtsuFire")
-  expect_false(exists("sample_stratified_legacy_unburned",
+  expect_false(exists("sample_stratified_otsu_negative",
                       envir = ns, inherits = FALSE))
 })
 
-test_that("PART A: full valid Otsu drop pool flows on (legacy_unburned_sampled == pool)", {
+test_that("PART A: full valid Otsu drop pool flows on (otsu_negative_sampled == pool)", {
   skip_if_not_installed("sf")
-  fn <- get("build_unburned_from_legacy_decisions",
+  fn <- get("build_otsu_negative_from_decisions",
             envir = asNamespace("OtsuFire"))
 
   # 5 non-overlapping drop patches, all passing the S_PATCH filter.
@@ -75,7 +75,7 @@ test_that("PART A: full valid Otsu drop pool flows on (legacy_unburned_sampled =
   sf::st_write(internal, ip, layer = "internal_decisions", quiet = TRUE)
 
   res <- fn(
-    legacy_patches_path = lp,
+    otsu_patches_path = lp,
     internal_decisions_path = ip,
     out_gpkg = NULL,
     use_drop = TRUE,
@@ -84,9 +84,9 @@ test_that("PART A: full valid Otsu drop pool flows on (legacy_unburned_sampled =
   )
   # No generation-side subsampling: the whole valid pool flows on, and the
   # `sampled` alias equals the full pool exactly.
-  expect_equal(nrow(res$legacy_unburned_pool), 5L)
-  expect_equal(nrow(res$legacy_unburned_sampled),
-               nrow(res$legacy_unburned_pool))
+  expect_equal(nrow(res$otsu_negative_pool), 5L)
+  expect_equal(nrow(res$otsu_negative_sampled),
+               nrow(res$otsu_negative_pool))
 })
 
 test_that("PART A: cap_otsu is the SOLE Otsu selector; count == ceiling(n_burned*cap) capped by availability (2017 invariant)", {
@@ -131,7 +131,7 @@ test_that("PART A: cap_otsu is the SOLE Otsu selector; count == ceiling(n_burned
 
 test_that("PART B (WITH overlap): a random cell inside an Otsu patch is removed; Otsu kept", {
   skip_if_not_installed("sf")
-  fn <- get("dedup_random_vs_otsu_unb_legacy", envir = asNamespace("OtsuFire"))
+  fn <- get("dedup_random_vs_otsu_negative", envir = asNamespace("OtsuFire"))
 
   # Otsu patch is a big square; random cells: one fully INSIDE it (duplicate),
   # one far away (kept), one sharing only an EDGE (kept - zero shared area).
@@ -163,7 +163,7 @@ test_that("PART B (WITH overlap): a random cell inside an Otsu patch is removed;
 
 test_that("PART B (WITHOUT overlap): nothing removed, random pool unchanged", {
   skip_if_not_installed("sf")
-  fn <- get("dedup_random_vs_otsu_unb_legacy", envir = asNamespace("OtsuFire"))
+  fn <- get("dedup_random_vs_otsu_negative", envir = asNamespace("OtsuFire"))
 
   otsu <- sf::st_sf(geometry = sf::st_sfc(mk_sq_g6(0, 0, side = 90), crs = 3035))
   rnd <- sf::st_sf(
@@ -184,7 +184,7 @@ test_that("PART B (WITHOUT overlap): nothing removed, random pool unchanged", {
 
 test_that("PART B: empty inputs are safe no-ops", {
   skip_if_not_installed("sf")
-  fn <- get("dedup_random_vs_otsu_unb_legacy", envir = asNamespace("OtsuFire"))
+  fn <- get("dedup_random_vs_otsu_negative", envir = asNamespace("OtsuFire"))
   rnd <- sf::st_sf(rid = 1L,
                    geometry = sf::st_sfc(mk_sq_g6(0, 0), crs = 3035))
   otsu0 <- rnd[0, , drop = FALSE]
@@ -219,7 +219,7 @@ test_that("PART B (persisted 2017): dedup removes the genuine location duplicate
   otsu <- fr[as.character(fr$source) == "otsu_patch_residual", , drop = FALSE]
   n_otsu_before <- nrow(otsu)
 
-  fn <- get("dedup_random_vs_otsu_unb_legacy", envir = asNamespace("OtsuFire"))
+  fn <- get("dedup_random_vs_otsu_negative", envir = asNamespace("OtsuFire"))
   res <- fn(random_sf = rnd, otsu_sf = otsu)
 
   expect_equal(res$n_random_before, nrow(rnd))

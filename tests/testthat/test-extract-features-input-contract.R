@@ -310,7 +310,7 @@ test_that("T_preserve_all: 0.4.0 — extract_features() preserves all input colu
     neg_type                 = c("a", "b", "c"),
     cell_id                  = c(101L, 102L, 103L),
     class_final              = c("keep", "drop", "keep"),
-    legacy_decision          = c("keep", "drop", "keep"),
+    otsu_decision          = c("keep", "drop", "keep"),
     intersects_deterministic = c(TRUE, TRUE, FALSE),
     raw_class                = c("burned", "unburned", "burned"),
     class_audited            = c("burned", "unburned", "burned"),

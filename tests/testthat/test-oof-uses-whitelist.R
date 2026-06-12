@@ -52,7 +52,7 @@ make_oof_fixture <- function(n = 30, seed = 23L) {
     fold_rep2                = rep(c(3L, 1L, 2L), length.out = 6)[rep(seq_len(6), length.out = n)],
     cell_id                  = seq_len(n) + 9000L,
     intersects_deterministic = sample(c(TRUE, FALSE), n, replace = TRUE),
-    legacy_decision          = sample(c("keep", "drop"), n, replace = TRUE),
+    otsu_decision          = sample(c("keep", "drop"), n, replace = TRUE),
     class_final              = rep(c("burned", "drop"), length.out = n),
     median_rbr               = stats::runif(n) * 1000,
     p_above_keep_q25         = stats::runif(n),
@@ -148,7 +148,7 @@ test_that("OOF design bundle columns are within the whitelist", {
   for (nm in c("neg_type", "fire_uid", "block_id", "fold_rep1",
                 "fold_rep2", "median_rbr", "p_above_keep_q25",
                 "qa_changed", "p_oof_mean", "area_ha", "n_pix",
-                "legacy_decision", "intersects_deterministic")) {
+                "otsu_decision", "intersects_deterministic")) {
     expect_false(nm %in% matrix_colnames,
                   info = paste("admin/residual leaked into OOF cols:", nm))
   }

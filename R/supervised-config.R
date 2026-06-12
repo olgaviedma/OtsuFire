@@ -66,7 +66,7 @@
 #' @param change_index SpatRaster or raster path. The main annual change-index
 #'   raster (band 1 = summer RBR, band 2 = post-fire day-of-year).
 #'   \strong{Required.} Consumed end-to-end from `cfg$inputs$change_index` by
-#'   the pool builder (legacy-Otsu severity raster) and the feature extractor
+#'   the pool builder (Otsu residual negative severity raster) and the feature extractor
 #'   (the same-window RBR features). `immediate_change_index_path` is the
 #'   canonical alias for this argument (see below).
 #'
@@ -105,7 +105,7 @@
 #'
 #' @param peninsula_shapefile sf / SpatVector / path. Optional study-area border
 #'   polygon (e.g. the Iberian peninsula). Consumed by the negative-pool
-#'   (legacy-Otsu) builder only when `options$legacy_otsu_mode = "corine"`, to
+#'   (Otsu residual negative) builder only when `options$otsu_negative_mode = "corine"`, to
 #'   crop CORINE to the study area. When `NULL` and `data_base` is available it
 #'   defaults to `<data_base>/Borders/Iberian_peninsula.shp`; otherwise it stays
 #'   `NULL`.
@@ -326,22 +326,22 @@
 #'     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
 #'       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
 #'       same names; surfaced on `cfg$tool_paths`.
-#'     \item `legacy_otsu_mode` --- negative-pool Otsu mode; `"burnable_only"`
+#'     \item `otsu_negative_mode` --- negative-pool Otsu mode; `"burnable_only"`
 #'       (default behaviour) or `"corine"` (crops to `peninsula_shapefile`).
 #'     \item `unb_verbose` --- verbose logging of the negative-pool builders.
 #'   }
 #'
 #'   \strong{Reproducibility-sensitive options} (set them to make a run fully
-#'   reproducible from the configuration alone): the negative-pool seeds
-#'   `unb_random_seed` (default `42`) and `legacy_random_seed` (default `42`);
-#'   the Otsu confidence thresholds `legacy_keep_hi` (`0.45`) and
-#'   `legacy_drop_lo` (`0.15`); and the current-year temporal-adjustment
+#'   reproducible from the configuration alone): the negative-pool random
+#'   background seed `unb_random_seed` (default `42`);
+#'   the Otsu confidence thresholds `otsu_negative_keep_hi` (`0.45`) and
+#'   `otsu_negative_drop_lo` (`0.15`); and the current-year temporal-adjustment
 #'   thresholds `currentyear_preyear_overlap_thr` (`0.70`),
 #'   `currentyear_hotspot_density_thr` (`0.001`) and
 #'   `currentyear_temporal_penalty_floor` (`0.10`). The remaining
-#'   negative-pool and legacy-Otsu knobs (`unb_excl_buffer_m`,
+#'   negative-pool and Otsu residual negative knobs (`unb_excl_buffer_m`,
 #'   `unb_n_random_cells`, `unb_random_rbr_q`, `unb_random_patch_size_cells`,
-#'   `legacy_min_pixels`, `legacy_buffers_m`, `legacy_core_thr`, and related)
+#'   `otsu_negative_min_pixels`, `otsu_negative_buffers_m`, `otsu_negative_core_thr`, and related)
 #'   default to their historical operational values, so omitting them
 #'   reproduces the standard run.
 #'
@@ -649,7 +649,7 @@ build_supervised_burned_config <- function(
 
   # External tool paths (AS01, OtsuFire 0.3.0). Mirrors the deterministic
   # stage convention from `deterministic-config.R`. All NULL by default;
-  # the legacy unburned pipeline (`all_sources` mode) errors loudly if
+  # the Otsu residual negative pipeline (`all_sources` mode) errors loudly if
   # the path it needs is missing. Callers may pass either flat options
   # (e.g. options$python_exe) or a nested options$tool_paths list.
   tool_paths <- list(
@@ -1123,7 +1123,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 # the `deterministic_direct` mode are gone; a stale option now triggers the
 # honest guard in `build_supervised_burned_config()` instead of a silent
 # redirect. (This is unrelated to the D4a empty-Otsu-pool robustness fallback
-# in internal-sup-unburned-legacy.R, which is retained.)
+# in internal-sup-otsu-negative.R, which is retained.)
 
 #' @keywords internal
 #' @noRd

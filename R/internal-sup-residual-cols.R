@@ -139,7 +139,7 @@
   "filter_1", "reason_1", "filter_2", "reason_2", "filter_3", "reason_3",
   "preyear_action", "preyear_reason", "preyear_overlap_frac",
   "class_final", "raw_class", "class_audited",
-  "legacy_decision",
+  "otsu_decision",
   # Geometric features deliberately excluded (sampling-induced size
   # bias documented in NEWS.md 0.3.1).
   "n_pix", "area_ha", "log_area", "perim_m",

@@ -90,7 +90,7 @@ corine_raster <- file.path(data_base, "Corine_Masks", "CLC_2012_peninsula.tif")
 delayed_change_index <- file.path(composite_base, "Autumn",
                                   sprintf("mean_mean_%d_mosaic.tif", target_year))
 
-# ---- EXTERNAL TOOL PATHS (REQUIRED; used by the legacy all_sources Otsu) -----
+# ---- EXTERNAL TOOL PATHS (REQUIRED; used by the all_sources Otsu residual negative) -----
 python_exe             <- "<PATH_TO_python.exe>"
 gdal_polygonize_script <- "<PATH_TO_gdal_polygonize.py>"
 gdalwarp_path          <- "<PATH_TO_gdalwarp.exe>"
@@ -337,9 +337,9 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
     feature_whitelist_override = feature_whitelist_override,
     options = list(
       data_base = data_base, composite_base = composite_base, result_name = result_name,
-      legacy_otsu_mode = "burnable_only", legacy_otsu_threshold = 0,
-      legacy_reference_otsu_threshold = 100,
-      legacy_reuse_existing = TRUE, legacy_write_output = TRUE, unb_verbose = TRUE)
+      otsu_negative_mode = "burnable_only", otsu_negative_threshold = 0,
+      otsu_negative_reference_threshold = 100,
+      otsu_negative_reuse_existing = TRUE, otsu_negative_write_output = TRUE, unb_verbose = TRUE)
   )
   cfg$tool_paths$python_exe             <- python_exe
   cfg$tool_paths$gdal_polygonize_script <- gdal_polygonize_script

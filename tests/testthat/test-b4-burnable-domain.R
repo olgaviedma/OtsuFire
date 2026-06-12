@@ -218,7 +218,7 @@ test_that("1C.2 (e): a different burnable mask changes eligible set + percentile
 # --------------------------------------------------------------------------
 test_that("1C.2 (f): neg-pool fingerprint changes on B4 changes, stable otherwise", {
   skip_if_not_installed("terra"); skip_if_not_installed("sf")
-  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+  fp <- get("otsu_negative_param_fingerprint", envir = ns)
   fx <- mk_fixture()
   base <- run_b4(fx, seed = 42, rbr_q = 0.50)
 

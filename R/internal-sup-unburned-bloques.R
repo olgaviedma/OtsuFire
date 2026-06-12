@@ -1,14 +1,14 @@
-# Block 5: legacy unburned helpers migrated from
+# Block 5: Otsu residual negative helpers migrated from
 # 2_SCRIPTS/00_FUNCTIONS/00_GENERAL_FUNCTIONS/METHODS_FUNCTIONS_BLOQUES.R
-# (lines 1..897). Only the three helpers used by the legacy unburned
+# (lines 1..897). Only the three helpers used by the Otsu residual negative
 # pipeline are kept: polygonize_Otsu(), coverage_by_patch_raster(),
-# run_scenarios(). The rest of the legacy file (tag_fire_id,
+# run_scenarios(). The rest of the source file (tag_fire_id,
 # coverage_by_fire, run_scenarios_fireonly_new, BLOQUE 3 helpers, ...)
 # is intentionally NOT migrated - those are not part of the supervised
 # one-year chain.
 #
-# These functions are package-internal: the supervised legacy unburned
-# dispatcher (internal-sup-unburned-legacy.R) calls them via lexical
+# These functions are package-internal: the supervised Otsu residual negative
+# pipeline (internal-sup-otsu-negative.R) calls them via lexical
 # scoping from the package namespace.
 #
 # NOT EXPORTED. NOT documented in roxygen.

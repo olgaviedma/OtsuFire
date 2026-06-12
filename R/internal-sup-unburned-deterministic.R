@@ -5,7 +5,7 @@
 # `sf::sf_use_s2(FALSE)` was REMOVED (global session-state leak, and DEAD in
 # installed-package mode). The S2 toggle is scoped + restored inside the
 # unburned builders that actually perform geometry ops (see
-# internal-sup-unburned-legacy.R) and inside run_supervised_pipeline().
+# internal-sup-otsu-negative.R) and inside run_supervised_pipeline().
 
 get_corine_year_unb <- function(y) {
   if (y >= 1984 && y <= 1999) "1990"
@@ -38,7 +38,7 @@ ensure_area_ha_unb <- function(x) {
 # same mask aligned onto a different template) produce DIFFERENT hashes, while
 # the same aligned mask is stable. This identifier feeds the negative-pool
 # fingerprint so a domain change invalidates any cached/stale negative pool.
-# Mirrors the rolling-checksum style of legacy_param_fingerprint_unb_legacy().
+# Mirrors the rolling-checksum style of otsu_negative_param_fingerprint().
 .of_random_bg_mask_hash <- function(aligned_mask) {
   geom <- paste(
     sprintf("crs=%s", terra::crs(aligned_mask, proj = TRUE)),
@@ -238,7 +238,7 @@ build_unburned_from_deterministic_decisions <- function(
   # Gate 1C.4 cfg-isolation: this builder uses planar (S2-off) sf semantics for
   # its buffer/intersect ops. Scope the toggle to this call and restore the
   # caller's prior value on exit (replaces the removed top-level
-  # sf::sf_use_s2(FALSE); mirrors the AS07 self-scoping in the legacy builders).
+  # sf::sf_use_s2(FALSE); mirrors the AS07 self-scoping in the Otsu negative builders).
   .prev_s2 <- sf::sf_use_s2()
   suppressMessages(sf::sf_use_s2(FALSE))
   on.exit(suppressMessages(sf::sf_use_s2(.prev_s2)), add = TRUE)

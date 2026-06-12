@@ -84,10 +84,10 @@ main <- function() {
     cap_otsu             = caps$otsu,
     options = list(
       data_base = paths$data_base, composite_base = paths$composite_base,
-      result_name = run_name, legacy_otsu_mode = "burnable_only",
-      legacy_otsu_threshold = 0, legacy_reference_otsu_threshold = 100,
-      legacy_reuse_existing = TRUE,
-      legacy_write_output = TRUE, unb_verbose = TRUE
+      result_name = run_name, otsu_negative_mode = "burnable_only",
+      otsu_negative_threshold = 0, otsu_negative_reference_threshold = 100,
+      otsu_negative_reuse_existing = TRUE,
+      otsu_negative_write_output = TRUE, unb_verbose = TRUE
     )
   )
   cfg$tool_paths$python_exe             <- tool_paths$python_exe

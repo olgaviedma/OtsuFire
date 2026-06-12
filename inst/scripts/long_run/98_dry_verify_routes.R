@@ -70,7 +70,7 @@ cat("\n--- junction check (canonical path must not depend on reparse points) ---
 junction_dirs_present <- function(engine_base) {
   sup <- file.path(engine_base, as.character(target_year), result_name,
                    "SUPERVISED", scenario)
-  subs <- c("01_POOLS", "02_FOLDS", "03_FEATURES", "_LEGACY_UNBURNED")
+  subs <- c("01_POOLS", "02_FOLDS", "03_FEATURES", "_OTSU_NEGATIVE")
   present <- subs[file.exists(file.path(sup, subs))]
   present
 }

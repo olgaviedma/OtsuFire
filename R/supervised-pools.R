@@ -13,7 +13,7 @@
 #' pools, builds the scenario `all_sources` negative pool from BOTH unburned
 #' builders ([build_unburned_from_deterministic_decisions()] = deterministic
 #' drops + random burnable background, and
-#' [build_unburned_from_legacy_pipeline()] = Otsu current-year residual
+#' [build_otsu_negative_pipeline()] = Otsu current-year residual
 #' patches), merges the labelled training set (`burned + unburned`), and writes
 #' the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` (layers `burned_pool`,
 #' `unburned_pool`, `review_pool`, `scoring_pool`, `train_labeled`, plus the
@@ -22,7 +22,7 @@
 #' @details
 #' **Self-contained config resolution.** Every value the inlined orchestrator
 #' STEP A consumed as an injected bare-name local is resolved here straight
-#' from `config`: the ~30 `UNB_*` / `UNB_LEGACY_*` negative-pool parameters from
+#' from `config`: the ~30 `UNB_*` / `UNB_OTSU_NEG_*` negative-pool parameters from
 #' `config$options$*` (with the SAME defaults the engine bindings use, so
 #' default behaviour is byte-identical), the four external tool paths
 #' (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`, `ogr2ogr_exe`) from
@@ -35,11 +35,12 @@
 #'
 #' **RNG determinism.** The random burnable-background sampling
 #' (`UNB_RANDOM_SEED = 42`) is forwarded verbatim and the two unburned builders
-#' are invoked in the SAME order (deterministic-decisions first, legacy second)
+#' are invoked in the SAME order (deterministic-decisions first, Otsu negative second)
 #' so the RNG stream — and therefore the sampled random negatives — are identical
-#' to a full orchestrator run. GATE 6.2 (2026-06-11): the legacy Otsu builder no
-#' longer performs any generation-side stratified sampling (the `legacy_sample_n`
-#' / `legacy_random_seed` pre-thinning was removed); the FULL valid Otsu drop
+#' to a full orchestrator run. GATE 6.2 (2026-06-11): the Otsu negative builder
+#' no longer performs any generation-side stratified sampling (the
+#' `otsu_negative_sample_n` / `otsu_negative_random_seed` pre-thinning was
+#' removed); the FULL valid Otsu drop
 #' pool flows on and the per-bucket cap `cap_otsu`
 #' (`otsu_unburned_to_burned_ratio`) is the sole, seeded Otsu selector.
 #'
@@ -212,7 +213,7 @@ build_supervised_training_pools <- function(config,
   cfg_peninsula_shapefile <- .cfg_input_path("peninsula_shapefile")
 
   # one_year_tif: the MAIN change-index raster, used here as the severity raster
-  # for the legacy Otsu builder. It is the REQUIRED, validated cfg$inputs$change_index
+  # for the Otsu negative builder. It is the REQUIRED, validated cfg$inputs$change_index
   # field; CONSUMED from cfg$inputs (single source of truth), NOT reconstructed
   # by the MinMin_<year>_mosaic_res90m.tif filename convention. The convention is
   # the fallback ONLY when the cfg carries no on-disk change_index path (e.g. an
@@ -235,13 +236,13 @@ build_supervised_training_pools <- function(config,
   deterministic_dir <- file.path(
     data_base, "Results", target_year, result_name, "DETERMINISTIC", scenario
   )
-  legacy_unb_root_dir <- file.path(result_dir, "_LEGACY_UNBURNED")
+  otsu_negative_root_dir <- file.path(result_dir, "_OTSU_NEGATIVE")
   unb_out_gpkg <- file.path(
     deterministic_dir, "UNBURNED",
     sprintf("%d_%s_unburned.gpkg", target_year, scenario)
   )
   dir.create(dirname(unb_out_gpkg), recursive = TRUE, showWarnings = FALSE)
-  dir.create(legacy_unb_root_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(otsu_negative_root_dir, recursive = TRUE, showWarnings = FALSE)
 
   # ---------------------------------------------------------------------------
   # 3) Resolve the deterministic decisions GPKG path. Prefer the explicit
@@ -282,7 +283,7 @@ build_supervised_training_pools <- function(config,
   internal_decisions_gpkg <- internal_decisions_path
 
   # ---------------------------------------------------------------------------
-  # 4) Resolve all UNB_* / UNB_LEGACY_* parameters + tool paths from config,
+  # 4) Resolve all UNB_* / UNB_OTSU_NEG_* parameters + tool paths from config,
   #    with the SAME defaults the engine bindings use (byte-identical default
   #    behaviour). See .of_supervised_engine_bindings() for the canonical list.
   # ---------------------------------------------------------------------------
@@ -298,37 +299,38 @@ build_supervised_training_pools <- function(config,
   UNB_RANDOM_PATCH_SIZE_CELLS <-
     config$options$unb_random_patch_size_cells %||% 3
 
-  # legacy Otsu builder
-  # GATE 6.4 (2026-06-11): `legacy_code_dir` read removed — the legacy helpers
-  # are in-package, so the option had no live consumer.
-  UNB_LEGACY_OTSU_MODE     <- config$options$legacy_otsu_mode %||% "burnable_only"
-  UNB_LEGACY_OTSU_THRESHOLD <- config$options$legacy_otsu_threshold %||% 0
-  UNB_LEGACY_REFERENCE_OTSU_THRESHOLD <-
-    config$options$legacy_reference_otsu_threshold %||% 100
-  UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE <-
-    config$options$legacy_min_otsu_threshold_value %||% 0
-  UNB_LEGACY_MIN_PIXELS    <- config$options$legacy_min_pixels %||% 8
-  UNB_LEGACY_BUFFERS_M     <- config$options$legacy_buffers_m %||% 90
-  UNB_LEGACY_CORE_THR      <- config$options$legacy_core_thr %||% 0.60
-  UNB_LEGACY_ALPHA_BOOST   <- config$options$legacy_alpha_boost %||% 0.25
-  UNB_LEGACY_MIN_BASE_BOOST <- config$options$legacy_min_base_boost %||% 0.35
-  UNB_LEGACY_DIST_POWER    <- config$options$legacy_dist_power %||% 1
-  UNB_LEGACY_KEEP_HI       <- config$options$legacy_keep_hi %||% 0.45
-  UNB_LEGACY_DROP_LO       <- config$options$legacy_drop_lo %||% 0.15
-  UNB_LEGACY_EXCL_BUFFER_M <- config$options$legacy_excl_buffer_m %||% 0
-  UNB_LEGACY_MIN_AREA_HA   <- config$options$legacy_min_area_ha %||% 0
-  # GATE 6.2 (2026-06-11): `legacy_sample_n` / `legacy_sample_props` /
-  # `legacy_random_seed` (the Otsu generation-side pre-thinning) were REMOVED.
-  # The full valid Otsu drop pool flows on; cap_otsu
+  # Otsu residual negative builder
+  # GATE 6.4 (2026-06-11): `otsu_negative_code_dir` read removed — the Otsu
+  # negative helpers are in-package, so the option had no live consumer.
+  UNB_OTSU_NEG_MODE        <- config$options$otsu_negative_mode %||% "burnable_only"
+  UNB_OTSU_NEG_THRESHOLD   <- config$options$otsu_negative_threshold %||% 0
+  UNB_OTSU_NEG_REFERENCE_THRESHOLD <-
+    config$options$otsu_negative_reference_threshold %||% 100
+  UNB_OTSU_NEG_MIN_THRESHOLD_VALUE <-
+    config$options$otsu_negative_min_threshold_value %||% 0
+  UNB_OTSU_NEG_MIN_PIXELS  <- config$options$otsu_negative_min_pixels %||% 8
+  UNB_OTSU_NEG_BUFFERS_M   <- config$options$otsu_negative_buffers_m %||% 90
+  UNB_OTSU_NEG_CORE_THR    <- config$options$otsu_negative_core_thr %||% 0.60
+  UNB_OTSU_NEG_ALPHA_BOOST <- config$options$otsu_negative_alpha_boost %||% 0.25
+  UNB_OTSU_NEG_MIN_BASE_BOOST <- config$options$otsu_negative_min_base_boost %||% 0.35
+  UNB_OTSU_NEG_DIST_POWER  <- config$options$otsu_negative_dist_power %||% 1
+  UNB_OTSU_NEG_KEEP_HI     <- config$options$otsu_negative_keep_hi %||% 0.45
+  UNB_OTSU_NEG_DROP_LO     <- config$options$otsu_negative_drop_lo %||% 0.15
+  UNB_OTSU_NEG_EXCL_BUFFER_M <- config$options$otsu_negative_excl_buffer_m %||% 0
+  UNB_OTSU_NEG_MIN_AREA_HA <- config$options$otsu_negative_min_area_ha %||% 0
+  # GATE 6.2 (2026-06-11): `otsu_negative_sample_n` / `otsu_negative_sample_props`
+  # / `otsu_negative_random_seed` (the Otsu generation-side pre-thinning) were
+  # REMOVED. The full valid Otsu drop pool flows on; cap_otsu
   # (otsu_unburned_to_burned_ratio) is the sole Otsu selector.
-  UNB_LEGACY_REUSE_EXISTING <- config$options$legacy_reuse_existing %||% TRUE
-  UNB_LEGACY_WRITE_OUTPUT   <- config$options$legacy_write_output %||% TRUE
-  # GATE 6.4 (2026-06-11): only `legacy_use_drop` (the live path) is read. The
-  # dead `legacy_use_review` / `legacy_use_keep` / `legacy_review_max_s_patch` /
-  # `legacy_keep_max_s_patch` were removed (Otsu review/keep are never negatives).
-  UNB_LEGACY_USE_DROP      <- config$options$legacy_use_drop   %||% TRUE
-  UNB_LEGACY_DROP_MAX_S_PATCH   <- config$options$legacy_drop_max_s_patch   %||% 0.15
-  # D4a (2026-06-05): default FALSE -> empty Otsu legacy pool ERRORS instead of
+  UNB_OTSU_NEG_REUSE_EXISTING <- config$options$otsu_negative_reuse_existing %||% TRUE
+  UNB_OTSU_NEG_WRITE_OUTPUT   <- config$options$otsu_negative_write_output %||% TRUE
+  # GATE 6.4 (2026-06-11): only `otsu_negative_use_drop` (the live path) is read.
+  # The dead `otsu_negative_use_review` / `otsu_negative_use_keep` /
+  # `otsu_negative_review_max_s_patch` / `otsu_negative_keep_max_s_patch` were
+  # removed (Otsu review/keep are never negatives).
+  UNB_OTSU_NEG_USE_DROP    <- config$options$otsu_negative_use_drop   %||% TRUE
+  UNB_OTSU_NEG_DROP_MAX_S_PATCH   <- config$options$otsu_negative_drop_max_s_patch   %||% 0.15
+  # D4a (2026-06-05): default FALSE -> empty Otsu residual negative pool ERRORS instead of
   # silently degrading to deterministic_direct. Opt back in via
   # config$options$allow_empty_otsu_pool = TRUE.
   UNB_ALLOW_EMPTY_OTSU_POOL     <- config$options$allow_empty_otsu_pool %||% FALSE
@@ -517,11 +519,11 @@ build_supervised_training_pools <- function(config,
   # ===========================================================================
   # A4. Generate unburned datasets (all_sources policy):
   #   build_unburned_from_deterministic_decisions() -> det drops + random bg
-  #   build_unburned_from_legacy_pipeline()         -> Otsu current-year patches
+  #   build_otsu_negative_pipeline()                -> Otsu current-year patches
   # RNG: forwarded UNB_RANDOM_SEED for the random background; the det builder
-  # runs BEFORE the legacy builder, identical to the orchestrator, so the random
-  # stream is preserved. GATE 6.2: the legacy builder no longer samples
-  # (UNB_LEGACY_RANDOM_SEED removed); the full Otsu drop pool flows on.
+  # runs BEFORE the Otsu negative builder, identical to the orchestrator, so the
+  # random stream is preserved. GATE 6.2: the Otsu negative builder no longer
+  # samples (UNB_OTSU_NEG_RANDOM_SEED removed); the full Otsu drop pool flows on.
   # ===========================================================================
   msg("STEP A4 - Generate unburned datasets [all_sources]")
   unb <- time_step("A4 Generate unburned datasets", {
@@ -569,7 +571,7 @@ build_supervised_training_pools <- function(config,
     exclusion_buffer <- to_crs_safe(res_det$exclusion_buffer, crs_master)
 
     # ---- Part 2: Otsu current-year unburned patches ----
-    res_otsu <- build_unburned_from_legacy_pipeline(
+    res_otsu <- build_otsu_negative_pipeline(
       target_year              = target_year,
       scenario_name            = scenario,
       data_base                = data_base,
@@ -585,32 +587,32 @@ build_supervised_training_pools <- function(config,
       gdal_polygonize_script   = gdal_polygonize_script,
       gdalwarp_path            = gdalwarp_path,
       ogr2ogr_exe              = ogr2ogr_exe,
-      otsu_mode                = UNB_LEGACY_OTSU_MODE,
-      otsu_threshold           = UNB_LEGACY_OTSU_THRESHOLD,
-      reference_otsu_threshold = UNB_LEGACY_REFERENCE_OTSU_THRESHOLD,
-      min_otsu_threshold_value = UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE,
-      min_pixels               = UNB_LEGACY_MIN_PIXELS,
-      buffers_m                = UNB_LEGACY_BUFFERS_M,
-      core_thr                 = UNB_LEGACY_CORE_THR,
-      alpha_boost              = UNB_LEGACY_ALPHA_BOOST,
-      min_base_boost           = UNB_LEGACY_MIN_BASE_BOOST,
-      dist_power               = UNB_LEGACY_DIST_POWER,
-      keep_hi                  = UNB_LEGACY_KEEP_HI,
-      drop_lo                  = UNB_LEGACY_DROP_LO,
-      use_drop                 = UNB_LEGACY_USE_DROP,
-      drop_max_s_patch         = UNB_LEGACY_DROP_MAX_S_PATCH,
-      exclude_buffer_m         = UNB_LEGACY_EXCL_BUFFER_M,
-      min_area_ha              = UNB_LEGACY_MIN_AREA_HA,
-      reuse_existing           = UNB_LEGACY_REUSE_EXISTING,
-      write_unburned           = UNB_LEGACY_WRITE_OUTPUT,
-      out_root_dir             = legacy_unb_root_dir,
+      otsu_mode                = UNB_OTSU_NEG_MODE,
+      otsu_threshold           = UNB_OTSU_NEG_THRESHOLD,
+      reference_otsu_threshold = UNB_OTSU_NEG_REFERENCE_THRESHOLD,
+      min_otsu_threshold_value = UNB_OTSU_NEG_MIN_THRESHOLD_VALUE,
+      min_pixels               = UNB_OTSU_NEG_MIN_PIXELS,
+      buffers_m                = UNB_OTSU_NEG_BUFFERS_M,
+      core_thr                 = UNB_OTSU_NEG_CORE_THR,
+      alpha_boost              = UNB_OTSU_NEG_ALPHA_BOOST,
+      min_base_boost           = UNB_OTSU_NEG_MIN_BASE_BOOST,
+      dist_power               = UNB_OTSU_NEG_DIST_POWER,
+      keep_hi                  = UNB_OTSU_NEG_KEEP_HI,
+      drop_lo                  = UNB_OTSU_NEG_DROP_LO,
+      use_drop                 = UNB_OTSU_NEG_USE_DROP,
+      drop_max_s_patch         = UNB_OTSU_NEG_DROP_MAX_S_PATCH,
+      exclude_buffer_m         = UNB_OTSU_NEG_EXCL_BUFFER_M,
+      min_area_ha              = UNB_OTSU_NEG_MIN_AREA_HA,
+      reuse_existing           = UNB_OTSU_NEG_REUSE_EXISTING,
+      write_unburned           = UNB_OTSU_NEG_WRITE_OUTPUT,
+      out_root_dir             = otsu_negative_root_dir,
       allow_empty_otsu_pool    = UNB_ALLOW_EMPTY_OTSU_POOL,
       verbose                  = UNB_VERBOSE
     )
-    otsu_pool    <- to_crs_safe(res_otsu$unburned$legacy_unburned_pool, crs_master)
-    otsu_sampled <- to_crs_safe(res_otsu$unburned$legacy_unburned_sampled, crs_master)
+    otsu_pool    <- to_crs_safe(res_otsu$unburned$otsu_negative_pool, crs_master)
+    otsu_sampled <- to_crs_safe(res_otsu$unburned$otsu_negative_sampled, crs_master)
     # GATE 6.2 (2026-06-11): there is no generation-side sampling anymore, so
-    # `legacy_unburned_sampled` is exactly the full `legacy_unburned_pool` (the
+    # `otsu_negative_sampled` is exactly the full `otsu_negative_pool` (the
     # `sampled` alias). The AS08 invariant therefore holds trivially (the two are
     # the same object); kept as a guard so a future regression that makes them
     # diverge fails loud.
@@ -620,9 +622,9 @@ build_supervised_training_pools <- function(config,
       mutate(
         source = "otsu_patch_residual",
         neg_type = dplyr::case_when(
-          as.character(.data$legacy_decision) == "drop"   ~ "otsu_patch_drop",
-          as.character(.data$legacy_decision) == "review" ~ "otsu_patch_review",
-          as.character(.data$legacy_decision) == "keep"   ~ "otsu_patch_keep",
+          as.character(.data$otsu_decision) == "drop"   ~ "otsu_patch_drop",
+          as.character(.data$otsu_decision) == "review" ~ "otsu_patch_review",
+          as.character(.data$otsu_decision) == "keep"   ~ "otsu_patch_keep",
           TRUE ~ as.character(.data$neg_type)
         )
       )
@@ -641,7 +643,7 @@ build_supervised_training_pools <- function(config,
     det_random_sf   <- det_final_raw[det_random_mask, , drop = FALSE]
     det_other_sf    <- det_final_raw[!det_random_mask, , drop = FALSE]
 
-    otsu_dedup <- dedup_random_vs_otsu_unb_legacy(
+    otsu_dedup <- dedup_random_vs_otsu_negative(
       random_sf = det_random_sf,
       otsu_sf   = otsu_raw
     )
@@ -670,7 +672,7 @@ build_supervised_training_pools <- function(config,
     # Prune the auxiliary unburned_random layer by the SAME exact-intersection
     # rule so the persisted layer reflects the deduplicated pool.
     if (nrow(unburned_random) > 0L && nrow(otsu_raw) > 0L) {
-      ur_dedup <- dedup_random_vs_otsu_unb_legacy(
+      ur_dedup <- dedup_random_vs_otsu_negative(
         random_sf = unburned_random,
         otsu_sf   = otsu_raw
       )
@@ -749,18 +751,19 @@ build_supervised_training_pools <- function(config,
   # A4b. Negative-pool fingerprint (Gate 1C.2). Deterministic identity of the
   # negative pool sufficient to INVALIDATE any cached/stale pool whose B4 domain
   # decision, burnable mask, percentile/config, seed, exclusions or relevant
-  # inputs predate this run. Built via the same base-R fingerprinter the legacy
-  # cache uses (legacy_param_fingerprint_unb_legacy). It folds in AT LEAST:
+  # inputs predate this run. Built via the same base-R fingerprinter the Otsu
+  # residual negative cache uses (otsu_negative_param_fingerprint). It folds in
+  # AT LEAST:
   #   - the B4 domain decision (burnable-restricted) + the aligned-mask hash,
   #   - the percentile config (random_rbr_q) + its computed value,
-  #   - the RNG seeds (det + legacy),
+  #   - the RNG seeds (det background),
   #   - the exclusions (exclude_buffer_m, patch size, n_random_cells),
   #   - the relevant inputs (change index, burnable mask path, decisions path).
-  # Because the pool is built ONCE here and SHARED downstream, both the legacy
-  # (single-fit) and nested_refit consumers operate on exactly this pool /
+  # Because the pool is built ONCE here and SHARED downstream, both the
+  # single-fit and nested_refit consumers operate on exactly this pool /
   # fingerprint — there is no second, independently-built pool.
   # ===========================================================================
-  neg_pool_fingerprint <- legacy_param_fingerprint_unb_legacy(list(
+  neg_pool_fingerprint <- otsu_negative_param_fingerprint(list(
     neg_pool_policy          = "all_sources",
     b4_domain_decision       = b4_audit$domain_decision %||% "burnable_restricted",
     b4_burnable_mask_hash    = burnable_mask_hash %||% NA_character_,
@@ -773,12 +776,12 @@ build_supervised_training_pools <- function(config,
     b4_exclude_buffer_m      = UNB_EXCL_BUFFER_M,
     b4_n_percentile_domain   = b4_audit$n_percentile_domain %||% NA_integer_,
     b4_n_eligible_cells      = b4_audit$n_eligible_cells %||% NA_integer_,
-    # GATE 6.2 (2026-06-11): `legacy_random_seed` / `legacy_sample_n` dropped
-    # from the fingerprint with the removal of the Otsu generation-side
-    # pre-thinning (cap_otsu is the sole Otsu selector). Their omission shifts
-    # the checksum, correctly INVALIDATING any pool built with the old
-    # pre-thinning so it is rebuilt rather than silently reused.
-    legacy_otsu_mode         = UNB_LEGACY_OTSU_MODE,
+    # GATE 6.2 (2026-06-11): `otsu_negative_random_seed` /
+    # `otsu_negative_sample_n` dropped from the fingerprint with the removal of
+    # the Otsu generation-side pre-thinning (cap_otsu is the sole Otsu selector).
+    # Their omission shifts the checksum, correctly INVALIDATING any pool built
+    # with the old pre-thinning so it is rebuilt rather than silently reused.
+    otsu_negative_mode       = UNB_OTSU_NEG_MODE,
     # GATE 6.2 (2026-06-11): Otsu>random spatial dedup audit folded in so a pool
     # built before the dedup (different random_removed / random_final) cannot be
     # silently reused.

@@ -74,7 +74,7 @@ SEQUENCE (orchestrator steps A1-A6): it reads the deterministic
 pools, builds the scenario `all_sources` negative pool from BOTH unburned
 builders ([build_unburned_from_deterministic_decisions()] = deterministic
 drops + random burnable background, and
-[build_unburned_from_legacy_pipeline()] = Otsu current-year residual
+[build_otsu_negative_pipeline()] = Otsu current-year residual
 patches), merges the labelled training set (`burned + unburned`), and writes
 the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` (layers `burned_pool`,
 `unburned_pool`, `review_pool`, `scoring_pool`, `train_labeled`, plus the
@@ -83,7 +83,7 @@ auxiliary unburned layers) and the QA CSV/GPKG audit files.
 \details{
 **Self-contained config resolution.** Every value the inlined orchestrator
 STEP A consumed as an injected bare-name local is resolved here straight
-from `config`: the ~30 `UNB_*` / `UNB_LEGACY_*` negative-pool parameters from
+from `config`: the ~30 `UNB_*` / `UNB_OTSU_NEG_*` negative-pool parameters from
 `config$options$*` (with the SAME defaults the engine bindings use, so
 default behaviour is byte-identical), the four external tool paths
 (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`, `ogr2ogr_exe`) from
@@ -96,11 +96,12 @@ dispatcher resolves it.
 
 **RNG determinism.** The random burnable-background sampling
 (`UNB_RANDOM_SEED = 42`) is forwarded verbatim and the two unburned builders
-are invoked in the SAME order (deterministic-decisions first, legacy second)
+are invoked in the SAME order (deterministic-decisions first, Otsu negative second)
 so the RNG stream — and therefore the sampled random negatives — are identical
-to a full orchestrator run. GATE 6.2 (2026-06-11): the legacy Otsu builder no
-longer performs any generation-side stratified sampling (the `legacy_sample_n`
-/ `legacy_random_seed` pre-thinning was removed); the FULL valid Otsu drop
+to a full orchestrator run. GATE 6.2 (2026-06-11): the Otsu negative builder
+no longer performs any generation-side stratified sampling (the
+`otsu_negative_sample_n` / `otsu_negative_random_seed` pre-thinning was
+removed); the FULL valid Otsu drop
 pool flows on and the per-bucket cap `cap_otsu`
 (`otsu_unburned_to_burned_ratio`) is the sole, seeded Otsu selector.
 }

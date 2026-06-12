@@ -142,7 +142,7 @@ validation_mask_shapefile <- file.path(data_base, "Mask_StudyArea", "mask_Penins
 strata_raster <- file.path(data_base, "Corine_Masks/STRATA", "strata_CLC_2012_res30.tif")
 strata_lut    <- file.path(data_base, "Corine_Masks/LUT/lut_full_strata8_v1.csv")
 
-# External tools for the legacy all_sources Otsu builder. TODO(Natalia): fill.
+# External tools for the all_sources Otsu residual negative builder. TODO(Natalia): fill.
 python_exe             <- "<PATH_TO_python.exe>"
 gdal_polygonize_script <- "<PATH_TO_gdal_polygonize.py>"
 gdalwarp_path          <- "<PATH_TO_gdalwarp.exe>"
@@ -218,9 +218,9 @@ B01_cfg <- build_supervised_burned_config(
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
   options = list(
     data_base = data_base, composite_base = composite_base, result_name = result_name,
-    legacy_otsu_mode = "burnable_only", legacy_otsu_threshold = 0,
-    legacy_reference_otsu_threshold = 100, legacy_sample_n = 2000L,
-    legacy_reuse_existing = TRUE, legacy_write_output = TRUE, unb_verbose = TRUE))
+    otsu_negative_mode = "burnable_only", otsu_negative_threshold = 0,
+    otsu_negative_reference_threshold = 100, otsu_negative_sample_n = 2000L,
+    otsu_negative_reuse_existing = TRUE, otsu_negative_write_output = TRUE, unb_verbose = TRUE))
 B01_cfg$tool_paths$python_exe             <- python_exe
 B01_cfg$tool_paths$gdal_polygonize_script <- gdal_polygonize_script
 B01_cfg$tool_paths$gdalwarp_path          <- gdalwarp_path

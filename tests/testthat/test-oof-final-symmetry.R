@@ -405,8 +405,12 @@ test_that("legitimate difference (L3 seeds): the seed DERIVATION rule is the doc
   # The two stages' base seeds are DISTINCT knobs by design (oof_seed_base vs
   # final_seed / final_sampling_seed) even when numerically equal here.
   tc <- canon_tc()()
+  # GATE 6.7 (2026-06-12): the canonical seeds block also carries random_seed
+  # (the negative-pool random-background seed) alongside the three training
+  # seeds.
   expect_setequal(names(tc$seeds),
-                  c("oof_seed_base", "final_sampling_seed", "final_seed"))
+                  c("oof_seed_base", "final_sampling_seed", "final_seed",
+                    "random_seed"))
 })
 
 test_that("legitimate difference (L1/L4): OOF holds out an outer fold; FINAL refits on the whole pool", {

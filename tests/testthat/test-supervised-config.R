@@ -303,14 +303,21 @@ test_that("PIECE 4: Otsu residual negative otsu_mode enum is burnable_only + cor
   expect_identical(modes[[1L]], "burnable_only")
 })
 
-test_that("PIECE 4: dispatch + pools default the Otsu negative otsu_mode to burnable_only", {
+test_that("PIECE 4 / GATE 6.7: dispatch + pools source the Otsu negative otsu_mode from the fixed internal defaults (burnable_only)", {
   ns <- asNamespace("OtsuFire")
+  # GATE 6.7 (2026-06-12): otsu_mode is a FIXED internal default
+  # (.of_supervised_negative_pool_internal_defaults()$otsu_mode == "burnable_only"),
+  # not a free-form option. Both the dispatch bindings and the pool builder read
+  # UNB_OTSU_NEG_MODE from the internal-defaults block (ni$otsu_mode).
+  expect_identical(
+    get(".of_supervised_negative_pool_internal_defaults", envir = ns)()$otsu_mode,
+    "burnable_only")
   disp <- paste(deparse(get(".of_supervised_engine_bindings", envir = ns)),
                 collapse = "\n")
-  expect_match(disp, 'otsu_negative_mode\\s*%\\|\\|%\\s*"burnable_only"')
+  expect_match(disp, "UNB_OTSU_NEG_MODE\\s*=\\s*ni\\$otsu_mode")
   pools <- paste(deparse(get("build_supervised_training_pools", envir = ns)),
                  collapse = "\n")
-  expect_match(pools, 'otsu_negative_mode\\s*%\\|\\|%\\s*"burnable_only"')
+  expect_match(pools, "UNB_OTSU_NEG_MODE\\s*<-\\s*\\.ni\\$otsu_mode")
 })
 
 test_that("PIECE 4: no ecoregion path is exposed or derived in the supervised path", {
@@ -372,5 +379,145 @@ test_that("PIECE 4: DETERMINISTIC CORINE x ecoregion Otsu wiring is preserved", 
                collapse = "\n")
   expect_match(det, "ecoregion_shapefile_path")
   expect_match(det, "segment_by_intersection")
+})
+
+# ===========================================================================
+# GATE 6.7 (2026-06-12): typed PUBLIC negative_pool_params + runtime_options;
+# caps single-source; random_seed in the canonical seeds block; runtime
+# excluded from the methodological fingerprint.
+# ===========================================================================
+
+mk_g67_cfg <- function(ci, id, ...) {
+  build_supervised_burned_config(
+    scenario = "balanced", internal_decisions = id, change_index = ci,
+    target_year = 2025L, ...)
+}
+
+test_that("GATE 6.7: typed defaults are visible and stored on the cfg", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  cfg <- mk_g67_cfg(ci, id)
+  np <- cfg$negative_pool_params
+  expect_equal(np$random$n_cells, 1500L)
+  expect_equal(np$random$rbr_quantile, 0.50)
+  expect_equal(np$otsu$candidate_threshold, 0)
+  expect_equal(np$otsu$reference_threshold, 100)
+  expect_equal(unname(np$caps[c("random", "otsu")]), c(1.0, 1.0))
+  expect_equal(cfg$negative_pool_runtime,
+               list(reuse_existing = TRUE, write_outputs = TRUE, verbose = TRUE))
+  # random_seed lives in the canonical seeds block, default 42.
+  expect_equal(cfg$train_control$seeds$random_seed, 42L)
+})
+
+test_that("GATE 6.7: unknown keys ERROR in negative_pool_params / each sub-list / runtime_options", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(nope = 1)),
+               regexp = "Unknown negative_pool_params key")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(random = list(nope = 1))),
+               regexp = "Unknown negative_pool_params\\$random key")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(otsu = list(nope = 1))),
+               regexp = "Unknown negative_pool_params\\$otsu key")
+  expect_error(mk_g67_cfg(ci, id, runtime_options = list(nope = TRUE)),
+               regexp = "Unknown runtime_options key")
+})
+
+test_that("GATE 6.7: type validation (n_cells / rbr_quantile / thresholds / caps / runtime flags)", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(random = list(n_cells = 0))),
+               regexp = "n_cells")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(random = list(rbr_quantile = 1.5))),
+               regexp = "rbr_quantile")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(otsu = list(candidate_threshold = "x"))),
+               regexp = "candidate_threshold")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(caps = c(random = 1))),
+               regexp = "caps")
+  expect_error(mk_g67_cfg(ci, id, negative_pool_params = list(caps = c(random = -1, otsu = 1))),
+               regexp = "caps")
+  expect_error(mk_g67_cfg(ci, id, runtime_options = list(verbose = 1)),
+               regexp = "verbose")
+})
+
+test_that("GATE 6.7: caps are single-source -- top-level cap_* ERRORS; resolved caps == negative_pool_params$caps", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  expect_error(mk_g67_cfg(ci, id, cap_random = 1.0), regexp = "unused argument")
+  expect_error(mk_g67_cfg(ci, id, cap_otsu = 1.0), regexp = "unused argument")
+  cfg <- mk_g67_cfg(ci, id,
+                    negative_pool_params = list(caps = c(random = 0.75, otsu = 1.5)))
+  # The resolved train_control caps equal negative_pool_params$caps (one source).
+  expect_equal(cfg$train_control$caps$random, cfg$negative_pool_params$caps[["random"]])
+  expect_equal(cfg$train_control$caps$otsu,   cfg$negative_pool_params$caps[["otsu"]])
+  expect_equal(cfg$train_control$caps$random, 0.75)
+  expect_equal(cfg$train_control$caps$otsu, 1.5)
+})
+
+test_that("GATE 6.7: random_seed lives in train_control$seeds with provenance + appears in the methodological fingerprint", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  ns <- asNamespace("OtsuFire")
+  fp <- get(".of_cfg_run_fingerprint", envir = ns)
+  cfg_def  <- mk_g67_cfg(ci, id)
+  cfg_seed <- mk_g67_cfg(ci, id, random_seed = 7L)
+  expect_equal(cfg_seed$train_control$seeds$random_seed, 7L)
+  # provenance recorded.
+  expect_equal(cfg_def$resolved_params_provenance$train_control$random_seed, "default")
+  expect_equal(cfg_seed$resolved_params_provenance$train_control$random_seed, "user")
+  # changing random_seed CHANGES the methodological fingerprint (SAME inputs).
+  expect_false(identical(fp(cfg_def)$checksum, fp(cfg_seed)$checksum))
+})
+
+test_that("GATE 6.7: a RUNTIME change does NOT alter the methodological fingerprint; a methodological change DOES", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  ns <- asNamespace("OtsuFire")
+  fp   <- get(".of_cfg_run_fingerprint", envir = ns)
+  prev <- get(".of_cfg_neg_pool_fingerprint_preview", envir = ns)
+  base <- mk_g67_cfg(ci, id)
+  # Runtime-only change: fingerprint unchanged (both the run fp and the neg-pool
+  # preview, which exclude runtime).
+  rt   <- mk_g67_cfg(ci, id,
+                     runtime_options = list(reuse_existing = FALSE,
+                                            write_outputs = FALSE, verbose = FALSE))
+  expect_identical(fp(base)$checksum, fp(rt)$checksum)
+  expect_identical(prev(base, 2025L)$checksum, prev(rt, 2025L)$checksum)
+  # Methodological change: each of n_cells / rbr_quantile / candidate_threshold /
+  # a cap moves the fingerprint.
+  for (np in list(
+    list(random = list(n_cells = 999L)),
+    list(random = list(rbr_quantile = 0.33)),
+    list(otsu   = list(candidate_threshold = 5)),
+    list(caps   = c(random = 2.0, otsu = 1.0))
+  )) {
+    cfg <- mk_g67_cfg(ci, id, negative_pool_params = np)
+    expect_false(identical(fp(base)$checksum, fp(cfg)$checksum),
+                 info = paste("np change:", names(np)[1]))
+  }
+})
+
+test_that("GATE 6.7: reproducibility -- same random_seed yields the same resolved cfg negative-pool identity", {
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+  ns <- asNamespace("OtsuFire")
+  prev <- get(".of_cfg_neg_pool_fingerprint_preview", envir = ns)
+  c1 <- mk_g67_cfg(ci, id, random_seed = 123L)
+  c2 <- mk_g67_cfg(ci, id, random_seed = 123L)
+  c3 <- mk_g67_cfg(ci, id, random_seed = 456L)
+  expect_identical(prev(c1, 2025L)$checksum, prev(c2, 2025L)$checksum)
+  expect_false(identical(prev(c1, 2025L)$checksum, prev(c3, 2025L)$checksum))
+})
+
+test_that("GATE 6.7: the FIXED internal defaults are kept (not public, not settable)", {
+  ns <- asNamespace("OtsuFire")
+  ni <- get(".of_supervised_negative_pool_internal_defaults", envir = ns)()
+  # Otsu mode is fixed burnable_only; use_drop fixed TRUE; the rest pinned.
+  expect_identical(ni$otsu_mode, "burnable_only")
+  expect_true(ni$otsu_use_drop)
+  expect_equal(ni$random_exclusion_buffer_m, 500)
+  expect_equal(ni$random_patch_size_cells, 3)
+  expect_equal(ni$otsu_min_pixels, 8)
+  expect_equal(ni$otsu_keep_hi, 0.45)
+  expect_equal(ni$otsu_drop_lo, 0.15)
+  expect_false(ni$allow_empty_otsu_pool)
+  # None of these is a builder argument.
+  fmls <- names(formals(build_supervised_burned_config))
+  for (k in c("otsu_mode", "otsu_min_pixels", "otsu_keep_hi", "otsu_drop_lo",
+              "random_patch_size_cells", "allow_empty_otsu_pool")) {
+    expect_false(k %in% fmls, info = k)
+  }
 })
 

@@ -149,7 +149,8 @@ gdalwarp_path          <- "<PATH_TO_gdalwarp.exe>"
 ogr2ogr_exe            <- "<PATH_TO_ogr2ogr.exe>"
 
 ## ---- (d) CANONICAL CONTROLS -----------------------------------------------
-CAP_CONTEXTUAL <- 0.25; CAP_SPECTRAL <- 2.0; CAP_RANDOM <- 1.0; CAP_OTSU <- 1.0
+# GATE 6.7 (2026-06-12): the two operative negative-bucket caps (random + otsu).
+CAP_RANDOM <- 1.0; CAP_OTSU <- 1.0
 SEED_BASE      <- 42L
 FOLD_COLS      <- c("fold_rep1", "fold_rep2")
 OPERATING_THRESHOLD <- 0.50
@@ -181,8 +182,8 @@ cat(sprintf("isolated lib OK  : %s\n", startsWith(.pkg_path, .iso_path)))
 cat(sprintf("MODEL_PROFILE    : %s  (expected base features = %d)\n", MODEL_PROFILE, EXPECTED_BASE_N))
 cat(sprintf("use_hotspots     : %s\n", USE_HOTSPOTS))
 cat(sprintf("whitelist ovrd n : %s\n", if (is.null(FEATURE_WHITELIST_OVERRIDE)) "NULL (FULL 50)" else length(FEATURE_WHITELIST_OVERRIDE)))
-cat(sprintf("caps             : ctx=%.2f spec=%.2f rnd=%.2f otsu=%.2f\n",
-            CAP_CONTEXTUAL, CAP_SPECTRAL, CAP_RANDOM, CAP_OTSU))
+cat(sprintf("caps             : rnd=%.2f otsu=%.2f\n",
+            CAP_RANDOM, CAP_OTSU))
 cat(sprintf("seed / folds     : %d / %s\n", SEED_BASE, paste(FOLD_COLS, collapse = "+")))
 cat(sprintf("EFFIS_MODE       : %s  (ALLOW_HIGH_MEMORY=%s)\n", EFFIS_MODE, ALLOW_HIGH_MEMORY))
 cat(sprintf("MANUAL_OUT       : %s\n", MANUAL_OUT))
@@ -208,19 +209,21 @@ B01_cfg <- build_supervised_burned_config(
   burnable_mask        = burnable_mask_run,
   nrounds_max          = NROUNDS_MAX,
   early_stop           = EARLY_STOP,
-  cap_contextual = CAP_CONTEXTUAL, cap_spectral = CAP_SPECTRAL,
-  cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
   oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
-  # OtsuFire always uses inner-early-stopping selection + full-data refit
-  # (no protocol choice). OOF always uses the SAME capped negative-sampling policy
-  # as the FINAL model, applied independently within each training fold; there is
-  # no oof_sampling argument.
+  # GATE 6.7 (2026-06-12): typed PUBLIC negative_pool_params (single caps source)
+  # + technical runtime_options. OtsuFire always uses inner-early-stopping
+  # selection + full-data refit; OOF uses the SAME capped negative-sampling
+  # policy as the FINAL model.
+  negative_pool_params = list(
+    random = list(n_cells = 1500L, rbr_quantile = 0.50),
+    otsu   = list(candidate_threshold = 0, reference_threshold = 100),
+    caps   = c(random = CAP_RANDOM, otsu = CAP_OTSU)
+  ),
+  runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE,
+                         verbose = TRUE),
   feature_whitelist_override = FEATURE_WHITELIST_OVERRIDE,
   options = list(
-    data_base = data_base, composite_base = composite_base, result_name = result_name,
-    otsu_negative_mode = "burnable_only", otsu_negative_threshold = 0,
-    otsu_negative_reference_threshold = 100, otsu_negative_sample_n = 2000L,
-    otsu_negative_reuse_existing = TRUE, otsu_negative_write_output = TRUE, unb_verbose = TRUE))
+    data_base = data_base, composite_base = composite_base, result_name = result_name))
 B01_cfg$tool_paths$python_exe             <- python_exe
 B01_cfg$tool_paths$gdal_polygonize_script <- gdal_polygonize_script
 B01_cfg$tool_paths$gdalwarp_path          <- gdalwarp_path
@@ -316,8 +319,8 @@ if (length(.src_col)) {
 } else {
   cat("(negative bucket/source column not found on train_labeled; see pools QA CSVs in 01_POOLS)\n")
 }
-cat(sprintf("caps applied : ctx=%.2f spec=%.2f rnd=%.2f otsu=%.2f\n",
-            CAP_CONTEXTUAL, CAP_SPECTRAL, CAP_RANDOM, CAP_OTSU))
+cat(sprintf("caps applied : rnd=%.2f otsu=%.2f\n",
+            CAP_RANDOM, CAP_OTSU))
 cat(sprintf("pools fingerprint : %s\n",
             B04_pools$fingerprint %||% B04_pools$pool_fingerprint %||% "(see pools sidecar)"))
 stopifnot(.n_burned > 0)

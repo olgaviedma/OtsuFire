@@ -48,7 +48,8 @@ build_canonical_cfg <- function() {
     internal_decisions = mk_pb_gpkg(),
     change_index       = mk_pb_tif(),
     target_year        = 2017L,
-    cap_random         = 0.5
+    # GATE 6.7 (2026-06-12): caps via the typed negative_pool_params block.
+    negative_pool_params = list(caps = c(random = 0.5, otsu = 1.0))
   )
 }
 

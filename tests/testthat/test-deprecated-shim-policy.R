@@ -88,7 +88,8 @@ test_that("P1: builder-set override (canonical path) is warning-free and propaga
   skip_if_not_installed("sf")
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
-  cfg <- mk_cfg(cap_random = 0.5)
+  # GATE 6.7 (2026-06-12): caps via the typed negative_pool_params block.
+  cfg <- mk_cfg(negative_pool_params = list(caps = c(random = 0.5, otsu = 1.0)))
   expect_no_warning(
     cap <- capture_oof_random(cfg, mk_oof_train_feats()),
     class = "otsufire_deprecated_param"
@@ -137,7 +138,8 @@ test_that("P1: a function-level override warns AND propagates (FINAL)", {
 # ---------------------------------------------------------------------------
 test_that("P1: builder-user value + conflicting function-level override -> error", {
   skip_if_not_installed("sf")
-  cfg <- mk_cfg(cap_random = 1.0)  # provenance "user"
+  cfg <- mk_cfg(negative_pool_params =
+                  list(caps = c(random = 1.0, otsu = 1.0)))  # provenance "user"
   expect_error(
     run_oof_diagnostics(train_features = mk_oof_train_feats(),
                         scoring_features = mk_oof_train_feats(), config = cfg,
@@ -157,7 +159,7 @@ test_that("P1: builder-user value + EQUAL function-level override -> no error, n
   skip_if_not_installed("sf")
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
-  cfg <- mk_cfg(cap_random = 1.0)
+  cfg <- mk_cfg(negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)))
   expect_no_warning(
     cap <- capture_oof_random(cfg, mk_oof_train_feats(),
                               random_to_burned_ratio = 1.0),
@@ -171,14 +173,19 @@ test_that("P1: builder-user value + EQUAL function-level override -> no error, n
 # ---------------------------------------------------------------------------
 test_that("P1: cfg carries per-field provenance ('default' vs 'user')", {
   cfg_def  <- mk_cfg()
-  cfg_user <- mk_cfg(cap_random = 0.5, nrounds_max = 10L)
+  cfg_user <- mk_cfg(
+    negative_pool_params = list(caps = c(random = 0.5, otsu = 1.0)),
+    nrounds_max = 10L)
   prov_def  <- cfg_def$resolved_params_provenance$train_control
   prov_user <- cfg_user$resolved_params_provenance$train_control
   expect_equal(prov_def$cap_random, "default")
+  expect_equal(prov_def$cap_otsu, "default")
   expect_equal(prov_def$nrounds_max, "default")
   expect_equal(prov_user$cap_random, "user")
   expect_equal(prov_user$nrounds_max, "user")
-  expect_equal(prov_user$cap_otsu, "default")  # untouched stays default
+  # GATE 6.7 (2026-06-12): caps are supplied as a single named vector via
+  # negative_pool_params$caps, so providing it marks BOTH bucket caps "user".
+  expect_equal(prov_user$cap_otsu, "user")
 })
 
 test_that("P1: shim resolver labels the resolution provenance correctly", {

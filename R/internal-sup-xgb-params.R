@@ -115,7 +115,8 @@
 #' xgboost training).
 #'
 #' @return Named list with: nrounds_max, early_stop, seeds (list of
-#'   oof_seed_base / final_sampling_seed / final_seed), val_frac, group_col,
+#'   oof_seed_base / final_sampling_seed / final_seed / random_seed), val_frac,
+#'   group_col,
 #'   impute_numeric, impute_factor_missing, caps (list of random / otsu),
 #'   feature_whitelist_override, feature_weights,
 #'   training_protocol (fixed internal constant "nested_refit"), oof_sampling.
@@ -125,10 +126,16 @@
   list(
     nrounds_max = 4000L,
     early_stop  = 80L,
+    # GATE 6.7 (2026-06-12): `random_seed` (the negative-pool random-background
+    # RNG seed; historically config$options$unb_random_seed) now lives in the
+    # CANONICAL SEEDS block alongside the three training seeds. It changes which
+    # negatives are selected, so it is methodological + reproducibility-affecting
+    # and is folded into the methodological fingerprint.
     seeds = list(
       oof_seed_base       = 42L,
       final_sampling_seed = 42L,
-      final_seed          = 42L
+      final_seed          = 42L,
+      random_seed         = 42L
     ),
     val_frac    = 0.15,
     group_col   = "block_id",

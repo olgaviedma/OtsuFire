@@ -26,12 +26,13 @@ build_supervised_burned_config(
   oof_seed_base = NULL,
   final_sampling_seed = NULL,
   final_seed = NULL,
+  random_seed = NULL,
   val_frac = NULL,
   group_col = NULL,
   impute_numeric = NULL,
   impute_factor_missing = NULL,
-  cap_random = NULL,
-  cap_otsu = NULL,
+  negative_pool_params = list(),
+  runtime_options = list(),
   feature_whitelist_override = NULL,
   feature_weights = NULL,
   model_params = NULL,
@@ -108,9 +109,10 @@ polygons remain after QA. Consumed by the pool builder / orchestrator.
 Default `5L`.}
 
 \item{peninsula_shapefile}{sf / SpatVector / path. Optional study-area border
-polygon (e.g. the Iberian peninsula). Consumed by the negative-pool
-(Otsu residual negative) builder only when `options$otsu_negative_mode = "corine"`, to
-crop CORINE to the study area. When `NULL` and `data_base` is available it
+polygon (e.g. the Iberian peninsula). Used by the negative-pool builder only
+under the `"corine"` Otsu mode to crop CORINE to the study area; the
+canonical Otsu mode is the fixed internal default `"burnable_only"`, so this
+input is typically unused. When `NULL` and `data_base` is available it
 defaults to `<data_base>/Borders/Iberian_peninsula.shp`; otherwise it stays
 `NULL`.}
 
@@ -147,6 +149,13 @@ negative-pool sampling; and FINAL train/validation split plus XGBoost
 training. Keep them set for full reproducibility. `NULL` uses `42` for
 each. Stored in `cfg$train_control$seeds`.}
 
+\item{random_seed}{Integer or `NULL`. The negative-pool random-background RNG
+seed (historically `options$unb_random_seed`). It changes WHICH negatives
+are selected, so it is methodological + reproducibility-affecting and lives
+in the canonical seeds block `cfg$train_control$seeds$random_seed` alongside
+the three training seeds (and is folded into the methodological
+fingerprint). `NULL` uses `42`.}
+
 \item{val_frac}{Numeric in `(0, 1)` or `NULL`. Inner validation fraction used
 by the inner train/validation split that selects the number of boosting
 rounds (early stopping) before the full-data refit, at both the OOF and
@@ -161,18 +170,39 @@ recipe's numeric imputation rule (`"median"` or `"zero"`) and the sentinel
 level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
 Stored in `cfg$train_control` and applied identically at OOF and FINAL.}
 
-\item{cap_random, cap_otsu}{Numeric `>= 0`
-  (`Inf` disables the cap) or `NULL`. The two negative-bucket caps, each
-  expressed as a multiple of the number of burned labels (`n_burned`). They
-  control the size of the random-background and Otsu negative buckets
-  respectively (see \strong{Details}). `NULL` uses the general package
-  defaults `1.0` / `1.0`. Stored in `cfg$train_control$caps`.
+\item{negative_pool_params}{Named typed list. The PUBLIC negative-pool
+methodological block (GATE 6.7, 2026-06-12) and the \strong{single source of
+truth} for the two negative-bucket caps. Recognized keys (unknown keys
+anywhere error):
+\itemize{
+  \item `random = list(n_cells, rbr_quantile)` --- the random
+    burnable-background bucket size (`n_cells`, integer `> 0`) and the RBR
+    percentile used to select background cells (`rbr_quantile` in `[0, 1]`).
+    Defaults `1500L` / `0.50`.
+  \item `otsu = list(candidate_threshold, reference_threshold)` --- the two
+    Otsu-residual severity thresholds (numeric). Defaults `0` / `100`.
+  \item `caps = c(random, otsu)` --- a NAMED numeric over exactly
+    `{random, otsu}`, each `>= 0` (`Inf` disables the cap), expressed as a
+    multiple of the number of burned labels (`n_burned`). Defaults
+    `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
+    `cfg$train_control$caps` and consumed end-to-end by the pool builder,
+    OOF and FINAL.
+}
+GATE 6.7: the former top-level `cap_random` / `cap_otsu` builder arguments
+were REMOVED; caps live ONLY in `negative_pool_params$caps`. Passing
+`cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
+now errors with an unused-argument error. The remaining negative-pool /
+Otsu-residual engine knobs (random exclusion buffer + patch size; Otsu mode
+`"burnable_only"`, min pixels, buffers, core threshold, boosts, distance
+power, keep/drop confidence, exclusion buffer, min area, `use_drop`,
+`drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal defaults,
+not user-settable.}
 
-  GATE 6.5 (2026-06-12): the former `cap_contextual` argument was REMOVED
-  together with the contextual (deterministic-drop) negative bucket. A
-  deterministic drop is NOT a training negative; the negative architecture is
-  two sources only (random background + Otsu residual). Passing
-  `cap_contextual` now errors with an unused-argument error.}
+\item{runtime_options}{Named typed list of TECHNICAL runtime toggles
+(GATE 6.7): `reuse_existing`, `write_outputs`, `verbose` (each a single
+TRUE/FALSE; unknown keys error). Defaults all `TRUE`. These are technical
+only and do NOT change WHICH negatives are selected, so they are EXCLUDED
+from the methodological fingerprint. Stored in `cfg$negative_pool_runtime`.}
 
 \item{feature_whitelist_override, feature_weights}{Optional feature controls,
 or `NULL`. `feature_whitelist_override` is a character subset of the
@@ -209,7 +239,10 @@ An S3 object of class `otsufire_supervised_burned_config`.
     \item `output_dir`
     \item `output_routes`
     \item `model_params`
-    \item `train_control`
+    \item `train_control` (caps, seeds incl. `random_seed`, rounds, ...)
+    \item `negative_pool_params` (typed PUBLIC negative-pool block + caps)
+    \item `negative_pool_runtime` (technical runtime toggles)
+    \item `negative_pool_internal` (FIXED internal defaults, not settable)
     \item `options`
     \item `tool_paths`
     \item `resolved_params_provenance`
@@ -322,9 +355,11 @@ share one internal eligibility resolver and one capping helper.
     \item \strong{random} --- random burnable-background cells;
     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
   }
-  Each bucket is capped by `cap_random` / `cap_otsu`, expressed as a multiple
-  of the number of burned labels; an `Inf` cap disables capping for that
-  bucket. The general package defaults are `1.0` / `1.0`.
+  Each bucket is capped by `negative_pool_params$caps[["random"]]` /
+  `negative_pool_params$caps[["otsu"]]`, expressed as a multiple of the number
+  of burned labels; an `Inf` cap disables capping for that bucket. The general
+  package defaults are `1.0` / `1.0`. The caps are the single caps source and
+  are mirrored into `cfg$train_control$caps`.
 }
 
 \subsection{OOF and FINAL}{
@@ -392,24 +427,23 @@ share one internal eligibility resolver and one capping helper.
     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
       same names; surfaced on `cfg$tool_paths`.
-    \item `otsu_negative_mode` --- negative-pool Otsu mode; `"burnable_only"`
-      (default behaviour) or `"corine"` (crops to `peninsula_shapefile`).
-    \item `unb_verbose` --- verbose logging of the negative-pool builders.
   }
+
+  GATE 6.7 (2026-06-12): the negative-pool knobs are no longer free-form
+  options. The user-settable subset lives in the typed `negative_pool_params`
+  block (random `n_cells` / `rbr_quantile`, Otsu `candidate_threshold` /
+  `reference_threshold`, `caps`), the random-background seed lives in
+  `random_seed`, and the technical toggles live in `runtime_options`. The
+  former free-form `options$unb_*` / `options$otsu_negative_*` keys are no
+  longer read; the remaining low-level knobs are FIXED internal defaults.
 
   \strong{Reproducibility-sensitive options} (set them to make a run fully
   reproducible from the configuration alone): the negative-pool random
-  background seed `unb_random_seed` (default `42`);
-  the Otsu confidence thresholds `otsu_negative_keep_hi` (`0.45`) and
-  `otsu_negative_drop_lo` (`0.15`); and the current-year temporal-adjustment
-  thresholds `currentyear_preyear_overlap_thr` (`0.70`),
+  background seed `random_seed` (default `42`, in
+  `cfg$train_control$seeds$random_seed`); and the current-year
+  temporal-adjustment thresholds `currentyear_preyear_overlap_thr` (`0.70`),
   `currentyear_hotspot_density_thr` (`0.001`) and
-  `currentyear_temporal_penalty_floor` (`0.10`). The remaining
-  negative-pool and Otsu residual negative knobs (`unb_excl_buffer_m`,
-  `unb_n_random_cells`, `unb_random_rbr_q`, `unb_random_patch_size_cells`,
-  `otsu_negative_min_pixels`, `otsu_negative_buffers_m`, `otsu_negative_core_thr`, and related)
-  default to their historical operational values, so omitting them
-  reproduces the standard run.
+  `currentyear_temporal_penalty_floor` (`0.10`).
 
   \strong{Deprecated / unsupported options}: the negative-pool policy is
   fixed to `"all_sources"` and is no longer user-settable. Passing
@@ -435,8 +469,9 @@ cfg <- build_supervised_burned_config(
   target_year          = 2017,
   output_dir           = "results/",
   run_name             = "balanced_2017",
-  cap_random           = 1.0,
-  cap_otsu             = 1.0
+  negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)),
+  runtime_options      = list(reuse_existing = TRUE, write_outputs = TRUE,
+                              verbose = TRUE)
 )
 
 pools <- build_supervised_training_pools(cfg)

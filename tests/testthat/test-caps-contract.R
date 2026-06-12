@@ -111,7 +111,9 @@ test_that("PART A: each cfg cap resolves (override=NULL) to itself -- no residua
   resolve <- get(".of_resolve_methodological_shim", envir = ns)
 
   for (cfg in list(.caps_cfg(),                                   # all default
-                   .caps_cfg(cap_random = 0.75, cap_otsu = 1.5))) {  # all user
+                   # GATE 6.7: caps via the typed negative_pool_params block.
+                   .caps_cfg(negative_pool_params =
+                               list(caps = c(random = 0.75, otsu = 1.5))))) {  # all user
     caps <- cfg$train_control$caps
     prov <- cfg$resolved_params_provenance$train_control %||% list()
     pairs <- list(
@@ -153,11 +155,17 @@ test_that("PART A / GATE 6.5: only two negative buckets + two cfg caps", {
   expect_setequal(names(cfg$train_control$caps), c("random", "otsu"))
 })
 
-test_that("PART A / GATE 6.5: passing cap_spectral / cap_contextual to the builder ERRORS (unused argument)", {
+test_that("PART A / GATE 6.5+6.7: passing cap_spectral / cap_contextual / cap_random / cap_otsu to the builder ERRORS (unused argument)", {
   expect_error(.caps_cfg(cap_spectral = 2.0),
                regexp = "cap_spectral|unused argument")
   expect_error(.caps_cfg(cap_contextual = 2.0),
                regexp = "cap_contextual|unused argument")
+  # GATE 6.7: top-level cap_random / cap_otsu were REMOVED -> single-source caps
+  # live ONLY in negative_pool_params$caps.
+  expect_error(.caps_cfg(cap_random = 1.0),
+               regexp = "cap_random|unused argument")
+  expect_error(.caps_cfg(cap_otsu = 1.0),
+               regexp = "cap_otsu|unused argument")
 })
 
 # =============================================================================

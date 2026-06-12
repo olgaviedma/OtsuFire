@@ -59,7 +59,8 @@ scenario            <- "balanced"
 run_name            <- "Min_Min"
 use_hotspots        <- target_year > 2000
 OPERATING_THRESHOLD <- 0.50   # threshold on the MODEL SCORE p_burned_model
-caps <- list(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
+# GATE 6.7 (2026-06-12): caps via the typed PUBLIC negative_pool_params block.
+caps <- c(random = 1.0, otsu = 1.0)
 
 
 main <- function() {
@@ -78,16 +79,17 @@ main <- function() {
     target_year          = target_year,
     output_dir           = paths$output_dir,
     run_name             = run_name,
-    cap_contextual       = caps$contextual,
-    cap_spectral         = caps$spectral,
-    cap_random           = caps$random,
-    cap_otsu             = caps$otsu,
+    # GATE 6.7 (2026-06-12): typed PUBLIC negative_pool_params + runtime_options.
+    negative_pool_params = list(
+      random = list(n_cells = 1500L, rbr_quantile = 0.50),
+      otsu   = list(candidate_threshold = 0, reference_threshold = 100),
+      caps   = caps
+    ),
+    runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE,
+                           verbose = TRUE),
     options = list(
       data_base = paths$data_base, composite_base = paths$composite_base,
-      result_name = run_name, otsu_negative_mode = "burnable_only",
-      otsu_negative_threshold = 0, otsu_negative_reference_threshold = 100,
-      otsu_negative_reuse_existing = TRUE,
-      otsu_negative_write_output = TRUE, unb_verbose = TRUE
+      result_name = run_name
     )
   )
   cfg$tool_paths$python_exe             <- tool_paths$python_exe

@@ -1150,7 +1150,14 @@ validate_supervised_execution <- function(config,
 #' @keywords internal
 #' @noRd
 .of_cfg_neg_pool_fingerprint_preview <- function(config, target_year) {
-  o <- config$options %||% list()
+  # GATE 6.7 (2026-06-12): the cfg-determined negative-pool subset is read from
+  # the TYPED cfg blocks (negative_pool_params / negative_pool_internal +
+  # canonical seeds$random_seed), NOT the removed free-form config$options$unb_*
+  # / otsu_negative_*. Runtime toggles are EXCLUDED (technical-only).
+  np  <- config$negative_pool_params   %||% .of_negative_pool_params_defaults()
+  ni  <- config$negative_pool_internal %||%
+           .of_supervised_negative_pool_internal_defaults()
+  sds <- (config$train_control %||% list())$seeds %||% list()
   ci_path <- .of_sup_input_path(config, "change_index") %||% ""
   id_path <- .of_sup_input_path(config, "internal_decisions") %||% ""
   bm_path <- .of_sup_input_path(config, "burnable_mask") %||% ""
@@ -1158,16 +1165,12 @@ validate_supervised_execution <- function(config,
     neg_pool_policy         = "all_sources",
     b4_domain_decision      = "burnable_restricted",
     b4_burnable_mask_path   = bm_path,
-    b4_random_rbr_q         = o$unb_random_rbr_q %||% 0.50,
-    b4_random_seed          = o$unb_random_seed %||% 42,
-    b4_n_random_cells       = o$unb_n_random_cells %||% 1500,
-    b4_random_patch_size    = o$unb_random_patch_size_cells %||% 3,
-    b4_exclude_buffer_m     = o$unb_excl_buffer_m %||% 500,
-    # GATE 6.2 (2026-06-11): `otsu_negative_random_seed` /
-    # `otsu_negative_sample_n` dropped to stay in lockstep with the build-time
-    # neg-pool fingerprint (the Otsu generation-side pre-thinning was removed;
-    # cap_otsu is the sole selector).
-    otsu_negative_mode      = o$otsu_negative_mode %||% "burnable_only",
+    b4_random_rbr_q         = np$random$rbr_quantile,
+    b4_random_seed          = sds$random_seed %||% 42L,
+    b4_n_random_cells       = np$random$n_cells,
+    b4_random_patch_size    = ni$random_patch_size_cells,
+    b4_exclude_buffer_m     = ni$random_exclusion_buffer_m,
+    otsu_negative_mode      = ni$otsu_mode,
     target_year             = as.integer(target_year),
     scenario                = config$scenario,
     change_index            = ci_path,
@@ -1207,6 +1210,13 @@ validate_supervised_execution <- function(config,
   inp <- function(nm) .of_sup_input_path(config, nm) %||% ""
   caps <- tc$caps %||% list()
   seeds <- tc$seeds %||% list()
+  # GATE 6.7 (2026-06-12): the methodological fingerprint folds in the typed
+  # PUBLIC negative-pool knobs (random n_cells / rbr_quantile, otsu candidate /
+  # reference thresholds) + the random_seed (now in the canonical seeds block),
+  # so changing any of them changes the fingerprint. The TECHNICAL runtime block
+  # (reuse_existing / write_outputs / verbose) is DELIBERATELY excluded -- a
+  # runtime change must NOT alter the methodological fingerprint.
+  np <- config$negative_pool_params %||% .of_negative_pool_params_defaults()
   otsu_negative_param_fingerprint(list(
     scenario                = config$scenario,
     target_year             = as.integer(config$target_year),
@@ -1223,11 +1233,16 @@ validate_supervised_execution <- function(config,
     in_hotspots             = inp("hotspots"),
     cap_random              = caps$random %||% NA_real_,
     cap_otsu                = caps$otsu %||% NA_real_,
+    np_random_n_cells       = np$random$n_cells %||% NA_integer_,
+    np_random_rbr_quantile  = np$random$rbr_quantile %||% NA_real_,
+    np_otsu_candidate_thr   = np$otsu$candidate_threshold %||% NA_real_,
+    np_otsu_reference_thr   = np$otsu$reference_threshold %||% NA_real_,
     nrounds_max             = tc$nrounds_max %||% NA_integer_,
     early_stop              = tc$early_stop %||% NA_integer_,
     oof_seed_base           = seeds$oof_seed_base %||% NA_integer_,
     final_sampling_seed     = seeds$final_sampling_seed %||% NA_integer_,
     final_seed              = seeds$final_seed %||% NA_integer_,
+    random_seed             = seeds$random_seed %||% NA_integer_,
     val_frac                = tc$val_frac %||% NA_real_,
     group_col               = tc$group_col %||% "",
     impute_numeric          = tc$impute_numeric %||% "",

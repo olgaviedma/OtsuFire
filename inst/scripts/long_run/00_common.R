@@ -97,7 +97,9 @@ gdalwarp_path          <- "<PATH_TO_gdalwarp.exe>"
 ogr2ogr_exe            <- "<PATH_TO_ogr2ogr.exe>"
 
 # ---- CANONICAL CONTROLS (FULL training; the canonical, NOT smoke values) -----
-CAP_CONTEXTUAL <- 0.25; CAP_SPECTRAL <- 2.0; CAP_RANDOM <- 1.0; CAP_OTSU <- 1.0
+# GATE 6.7 (2026-06-12): the two operative negative-bucket caps (random + otsu).
+# The contextual / spectral buckets were removed in earlier gates.
+CAP_RANDOM <- 1.0; CAP_OTSU <- 1.0
 SEED_BASE      <- 42L
 FOLD_COLS      <- c("fold_rep1", "fold_rep2")
 OPERATING_THRESHOLD <- 0.50
@@ -328,18 +330,20 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
     burnable_mask        = burnable_mask_run,
     nrounds_max          = NROUNDS_MAX,
     early_stop           = EARLY_STOP,
-    cap_contextual = CAP_CONTEXTUAL, cap_spectral = CAP_SPECTRAL,
-    cap_random = CAP_RANDOM, cap_otsu = CAP_OTSU,
     oof_seed_base = SEED_BASE, final_sampling_seed = SEED_BASE, final_seed = SEED_BASE,
-    # OOF always uses the same capped negative-sampling policy as the FINAL model
-    # (applied independently within each training fold). There is no oof_sampling
-    # choice: capped is the single policy.
+    # GATE 6.7 (2026-06-12): typed PUBLIC negative_pool_params (single caps
+    # source) + technical runtime_options. OOF always uses the same capped
+    # negative-sampling policy as the FINAL model.
+    negative_pool_params = list(
+      random = list(n_cells = 1500L, rbr_quantile = 0.50),
+      otsu   = list(candidate_threshold = 0, reference_threshold = 100),
+      caps   = c(random = CAP_RANDOM, otsu = CAP_OTSU)
+    ),
+    runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE,
+                           verbose = TRUE),
     feature_whitelist_override = feature_whitelist_override,
     options = list(
-      data_base = data_base, composite_base = composite_base, result_name = result_name,
-      otsu_negative_mode = "burnable_only", otsu_negative_threshold = 0,
-      otsu_negative_reference_threshold = 100,
-      otsu_negative_reuse_existing = TRUE, otsu_negative_write_output = TRUE, unb_verbose = TRUE)
+      data_base = data_base, composite_base = composite_base, result_name = result_name)
   )
   cfg$tool_paths$python_exe             <- python_exe
   cfg$tool_paths$gdal_polygonize_script <- gdal_polygonize_script

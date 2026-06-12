@@ -154,7 +154,6 @@
                                        # resolves them (cfg + explicit overrides)
                                        # and passes them here. A dropped arg ERRORS
                                        # in the guard block below.
-                                       contextual_exclusion_to_burned_ratio,
                                        random_to_burned_ratio,
                                        otsu_unburned_to_burned_ratio,
                                        feature_whitelist_override,
@@ -172,8 +171,7 @@
                                        final_impute_numeric,
                                        final_impute_factor_missing) {
   # Gate 1B: required-arg guard (no silent methodological defaults).
-  .req <- c("contextual_exclusion_to_burned_ratio",
-            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+  .req <- c("random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
             "feature_whitelist_override", "feature_weights",
             "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
             "final_sampling_seed", "final_seed", "final_val_frac",
@@ -246,7 +244,6 @@
     # 2026-06-05: thread the user's overwrite flag into the engine
     # (previously dropped here; the engine hardcoded overwrite=TRUE).
     overwrite         = overwrite,
-    contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
     random_to_burned_ratio                 = random_to_burned_ratio,
     otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
     feature_whitelist_override             = feature_whitelist_override,

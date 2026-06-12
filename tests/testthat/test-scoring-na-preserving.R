@@ -55,7 +55,6 @@ train_persist_fixture <- function() {
     verbose = FALSE,
     nrounds_max = 12L,
     early_stopping_rounds = 6L,
-    contextual_exclusion_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.2, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",

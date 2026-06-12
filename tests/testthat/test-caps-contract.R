@@ -1,9 +1,10 @@
 # =============================================================================
 # Gate 1D.6 PART A -- NEGATIVE-POOL CAPS CONTRACT
 # =============================================================================
-# Contract for the THREE negative-bucket caps (contextual / random / otsu).
-# (GATE 6.1: the dead spectral bucket was removed end-to-end.) For each cap this
-# file proves, end-to-end:
+# Contract for the TWO negative-bucket caps (random / otsu).
+# (GATE 6.1 removed the dead spectral bucket; GATE 6.5 removed the contextual
+# (deterministic-drop) bucket end-to-end.) For each cap this file proves,
+# end-to-end:
 #
 #   (1) the value STORED in cfg               -> cfg$train_control$caps$<name>;
 #   (2) the value RECEIVED by the OOF engine  -> the resolved ratio handed to
@@ -31,9 +32,9 @@ ns <- asNamespace("OtsuFire")
 .caps_gpkg <- sc_decisions_gpkg
 .caps_cfg  <- sc_min_cfg
 
-# The three canonical (default) cap ratios, in the bucket order used everywhere
-# (contextual, random, otsu).
-CANON_CAPS <- c(contextual = 0.25, random = 1.0, otsu = 1.0)
+# The two canonical (default) cap ratios, in the bucket order used everywhere
+# (random, otsu). GATE 6.5: the contextual cap was removed.
+CANON_CAPS <- c(random = 1.0, otsu = 1.0)
 
 # =============================================================================
 # (4)+(5)+(6) EFFECTIVE-CAP FORMULA, recovered + bound to an assertion.
@@ -92,11 +93,13 @@ test_that("PART A: BOTH the OOF and FINAL engines route capping through the SHAR
   src <- paste(deparse(body(get(".of_cap_negative_buckets", envir = ns))),
                collapse = "\n")
   expect_true(grepl("ceiling(n_burned * cap_ratio)", src, fixed = TRUE))
-  expect_true(grepl("ceiling(n_burned * contextual_exclusion_to_burned_ratio)",
+  expect_true(grepl("ceiling(n_burned * random_to_burned_ratio)",
                     final_src, fixed = TRUE))
-  # No spectral negative machinery survives in either engine.
+  # No spectral / contextual negative machinery survives in either engine.
   expect_false(grepl("spectral_hard_negative", oof_src, fixed = TRUE))
   expect_false(grepl("spectral_hard_negative", final_src, fixed = TRUE))
+  expect_false(grepl("contextual_exclusion_to_burned_ratio", oof_src, fixed = TRUE))
+  expect_false(grepl("contextual_exclusion_to_burned_ratio", final_src, fixed = TRUE))
 })
 
 # =============================================================================
@@ -108,12 +111,10 @@ test_that("PART A: each cfg cap resolves (override=NULL) to itself -- no residua
   resolve <- get(".of_resolve_methodological_shim", envir = ns)
 
   for (cfg in list(.caps_cfg(),                                   # all default
-                   .caps_cfg(cap_contextual = 0.5,
-                             cap_random = 0.75, cap_otsu = 1.5))) {  # all user
+                   .caps_cfg(cap_random = 0.75, cap_otsu = 1.5))) {  # all user
     caps <- cfg$train_control$caps
     prov <- cfg$resolved_params_provenance$train_control %||% list()
     pairs <- list(
-      list("cap_contextual", caps$contextual),
       list("cap_random",     caps$random),
       list("cap_otsu",       caps$otsu)
     )
@@ -130,30 +131,33 @@ test_that("PART A: each cfg cap resolves (override=NULL) to itself -- no residua
 test_that("PART A: a conflicting explicit cap (cfg-user vs function override) ERRORS, never silently picks", {
   resolve <- get(".of_resolve_methodological_shim", envir = ns)
   expect_error(
-    resolve(override = 1.0, cfg_value = 2.0, param = "cap_contextual",
+    resolve(override = 1.0, cfg_value = 2.0, param = "cap_random",
             cfg_provenance = "user", record = NULL),
-    regexp = "Conflicting supervised parameter 'cap_contextual'"
+    regexp = "Conflicting supervised parameter 'cap_random'"
   )
   expect_silent(
-    out <- resolve(override = 2.0, cfg_value = 2.0, param = "cap_contextual",
+    out <- resolve(override = 2.0, cfg_value = 2.0, param = "cap_random",
                    cfg_provenance = "user", record = NULL))
   expect_equal(out, 2.0)
 })
 
 # =============================================================================
-# GATE 6.1: only three buckets exist; cap_spectral is no longer a builder arg.
+# GATE 6.5: only two buckets exist; cap_spectral / cap_contextual are no longer
+# builder args.
 # =============================================================================
 
-test_that("PART A / GATE 6.1: only three negative buckets + three cfg caps", {
+test_that("PART A / GATE 6.5: only two negative buckets + two cfg caps", {
   expect_equal(get(".of_valid_negative_buckets", envir = ns)(),
-               c("contextual", "random", "otsu"))
+               c("random", "otsu"))
   cfg <- .caps_cfg()
-  expect_setequal(names(cfg$train_control$caps), c("contextual", "random", "otsu"))
+  expect_setequal(names(cfg$train_control$caps), c("random", "otsu"))
 })
 
-test_that("PART A / GATE 6.1: passing cap_spectral to the builder ERRORS (unused argument)", {
+test_that("PART A / GATE 6.5: passing cap_spectral / cap_contextual to the builder ERRORS (unused argument)", {
   expect_error(.caps_cfg(cap_spectral = 2.0),
                regexp = "cap_spectral|unused argument")
+  expect_error(.caps_cfg(cap_contextual = 2.0),
+               regexp = "cap_contextual|unused argument")
 })
 
 # =============================================================================
@@ -169,20 +173,20 @@ test_that("PART A: dropping a required cap ERRORS in the FINAL pool boundary (no
   sf::st_write(sf::st_sf(fire_uid = "a", class = "burned", geometry = sfc),
                g, layer = "train_features", quiet = TRUE, delete_dsn = TRUE)
 
-  # Supply every required methodological arg EXCEPT the contextual cap -> must
+  # Supply every required methodological arg EXCEPT the random cap -> must
   # error (the required-arg guard refuses a silent default for the bucket).
   expect_error(
     suppressMessages(fn(
       labelled_gpkg = g, labelled_layer = "train_features",
       out_dir = tempfile(), prefix = "x", overwrite = TRUE, verbose = FALSE,
-      # contextual_exclusion_to_burned_ratio DROPPED on purpose.
-      random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
+      # random_to_burned_ratio DROPPED on purpose.
+      otsu_unburned_to_burned_ratio = 1,
       sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
       nrounds_max = 80, early_stopping_rounds = 80, impute_numeric = "median",
       impute_factor_missing = "MISSING",
       model_params_base = get(".of_canonical_model_params", envir = ns)()
     )),
-    regexp = "contextual_exclusion_to_burned_ratio"
+    regexp = "random_to_burned_ratio"
   )
 })
 
@@ -190,7 +194,7 @@ test_that("PART A: dropping a required cap ERRORS on the OOF path (no silent 1.0
   skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")
   fn <- get("run_oof_xgb", envir = ns)
-  # The three cap ratios are REQUIRED formals; a dropped one ERRORS rather than
+  # The two cap ratios are REQUIRED formals; a dropped one ERRORS rather than
   # reverting the bucket to 1.0.
   expect_error(
     suppressMessages(suppressWarnings(fn(
@@ -203,9 +207,9 @@ test_that("PART A: dropping a required cap ERRORS on the OOF path (no silent 1.0
       group_col = "block_id", val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
       prepared_labelled = data.frame(x = c(0, 1)), model_cols = "x",
-      # contextual_exclusion_to_burned_ratio DROPPED on purpose.
-      random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1
+      # random_to_burned_ratio DROPPED on purpose.
+      otsu_unburned_to_burned_ratio = 1
     ))),
-    regexp = "contextual_exclusion_to_burned_ratio"
+    regexp = "random_to_burned_ratio"
   )
 })

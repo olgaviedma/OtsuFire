@@ -127,9 +127,9 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
-    # The 3 cap ratios are REQUIRED formals (no defaults) so a dropped argument
+    # The cap ratios are REQUIRED formals (no defaults) so a dropped argument
     # cannot silently revert a bucket to ratio 1.0. Forwarded to run_oof_xgb.
-    contextual_exclusion_to_burned_ratio,
+    # GATE 6.5 (2026-06-12): the contextual cap was removed (random + otsu only).
     random_to_burned_ratio,
     otsu_unburned_to_burned_ratio,
     # Gate 1B (2026-06-07): FINAL train/val split + imputation controls are
@@ -192,12 +192,9 @@ run_dm_oof_pipeline <- function(
            "' is missing (no methodological default).", call. = FALSE)
     }
   }
-  # The 3 cap ratios are formals WITHOUT defaults and are REQUIRED: a dropped
+  # The cap ratios are formals WITHOUT defaults and are REQUIRED: a dropped
   # argument ERRORS here (so the OOF chain can never silently revert a bucket to
   # ratio 1.0).
-  if (missing(contextual_exclusion_to_burned_ratio)) {
-    stop("run_dm_oof_pipeline(): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
-  }
   if (missing(random_to_burned_ratio)) {
     stop("run_dm_oof_pipeline(): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
   }
@@ -392,9 +389,6 @@ run_dm_oof_pipeline <- function(
   if (!missing(val_frac))              oof_args$val_frac <- val_frac
   if (!missing(impute_numeric))        oof_args$impute_numeric <- impute_numeric
   if (!missing(impute_factor_missing)) oof_args$impute_factor_missing <- impute_factor_missing
-  if (!missing(contextual_exclusion_to_burned_ratio)) {
-    oof_args$contextual_exclusion_to_burned_ratio <- contextual_exclusion_to_burned_ratio
-  }
   if (!missing(random_to_burned_ratio)) {
     oof_args$random_to_burned_ratio <- random_to_burned_ratio
   }

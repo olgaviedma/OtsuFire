@@ -1,7 +1,8 @@
-# Phase 2A three-bucket unburned taxonomy helpers. Internal only.
+# Phase 2A unburned taxonomy helpers. Internal only.
 #
-# Closed 2026-04-17 (handoff Sections 32-38). Buckets:
-# - contextual_exclusion         cap = 0.25x
+# Closed 2026-04-17 (handoff Sections 32-38). Buckets (GATE 6.5, 2026-06-12:
+# the contextual_exclusion bucket was removed — deterministic drops are not
+# training negatives):
 # - random_background_sampled    cap = 1x
 # - otsu_unburned_sampled        cap = 1x
 #
@@ -16,8 +17,7 @@
   .NotYetImplemented()
 }
 
-.bucket_cap <- function(bucket = c("contextual_exclusion",
-                                   "random_background_sampled",
+.bucket_cap <- function(bucket = c("random_background_sampled",
                                    "otsu_unburned_sampled")) {
   .NotYetImplemented()
 }

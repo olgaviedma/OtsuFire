@@ -8,7 +8,6 @@ train_final_burned_model(
   train_features,
   config,
   oof_agg = NULL,
-  contextual_exclusion_to_burned_ratio = NULL,
   random_to_burned_ratio = NULL,
   otsu_unburned_to_burned_ratio = NULL,
   feature_whitelist_override = NULL,
@@ -45,9 +44,6 @@ read it back identically.}
 
 \item{oof_agg}{Character path to the OOF aggregate CSV (`_oof_agg.csv`) OR
 `NULL`. Forwarded as the engine's `qa` argument (summary enrichment only).}
-
-\item{contextual_exclusion_to_burned_ratio}{Numeric. Cap on the
-contextual-exclusion negative pool. Default `0.25`.}
 
 \item{random_to_burned_ratio}{Numeric. Cap on random-burnable-background
 negatives. Default `1.0`.}
@@ -164,7 +160,7 @@ procedure per outer fold, so OOF and FINAL share the identical training core
 
 Training eligibility is defined by EXPLICIT class, never by negation: only
 explicit burned rows (positives) and explicit unburned rows that resolve to a
-valid negative bucket (contextual, random, otsu) enter training;
+valid negative bucket (random, otsu) enter training;
 review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
 share one internal eligibility resolver and one capping helper, so the two
 stages cannot diverge on eligibility or capping. OOF uses the same capped

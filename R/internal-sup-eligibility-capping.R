@@ -4,13 +4,23 @@
 # Methodological fix (2026-06-11): the supervised training population is defined
 # by EXPLICIT class, NEVER by negation. A row is a:
 #   - POSITIVE   iff class == "burned";
-#   - NEGATIVE   iff class == "unburned" AND it maps to exactly ONE of the three
-#                valid negative buckets (contextual, random, otsu);
+#   - NEGATIVE   iff class == "unburned" AND it maps to exactly ONE of the two
+#                valid negative buckets (random, otsu);
 #   - EXCLUDED   iff class == "unburned" but its (source, neg_type) is a KNOWN
 #                excluded type (the otsu exclude-list, e.g. otsu_patch_review /
 #                otsu_patch_keep) -> logged, never trained, never an error;
 #   - ERROR      in every other case (unburned with no resolvable bucket and not
 #                a known-excluded type; class NA; class not in {burned,unburned}).
+#
+# GATE 6.5 (2026-06-12): the CONTEXTUAL negative bucket was REMOVED entirely. An
+# audit across 6 years proved no contextual category is a reliable negative
+# (geo_excluded_hot / too_few_pixels / too_small carry no non-burn evidence;
+# drop_outside_burnable, the only conceptually-valid negative, has zero cases).
+# A deterministic drop does NOT automatically become an unburned label. The
+# final negative architecture is TWO sources only: random background + Otsu
+# residual. Deterministic-drop rows are therefore NEVER written as unburned
+# negatives upstream, so an unburned row routed to "contextual" (or carrying
+# source deterministic_drop_hard) now hits the strict unknown-bucket ERROR.
 #
 # The former OOF predicate `is_negative <- !is_burned` (plus its `sel_other` /
 # `other_kept` "5th category") is METHODOLOGICALLY WRONG and is removed: review /
@@ -29,9 +39,10 @@
 
 # Canonical valid negative buckets, in canonical order. Used by BOTH helpers so
 # the ordering of the seeded draws (and therefore the selected ids) is one fixed
-# convention: contextual -> random -> otsu.
+# convention: random -> otsu. GATE 6.5 (2026-06-12): the "contextual" bucket was
+# removed (deterministic drops are no longer training negatives).
 .of_valid_negative_buckets <- function() {
-  c("contextual", "random", "otsu")
+  c("random", "otsu")
 }
 
 # Resolve the supervised training ELIGIBILITY of every row by EXPLICIT class +
@@ -41,8 +52,6 @@
 # @param class     character vector of class labels, length n.
 # @param source    character vector of `source` metadata, length n (NA allowed).
 # @param neg_type  character vector of `neg_type` metadata, length n (NA allowed).
-# @param deterministic_drop_source        sources defining the deterministic-drop
-#        negatives (all routed to the CONTEXTUAL bucket).
 # @param random_background_source         sources defining the RANDOM bucket.
 # @param otsu_unburned_source             sources defining the OTSU bucket.
 # @param otsu_unburned_exclude_neg_types  neg_types (within the otsu source) that
@@ -58,16 +67,15 @@
 #   excluded            : data.frame(id, class, source, neg_type, reason),
 #   audit               : data.frame(class, bucket, n, action)
 # )
-# The helper does NOT infer or repair classes/buckets. A det-drop that is
-# methodologically a valid contextual negative must carry that metadata UPSTREAM
-# (set at pool-build time); the helper only classifies by explicit metadata and
-# errors if an unbucketed unburned negative ever appears.
+# The helper does NOT infer or repair classes/buckets. It classifies by explicit
+# metadata and errors if an unbucketed unburned negative ever appears (GATE 6.5:
+# a deterministic-drop row reaching here as an unburned negative is exactly such
+# an error, because det drops are no longer written as unburned upstream).
 #
 # @keywords internal
 # @noRd
 .of_resolve_supervised_eligibility <- function(
     id, class, source, neg_type,
-    deterministic_drop_source,
     random_background_source,
     otsu_unburned_source,
     otsu_unburned_exclude_neg_types,
@@ -86,13 +94,11 @@
   valid_buckets <- .of_valid_negative_buckets()
 
   # --- bucket predicates (mirror the FINAL pool filters exactly) -------------
-  in_det   <- !is.na(src) & (src %in% deterministic_drop_source)
   in_rand  <- !is.na(src) & (src %in% random_background_source)
   in_otsu  <- !is.na(src) & (src %in% otsu_unburned_source)
   otsu_excl <- !is.na(ngt) & (ngt %in% otsu_unburned_exclude_neg_types)
 
   bucket_of <- function(i) {
-    if (in_det[i])                return("contextual")
     if (in_rand[i])               return("random")
     if (in_otsu[i] && !otsu_excl[i]) return("otsu")
     NA_character_
@@ -172,9 +178,6 @@
   audit <- rbind(
     data.frame(class = "burned", bucket = "NA/n.a.", n = n_burned_pos,
                action = "keep positive", stringsAsFactors = FALSE),
-    data.frame(class = "unburned", bucket = "contextual",
-               n = length(negatives_by_bucket[["contextual"]]),
-               action = "eligible", stringsAsFactors = FALSE),
     data.frame(class = "unburned", bucket = "random",
                n = length(negatives_by_bucket[["random"]]),
                action = "eligible", stringsAsFactors = FALSE),
@@ -198,14 +201,14 @@
 
 # Apply the negative-bucket caps to ALREADY-RESOLVED positives + negatives. Pure
 # except for the single explicitly-seeded draw. Receives positives and negatives
-# grouped by VALID bucket; FAILS if handed any bucket outside the canonical four.
+# grouped by VALID bucket; FAILS if handed any bucket outside the canonical two.
 # Performs NO eligibility/repair logic.
 #
 # @param positive_idx       integer row indices of burned positives (all kept).
 # @param negatives_by_bucket named list(bucket -> integer row indices), buckets
-#        MUST be a subset of the canonical three.
+#        MUST be a subset of the canonical two.
 # @param n_burned           number of burned positives (drives every cap).
-# @param caps               named numeric(contextual, random, otsu)
+# @param caps               named numeric(random, otsu)
 #        cap ratios. ceiling(n_burned * cap) is the per-bucket max.
 # @param seed               integer RNG seed (REQUIRED; NULL/invalid -> error;
 #        no silent unseeded draw).
@@ -254,7 +257,7 @@
   bad_bucket <- setdiff(bnames, valid_buckets)
   if (length(bad_bucket) > 0L) {
     stop(".of_cap_negative_buckets(): received bucket(s) outside the canonical ",
-         "three {", paste(valid_buckets, collapse = ", "), "}: ",
+         "two {", paste(valid_buckets, collapse = ", "), "}: ",
          paste(bad_bucket, collapse = ", "),
          ". The caller must resolve eligibility FIRST; this helper performs no ",
          "repair.", call. = FALSE)
@@ -262,7 +265,7 @@
   if (is.null(caps) || is.null(names(caps)) ||
       !all(valid_buckets %in% names(caps))) {
     stop(".of_cap_negative_buckets(): `caps` must be a named numeric with all ",
-         "three buckets {", paste(valid_buckets, collapse = ", "), "}.",
+         "two buckets {", paste(valid_buckets, collapse = ", "), "}.",
          call. = FALSE)
   }
 

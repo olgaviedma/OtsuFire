@@ -315,8 +315,8 @@ test_that("train_final_burned_model validates inputs", {
     suppressWarnings(
       OtsuFire:::train_final_burned_model(
         train_features = mk_tmp_gpkg_m(), config = cfg,
-        contextual_exclusion_to_burned_ratio = -1)),
-    regexp = "contextual_exclusion_to_burned_ratio"
+        random_to_burned_ratio = -1)),
+    regexp = "random_to_burned_ratio"
   )
   expect_error(
     OtsuFire:::train_final_burned_model(train_features = mk_tmp_gpkg_m(),

@@ -555,8 +555,13 @@ build_supervised_training_pools <- function(config,
     b4_audit           <- res_det$b4_audit
     burnable_mask_hash <- res_det$burnable_mask_hash
 
-    unburned_hard   <- to_crs_safe(res_det$unburned_hard, crs_master) |>
-      mutate(source = "deterministic_drop_hard")
+    # GATE 6.5 (2026-06-12): `unburned_hard` is now ALWAYS EMPTY (deterministic
+    # drops are no longer training negatives). Kept only so the auxiliary
+    # `unburned_hard` GPKG layer schema is preserved; it contributes zero rows to
+    # the negative pool. The deterministic-drop polygons reach the scoring pool
+    # via the independent internal_qc -> scoring_pool path (STEP A3 above), which
+    # has no burnable/CORINE mask, so they remain scoreable.
+    unburned_hard   <- to_crs_safe(res_det$unburned_hard, crs_master)
     unburned_random <- to_crs_safe(res_det$unburned_random, crs_master) |>
       mutate(source = "random_burnable_background")
     det_final_raw   <- to_crs_safe(res_det$unburned_final, crs_master) |>

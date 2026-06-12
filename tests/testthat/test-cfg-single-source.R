@@ -4,7 +4,7 @@
 #       sourced from the single canonical builders;
 #   (2) the params that REACH the OOF and FINAL engines equal cfg
 #       (recipe/param equality, not just non-error);
-#   (3) a USER override in the builder (cap_contextual = 1.0, nrounds_max = 10)
+#   (3) a USER override in the builder (cap_random = 1.0, nrounds_max = 10)
 #       propagates to BOTH the OOF and FINAL engines IDENTICALLY;
 #   (4) an internal-pure function ERRORS when a required methodological arg is
 #       omitted (proves there is no silent default).
@@ -47,7 +47,7 @@ test_that("Gate 1B: cfg carries model_params + train_control with the canonical 
   expect_setequal(names(tc$seeds),
                   c("oof_seed_base", "final_sampling_seed", "final_seed"))
   expect_setequal(names(tc$caps),
-                  c("contextual", "random", "otsu"))
+                  c("random", "otsu"))
   # Canonical values (the INVARIANT: identical to the historical defaults).
   expect_identical(tc, get(".of_canonical_train_control", envir = ns)())
   expect_equal(tc$nrounds_max, 4000L)
@@ -55,7 +55,7 @@ test_that("Gate 1B: cfg carries model_params + train_control with the canonical 
   expect_equal(unlist(tc$seeds, use.names = FALSE), c(42L, 42L, 42L))
   expect_equal(tc$val_frac, 0.15)
   expect_equal(tc$group_col, "block_id")
-  expect_equal(unname(unlist(tc$caps)), c(0.25, 1.0, 1.0))
+  expect_equal(unname(unlist(tc$caps)), c(1.0, 1.0))
   # Fixed internal constants (traceability only; not user-settable).
   expect_equal(tc$training_protocol, "nested_refit")
   # oof_sampling is now a FIXED constant, not a user-settable toggle.
@@ -77,8 +77,7 @@ capture_oof_args <- function(cfg, train_feats) {
       captured$early_stop  <- a$early_stop
       captured$seed_base   <- a$seed_base
       captured$group_col   <- a$group_col
-      captured$caps <- c(a$contextual_exclusion_to_burned_ratio,
-                         a$random_to_burned_ratio,
+      captured$caps <- c(a$random_to_burned_ratio,
                          a$otsu_unburned_to_burned_ratio)
       captured$params <- a$params
       list(dm = NULL, oof = list(oof_agg = NULL, oof_long = NULL),
@@ -105,8 +104,7 @@ capture_final_args <- function(cfg, train_gpkg) {
       captured$group_col             <- a$group_col
       captured$impute_numeric        <- a$impute_numeric
       captured$impute_factor_missing <- a$impute_factor_missing
-      captured$caps <- c(a$contextual_exclusion_to_burned_ratio,
-                         a$random_to_burned_ratio,
+      captured$caps <- c(a$random_to_burned_ratio,
                          a$otsu_unburned_to_burned_ratio)
       captured$model_params_base <- a$model_params_base
       list(model = NULL, recipe = NULL, training_ok_sf = NULL, split = NULL,
@@ -137,7 +135,7 @@ test_that("Gate 1B: params reaching the OOF engine equal cfg$train_control / cfg
   # single source the FINAL stage uses), not a hardcoded literal.
   expect_equal(cap$group_col,   cfg$train_control$group_col)
   expect_equal(cap$caps, with(cfg$train_control$caps,
-                              c(contextual, random, otsu)))
+                              c(random, otsu)))
   # The xgb params built for OOF are cfg$model_params + a computed spw.
   expect_identical(cap$params[setdiff(names(cap$params), "scale_pos_weight")],
                    cfg$model_params)
@@ -159,27 +157,27 @@ test_that("Gate 1B: params reaching the FINAL engine equal cfg$train_control / c
   expect_equal(cap$impute_numeric,        cfg$train_control$impute_numeric)
   expect_equal(cap$impute_factor_missing, cfg$train_control$impute_factor_missing)
   expect_equal(cap$caps, with(cfg$train_control$caps,
-                              c(contextual, random, otsu)))
+                              c(random, otsu)))
   # The FINAL engine receives cfg$model_params as its model_params_base.
   expect_identical(cap$model_params_base, cfg$model_params)
 })
 
 # ---------------------------------------------------------------------------
-# (3) A builder override (cap_contextual = 1.0, nrounds_max = 10) propagates to
+# (3) A builder override (cap_random = 1.0, nrounds_max = 10) propagates to
 #     BOTH OOF and FINAL identically.
 # ---------------------------------------------------------------------------
 test_that("Gate 1B: a builder override propagates to BOTH OOF and FINAL identically", {
   skip_if_not_installed("sf")
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
-  cfg <- mk_ss_cfg(cap_contextual = 1.0, nrounds_max = 10L)
-  expect_equal(cfg$train_control$caps$contextual, 1.0)
+  cfg <- mk_ss_cfg(cap_random = 1.0, nrounds_max = 10L)
+  expect_equal(cfg$train_control$caps$random, 1.0)
   expect_equal(cfg$train_control$nrounds_max, 10L)
 
   cap_oof   <- capture_oof_args(cfg, mk_oof_train_feats())
   cap_final <- capture_final_args(cfg, mk_final_train_gpkg())
 
-  # contextual cap == 1.0 in BOTH (caps order = contextual, random, otsu).
+  # random cap == 1.0 in BOTH (caps order = random, otsu).
   expect_equal(cap_oof$caps[1],   1.0)
   expect_equal(cap_final$caps[1], 1.0)
   # nrounds_max == 10 in BOTH.
@@ -201,7 +199,7 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
     nrounds_max         = 137L,
     early_stop          = 9L,
     val_frac            = 0.222,
-    cap_contextual      = 1.0,
+    cap_random          = 1.0,
     oof_seed_base       = 4242L,
     final_sampling_seed = 1234L,
     final_seed          = 9999L,
@@ -214,7 +212,7 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
   expect_equal(cfg$train_control$nrounds_max, 137L)
   expect_equal(cfg$train_control$early_stop, 9L)
   expect_equal(cfg$train_control$val_frac, 0.222)
-  expect_equal(cfg$train_control$caps$contextual, 1.0)
+  expect_equal(cfg$train_control$caps$random, 1.0)
   expect_equal(cfg$train_control$seeds$oof_seed_base, 4242L)
   expect_equal(cfg$train_control$seeds$final_sampling_seed, 1234L)
   expect_equal(cfg$train_control$seeds$final_seed, 9999L)
@@ -223,7 +221,7 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
   cap_oof   <- capture_oof_args(cfg, mk_oof_train_feats())
   cap_final <- capture_final_args(cfg, mk_final_train_gpkg())
 
-  # OOF engine: the OOF-specific seed + shared nrounds/early-stop + contextual cap.
+  # OOF engine: the OOF-specific seed + shared nrounds/early-stop + random cap.
   expect_equal(cap_oof$nrounds_max, 137L)
   expect_equal(cap_oof$early_stop, 9L)
   expect_equal(cap_oof$seed_base, 4242L)
@@ -290,7 +288,6 @@ test_that("Gate 1B: current defaults equal the documented legacy recipe (params 
   expect_equal(tc$group_col, "block_id")
   expect_equal(tc$impute_numeric, "median")
   expect_equal(tc$impute_factor_missing, "MISSING")
-  expect_equal(tc$caps$contextual, 0.25)
   expect_equal(tc$caps$random, 1.0)
   expect_equal(tc$caps$otsu, 1.0)
   expect_equal(tc$training_protocol, "nested_refit")
@@ -310,7 +307,6 @@ test_that("Gate 1B: train_final_model_direct ERRORS when a required methodologic
     suppressMessages(fn(
       labelled_gpkg = g, labelled_layer = "train_features",
       out_dir = tempfile(), prefix = "x", overwrite = TRUE, verbose = FALSE,
-      contextual_exclusion_to_burned_ratio = 1,
       random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
       sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
       early_stopping_rounds = 80, impute_numeric = "median",
@@ -329,7 +325,6 @@ test_that("Gate 1B: train_final_model_direct ERRORS when model_params_base is om
     suppressMessages(fn(
       labelled_gpkg = g, labelled_layer = "train_features",
       out_dir = tempfile(), prefix = "x", overwrite = TRUE, verbose = FALSE,
-      contextual_exclusion_to_burned_ratio = 1,
       random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
       sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
       nrounds_max = 80, early_stopping_rounds = 80, impute_numeric = "median",
@@ -387,10 +382,13 @@ test_that("Gate 1B: builder validates the resolved-param overrides", {
   expect_error(mk_ss_cfg(val_frac = 1), regexp = "val_frac")
   expect_error(mk_ss_cfg(nrounds_max = 0), regexp = "nrounds_max")
   expect_error(mk_ss_cfg(early_stop = -1), regexp = "early_stop")
-  expect_error(mk_ss_cfg(cap_contextual = -0.1), regexp = "cap_contextual")
+  expect_error(mk_ss_cfg(cap_random = -0.1), regexp = "cap_random")
   # GATE 6.1: cap_spectral is no longer a builder argument.
   expect_error(mk_ss_cfg(cap_spectral = 2.0),
                regexp = "cap_spectral|unused argument")
+  # GATE 6.5: cap_contextual is no longer a builder argument.
+  expect_error(mk_ss_cfg(cap_contextual = 1.0),
+               regexp = "cap_contextual|unused argument")
   # training_protocol is no longer a builder argument -> R "unused argument".
   expect_error(mk_ss_cfg(training_protocol = "nested_refit"),
                regexp = "unused argument")

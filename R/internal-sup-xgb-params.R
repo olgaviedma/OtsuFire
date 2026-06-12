@@ -116,8 +116,8 @@
 #'
 #' @return Named list with: nrounds_max, early_stop, seeds (list of
 #'   oof_seed_base / final_sampling_seed / final_seed), val_frac, group_col,
-#'   impute_numeric, impute_factor_missing, caps (list of contextual / random
-#'   / otsu), feature_whitelist_override, feature_weights,
+#'   impute_numeric, impute_factor_missing, caps (list of random / otsu),
+#'   feature_whitelist_override, feature_weights,
 #'   training_protocol (fixed internal constant "nested_refit"), oof_sampling.
 #' @keywords internal
 #' @noRd
@@ -134,8 +134,9 @@
     group_col   = "block_id",
     impute_numeric        = "median",
     impute_factor_missing = "MISSING",
+    # GATE 6.5 (2026-06-12): the "contextual" (deterministic-drop) cap was removed
+    # with the bucket. Negative architecture = random + Otsu residual only.
     caps = list(
-      contextual = 0.25,
       random     = 1.0,
       otsu       = 1.0
     ),

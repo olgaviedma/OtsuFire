@@ -48,12 +48,15 @@ make_whitelist_fixture_gpkg <- function(n_burned = 14, n_neg_random = 7,
     fire_uid                 = sprintf("uid_%03d", seq_len(n)),
     class                    = c(rep("burned", n_burned),
                                   rep("unburned", n_neg_random + n_neg_drop)),
+    # GATE 6.5 (2026-06-12): deterministic_drop_hard is no longer a training
+    # negative. The former "drop" negatives are now Otsu-residual negatives so the
+    # row count is preserved while every unburned row resolves to a valid bucket.
     source                   = c(rep("burned_truth", n_burned),
                                   rep("random_burnable_background", n_neg_random),
-                                  rep("deterministic_drop_hard", n_neg_drop)),
+                                  rep("otsu_patch_residual", n_neg_drop)),
     neg_type                 = c(rep(NA_character_, n_burned),
                                   rep("background_cell", n_neg_random),
-                                  rep("geo_excluded_hot", n_neg_drop)),
+                                  rep("otsu_patch_drop", n_neg_drop)),
     block_id                 = rep(c(1L, 2L, 3L, 4L), length.out = n),
     fold_rep1                = rep(c(1L, 2L), length.out = n),
     fold_rep2                = rep(c(2L, 1L), length.out = n),
@@ -174,7 +177,6 @@ test_that("recipe$cols$feature_cols and x_cols are within the whitelist", {
     verbose = FALSE,
     nrounds_max = 8L,
     early_stopping_rounds = 4L,
-    contextual_exclusion_to_burned_ratio = 1,
     random_to_burned_ratio = 1,
     otsu_unburned_to_burned_ratio = 1,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.

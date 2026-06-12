@@ -30,12 +30,6 @@
 #'   recomputing completed stages. Before 2026-06-05 this flag was
 #'   cosmetic: it was validated but never threaded, and the engine always
 #'   behaved as if `overwrite = TRUE`.)
-#' @param contextual_exclusion_to_burned_ratio Numeric. Cap on the
-#'   contextual-exclusion negative pool (all deterministic-drop polygons),
-#'   expressed as a multiple
-#'   of `n_burned`, applied when fitting the FINAL supervised model.
-#'   Default `0.25` reproduces historical behaviour. Use `Inf` to disable
-#'   the cap. See "Phase B sampling caps" below.
 #' @param random_to_burned_ratio Numeric. Cap on
 #'   random-burnable-background negatives for the FINAL model, as a
 #'   multiple of `n_burned`. Default `1.0` (historical behaviour).
@@ -114,12 +108,12 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (contextual, random, otsu) enter training;
+#' valid negative bucket (random, otsu) enter training;
 #' review / keep / `NA` / unknown rows never become negatives. Both stages route
 #' through one internal eligibility resolver and one shared capping helper.
 #'
 #' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
-#' The methodological / training-control arguments of this function (the three
+#' The methodological / training-control arguments of this function (the two
 #' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
 #' `oof_*` / `final_*` training knobs) are
 #' DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
@@ -187,7 +181,7 @@
 #'
 #' @section Phase B sampling caps and feature space:
 #' The pass-through hooks above support the Phase B experiment matrix
-#' (cap_contextual  in  {0.25, 1.0, Inf} x
+#' (cap_random  in  {0.25, 1.0, Inf} x
 #' hotspot-feature variants {All, L1, L2, None}) and the eventual mass
 #' re-training (10 years x 3 scenarios). All defaults reproduce the
 #' historical behaviour byte-for-byte; a caller that does not pass
@@ -237,7 +231,6 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
                                             # (.of_canonical_train_control /
                                             # .of_canonical_model_params); they
                                             # are no longer duplicated here.
-                                            contextual_exclusion_to_burned_ratio   = NULL,
                                             random_to_burned_ratio                 = NULL,
                                             otsu_unburned_to_burned_ratio          = NULL,
                                             feature_whitelist_override             = NULL,
@@ -285,6 +278,17 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
       call. = FALSE
     )
   }
+  if ("cap_contextual" %in% names(.dots) ||
+      "contextual_exclusion_to_burned_ratio" %in% names(.dots)) {
+    stop(
+      "`cap_contextual` / `contextual_exclusion_to_burned_ratio` were removed in ",
+      "OtsuFire (GATE 6.5): the contextual (deterministic-drop) negative bucket ",
+      "no longer exists. A deterministic drop is NOT a training negative. The ",
+      "negative architecture is two sources only (random background + Otsu ",
+      "residual); use cap_random / cap_otsu.",
+      call. = FALSE
+    )
+  }
   if (length(.dots) > 0L) {
     stop("Unused arguments passed to run_oneyear_supervised_pipeline(): ",
          paste(names(.dots), collapse = ", "), call. = FALSE)
@@ -312,7 +316,6 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
       arg_name = arg_name, cfg_provenance = .prov[[param]] %||% "default",
       record = .rec)
   }
-  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
   random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
   otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
   feature_whitelist_override             <- .shim(feature_whitelist_override,             .tc$feature_whitelist_override, "feature_whitelist_override", "feature_whitelist_override")
@@ -374,7 +377,6 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
   res <- .of_run_supervised_oneyear(config,
                                      run_consistency = run_consistency,
                                      overwrite = overwrite,
-                                     contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
                                      random_to_burned_ratio                 = random_to_burned_ratio,
                                      otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
                                      feature_whitelist_override             = feature_whitelist_override,

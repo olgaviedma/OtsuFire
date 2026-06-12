@@ -5,7 +5,7 @@
 # `labelled` and `burned_like` inputs before they reach
 # build_design_matrix_patches(). The OOF design bundle's
 # `prep$matrix_colnames` must therefore be a subset of
-# `.supervised_feature_cols ∪ _isNA companions`.
+# `.supervised_feature_cols âˆª _isNA companions`.
 
 oof_pipeline_internal <- function() {
   get("run_dm_oof_pipeline", envir = asNamespace("OtsuFire"))
@@ -125,7 +125,6 @@ test_that("OOF design bundle columns are within the whitelist", {
     group_col   = "block_id",
     val_frac = 0.15,
     impute_numeric = "median", impute_factor_missing = "MISSING",
-    contextual_exclusion_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     verbose     = 0,
     save_prefix = "oof_smoke",

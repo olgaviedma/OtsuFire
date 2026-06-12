@@ -98,11 +98,10 @@ test_that("PART A: cap_otsu is the SOLE Otsu selector; count == ceiling(n_burned
   # differ by design (different availability). We assert the count invariant and
   # that more availability does NOT change the selected count.
   n_burned <- 532L
-  caps <- c(contextual = 1.0, random = 1.0, otsu = 1.0)
+  caps <- c(random = 1.0, otsu = 1.0)
 
   draw_count <- function(n_avail) {
     negs <- list(
-      contextual = integer(0),
       random     = integer(0),
       otsu       = seq_len(n_avail)
     )

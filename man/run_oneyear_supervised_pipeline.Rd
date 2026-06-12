@@ -8,7 +8,6 @@ run_oneyear_supervised_pipeline(
   config,
   run_consistency = TRUE,
   overwrite = FALSE,
-  contextual_exclusion_to_burned_ratio = NULL,
   random_to_burned_ratio = NULL,
   otsu_unburned_to_burned_ratio = NULL,
   feature_whitelist_override = NULL,
@@ -43,13 +42,6 @@ default is `FALSE` so an interrupted run can resume without
 recomputing completed stages. Before 2026-06-05 this flag was
 cosmetic: it was validated but never threaded, and the engine always
 behaved as if `overwrite = TRUE`.)}
-
-\item{contextual_exclusion_to_burned_ratio}{Numeric. Cap on the
-contextual-exclusion negative pool (all deterministic-drop polygons),
-expressed as a multiple
-of `n_burned`, applied when fitting the FINAL supervised model.
-Default `0.25` reproduces historical behaviour. Use `Inf` to disable
-the cap. See "Phase B sampling caps" below.}
 
 \item{random_to_burned_ratio}{Numeric. Cap on
 random-burnable-background negatives for the FINAL model, as a
@@ -178,13 +170,13 @@ deployment.
 
 Training eligibility is defined by EXPLICIT class, never by negation: only
 explicit burned rows (positives) and explicit unburned rows that resolve to a
-valid negative bucket (contextual, random, otsu) enter training;
+valid negative bucket (random, otsu) enter training;
 review / keep / `NA` / unknown rows never become negatives. Both stages route
 through one internal eligibility resolver and one shared capping helper.
 }
 \section{Deprecated function-level parameter shims (Precision 1, 2026-06-07)}{
 
-The methodological / training-control arguments of this function (the three
+The methodological / training-control arguments of this function (the two
 `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
 `oof_*` / `final_*` training knobs) are
 DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
@@ -250,7 +242,7 @@ from its own training labels.
 \section{Phase B sampling caps and feature space}{
 
 The pass-through hooks above support the Phase B experiment matrix
-(cap_contextual  in  {0.25, 1.0, Inf} x
+(cap_random  in  {0.25, 1.0, Inf} x
 hotspot-feature variants {All, L1, L2, None}) and the eventual mass
 re-training (10 years x 3 scenarios). All defaults reproduce the
 historical behaviour byte-for-byte; a caller that does not pass

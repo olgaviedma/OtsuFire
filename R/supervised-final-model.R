@@ -30,7 +30,7 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (contextual, random, otsu) enter training;
+#' valid negative bucket (random, otsu) enter training;
 #' review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
 #' share one internal eligibility resolver and one capping helper, so the two
 #' stages cannot diverge on eligibility or capping. OOF uses the same capped
@@ -64,8 +64,6 @@
 #'   (`"<year>_<scenario>_patch_certified"`), and `target_year` / `scenario`.
 #' @param oof_agg Character path to the OOF aggregate CSV (`_oof_agg.csv`) OR
 #'   `NULL`. Forwarded as the engine's `qa` argument (summary enrichment only).
-#' @param contextual_exclusion_to_burned_ratio Numeric. Cap on the
-#'   contextual-exclusion negative pool. Default `0.25`.
 #' @param random_to_burned_ratio Numeric. Cap on random-burnable-background
 #'   negatives. Default `1.0`.
 #' @param otsu_unburned_to_burned_ratio Numeric. Cap on Otsu current-year
@@ -169,7 +167,6 @@ train_final_burned_model <- function(
     # from cfg$train_control / cfg$model_params" (single source of truth). A
     # non-NULL value overrides cfg for standalone use. No literal methodological
     # numbers live here.
-    contextual_exclusion_to_burned_ratio   = NULL,
     random_to_burned_ratio                 = NULL,
     otsu_unburned_to_burned_ratio          = NULL,
     feature_whitelist_override = NULL,
@@ -240,7 +237,6 @@ train_final_burned_model <- function(
         record = NULL)
     }
   }
-  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
   random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
   otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
   feature_whitelist_override <- .shim(feature_whitelist_override, .tc$feature_whitelist_override, "feature_whitelist_override")
@@ -257,8 +253,7 @@ train_final_burned_model <- function(
       !(is.character(oof_agg) && length(oof_agg) == 1L)) {
     stop("'oof_agg' must be NULL or a single CSV path.", call. = FALSE)
   }
-  for (nm in c("contextual_exclusion_to_burned_ratio",
-               "random_to_burned_ratio",
+  for (nm in c("random_to_burned_ratio",
                "otsu_unburned_to_burned_ratio")) {
     v <- get(nm)
     if (!is.numeric(v) || length(v) != 1L || is.na(v) || v < 0) {
@@ -330,7 +325,6 @@ train_final_burned_model <- function(
     prefix         = prefix,
     overwrite      = overwrite,
     verbose        = verbose,
-    contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
     random_to_burned_ratio                 = random_to_burned_ratio,
     otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
     feature_whitelist_override             = feature_whitelist_override,

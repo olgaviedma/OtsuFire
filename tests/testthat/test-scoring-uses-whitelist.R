@@ -4,7 +4,7 @@
 #
 # Under 0.4.0 the scoring matrix is aligned to
 # `recipe$cols$x_cols`, which is itself a subset of
-# `.supervised_feature_cols ∪ _isNA companions` (asserted in
+# `.supervised_feature_cols âˆª _isNA companions` (asserted in
 # test-final-model-uses-whitelist.R). This test ensures the scoring
 # path actually uses that recipe column set rather than blindly
 # accepting the unlabeled GPKG's column set.
@@ -13,7 +13,7 @@ whitelist_internal <- function() {
   get(".supervised_feature_cols", envir = asNamespace("OtsuFire"))
 }
 
-test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
+test_that("recipe$cols$x_cols âŠ† whitelist (post-train invariant)", {
   skip_if_not_installed("sf")
   skip_if_not_installed("xgboost")
   skip_if_not_installed("Matrix")
@@ -42,7 +42,6 @@ test_that("recipe$cols$x_cols ⊆ whitelist (post-train invariant)", {
     nrounds_max = 8L,
     early_stopping_rounds = 4L,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
-    contextual_exclusion_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",
@@ -107,7 +106,6 @@ test_that("scoring path feature selection yields whitelist-only cols", {
     nrounds_max = 8L,
     early_stopping_rounds = 4L,
     # Gate 1B (2026-06-07): the engine now requires resolved methodological args.
-    contextual_exclusion_to_burned_ratio = 1,
     random_to_burned_ratio = 1, otsu_unburned_to_burned_ratio = 1,
     sampling_seed = 42, seed = 42, val_frac = 0.15, group_col = "block_id",
     impute_numeric = "median", impute_factor_missing = "MISSING",

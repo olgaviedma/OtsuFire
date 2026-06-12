@@ -91,10 +91,12 @@ CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 # Negative-pool strategy - FIXED to a single policy (§N+26, 2026-06-05):
 #
 #   "all_sources"  - Full operational mode (used in MASTER pipeline).
-#       Combines all three current-year unburned sources into the training pool:
-#         (1) Deterministic drop polygons  -> contextual_exclusion
-#         (2) Random burnable-background cells -> random_background_sampled
-#         (3) Otsu current-year unburned patches -> otsu_unburned_sampled
+#       Combines the TWO current-year unburned sources into the training pool
+#       (GATE 6.5, 2026-06-12: the deterministic-drop "contextual" bucket was
+#       removed — a deterministic drop does NOT automatically become an unburned
+#       label):
+#         (1) Random burnable-background cells -> random_background_sampled
+#         (2) Otsu current-year unburned patches -> otsu_unburned_sampled
 #       Each source routes to its own training_group in train_final_model_direct()
 #       with an independent cap. No historical/cross-year content is used.
 #       See HANDOFF sections 23-27 for taxonomy and composition rules.
@@ -321,7 +323,6 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     # and threaded by the dispatcher
                                     # .of_run_supervised_oneyear(). A dropped arg
                                     # ERRORS in the guard block below.
-                                    contextual_exclusion_to_burned_ratio,
                                     random_to_burned_ratio,
                                     otsu_unburned_to_burned_ratio,
                                     feature_whitelist_override,
@@ -342,8 +343,7 @@ run_supervised_pipeline <- function(target_year, scenario,
                                     engine_bindings                        = NULL,
                                     config                                 = NULL) {
   # Gate 1B: required-arg guard (no silent methodological defaults).
-  .req <- c("contextual_exclusion_to_burned_ratio",
-            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+  .req <- c("random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
             "feature_whitelist_override", "feature_weights",
             "oof_nrounds_max", "oof_early_stop", "oof_seed_base",
             "final_sampling_seed", "final_seed", "final_val_frac",
@@ -1042,9 +1042,9 @@ run_supervised_pipeline <- function(target_year, scenario,
         # Precision 1 (2026-06-07): shims already resolved at the public
         # boundary; suppress a second deprecation warning here.
         .internal_resolved = TRUE,
-        # The SAME 3 cap ratios forwarded to FINAL (so OOF and FINAL see
-        # identical caps). OOF always uses the capped negative-sampling policy.
-        contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
+        # The SAME cap ratios forwarded to FINAL (so OOF and FINAL see identical
+        # caps). OOF always uses the capped negative-sampling policy. GATE 6.5:
+        # contextual cap removed (random + otsu only).
         random_to_burned_ratio                 = random_to_burned_ratio,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         val_frac          = final_val_frac,
@@ -1074,7 +1074,6 @@ run_supervised_pipeline <- function(target_year, scenario,
         train_features = gpkg_features,
         config         = config,
         oof_agg        = oof_agg_csv,
-        contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
         random_to_burned_ratio                 = random_to_burned_ratio,
         otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
         # 0.5.0: same feature space + weights as the OOF stage (KB1/KB2).

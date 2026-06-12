@@ -16,8 +16,9 @@
 #     early-stopping set; refit on all outer_train at best_iteration);
 #   - transforms the FULL outer_test with the REFIT medians and predicts it;
 #   - records a per-fold audit row.
-# The 4 cap ratios are REQUIRED formals (no defaults) so a dropped argument
-# cannot silently revert a bucket to ratio 1.0.
+# The cap ratios are REQUIRED formals (no defaults) so a dropped argument
+# cannot silently revert a bucket to ratio 1.0. GATE 6.5 (2026-06-12): the
+# contextual (deterministic-drop) bucket was removed; only random + otsu remain.
 # =============================================================================
 run_oof_xgb <- function(
     XL_mat, y, labelled_df,
@@ -61,11 +62,11 @@ run_oof_xgb <- function(
     feature_weights = NULL,
     # B1: bucket cap ratios. REQUIRED on the nested path (no defaults) so a
     # dropped argument cannot silently revert a bucket to ratio 1.0.
-    contextual_exclusion_to_burned_ratio,
     random_to_burned_ratio,
     otsu_unburned_to_burned_ratio,
     # B1: bucket source / neg_type definitions, mirroring the FINAL stage.
-    deterministic_drop_source = c("deterministic_drop_hard"),
+    # GATE 6.5 (2026-06-12): the contextual (deterministic-drop) bucket was
+    # removed; `deterministic_drop_source` / contextual cap are gone.
     random_background_source = c("random_burnable_background"),
     otsu_unburned_source = c("otsu_patch_residual"),
     otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep")
@@ -105,9 +106,6 @@ run_oof_xgb <- function(
     # Force the 3 cap ratios: required formals -> a dropped arg ERRORS here
     # (cannot silently revert a bucket to ratio 1.0). missing() must be called
     # directly on each formal name.
-    if (missing(contextual_exclusion_to_burned_ratio)) {
-      stop("run_oof_xgb(nested_refit): required cap 'contextual_exclusion_to_burned_ratio' is missing.", call. = FALSE)
-    }
     if (missing(random_to_burned_ratio)) {
       stop("run_oof_xgb(nested_refit): required cap 'random_to_burned_ratio' is missing.", call. = FALSE)
     }
@@ -141,7 +139,6 @@ run_oof_xgb <- function(
       # Resolve eligibility over LOCAL row indices (1..length(tr_idx)).
       elig <- .of_resolve_supervised_eligibility(
         id = id_local, class = cls, source = src, neg_type = ngt,
-        deterministic_drop_source        = deterministic_drop_source,
         random_background_source         = random_background_source,
         otsu_unburned_source             = otsu_unburned_source,
         otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
@@ -150,7 +147,6 @@ run_oof_xgb <- function(
       n_burned <- length(elig$positive_idx)
 
       caps <- c(
-        contextual = contextual_exclusion_to_burned_ratio,
         random     = random_to_burned_ratio,
         otsu       = otsu_unburned_to_burned_ratio
       )
@@ -178,10 +174,6 @@ run_oof_xgb <- function(
       }
       audit <- list(
         n_burned             = n_burned,
-        contextual_available = bget("contextual", "n_available"),
-        contextual_cap       = bget("contextual", "n_cap_max"),
-        contextual_selected  = bget("contextual", "n_selected"),
-        contextual_effective_ratio = eff("contextual"),
         random_bg_available  = bget("random", "n_available"),
         random_bg_cap        = bget("random", "n_cap_max"),
         random_bg_selected   = bget("random", "n_selected"),
@@ -341,10 +333,6 @@ run_oof_xgb <- function(
         if (!is.null(capped$audit)) {
           ca <- capped$audit
           a$n_burned             <- ca$n_burned
-          a$contextual_available <- ca$contextual_available
-          a$contextual_cap       <- ca$contextual_cap
-          a$contextual_selected  <- ca$contextual_selected
-          a$contextual_effective_ratio <- ca$contextual_effective_ratio
           a$random_bg_available  <- ca$random_bg_available
           a$random_bg_cap        <- ca$random_bg_cap
           a$random_bg_selected   <- ca$random_bg_selected

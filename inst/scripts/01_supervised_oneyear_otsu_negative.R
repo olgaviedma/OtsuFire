@@ -38,11 +38,12 @@
 #   the package docs). Use it for ranking / thresholding, and pick the operating
 #   threshold from external (EFFIS) validation, not from the score scale.
 #
-# NEGATIVE POOL (4 buckets, all_sources policy — the only supported policy):
-#   1. contextual exclusions  (deterministic DROP, non-spectral)   cap 0.25 x n_burned
-#   2. spectral hard negatives (deterministic DROP, spectral)      cap 1.0  x n_burned (pkg default; see 02_phaseB for 2.0)
-#   3. random burnable bg      (burnable cells outside buffers)    cap 1.0  x n_burned
-#   4. otsu unburned           (Otsu residual negative patches)    cap 1.0  x n_burned
+# NEGATIVE POOL — TWO explicit negative sources, all_sources policy (the only
+# supported policy). GATE 6 removed the contextual + spectral buckets; a
+# deterministic drop is NOT a training negative (it stays scoreable but
+# unlabelled):
+#   1. random  (random burnable background, cells outside buffers)  cap 1.0 x n_burned
+#   2. otsu    (Otsu residual negative patches)                     cap 1.0 x n_burned
 #
 # HOW TO RUN
 #   This script does NOT execute heavy work when sourced (for a parse/syntax
@@ -95,7 +96,7 @@ scenario     <- "balanced"     # one of: balanced | original | lax | restrictive
 run_name     <- "Min_Min"      # composite family / run identifier
 use_hotspots <- target_year > 2000   # hotspots are used post-2000
 
-# 4-bucket negative-pool caps (package defaults).
+# Two-source negative-pool caps (package defaults), one per bucket.
 # GATE 6.7 (2026-06-12): the two negative-bucket caps live in the typed PUBLIC
 # negative_pool_params block (single source of truth). The contextual / spectral
 # buckets were removed in earlier gates.

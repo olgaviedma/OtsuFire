@@ -30,9 +30,9 @@
 #' @param cfg_value The value already resolved on the cfg
 #'   (cfg$train_control / cfg$model_params).
 #' @param param Character. The user-facing builder field name (the provenance
-#'   key, e.g. "cap_contextual", "nrounds_max", "val_frac"), used in messages.
+#'   key, e.g. "cap_random", "nrounds_max", "val_frac"), used in messages.
 #' @param arg_name Character. The function-level argument name (e.g.
-#'   "contextual_exclusion_to_burned_ratio"), used in messages. Defaults to
+#'   "random_to_burned_ratio"), used in messages. Defaults to
 #'   `param`.
 #' @param cfg_provenance Character. "user" or "default" — the builder-time
 #'   provenance of the cfg field (from cfg$resolved_params_provenance).

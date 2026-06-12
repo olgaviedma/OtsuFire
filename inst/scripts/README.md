@@ -51,11 +51,17 @@ working copies can be detected. Prefer the blob SHA-1 for divergence checks:
 
 ## Training eligibility + the single shared capping helper
 
+The supervised model uses **two explicit negative sources: random background and
+Otsu residuals.** There are no other negative buckets (the contextual + spectral
+buckets were removed in GATE 6). The two per-bucket caps live in the typed PUBLIC
+`negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` (the single source of
+truth), mirrored into `cfg$train_control$caps`.
+
 Training eligibility is defined by **explicit class, never by negation**:
 
 - `class == "burned"` → **positive** (always kept);
-- `class == "unburned"` **and** the row resolves to exactly one of the four
-  valid negative buckets (`contextual`, `spectral`, `random`, `otsu`) →
+- `class == "unburned"` **and** the row resolves to exactly one of the two
+  valid negative buckets (`random`, `otsu`) →
   **negative**, eligible for capping;
 - otsu review / keep rows (the otsu exclude-list) → **excluded + logged**, never
   trained;
@@ -79,7 +85,7 @@ for the default 2017 balanced run.
 | # | File | Purpose (one line) |
 |---|------|--------------------|
 | 01 | `01_supervised_oneyear_otsu_negative.R` | Common-recipe one-year pipeline, full 6-stage modular chain. |
-| 02 | `02_supervised_phaseB_config.R` | Phase B config: `cap_spectral = 2.0` via the builder, with the abort-on-cap-mismatch guard and the inherited runtime feature-schema parity guard. |
+| 02 | `02_supervised_phaseB_config.R` | Phase B config: two-source caps (`random` + `otsu`) via the typed `negative_pool_params` builder block, with the abort-on-cap-mismatch guard and the inherited runtime feature-schema parity guard. |
 | 03 | `05_supervised_effis_validation.R` | EFFIS validation via `validate_fire_maps()` on a thresholded map (distinct from `validate_supervised_execution()`). |
 | 04 | `06_supervised_no_hotspots_reduced_historical.R` | No-hotspots / reduced-historical (pre-MODIS) run: `hotspots = NULL`, `use_hotspots = FALSE`. |
 

@@ -7,9 +7,12 @@
 # Targets OtsuFire >= 0.5.0.
 #
 # WHAT THIS SCRIPT DEMONSTRATES — the PHASE B configuration:
-#   * cap_spectral = 2.0 set THROUGH the builder (Natalia's Phase B value; the
-#     PACKAGE DEFAULT is 1.0). It lands in cfg$train_control$caps$spectral with
-#     builder provenance "user".
+#   * The TWO-SOURCE negative architecture (random background + Otsu residual)
+#     set THROUGH the builder via the typed PUBLIC negative_pool_params block.
+#     The per-bucket caps land in cfg$train_control$caps (single source of truth)
+#     with builder provenance "user". GATE 6 removed the contextual + spectral
+#     buckets, so the historical Phase B `cap_spectral = 2.0` knob is gone; this
+#     script now exercises the random/otsu caps reaching the cfg.
 #   * OtsuFire always uses the single training procedure (inner-early-stopping
 #     selection + full-data refit); there is no training-protocol choice.
 #   * The ABORT-ON-CAP-MISMATCH guard: the caps reaching OOF and FINAL MUST be
@@ -53,10 +56,11 @@ scenario     <- "balanced"
 run_name     <- "Min_Min"
 use_hotspots <- target_year > 2000
 
-# PHASE B caps — spectral = 2.0 is the Phase B value (package default is 1.0).
-# GATE 6.7 (2026-06-12): caps live in the typed PUBLIC negative_pool_params
-# block (the two operative buckets random + otsu; contextual / spectral were
-# removed in earlier gates).
+# PHASE B caps. GATE 6.7 (2026-06-12): caps live in the typed PUBLIC
+# negative_pool_params block over the two operative buckets random + otsu;
+# the contextual / spectral buckets were removed in earlier gates, so the old
+# `cap_spectral = 2.0` Phase B value no longer exists. Package default is 1.0
+# per bucket.
 caps <- c(random = 1.0, otsu = 1.0)
 
 
@@ -70,7 +74,7 @@ main <- function() {
   suppressMessages(pkgload::load_all(paths$pkg_root, quiet = TRUE))
   stopifnot(utils::packageVersion("OtsuFire") >= "0.5.0")
 
-  # ---- Build the PHASE B cfg: cap_spectral = 2.0 via the builder. ------------
+  # ---- Build the PHASE B cfg: two-source caps via the builder. ---------------
   cfg <- build_supervised_burned_config(
     scenario             = scenario,
     internal_decisions   = paths$internal_decisions,
@@ -106,13 +110,15 @@ main <- function() {
 
   # ---- ABORT-ON-CAP-MISMATCH: the cfg is the single source consumed by BOTH
   #      OOF and FINAL, so requested == resolved == received. We assert the
-  #      Phase B spectral cap reached the cfg with provenance "user", and fail
-  #      fast otherwise (regression tripwire). ---------------------------------
+  #      two-source caps (random + Otsu residual) reached the cfg with provenance
+  #      "user", and fail fast otherwise (regression tripwire). ----------------
   stopifnot(
-    isTRUE(all.equal(cfg$train_control$caps$spectral, caps$spectral)),
-    identical(cfg$resolved_params_provenance$train_control$cap_spectral, "user")
+    isTRUE(all.equal(cfg$train_control$caps$random, caps[["random"]])),
+    isTRUE(all.equal(cfg$train_control$caps$otsu,   caps[["otsu"]])),
+    identical(cfg$resolved_params_provenance$train_control$cap_random, "user"),
+    identical(cfg$resolved_params_provenance$train_control$cap_otsu,   "user")
   )
-  cat("[OK] Phase B cap_spectral = 2.0 reached cfg$train_control (provenance user).\n")
+  cat("[OK] Phase B caps (random + otsu) reached cfg$train_control (provenance user).\n")
 
   # ---- PRE-RUN CHECK: blocking inputs / runtime feature-schema parity guard.  -
   validate_supervised_execution(cfg, strict = TRUE)

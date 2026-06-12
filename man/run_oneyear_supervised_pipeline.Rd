@@ -213,7 +213,8 @@ The supervised methodological / training-control parameters now live in
 exactly ONE place: the cfg object built by
 [build_supervised_burned_config()] (`cfg$model_params` and
 `cfg$train_control`). Every methodological argument of this function (the
-four `*_to_burned_ratio` caps, `feature_whitelist_override`,
+two `*_to_burned_ratio` caps — `random_to_burned_ratio` /
+`otsu_unburned_to_burned_ratio` — `feature_whitelist_override`,
 `feature_weights`, the `oof_*` / `final_*` training knobs)
 now DEFAULTS TO `NULL`, meaning "use the value resolved on
 the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
@@ -242,7 +243,7 @@ from its own training labels.
 \section{Phase B sampling caps and feature space}{
 
 The pass-through hooks above support the Phase B experiment matrix
-(cap_random  in  {0.25, 1.0, Inf} x
+(`random_to_burned_ratio`  in  {0.25, 1.0, Inf} x
 hotspot-feature variants {All, L1, L2, None}) and the eventual mass
 re-training (10 years x 3 scenarios). All defaults reproduce the
 historical behaviour byte-for-byte; a caller that does not pass

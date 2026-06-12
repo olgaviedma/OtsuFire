@@ -59,8 +59,7 @@ lines <- c(
   paste0("free physical mem GB: ", mem_gb),
   paste0("tempdir(): ", tempdir()),
   paste0("nrounds_max: ", NROUNDS_MAX, " ; early_stop: ", EARLY_STOP, " ; seed: ", SEED_BASE),
-  paste0("caps: contextual=", CAP_CONTEXTUAL, " spectral=", CAP_SPECTRAL,
-         " random=", CAP_RANDOM, " otsu=", CAP_OTSU),
+  paste0("caps: random=", CAP_RANDOM, " otsu=", CAP_OTSU),
   "", "==== RESOLVED INPUT SHA256 ====")
 for (nm in names(inputs)) {
   lines <- c(lines, sprintf("%-26s %s | %s", nm, sha256(inputs[[nm]]), inputs[[nm]]))

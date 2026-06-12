@@ -7,7 +7,7 @@
 # - otsu_unburned_sampled        cap = 1x
 #
 # Scope (Phase A — stubs only):
-# - .build_all_sources_pool(): assemble unburned pool from the three buckets.
+# - .build_all_sources_pool(): assemble unburned pool from the two buckets.
 # - .bucket_cap(): return the cap multiplier for a given bucket name.
 # - .resolve_unburned_strategy(): map a strategy name to its implementation
 #   (all_sources is the operational default; deterministic_direct is the

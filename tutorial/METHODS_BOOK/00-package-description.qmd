@@ -38,7 +38,7 @@ The handoff and current code support the following status summary.
 Two project-state details are especially important for interpretation.
 
 - The deterministic RBR keep-pool registry lives under `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`. This is a deterministic feature; the **supervised** pipeline no longer writes any registry (the supervised burned-like registry and its `historical_registry_augment` augmentation design were removed on 2026-06-05; Mode B had been formally rejected on 2026-04-17).
-- The supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly: a burnable-only, four-bucket unburned taxonomy with independent capacity caps (Phase 2A, closed 2026-04-17). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05.
+- The supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly. The supervised model uses **two explicit negative sources: random background and Otsu residuals**, each with its own capacity cap (the GATE 6 contextual + spectral buckets were removed). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05.
 
 ## Canonical Inputs And Outputs
 

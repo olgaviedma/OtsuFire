@@ -97,7 +97,7 @@ The supervised workflow reads `05_DECISIONS/internal_decisions.gpkg` as its cano
 
 - deterministic `keep` polygons become the starting burned pool,
 - deterministic `review` polygons become the main ambiguous scoring pool,
-- deterministic `drop` polygons contribute to the negative pool (the contextual-exclusion and spectral-hard-negative buckets of the `all_sources` taxonomy).
+- deterministic `drop` polygons are **not** training negatives (GATE 6 removed the contextual-exclusion and spectral-hard-negative buckets); they remain scoreable but unlabelled. The supervised negative pool draws only from its two own sources, random background and Otsu residuals.
 
 For that reason, the deterministic stage is both an operational annual product and the structural foundation of the supervised stage.
 

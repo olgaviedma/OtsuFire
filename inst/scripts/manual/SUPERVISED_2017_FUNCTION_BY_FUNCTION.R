@@ -439,7 +439,7 @@ cat("=======================================================\n")
 #
 #   ELIGIBILITY (internal, no functional change to drive here): training rows are
 #   chosen by EXPLICIT class, never by negation. class=="burned" -> positive;
-#   class=="unburned" + a valid bucket (contextual/spectral/random/otsu) ->
+#   class=="unburned" + a valid bucket (random/otsu) ->
 #   negative; otsu review/keep -> excluded+logged; NA/unknown/unbucketed -> error.
 #   Review/keep/NA/unknown can NEVER become negatives. OOF and FINAL (block 09)
 #   share the SAME internal eligibility resolver + the SAME capping helper, so the

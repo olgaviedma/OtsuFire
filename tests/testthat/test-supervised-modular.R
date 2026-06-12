@@ -291,7 +291,7 @@ test_that("run_oof_diagnostics resolves out_dir/matrix_dir from config", {
 # fully-featured, whitelist-complete labelled GPKG plus an xgboost fit -- far
 # too heavy/slow for a unit test (and exercised end-to-end by the operational
 # pipeline). We therefore assert the argument-validation contract (config now
-# REQUIRED, train_features required, the four caps must be non-negative
+# REQUIRED, train_features required, the two caps must be non-negative
 # numbers, overwrite logical) plus the resolution of out_dir from config; the
 # byte-identical engine call is covered by the engine's own tests + the
 # orchestrator integration.

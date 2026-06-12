@@ -96,7 +96,10 @@ run_name     <- "Min_Min"      # composite family / run identifier
 use_hotspots <- target_year > 2000   # hotspots are used post-2000
 
 # 4-bucket negative-pool caps (package defaults).
-caps <- list(contextual = 0.25, spectral = 1.0, random = 1.0, otsu = 1.0)
+# GATE 6.7 (2026-06-12): the two negative-bucket caps live in the typed PUBLIC
+# negative_pool_params block (single source of truth). The contextual / spectral
+# buckets were removed in earlier gates.
+caps <- c(random = 1.0, otsu = 1.0)
 
 
 # -------------------------------------------------------------------
@@ -127,20 +130,23 @@ main <- function() {
     output_dir           = paths$output_dir,
     run_name             = run_name,
     # ---- CANONICAL methodological params (set HERE, read by every stage) ----
-    cap_contextual       = caps$contextual,
-    cap_spectral         = caps$spectral,
-    cap_random           = caps$random,
-    cap_otsu             = caps$otsu,
+    # GATE 6.7 (2026-06-12): the typed PUBLIC negative-pool block + technical
+    # runtime options. Caps are the SINGLE source of truth here (top-level cap_*
+    # args were removed). The otsu candidate/reference thresholds are the two
+    # public Otsu knobs; the rest are FIXED internal defaults (otsu mode =
+    # "burnable_only", etc.). reuse_existing / write_outputs / verbose are
+    # technical and do NOT affect the methodological fingerprint.
+    negative_pool_params = list(
+      random = list(n_cells = 1500L, rbr_quantile = 0.50),
+      otsu   = list(candidate_threshold = 0, reference_threshold = 100),
+      caps   = caps
+    ),
+    runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE,
+                           verbose = TRUE),
     options = list(
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,
-      result_name                     = run_name,
-      otsu_negative_mode                = "burnable_only",
-      otsu_negative_threshold           = 0,
-      otsu_negative_reference_threshold = 100,
-      otsu_negative_reuse_existing           = TRUE,
-      otsu_negative_write_output             = TRUE,
-      unb_verbose                     = TRUE
+      result_name                     = run_name
     )
   )
   # Attach external tool paths (consumed by the pools stage).

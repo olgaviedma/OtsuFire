@@ -104,9 +104,10 @@
 #'   when not supplied.
 #'
 #' @param peninsula_shapefile sf / SpatVector / path. Optional study-area border
-#'   polygon (e.g. the Iberian peninsula). Consumed by the negative-pool
-#'   (Otsu residual negative) builder only when `options$otsu_negative_mode = "corine"`, to
-#'   crop CORINE to the study area. When `NULL` and `data_base` is available it
+#'   polygon (e.g. the Iberian peninsula). Used by the negative-pool builder only
+#'   under the `"corine"` Otsu mode to crop CORINE to the study area; the
+#'   canonical Otsu mode is the fixed internal default `"burnable_only"`, so this
+#'   input is typically unused. When `NULL` and `data_base` is available it
 #'   defaults to `<data_base>/Borders/Iberian_peninsula.shp`; otherwise it stays
 #'   `NULL`.
 #'
@@ -174,18 +175,46 @@
 #'   level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
 #'   Stored in `cfg$train_control` and applied identically at OOF and FINAL.
 #'
-#' @param cap_random,cap_otsu Numeric `>= 0`
-#'   (`Inf` disables the cap) or `NULL`. The two negative-bucket caps, each
-#'   expressed as a multiple of the number of burned labels (`n_burned`). They
-#'   control the size of the random-background and Otsu negative buckets
-#'   respectively (see \strong{Details}). `NULL` uses the general package
-#'   defaults `1.0` / `1.0`. Stored in `cfg$train_control$caps`.
+#' @param negative_pool_params Named typed list. The PUBLIC negative-pool
+#'   methodological block (GATE 6.7, 2026-06-12) and the \strong{single source of
+#'   truth} for the two negative-bucket caps. Recognized keys (unknown keys
+#'   anywhere error):
+#'   \itemize{
+#'     \item `random = list(n_cells, rbr_quantile)` --- the random
+#'       burnable-background bucket size (`n_cells`, integer `> 0`) and the RBR
+#'       percentile used to select background cells (`rbr_quantile` in `[0, 1]`).
+#'       Defaults `1500L` / `0.50`.
+#'     \item `otsu = list(candidate_threshold, reference_threshold)` --- the two
+#'       Otsu-residual severity thresholds (numeric). Defaults `0` / `100`.
+#'     \item `caps = c(random, otsu)` --- a NAMED numeric over exactly
+#'       `{random, otsu}`, each `>= 0` (`Inf` disables the cap), expressed as a
+#'       multiple of the number of burned labels (`n_burned`). Defaults
+#'       `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
+#'       `cfg$train_control$caps` and consumed end-to-end by the pool builder,
+#'       OOF and FINAL.
+#'   }
+#'   GATE 6.7: the former top-level `cap_random` / `cap_otsu` builder arguments
+#'   were REMOVED; caps live ONLY in `negative_pool_params$caps`. Passing
+#'   `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
+#'   now errors with an unused-argument error. The remaining negative-pool /
+#'   Otsu-residual engine knobs (random exclusion buffer + patch size; Otsu mode
+#'   `"burnable_only"`, min pixels, buffers, core threshold, boosts, distance
+#'   power, keep/drop confidence, exclusion buffer, min area, `use_drop`,
+#'   `drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal defaults,
+#'   not user-settable.
 #'
-#'   GATE 6.5 (2026-06-12): the former `cap_contextual` argument was REMOVED
-#'   together with the contextual (deterministic-drop) negative bucket. A
-#'   deterministic drop is NOT a training negative; the negative architecture is
-#'   two sources only (random background + Otsu residual). Passing
-#'   `cap_contextual` now errors with an unused-argument error.
+#' @param runtime_options Named typed list of TECHNICAL runtime toggles
+#'   (GATE 6.7): `reuse_existing`, `write_outputs`, `verbose` (each a single
+#'   TRUE/FALSE; unknown keys error). Defaults all `TRUE`. These are technical
+#'   only and do NOT change WHICH negatives are selected, so they are EXCLUDED
+#'   from the methodological fingerprint. Stored in `cfg$negative_pool_runtime`.
+#'
+#' @param random_seed Integer or `NULL`. The negative-pool random-background RNG
+#'   seed (historically `options$unb_random_seed`). It changes WHICH negatives
+#'   are selected, so it is methodological + reproducibility-affecting and lives
+#'   in the canonical seeds block `cfg$train_control$seeds$random_seed` alongside
+#'   the three training seeds (and is folded into the methodological
+#'   fingerprint). `NULL` uses `42`.
 #'
 #' @param feature_whitelist_override,feature_weights Optional feature controls,
 #'   or `NULL`. `feature_whitelist_override` is a character subset of the
@@ -256,9 +285,11 @@
 #'     \item \strong{random} --- random burnable-background cells;
 #'     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
 #'   }
-#'   Each bucket is capped by `cap_random` / `cap_otsu`, expressed as a multiple
-#'   of the number of burned labels; an `Inf` cap disables capping for that
-#'   bucket. The general package defaults are `1.0` / `1.0`.
+#'   Each bucket is capped by `negative_pool_params$caps[["random"]]` /
+#'   `negative_pool_params$caps[["otsu"]]`, expressed as a multiple of the number
+#'   of burned labels; an `Inf` cap disables capping for that bucket. The general
+#'   package defaults are `1.0` / `1.0`. The caps are the single caps source and
+#'   are mirrored into `cfg$train_control$caps`.
 #' }
 #'
 #' \subsection{OOF and FINAL}{
@@ -326,24 +357,23 @@
 #'     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
 #'       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
 #'       same names; surfaced on `cfg$tool_paths`.
-#'     \item `otsu_negative_mode` --- negative-pool Otsu mode; `"burnable_only"`
-#'       (default behaviour) or `"corine"` (crops to `peninsula_shapefile`).
-#'     \item `unb_verbose` --- verbose logging of the negative-pool builders.
 #'   }
+#'
+#'   GATE 6.7 (2026-06-12): the negative-pool knobs are no longer free-form
+#'   options. The user-settable subset lives in the typed `negative_pool_params`
+#'   block (random `n_cells` / `rbr_quantile`, Otsu `candidate_threshold` /
+#'   `reference_threshold`, `caps`), the random-background seed lives in
+#'   `random_seed`, and the technical toggles live in `runtime_options`. The
+#'   former free-form `options$unb_*` / `options$otsu_negative_*` keys are no
+#'   longer read; the remaining low-level knobs are FIXED internal defaults.
 #'
 #'   \strong{Reproducibility-sensitive options} (set them to make a run fully
 #'   reproducible from the configuration alone): the negative-pool random
-#'   background seed `unb_random_seed` (default `42`);
-#'   the Otsu confidence thresholds `otsu_negative_keep_hi` (`0.45`) and
-#'   `otsu_negative_drop_lo` (`0.15`); and the current-year temporal-adjustment
-#'   thresholds `currentyear_preyear_overlap_thr` (`0.70`),
+#'   background seed `random_seed` (default `42`, in
+#'   `cfg$train_control$seeds$random_seed`); and the current-year
+#'   temporal-adjustment thresholds `currentyear_preyear_overlap_thr` (`0.70`),
 #'   `currentyear_hotspot_density_thr` (`0.001`) and
-#'   `currentyear_temporal_penalty_floor` (`0.10`). The remaining
-#'   negative-pool and Otsu residual negative knobs (`unb_excl_buffer_m`,
-#'   `unb_n_random_cells`, `unb_random_rbr_q`, `unb_random_patch_size_cells`,
-#'   `otsu_negative_min_pixels`, `otsu_negative_buffers_m`, `otsu_negative_core_thr`, and related)
-#'   default to their historical operational values, so omitting them
-#'   reproduces the standard run.
+#'   `currentyear_temporal_penalty_floor` (`0.10`).
 #'
 #'   \strong{Deprecated / unsupported options}: the negative-pool policy is
 #'   fixed to `"all_sources"` and is no longer user-settable. Passing
@@ -364,7 +394,10 @@
 #'     \item `output_dir`
 #'     \item `output_routes`
 #'     \item `model_params`
-#'     \item `train_control`
+#'     \item `train_control` (caps, seeds incl. `random_seed`, rounds, ...)
+#'     \item `negative_pool_params` (typed PUBLIC negative-pool block + caps)
+#'     \item `negative_pool_runtime` (technical runtime toggles)
+#'     \item `negative_pool_internal` (FIXED internal defaults, not settable)
 #'     \item `options`
 #'     \item `tool_paths`
 #'     \item `resolved_params_provenance`
@@ -396,8 +429,9 @@
 #'   target_year          = 2017,
 #'   output_dir           = "results/",
 #'   run_name             = "balanced_2017",
-#'   cap_random           = 1.0,
-#'   cap_otsu             = 1.0
+#'   negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)),
+#'   runtime_options      = list(reuse_existing = TRUE, write_outputs = TRUE,
+#'                               verbose = TRUE)
 #' )
 #'
 #' pools <- build_supervised_training_pools(cfg)
@@ -479,12 +513,25 @@ build_supervised_burned_config <- function(
     oof_seed_base              = NULL,
     final_sampling_seed        = NULL,
     final_seed                 = NULL,
+    # GATE 6.7 (2026-06-12): `random_seed` is the negative-pool random-background
+    # RNG seed. It lives in the CANONICAL SEEDS block (cfg$train_control$seeds)
+    # alongside the three training seeds, NOT in runtime_options: it changes WHICH
+    # negatives are selected, so it is methodological + reproducibility-affecting
+    # and is folded into the methodological fingerprint. NULL = canonical 42.
+    random_seed                = NULL,
     val_frac                   = NULL,
     group_col                  = NULL,
     impute_numeric             = NULL,
     impute_factor_missing      = NULL,
-    cap_random                 = NULL,
-    cap_otsu                   = NULL,
+    # GATE 6.7 (2026-06-12): the typed PUBLIC negative-pool block. This is the
+    # SINGLE source of truth for the two negative-bucket caps and the small set
+    # of user-settable negative-pool methodological knobs. The former top-level
+    # `cap_random` / `cap_otsu` builder args were REMOVED: passing them now hits
+    # the unused-argument guard. See .of_resolve_negative_pool_params().
+    negative_pool_params       = list(),
+    # GATE 6.7 (2026-06-12): TECHNICAL runtime options (reuse_existing /
+    # write_outputs / verbose). These do NOT alter the methodological fingerprint.
+    runtime_options            = list(),
     feature_whitelist_override = NULL,
     feature_weights            = NULL,
     model_params               = NULL,
@@ -714,18 +761,33 @@ build_supervised_burned_config <- function(
   # "default" otherwise). scale_pos_weight is intentionally absent (site-specific,
   # rejected by the resolver, never a cfg$model_params field).
   mp_provenance <- .of_model_params_provenance(.model_params_requested)
+
+  # ---- GATE 6.7 (2026-06-12): typed negative-pool + runtime resolution -------
+  # negative_pool_params (PUBLIC methodological block) is the SINGLE source of
+  # truth for the two caps and the user-settable negative-pool knobs. Its caps
+  # flow into cfg$train_control$caps (the one place every stage reads caps from),
+  # so there is NO second caps source. runtime_options (reuse_existing /
+  # write_outputs / verbose) is technical and is EXCLUDED from the methodological
+  # fingerprint. The remaining negative-pool knobs are fixed internal defaults
+  # (.of_supervised_negative_pool_internal_defaults()), NOT public.
+  np_res      <- .of_resolve_negative_pool_params(negative_pool_params)
+  rt_res      <- .of_resolve_runtime_options(runtime_options)
+  np_internal <- .of_supervised_negative_pool_internal_defaults()
+
   train_control <- .of_resolve_supervised_train_control(
     nrounds_max                = nrounds_max,
     early_stop                 = early_stop,
     oof_seed_base              = oof_seed_base,
     final_sampling_seed        = final_sampling_seed,
     final_seed                 = final_seed,
+    random_seed                = random_seed,
     val_frac                   = val_frac,
     group_col                  = group_col,
     impute_numeric             = impute_numeric,
     impute_factor_missing      = impute_factor_missing,
-    cap_random                 = cap_random,
-    cap_otsu                   = cap_otsu,
+    # GATE 6.7: caps come from the typed negative_pool_params block, the SINGLE
+    # caps source. The train_control resolver no longer accepts cap_* args.
+    caps                       = np_res$values$caps,
     feature_whitelist_override = feature_whitelist_override,
     feature_weights            = feature_weights
   )
@@ -745,12 +807,18 @@ build_supervised_burned_config <- function(
     oof_seed_base         = if (is.null(oof_seed_base))         "default" else "user",
     final_sampling_seed   = if (is.null(final_sampling_seed))   "default" else "user",
     final_seed            = if (is.null(final_seed))            "default" else "user",
+    # GATE 6.7: random_seed provenance lives in the canonical-seeds provenance
+    # alongside the three training seeds.
+    random_seed           = if (is.null(random_seed))           "default" else "user",
     val_frac              = if (is.null(val_frac))              "default" else "user",
     group_col             = if (is.null(group_col))             "default" else "user",
     impute_numeric        = if (is.null(impute_numeric))        "default" else "user",
     impute_factor_missing = if (is.null(impute_factor_missing)) "default" else "user",
-    cap_random            = if (is.null(cap_random))            "default" else "user",
-    cap_otsu              = if (is.null(cap_otsu))              "default" else "user",
+    # GATE 6.7: caps provenance now sourced from negative_pool_params$caps. The
+    # per-bucket provenance is in resolved_params_provenance$negative_pool below;
+    # a single block-level flag is kept here for the shim conflict-error logic.
+    cap_random            = np_res$provenance$caps$random %||% "default",
+    cap_otsu              = np_res$provenance$caps$otsu   %||% "default",
     feature_whitelist_override =
       if (is.null(feature_whitelist_override)) "default" else "user",
     feature_weights       = if (is.null(feature_weights))       "default" else "user",
@@ -782,6 +850,15 @@ build_supervised_burned_config <- function(
     # single source of truth read by every supervised stage.
     model_params             = model_params,
     train_control            = train_control,
+    # GATE 6.7 (2026-06-12): typed PUBLIC negative-pool block (random / otsu
+    # knobs + caps). Caps are mirrored into train_control$caps (single source);
+    # this block surfaces the full public negative-pool surface for print() /
+    # manifests / introspection. The FIXED internal defaults (not user-settable)
+    # live in $negative_pool_internal. The TECHNICAL runtime toggles live in
+    # $negative_pool_runtime and are EXCLUDED from the methodological fingerprint.
+    negative_pool_params     = np_res$values,
+    negative_pool_runtime    = rt_res$values,
+    negative_pool_internal   = np_internal,
     # Gate 1B / Precision 1: per-field provenance ("default" canonical vs "user"
     # explicitly set in the builder). The public-boundary shim resolver enriches
     # this into a full requested/resolved record at run time; the static builder
@@ -795,8 +872,14 @@ build_supervised_burned_config <- function(
     #     onto the canonical block. This mirrors the train_control shim record and
     #     is what a downstream manifest renders as the model_params provenance
     #     table.
-    resolved_params_provenance = list(train_control = tc_provenance,
-                                      model_params  = mp_provenance),
+    resolved_params_provenance = list(train_control  = tc_provenance,
+                                      model_params   = mp_provenance,
+                                      # GATE 6.7: per-parameter provenance of the
+                                      # typed negative_pool_params + runtime_options
+                                      # (user vs default), mirroring the existing
+                                      # train_control / model_params records.
+                                      negative_pool  = np_res$provenance,
+                                      runtime_options = rt_res$provenance),
     tool_paths               = tool_paths,
     options                  = options
   )
@@ -818,8 +901,28 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     cat("  train_control   : training=early-stopping selection + full-data refit",
         " nrounds=", tc$nrounds_max, " early_stop=", tc$early_stop,
         " val_frac=", tc$val_frac, "\n", sep = "")
-    cat("    caps          : random=", tc$caps$random,
-        " otsu=", tc$caps$otsu, "\n", sep = "")
+    sd <- tc$seeds %||% list()
+    cat("    seeds         : oof=", sd$oof_seed_base,
+        " final_sampling=", sd$final_sampling_seed,
+        " final=", sd$final_seed,
+        " random=", sd$random_seed, "\n", sep = "")
+  }
+  # GATE 6.7: typed PUBLIC negative-pool block + caps + technical runtime.
+  if (!is.null(x$negative_pool_params)) {
+    np <- x$negative_pool_params
+    cat("  negative_pool   :\n")
+    cat("    random        : n_cells=", np$random$n_cells,
+        " rbr_quantile=", np$random$rbr_quantile, "\n", sep = "")
+    cat("    otsu          : candidate_threshold=", np$otsu$candidate_threshold,
+        " reference_threshold=", np$otsu$reference_threshold, "\n", sep = "")
+    cat("    caps          : random=", np$caps[["random"]],
+        " otsu=", np$caps[["otsu"]], "\n", sep = "")
+  }
+  if (!is.null(x$negative_pool_runtime)) {
+    rt <- x$negative_pool_runtime
+    cat("  runtime_options : reuse_existing=", rt$reuse_existing,
+        " write_outputs=", rt$write_outputs,
+        " verbose=", rt$verbose, "\n", sep = "")
   }
   cat("  inputs          :\n")
   for (nm in names(x$inputs)) {
@@ -920,8 +1023,9 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' @noRd
 .of_resolve_supervised_train_control <- function(
     nrounds_max, early_stop, oof_seed_base, final_sampling_seed, final_seed,
+    random_seed,
     val_frac, group_col, impute_numeric, impute_factor_missing,
-    cap_random, cap_otsu,
+    caps,
     feature_whitelist_override, feature_weights) {
 
   tc <- .of_canonical_train_control()
@@ -945,6 +1049,10 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
                                                 "final_sampling_seed")
   if (!is.null(final_seed))
     tc$seeds$final_seed <- chk_pos_int(final_seed, "final_seed")
+  # GATE 6.7 (2026-06-12): random_seed (negative-pool random-background seed)
+  # lives in the canonical seeds block alongside the three training seeds.
+  if (!is.null(random_seed))
+    tc$seeds$random_seed <- chk_pos_int(random_seed, "random_seed")
 
   # --- val_frac in (0, 1) ----------------------------------------------------
   if (!is.null(val_frac)) {
@@ -979,16 +1087,20 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     tc$impute_factor_missing <- impute_factor_missing
   }
 
-  # --- negative-bucket caps: numeric >= 0 (Inf allowed = disable) -------------
-  chk_cap <- function(v, nm) {
-    if (!is.numeric(v) || length(v) != 1L || is.na(v) || v < 0) {
-      stop(sprintf("'%s' must be a single number >= 0 (Inf disables the cap).",
-                   nm), call. = FALSE)
+  # --- negative-bucket caps (GATE 6.7): the resolved caps are the SINGLE source
+  # of truth, supplied by .of_resolve_negative_pool_params() from the typed
+  # negative_pool_params$caps block. The train_control resolver no longer parses
+  # cap_* args; it just stores the already-validated named numeric here so every
+  # downstream stage reads tc$caps.
+  if (!is.null(caps)) {
+    if (!is.numeric(caps) || is.null(names(caps)) ||
+        !setequal(names(caps), c("random", "otsu"))) {
+      stop("internal: train_control 'caps' must be a named numeric over exactly ",
+           "{random, otsu}.", call. = FALSE)
     }
-    as.numeric(v)
+    tc$caps$random <- as.numeric(caps[["random"]])
+    tc$caps$otsu   <- as.numeric(caps[["otsu"]])
   }
-  if (!is.null(cap_random))     tc$caps$random     <- chk_cap(cap_random, "cap_random")
-  if (!is.null(cap_otsu))       tc$caps$otsu       <- chk_cap(cap_otsu, "cap_otsu")
 
   # --- feature whitelist / weights (pass-through, light validation) ----------
   if (!is.null(feature_whitelist_override)) {
@@ -1014,6 +1126,227 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
   # .of_canonical_train_control(); it is not user-settable.
 
   tc
+}
+
+# =============================================================================
+# GATE 6.7 (2026-06-12): typed negative-pool config + runtime options.
+#
+# Mirrors the DETERMINISTIC builder's restrained surface (typed list-blocks,
+# .of_check_unknown_keys whitelist with unknown-keys-error, visible defaults,
+# per-parameter provenance). The PUBLIC negative-pool surface is intentionally
+# small: only the methodological knobs that change WHICH negatives are selected
+# (random n_cells / rbr_quantile, otsu candidate/reference thresholds) plus the
+# two caps. Everything else is a FIXED internal default (NOT public).
+# =============================================================================
+
+#' Visible defaults for the PUBLIC typed negative_pool_params block (GATE 6.7).
+#'
+#' @return Named list with `random` (n_cells, rbr_quantile), `otsu`
+#'   (candidate_threshold, reference_threshold) and `caps` (a named numeric over
+#'   {random, otsu}).
+#' @keywords internal
+#' @noRd
+.of_negative_pool_params_defaults <- function() {
+  list(
+    random = list(
+      n_cells      = 1500L,
+      rbr_quantile = 0.50
+    ),
+    otsu = list(
+      candidate_threshold = 0,
+      reference_threshold = 100
+    ),
+    caps = c(random = 1.0, otsu = 1.0)
+  )
+}
+
+#' Visible defaults for the technical runtime_options block (GATE 6.7).
+#'
+#' These are TECHNICAL toggles only; they MUST NOT enter the methodological
+#' fingerprint.
+#' @keywords internal
+#' @noRd
+.of_runtime_options_defaults <- function() {
+  list(
+    reuse_existing = TRUE,
+    write_outputs  = TRUE,
+    verbose        = TRUE
+  )
+}
+
+#' FIXED internal negative-pool defaults (GATE 6.7) -- NOT public, NOT settable.
+#'
+#' The lower-level negative-pool / Otsu-residual engine knobs that are pinned to
+#' validated operational constants (mirroring the deterministic engine's fixed
+#' settings). They MAY enter the methodological fingerprint (they affect the
+#' pool) but are NOT user-settable and NOT part of the public block. The clean
+#' public names in `negative_pool_params` map onto the historical
+#' `unb_*` / `otsu_negative_*` bindings; these are the rest.
+#' @keywords internal
+#' @noRd
+.of_supervised_negative_pool_internal_defaults <- function() {
+  list(
+    # random background
+    random_exclusion_buffer_m = 500,
+    random_patch_size_cells   = 3,
+    # otsu residual negative
+    otsu_mode                 = "burnable_only",
+    otsu_min_threshold_value  = 0,
+    otsu_min_pixels           = 8,
+    otsu_buffers_m            = 90,
+    otsu_core_thr             = 0.60,
+    otsu_alpha_boost          = 0.25,
+    otsu_min_base_boost       = 0.35,
+    otsu_dist_power           = 1,
+    otsu_keep_hi              = 0.45,
+    otsu_drop_lo              = 0.15,
+    otsu_excl_buffer_m        = 0,
+    otsu_min_area_ha          = 0,
+    otsu_use_drop             = TRUE,
+    otsu_drop_max_s_patch     = 0.15,
+    allow_empty_otsu_pool     = FALSE
+  )
+}
+
+#' Resolve + validate the typed PUBLIC negative_pool_params block (GATE 6.7).
+#'
+#' Whitelisted per sub-block (unknown key anywhere -> ERROR). Validates types
+#' (n_cells integer > 0; rbr_quantile in [0,1]; thresholds numeric; caps a named
+#' numeric over exactly {random, otsu}, each >= 0). Returns the resolved values
+#' AND a per-parameter provenance record ("user" vs "default").
+#'
+#' @param negative_pool_params The user `negative_pool_params` list (may be
+#'   empty / NULL).
+#' @return list(values, provenance).
+#' @keywords internal
+#' @noRd
+.of_resolve_negative_pool_params <- function(negative_pool_params) {
+  defs <- .of_negative_pool_params_defaults()
+  np   <- if (is.null(negative_pool_params)) list() else negative_pool_params
+  .of_check_named_list(np, "negative_pool_params")
+  .of_check_unknown_keys(np, names(defs), "negative_pool_params")
+
+  # --- random sub-block ------------------------------------------------------
+  rnd <- if (is.null(np$random)) list() else np$random
+  .of_check_named_list(rnd, "negative_pool_params$random")
+  .of_check_unknown_keys(rnd, names(defs$random), "negative_pool_params$random")
+  n_cells <- defs$random$n_cells
+  if (!is.null(rnd$n_cells)) {
+    ni <- suppressWarnings(as.integer(rnd$n_cells)[1L])
+    if (is.na(ni) || ni <= 0L) {
+      stop("'negative_pool_params$random$n_cells' must be a single positive ",
+           "integer.", call. = FALSE)
+    }
+    n_cells <- ni
+  }
+  rbr_q <- defs$random$rbr_quantile
+  if (!is.null(rnd$rbr_quantile)) {
+    q <- rnd$rbr_quantile
+    if (!is.numeric(q) || length(q) != 1L || is.na(q) || q < 0 || q > 1) {
+      stop("'negative_pool_params$random$rbr_quantile' must be a single number ",
+           "in [0, 1].", call. = FALSE)
+    }
+    rbr_q <- as.numeric(q)
+  }
+
+  # --- otsu sub-block --------------------------------------------------------
+  ots <- if (is.null(np$otsu)) list() else np$otsu
+  .of_check_named_list(ots, "negative_pool_params$otsu")
+  .of_check_unknown_keys(ots, names(defs$otsu), "negative_pool_params$otsu")
+  chk_num1 <- function(v, nm) {
+    if (!is.numeric(v) || length(v) != 1L || !is.finite(v)) {
+      stop(sprintf("'%s' must be a single finite numeric value.", nm),
+           call. = FALSE)
+    }
+    as.numeric(v)
+  }
+  cand_thr <- defs$otsu$candidate_threshold
+  if (!is.null(ots$candidate_threshold)) {
+    cand_thr <- chk_num1(ots$candidate_threshold,
+                         "negative_pool_params$otsu$candidate_threshold")
+  }
+  ref_thr <- defs$otsu$reference_threshold
+  if (!is.null(ots$reference_threshold)) {
+    ref_thr <- chk_num1(ots$reference_threshold,
+                        "negative_pool_params$otsu$reference_threshold")
+  }
+
+  # --- caps (single source of truth) -----------------------------------------
+  caps <- defs$caps
+  caps_user <- list(random = FALSE, otsu = FALSE)
+  if (!is.null(np$caps)) {
+    uc <- np$caps
+    if (!is.numeric(uc) || is.null(names(uc)) ||
+        !setequal(names(uc), c("random", "otsu"))) {
+      stop("'negative_pool_params$caps' must be a NAMED numeric over exactly ",
+           "{random, otsu}.", call. = FALSE)
+    }
+    chk_cap <- function(v, nm) {
+      if (!is.numeric(v) || length(v) != 1L || is.na(v) || v < 0) {
+        stop(sprintf("'%s' must be a single number >= 0 (Inf disables the cap).",
+                     nm), call. = FALSE)
+      }
+      as.numeric(v)
+    }
+    caps[["random"]] <- chk_cap(uc[["random"]], "negative_pool_params$caps['random']")
+    caps[["otsu"]]   <- chk_cap(uc[["otsu"]],   "negative_pool_params$caps['otsu']")
+    caps_user$random <- TRUE
+    caps_user$otsu   <- TRUE
+  }
+
+  values <- list(
+    random = list(n_cells = n_cells, rbr_quantile = rbr_q),
+    otsu   = list(candidate_threshold = cand_thr, reference_threshold = ref_thr),
+    caps   = caps
+  )
+  provenance <- list(
+    random = list(
+      n_cells      = if (is.null(rnd$n_cells))      "default" else "user",
+      rbr_quantile = if (is.null(rnd$rbr_quantile)) "default" else "user"
+    ),
+    otsu = list(
+      candidate_threshold = if (is.null(ots$candidate_threshold)) "default" else "user",
+      reference_threshold = if (is.null(ots$reference_threshold)) "default" else "user"
+    ),
+    caps = list(
+      random = if (caps_user$random) "user" else "default",
+      otsu   = if (caps_user$otsu)   "user" else "default"
+    )
+  )
+  list(values = values, provenance = provenance)
+}
+
+#' Resolve + validate the technical runtime_options block (GATE 6.7).
+#'
+#' Whitelisted (reuse_existing / write_outputs / verbose only; unknown key ->
+#' ERROR). Each must be a single TRUE/FALSE. Runtime changes MUST NOT alter the
+#' methodological fingerprint, so these are kept in their own cfg block and
+#' excluded from every fingerprint.
+#' @keywords internal
+#' @noRd
+.of_resolve_runtime_options <- function(runtime_options) {
+  defs <- .of_runtime_options_defaults()
+  ro   <- if (is.null(runtime_options)) list() else runtime_options
+  .of_check_named_list(ro, "runtime_options")
+  .of_check_unknown_keys(ro, names(defs), "runtime_options")
+  chk_flag <- function(v, nm) {
+    if (!is.logical(v) || length(v) != 1L || is.na(v)) {
+      stop(sprintf("'runtime_options$%s' must be a single TRUE/FALSE.", nm),
+           call. = FALSE)
+    }
+    v
+  }
+  values <- defs
+  prov   <- list()
+  for (nm in names(defs)) {
+    if (!is.null(ro[[nm]])) {
+      values[[nm]] <- chk_flag(ro[[nm]], nm)
+      prov[[nm]]   <- "user"
+    } else {
+      prov[[nm]]   <- "default"
+    }
+  }
+  list(values = values, provenance = prov)
 }
 
 #' Centralized supervised-RUN input-path conventions (§N+25)

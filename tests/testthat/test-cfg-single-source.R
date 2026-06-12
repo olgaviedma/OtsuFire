@@ -44,15 +44,18 @@ test_that("Gate 1B: cfg carries model_params + train_control with the canonical 
       "feature_whitelist_override", "feature_weights",
       "training_protocol", "oof_sampling")
   )
+  # GATE 6.7 (2026-06-12): random_seed (negative-pool random background) moved
+  # into the canonical seeds block alongside the three training seeds.
   expect_setequal(names(tc$seeds),
-                  c("oof_seed_base", "final_sampling_seed", "final_seed"))
+                  c("oof_seed_base", "final_sampling_seed", "final_seed",
+                    "random_seed"))
   expect_setequal(names(tc$caps),
                   c("random", "otsu"))
   # Canonical values (the INVARIANT: identical to the historical defaults).
   expect_identical(tc, get(".of_canonical_train_control", envir = ns)())
   expect_equal(tc$nrounds_max, 4000L)
   expect_equal(tc$early_stop, 80L)
-  expect_equal(unlist(tc$seeds, use.names = FALSE), c(42L, 42L, 42L))
+  expect_equal(unlist(tc$seeds, use.names = FALSE), c(42L, 42L, 42L, 42L))
   expect_equal(tc$val_frac, 0.15)
   expect_equal(tc$group_col, "block_id")
   expect_equal(unname(unlist(tc$caps)), c(1.0, 1.0))
@@ -170,7 +173,10 @@ test_that("Gate 1B: a builder override propagates to BOTH OOF and FINAL identica
   skip_if_not_installed("sf")
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
-  cfg <- mk_ss_cfg(cap_random = 1.0, nrounds_max = 10L)
+  # GATE 6.7 (2026-06-12): caps now set via the typed negative_pool_params block
+  # (single source of truth), no longer top-level cap_random / cap_otsu.
+  cfg <- mk_ss_cfg(negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)),
+                   nrounds_max = 10L)
   expect_equal(cfg$train_control$caps$random, 1.0)
   expect_equal(cfg$train_control$nrounds_max, 10L)
 
@@ -199,7 +205,7 @@ test_that("Gate 1B: deliberately non-default values propagate to BOTH OOF and FI
     nrounds_max         = 137L,
     early_stop          = 9L,
     val_frac            = 0.222,
-    cap_random          = 1.0,
+    negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)),
     oof_seed_base       = 4242L,
     final_sampling_seed = 1234L,
     final_seed          = 9999L,
@@ -382,11 +388,16 @@ test_that("Gate 1B: builder validates the resolved-param overrides", {
   expect_error(mk_ss_cfg(val_frac = 1), regexp = "val_frac")
   expect_error(mk_ss_cfg(nrounds_max = 0), regexp = "nrounds_max")
   expect_error(mk_ss_cfg(early_stop = -1), regexp = "early_stop")
-  expect_error(mk_ss_cfg(cap_random = -0.1), regexp = "cap_random")
-  # GATE 6.1: cap_spectral is no longer a builder argument.
+  # GATE 6.7: a negative cap in the typed negative_pool_params block errors.
+  expect_error(
+    mk_ss_cfg(negative_pool_params = list(caps = c(random = -0.1, otsu = 1.0))),
+    regexp = "caps")
+  # GATE 6.7: top-level cap_random / cap_otsu were REMOVED (single-source caps).
+  expect_error(mk_ss_cfg(cap_random = 1.0), regexp = "unused argument")
+  expect_error(mk_ss_cfg(cap_otsu = 1.0), regexp = "unused argument")
+  # GATE 6.1/6.5: cap_spectral / cap_contextual are not builder arguments.
   expect_error(mk_ss_cfg(cap_spectral = 2.0),
                regexp = "cap_spectral|unused argument")
-  # GATE 6.5: cap_contextual is no longer a builder argument.
   expect_error(mk_ss_cfg(cap_contextual = 1.0),
                regexp = "cap_contextual|unused argument")
   # training_protocol is no longer a builder argument -> R "unused argument".

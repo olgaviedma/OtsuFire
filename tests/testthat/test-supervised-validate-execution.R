@@ -354,7 +354,9 @@ test_that("a cfg field change produces a DIFFERENT fingerprint", {
     topo = OtsuFire:::.of_sup_input_path(cfgB, "topo"),
     corine_raster = OtsuFire:::.of_sup_input_path(cfgB, "corine_raster"),
     burnable_mask = OtsuFire:::.of_sup_input_path(cfgB, "burnable_mask"),
-    cap_random = 0.5)   # the ONE methodological change (GATE 6.5: cap_contextual removed)
+    # GATE 6.7 (2026-06-12): the ONE methodological change, via the typed
+    # negative_pool_params block (top-level cap_random was removed).
+    negative_pool_params = list(caps = c(random = 0.5, otsu = 1.0)))
   expect_false(identical(cfp_fn()(cfgA)$checksum, cfp_fn()(cfgB2)$checksum))
   # Changing only the random cap on the SAME cfg also moves the fingerprint.
   expect_false(identical(cfp_fn()(cfgB)$checksum, cfp_fn()(cfgB2)$checksum))

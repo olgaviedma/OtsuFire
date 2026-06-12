@@ -54,7 +54,10 @@ run_name     <- "Min_Min"
 use_hotspots <- target_year > 2000
 
 # PHASE B caps — spectral = 2.0 is the Phase B value (package default is 1.0).
-caps <- list(contextual = 0.25, spectral = 2.0, random = 1.0, otsu = 1.0)
+# GATE 6.7 (2026-06-12): caps live in the typed PUBLIC negative_pool_params
+# block (the two operative buckets random + otsu; contextual / spectral were
+# removed in earlier gates).
+caps <- c(random = 1.0, otsu = 1.0)
 
 
 main <- function() {
@@ -78,23 +81,21 @@ main <- function() {
     output_dir           = paths$output_dir,
     run_name             = run_name,
     # ---- PHASE B methodological params (single source of truth) ----
-    cap_contextual       = caps$contextual,
-    cap_spectral         = caps$spectral,   # 2.0 (PHASE B; default 1.0)
-    cap_random           = caps$random,
-    cap_otsu             = caps$otsu,
-    # OOF always uses the same capped negative-sampling policy as the FINAL model
-    # (applied independently within each training fold); there is no oof_sampling
-    # argument.
+    # GATE 6.7 (2026-06-12): the typed PUBLIC negative_pool_params block + the
+    # technical runtime_options. Caps are the single caps source (top-level
+    # cap_* args removed). OOF always uses the same capped negative-sampling
+    # policy as the FINAL model.
+    negative_pool_params = list(
+      random = list(n_cells = 1500L, rbr_quantile = 0.50),
+      otsu   = list(candidate_threshold = 0, reference_threshold = 100),
+      caps   = caps
+    ),
+    runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE,
+                           verbose = TRUE),
     options = list(
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,
-      result_name                     = run_name,
-      otsu_negative_mode                = "burnable_only",
-      otsu_negative_threshold           = 0,
-      otsu_negative_reference_threshold = 100,
-      otsu_negative_reuse_existing           = TRUE,
-      otsu_negative_write_output             = TRUE,
-      unb_verbose                     = TRUE
+      result_name                     = run_name
     )
   )
   cfg$tool_paths$python_exe             <- tool_paths$python_exe

@@ -289,51 +289,50 @@ build_supervised_training_pools <- function(config,
   # ---------------------------------------------------------------------------
   min_burned_pool_n <- config$min_burned_pool_n %||% 5L
 
-  UNB_VERBOSE       <- config$options$unb_verbose %||% TRUE
+  # GATE 6.7 (2026-06-12): the negative-pool methodological knobs, caps, random
+  # seed and runtime toggles are sourced from the TYPED cfg blocks
+  # (negative_pool_params / negative_pool_runtime / negative_pool_internal +
+  # train_control$seeds$random_seed). The free-form config$options$unb_* /
+  # otsu_negative_* reads were REMOVED: there is ONE source of truth, identical
+  # to .of_supervised_engine_bindings().
+  .np  <- config$negative_pool_params   %||% .of_negative_pool_params_defaults()
+  .rt  <- config$negative_pool_runtime  %||% .of_runtime_options_defaults()
+  .ni  <- config$negative_pool_internal %||%
+            .of_supervised_negative_pool_internal_defaults()
+  .sds <- (config$train_control %||% list())$seeds %||% list()
 
-  # deterministic-decisions builder (det drops + random burnable background)
-  UNB_EXCL_BUFFER_M        <- config$options$unb_excl_buffer_m %||% 500
-  UNB_N_RANDOM_CELLS       <- config$options$unb_n_random_cells %||% 1500
-  UNB_RANDOM_RBR_Q         <- config$options$unb_random_rbr_q %||% 0.50
-  UNB_RANDOM_SEED          <- config$options$unb_random_seed %||% 42
-  UNB_RANDOM_PATCH_SIZE_CELLS <-
-    config$options$unb_random_patch_size_cells %||% 3
+  UNB_VERBOSE       <- .rt$verbose
 
-  # Otsu residual negative builder
-  # GATE 6.4 (2026-06-11): `otsu_negative_code_dir` read removed — the Otsu
-  # negative helpers are in-package, so the option had no live consumer.
-  UNB_OTSU_NEG_MODE        <- config$options$otsu_negative_mode %||% "burnable_only"
-  UNB_OTSU_NEG_THRESHOLD   <- config$options$otsu_negative_threshold %||% 0
-  UNB_OTSU_NEG_REFERENCE_THRESHOLD <-
-    config$options$otsu_negative_reference_threshold %||% 100
-  UNB_OTSU_NEG_MIN_THRESHOLD_VALUE <-
-    config$options$otsu_negative_min_threshold_value %||% 0
-  UNB_OTSU_NEG_MIN_PIXELS  <- config$options$otsu_negative_min_pixels %||% 8
-  UNB_OTSU_NEG_BUFFERS_M   <- config$options$otsu_negative_buffers_m %||% 90
-  UNB_OTSU_NEG_CORE_THR    <- config$options$otsu_negative_core_thr %||% 0.60
-  UNB_OTSU_NEG_ALPHA_BOOST <- config$options$otsu_negative_alpha_boost %||% 0.25
-  UNB_OTSU_NEG_MIN_BASE_BOOST <- config$options$otsu_negative_min_base_boost %||% 0.35
-  UNB_OTSU_NEG_DIST_POWER  <- config$options$otsu_negative_dist_power %||% 1
-  UNB_OTSU_NEG_KEEP_HI     <- config$options$otsu_negative_keep_hi %||% 0.45
-  UNB_OTSU_NEG_DROP_LO     <- config$options$otsu_negative_drop_lo %||% 0.15
-  UNB_OTSU_NEG_EXCL_BUFFER_M <- config$options$otsu_negative_excl_buffer_m %||% 0
-  UNB_OTSU_NEG_MIN_AREA_HA <- config$options$otsu_negative_min_area_ha %||% 0
-  # GATE 6.2 (2026-06-11): `otsu_negative_sample_n` / `otsu_negative_sample_props`
-  # / `otsu_negative_random_seed` (the Otsu generation-side pre-thinning) were
-  # REMOVED. The full valid Otsu drop pool flows on; cap_otsu
-  # (otsu_unburned_to_burned_ratio) is the sole Otsu selector.
-  UNB_OTSU_NEG_REUSE_EXISTING <- config$options$otsu_negative_reuse_existing %||% TRUE
-  UNB_OTSU_NEG_WRITE_OUTPUT   <- config$options$otsu_negative_write_output %||% TRUE
-  # GATE 6.4 (2026-06-11): only `otsu_negative_use_drop` (the live path) is read.
-  # The dead `otsu_negative_use_review` / `otsu_negative_use_keep` /
-  # `otsu_negative_review_max_s_patch` / `otsu_negative_keep_max_s_patch` were
-  # removed (Otsu review/keep are never negatives).
-  UNB_OTSU_NEG_USE_DROP    <- config$options$otsu_negative_use_drop   %||% TRUE
-  UNB_OTSU_NEG_DROP_MAX_S_PATCH   <- config$options$otsu_negative_drop_max_s_patch   %||% 0.15
-  # D4a (2026-06-05): default FALSE -> empty Otsu residual negative pool ERRORS instead of
-  # silently degrading to deterministic_direct. Opt back in via
-  # config$options$allow_empty_otsu_pool = TRUE.
-  UNB_ALLOW_EMPTY_OTSU_POOL     <- config$options$allow_empty_otsu_pool %||% FALSE
+  # random-background negative params (PUBLIC: n_cells / rbr_quantile; INTERNAL:
+  # exclusion buffer + patch size; SEED: canonical seeds$random_seed)
+  UNB_EXCL_BUFFER_M        <- .ni$random_exclusion_buffer_m
+  UNB_N_RANDOM_CELLS       <- .np$random$n_cells
+  UNB_RANDOM_RBR_Q         <- .np$random$rbr_quantile
+  UNB_RANDOM_SEED          <- .sds$random_seed %||% 42L
+  UNB_RANDOM_PATCH_SIZE_CELLS <- .ni$random_patch_size_cells
+
+  # Otsu residual negative builder (PUBLIC: candidate/reference threshold;
+  # INTERNAL: everything else)
+  UNB_OTSU_NEG_MODE        <- .ni$otsu_mode
+  UNB_OTSU_NEG_THRESHOLD   <- .np$otsu$candidate_threshold
+  UNB_OTSU_NEG_REFERENCE_THRESHOLD <- .np$otsu$reference_threshold
+  UNB_OTSU_NEG_MIN_THRESHOLD_VALUE <- .ni$otsu_min_threshold_value
+  UNB_OTSU_NEG_MIN_PIXELS  <- .ni$otsu_min_pixels
+  UNB_OTSU_NEG_BUFFERS_M   <- .ni$otsu_buffers_m
+  UNB_OTSU_NEG_CORE_THR    <- .ni$otsu_core_thr
+  UNB_OTSU_NEG_ALPHA_BOOST <- .ni$otsu_alpha_boost
+  UNB_OTSU_NEG_MIN_BASE_BOOST <- .ni$otsu_min_base_boost
+  UNB_OTSU_NEG_DIST_POWER  <- .ni$otsu_dist_power
+  UNB_OTSU_NEG_KEEP_HI     <- .ni$otsu_keep_hi
+  UNB_OTSU_NEG_DROP_LO     <- .ni$otsu_drop_lo
+  UNB_OTSU_NEG_EXCL_BUFFER_M <- .ni$otsu_excl_buffer_m
+  UNB_OTSU_NEG_MIN_AREA_HA <- .ni$otsu_min_area_ha
+  # TECHNICAL runtime toggles (reuse_existing / write_outputs).
+  UNB_OTSU_NEG_REUSE_EXISTING <- .rt$reuse_existing
+  UNB_OTSU_NEG_WRITE_OUTPUT   <- .rt$write_outputs
+  UNB_OTSU_NEG_USE_DROP    <- .ni$otsu_use_drop
+  UNB_OTSU_NEG_DROP_MAX_S_PATCH   <- .ni$otsu_drop_max_s_patch
+  UNB_ALLOW_EMPTY_OTSU_POOL     <- .ni$allow_empty_otsu_pool
 
   # external tool paths
   python_exe             <- config$tool_paths$python_exe

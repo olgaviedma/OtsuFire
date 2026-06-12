@@ -79,14 +79,15 @@ log("[shared] feature lineage table written (", nrow(lineage), " base features).
 
 # ---- SHARED manifest --------------------------------------------------------
 manifest <- data.frame(
+  # GATE 6.7 (2026-06-12): only the two operative caps (random + otsu) remain.
   key = c("n_burned", "train_features_rows", "train_features_cols",
           "scoring_features_rows", "scoring_features_cols",
-          "fold_cols", "seed_base", "cap_contextual", "cap_spectral",
+          "fold_cols", "seed_base",
           "cap_random", "cap_otsu", "nrounds_max", "early_stop", "xgb_nthread",
           "hotspot_cols_present"),
   value = c(n_burned, nrow(feats$train_features), ncol(feats$train_features),
             nrow(feats$scoring_features), ncol(feats$scoring_features),
-            paste(FOLD_COLS, collapse = "+"), SEED_BASE, CAP_CONTEXTUAL, CAP_SPECTRAL,
+            paste(FOLD_COLS, collapse = "+"), SEED_BASE,
             CAP_RANDOM, CAP_OTSU, NROUNDS_MAX, EARLY_STOP, XGB_NTHREAD,
             length(hs_present)),
   stringsAsFactors = FALSE)

@@ -78,7 +78,7 @@ for the default 2017 balanced run.
 
 | # | File | Purpose (one line) |
 |---|------|--------------------|
-| 01 | `01_supervised_oneyear_legacy.R` | Common-recipe one-year pipeline, full 6-stage modular chain. (Filename keeps its historical `legacy` suffix for the sync contract; it no longer refers to any training-protocol choice.) |
+| 01 | `01_supervised_oneyear_otsu_negative.R` | Common-recipe one-year pipeline, full 6-stage modular chain. |
 | 02 | `02_supervised_phaseB_config.R` | Phase B config: `cap_spectral = 2.0` via the builder, with the abort-on-cap-mismatch guard and the inherited runtime feature-schema parity guard. |
 | 03 | `05_supervised_effis_validation.R` | EFFIS validation via `validate_fire_maps()` on a thresholded map (distinct from `validate_supervised_execution()`). |
 | 04 | `06_supervised_no_hotspots_reduced_historical.R` | No-hotspots / reduced-historical (pre-MODIS) run: `hotspots = NULL`, `use_hotspots = FALSE`. |
@@ -111,9 +111,9 @@ Every `<PATH_TO_...>` in the CONFIG block is required:
 - `hotspots` — required post-2000; `NULL` for pre-MODIS years (script 06).
 - `reference_burned`, `burnable_raster`, `validation_mask`, `strata_*` — only for
   the EFFIS validation script (05); `strata_*` may be `NULL` to skip strata.
-- `data_base`, `composite_base`, `output_dir` — roots forwarded to the legacy
-  all_sources Otsu builder; `output_dir` is the **root** (the package appends
+- `data_base`, `composite_base`, `output_dir` — roots forwarded to the
+  all_sources Otsu residual negative builder; `output_dir` is the **root** (the package appends
   `<year>/<run_name>/SUPERVISED/<scenario>`).
 - `tool_paths` (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`,
-  `ogr2ogr_exe`) — the external GDAL/Python tools the all_sources legacy Otsu
-  builder requires.
+  `ogr2ogr_exe`) — the external GDAL/Python tools the all_sources Otsu residual
+  negative builder requires.

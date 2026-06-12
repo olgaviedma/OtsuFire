@@ -8,7 +8,7 @@
 #       - a VALID existing output is NOT overwritten (reused / kept);
 #       - an INCOMPATIBLE existing output is NOT silently reused -- it is
 #         detected (rebuilt or errored, per the established policy) via the
-#         content-aware fingerprint / cache (1C.2 / 1C.4 + AS02 legacy cache);
+#         content-aware fingerprint / cache (1C.2 / 1C.4 + AS02 Otsu-negative cache);
 #   * overwrite = TRUE:
 #       - regeneration happens AND is RECORDED (a message / manifest note).
 #
@@ -22,7 +22,7 @@
 #                       (an existing bundle is the OOF stage's overwrite gate)
 #   - Features GPKG     R/internal-sup-extract-features.R:809 unlink+rebuild
 #   - Folds GPKG        R/internal-sup-make-folds.R:468/491 delete_layer write
-#   - Unburned/pools    R/internal-sup-unburned-legacy.R:906-921 fingerprint cache
+#   - Unburned/pools    R/internal-sup-otsu-negative.R fingerprint cache
 #                       (reuse ONLY when the param fingerprint matches; a MISMATCH
 #                        -> recompute, never silently serve a stale/incompatible
 #                        artifact)
@@ -132,11 +132,11 @@ test_that("PART B: overwrite=FALSE keeps a VALID existing artifact; overwrite=TR
 # ---------------------------------------------------------------------------
 # (B) CONTENT-AWARE cache: a VALID (fingerprint-matching) artifact is reused;
 #     an INCOMPATIBLE (fingerprint-mismatching) artifact is NOT silently reused.
-#     This is the unburned/pools-stage policy (AS02 legacy cache) and the same
-#     principle as the validate-fire-maps content-aware cache.
+#     This is the unburned/pools-stage policy (AS02 Otsu-negative cache) and the
+#     same principle as the validate-fire-maps content-aware cache.
 # ---------------------------------------------------------------------------
-test_that("PART B: the legacy param fingerprint is deterministic and content-sensitive", {
-  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+test_that("PART B: the Otsu residual negative param fingerprint is deterministic and content-sensitive", {
+  fp <- get("otsu_negative_param_fingerprint", envir = ns)
   p1 <- list(a = 1L, b = "x", c = c(2.0, 3.0))
   p2 <- list(a = 1L, b = "x", c = c(2.0, 3.0))           # identical content
   p3 <- list(a = 2L, b = "x", c = c(2.0, 3.0))           # ONE param changed
@@ -152,10 +152,10 @@ test_that("PART B: the legacy param fingerprint is deterministic and content-sen
 })
 
 # Helper: build the AS02 fingerprint token EXACTLY as production does
-# (R/internal-sup-unburned-legacy.R:907-913): a 5-element character vector whose
+# (R/internal-sup-otsu-negative.R): a 5-element character vector whose
 # LAST element is the (possibly multi-line) fp$text.
 as02_token <- function(fpr) {
-  c("# OtsuFire legacy unburned cache fingerprint (AS02).",
+  c("# OtsuFire Otsu residual negative cache fingerprint (AS02).",
     "# reuse_existing only honoured when this file matches the current call.",
     sprintf("CHECKSUM=%s", fpr$checksum), "---",
     fpr$text)
@@ -174,7 +174,7 @@ cache_reuse_decision_intended <- function(reuse_existing, fingerprint_path, toke
 }
 
 # The PRODUCTION AS02 reuse decision, mirroring the engine byte-for-byte
-# (R/internal-sup-unburned-legacy.R:914-925, AS02 fix): BOTH sides are collapsed
+# (R/internal-sup-otsu-negative.R, AS02 fix): BOTH sides are collapsed
 # to a single "\n"-joined string before `identical()`, so an embedded newline in
 # fp$text round-trips through writeLines/readLines correctly. This is now the
 # SAME rule as `cache_reuse_decision_intended`; we keep a distinct helper so the
@@ -188,10 +188,10 @@ cache_reuse_decision_production <- function(reuse_existing, fingerprint_path, to
 }
 
 test_that("PART B: content-aware cache (INTENDED contract) reuses a valid artifact and rebuilds an incompatible one", {
-  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+  fp <- get("otsu_negative_param_fingerprint", envir = ns)
   d <- tempfile("unbcache_"); dir.create(d)
   on.exit(unlink(d, recursive = TRUE, force = TRUE), add = TRUE)
-  fingerprint_path <- file.path(d, "_LEGACY_PARAM_FINGERPRINT.txt")
+  fingerprint_path <- file.path(d, "_OTSU_NEGATIVE_FINGERPRINT.txt")
 
   # Realistic MULTI-param fingerprint (like the ~25-param production call), so
   # fp$text spans multiple lines -- the regime where the defect bites.
@@ -224,7 +224,7 @@ test_that("PART B: content-aware cache (INTENDED contract) reuses a valid artifa
 # `readLines()` returned MORE elements than `fingerprint_token` and the old
 # `identical(readLines(...), fingerprint_token)` was ALWAYS FALSE. Net effect:
 # `cache_fingerprint_matches` was ALWAYS FALSE for a real (multi-param) call, so
-# the legacy unburned stage NEVER reused -- it silently RECOMPUTED every run
+# the Otsu residual negative stage NEVER reused -- it silently RECOMPUTED every run
 # (wasteful, but never stale: overwrite=FALSE safety was intact).
 #
 # FIX: normalise BOTH sides before comparing --
@@ -235,10 +235,10 @@ test_that("PART B: content-aware cache (INTENDED contract) reuses a valid artifa
 # the production comparison now MATCHES an unchanged multi-param re-run.
 # ---------------------------------------------------------------------------
 test_that("PART B: production AS02 token comparison MATCHES an unchanged multi-param re-run (AS02 fix)", {
-  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+  fp <- get("otsu_negative_param_fingerprint", envir = ns)
   d <- tempfile("unbcache_prod_"); dir.create(d)
   on.exit(unlink(d, recursive = TRUE, force = TRUE), add = TRUE)
-  fingerprint_path <- file.path(d, "_LEGACY_PARAM_FINGERPRINT.txt")
+  fingerprint_path <- file.path(d, "_OTSU_NEGATIVE_FINGERPRINT.txt")
 
   params <- list(target_year = 2017L, otsu_threshold = 0L,
                  sample_n = 1000L, random_seed = 42L)   # >1 param -> multi-line
@@ -267,7 +267,7 @@ test_that("PART B: production AS02 token comparison MATCHES an unchanged multi-p
 test_that("PART B: the production AS02 comparison normalises BOTH sides before identical() (collapse fix)", {
   # deparse() may wrap a single call across several lines, so collapse all
   # internal whitespace to single spaces before matching the source tokens.
-  src <- paste(deparse(body(get("build_unburned_from_legacy_pipeline", envir = ns))),
+  src <- paste(deparse(body(get("build_otsu_negative_pipeline", envir = ns))),
                collapse = " ")
   src <- gsub("[[:space:]]+", " ", src)
   # Both the read-back file and the in-memory token are collapsed with "\n".
@@ -290,10 +290,10 @@ test_that("PART B: the production AS02 comparison normalises BOTH sides before i
 # overlaid with the overwrite contract (overwrite=TRUE always regenerates).
 # ---------------------------------------------------------------------------
 test_that("PART B: AS02 cache reuses on unchanged input, invalidates on changed input, honours overwrite", {
-  fp <- get("legacy_param_fingerprint_unb_legacy", envir = ns)
+  fp <- get("otsu_negative_param_fingerprint", envir = ns)
   d <- tempfile("unbcache_contract_"); dir.create(d)
   on.exit(unlink(d, recursive = TRUE, force = TRUE), add = TRUE)
-  fingerprint_path <- file.path(d, "_LEGACY_PARAM_FINGERPRINT.txt")
+  fingerprint_path <- file.path(d, "_OTSU_NEGATIVE_FINGERPRINT.txt")
 
   # A realistic multi-param call (so fp$text spans several lines -- the regime
   # where the defect bit). Persist the fingerprint exactly as the engine does.
@@ -336,7 +336,7 @@ test_that("PART B: the production unburned stage gates reuse on a fingerprint MA
   # Source-level guard: reuse is conditioned on the fingerprint match, and a
   # MISMATCH/ABSENT fingerprint emits a recompute message (recorded), never a
   # silent stale reuse.
-  src <- paste(deparse(body(get("build_unburned_from_legacy_pipeline", envir = ns))),
+  src <- paste(deparse(body(get("build_otsu_negative_pipeline", envir = ns))),
                collapse = "\n")
   expect_true(grepl("cache_fingerprint_matches", src, fixed = TRUE))
   expect_true(grepl("reuse_ok <- isTRUE(reuse_existing) && isTRUE(cache_fingerprint_matches)",

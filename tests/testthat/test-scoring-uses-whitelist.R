@@ -137,7 +137,7 @@ test_that("scoring path feature selection yields whitelist-only cols", {
                                             "p_above_keep_q25",
                                             "qa_changed", "p_oof_mean",
                                             "area_ha", "n_pix",
-                                            "legacy_decision",
+                                            "otsu_decision",
                                             "intersects_deterministic")),
                 character(0))
 })

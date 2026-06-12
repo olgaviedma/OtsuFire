@@ -1,5 +1,5 @@
-# OPERATIONAL BATCH 2 (2026-06-06): low-level tests for the legacy
-# Otsu-unburned stack robustness fixes.
+# OPERATIONAL BATCH 2 (2026-06-06): low-level tests for the Otsu residual
+# negative stack robustness fixes.
 #   AS02 - parameter fingerprint for honest `reuse_existing`.
 #   AS09 - single canonical area column (no duplicate AREA_HA / AREA_HA_1).
 #   AS11 - coverage_by_patch_raster() does not mutate its ref_raster in place.
@@ -13,7 +13,7 @@
 
 # --- AS02 -----------------------------------------------------------
 test_that("AS02: fingerprint is deterministic and param-sensitive", {
-  fp <- get("legacy_param_fingerprint_unb_legacy",
+  fp <- get("otsu_negative_param_fingerprint",
             envir = asNamespace("OtsuFire"))
 
   p1 <- list(target_year = 2017L, otsu_threshold = 0, buffers_m = 90,
@@ -36,13 +36,13 @@ test_that("AS02: fingerprint is deterministic and param-sensitive", {
 })
 
 # --- AS09 -----------------------------------------------------------
-test_that("AS09: legacy pool keeps a single canonical area_ha column", {
+test_that("AS09: Otsu residual negative pool keeps a single canonical area_ha column", {
   skip_if_not_installed("sf")
 
-  fn <- get("build_unburned_from_legacy_decisions",
+  fn <- get("build_otsu_negative_from_decisions",
             envir = asNamespace("OtsuFire"))
 
-  # Two non-overlapping legacy patches carrying ESRI-truncated area dupes.
+  # Two non-overlapping Otsu patches carrying ESRI-truncated area dupes.
   geom <- sf::st_sfc(
     .mk_rect_b2(0, 0, 100, 100),
     .mk_rect_b2(500, 500, 700, 700),
@@ -69,7 +69,7 @@ test_that("AS09: legacy pool keeps a single canonical area_ha column", {
                quiet = TRUE)
 
   res <- fn(
-    legacy_patches_path     = legacy_path,
+    otsu_patches_path       = legacy_path,
     internal_decisions_path = internal_path,
     out_gpkg                = NULL,
     use_drop                = TRUE,
@@ -77,7 +77,7 @@ test_that("AS09: legacy pool keeps a single canonical area_ha column", {
     verbose                 = FALSE
   )
 
-  pool <- res$legacy_unburned_pool
+  pool <- res$otsu_negative_pool
   nm   <- names(pool)
   # Exactly one area column, lowercase, no truncated leftovers.
   expect_true("area_ha" %in% nm)

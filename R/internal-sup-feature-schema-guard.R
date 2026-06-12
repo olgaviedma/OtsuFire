@@ -36,7 +36,7 @@
 #
 # The fingerprint is the SAME deterministic, base-R, wall-clock-FREE style used
 # for the fold / pool fingerprints (make_fold_fingerprint /
-# legacy_param_fingerprint_unb_legacy): a sorted key=value body plus an
+# otsu_negative_param_fingerprint): a sorted key=value body plus an
 # order-stable rolling checksum. No `digest` dependency, no timestamps, no
 # data-dependent statistics -> two computations of the SAME contract at
 # different wall-clock times produce the IDENTICAL fingerprint.

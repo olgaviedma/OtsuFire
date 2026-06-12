@@ -63,7 +63,7 @@ make_whitelist_fixture_gpkg <- function(n_burned = 14, n_neg_random = 7,
     poly_id                  = sprintf("p_%03d", seq_len(n)),
     cell_id                  = seq_len(n) + 1000L,
     intersects_deterministic = sample(c(TRUE, FALSE), n, replace = TRUE),
-    legacy_decision          = sample(c("keep", "drop"), n, replace = TRUE),
+    otsu_decision          = sample(c("keep", "drop"), n, replace = TRUE),
     class_final              = c(rep("burned", n_burned),
                                   rep("drop", n_neg_random + n_neg_drop)),
     raw_class                = c(rep("burned", n_burned),
@@ -215,7 +215,7 @@ test_that("recipe$cols$feature_cols and x_cols are within the whitelist", {
   for (nm in c("neg_type", "fire_uid", "block_id", "fold_rep1",
                 "fold_rep2", "class_final", "median_rbr",
                 "p_above_keep_q25", "qa_changed", "p_oof_mean",
-                "area_ha", "n_pix", "legacy_decision",
+                "area_ha", "n_pix", "otsu_decision",
                 "intersects_deterministic")) {
     expect_false(nm %in% feat_cols,
                   info = paste("admin/residual leaked into feature_cols:", nm))

@@ -40,7 +40,7 @@
 # in installed-package mode it was DEAD anyway (top-level R/*.R only re-runs
 # under pkgload::load_all()). The S2 toggle is now scoped + restored INSIDE
 # run_supervised_pipeline() via on.exit (mirroring the AS07 fix already applied
-# in internal-sup-unburned-legacy.R / validate-fire-maps.R), so the supervised
+# in internal-sup-otsu-negative.R / validate-fire-maps.R), so the supervised
 # run does not contaminate the caller's session and two runs are isolated.
 
 # ============================== 2) GLOBAL CONFIG =========================
@@ -50,7 +50,7 @@ project_paths <- list()
 data_base <- NULL
 # BUG 3 Phase 1b (2026-06-05): removed the `script_base` and
 # `supervised_functions_dir` placeholders. Both were always NULL: `script_base`
-# was dead plumbing into source_legacy_unburned_helpers() (which ignores it),
+# was dead plumbing into verify_otsu_negative_helpers() (which ignores it),
 # and `supervised_functions_dir` was never read. The matching dispatcher
 # bindings were dropped too.
 composite_base <- NULL
@@ -107,7 +107,7 @@ CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 #   `deterministic_direct` mode are gone, the dispatcher no longer supplies a
 #   strategy binding, and the only former reader (the `common_unb_dir` output
 #   selection) is now hardwired to the all_sources path. (Unrelated to the D4a
-#   empty-Otsu-pool robustness fallback in internal-sup-unburned-legacy.R, which
+#   empty-Otsu-pool robustness fallback in internal-sup-otsu-negative.R, which
 #   degrades all_sources to deterministic_direct *semantics* and is kept.)
 # B7 (2026-06-06): the `MIN_BURNED_POOL_N <- 5L` placeholder was removed. The
 # live F7 sparse-year guard (years with fewer keep patches abort cleanly) reads
@@ -116,8 +116,8 @@ CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 # the dispatcher no longer injects it.
 
 UNB_VERBOSE  <- TRUE
-# GATE 6.4 (2026-06-11): `UNB_LEGACY_CODE_DIR` placeholder removed (legacy
-# helpers are in-package; no live consumer).
+# GATE 6.4 (2026-06-11): `UNB_OTSU_NEG_CODE_DIR` placeholder removed (Otsu
+# negative helpers are in-package; no live consumer).
 
 # Shared deterministic-decision negative parameters (det drops + random background;
 # used by all_sources' build_unburned_from_deterministic_decisions() call).
@@ -128,32 +128,33 @@ UNB_RANDOM_SEED     <- 42
 UNB_RANDOM_PATCH_SIZE_CELLS <- 3
 
 # Otsu pipeline parameters (used by all_sources mode)
-UNB_LEGACY_OTSU_MODE <- "burnable_only"
-UNB_LEGACY_OTSU_THRESHOLD <- 0
-UNB_LEGACY_REFERENCE_OTSU_THRESHOLD <- 100
-UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE <- 0
-UNB_LEGACY_MIN_PIXELS <- 8
-UNB_LEGACY_BUFFERS_M <- 90
-UNB_LEGACY_CORE_THR <- 0.60
-UNB_LEGACY_ALPHA_BOOST <- 0.25
-UNB_LEGACY_MIN_BASE_BOOST <- 0.35
-UNB_LEGACY_DIST_POWER <- 1
-UNB_LEGACY_KEEP_HI <- 0.45
-UNB_LEGACY_DROP_LO <- 0.15
-UNB_LEGACY_USE_DROP <- TRUE
-# GATE 6.4 (2026-06-11): the dead `UNB_LEGACY_USE_REVIEW` / `UNB_LEGACY_USE_KEEP`
-# / `UNB_LEGACY_REVIEW_MAX_S_PATCH` / `UNB_LEGACY_KEEP_MAX_S_PATCH` placeholders
-# were removed (Otsu review/keep are never negatives — they were already excluded
-# by train_final_model_direct()). Only the `drop` path remains.
-UNB_LEGACY_DROP_MAX_S_PATCH <- 0.15
-# GATE 6.2 (2026-06-11): `UNB_LEGACY_SAMPLE_N` / `UNB_LEGACY_SAMPLE_PROPS` /
-# `UNB_LEGACY_RANDOM_SEED` placeholders removed with the Otsu generation-side
+UNB_OTSU_NEG_MODE <- "burnable_only"
+UNB_OTSU_NEG_THRESHOLD <- 0
+UNB_OTSU_NEG_REFERENCE_THRESHOLD <- 100
+UNB_OTSU_NEG_MIN_THRESHOLD_VALUE <- 0
+UNB_OTSU_NEG_MIN_PIXELS <- 8
+UNB_OTSU_NEG_BUFFERS_M <- 90
+UNB_OTSU_NEG_CORE_THR <- 0.60
+UNB_OTSU_NEG_ALPHA_BOOST <- 0.25
+UNB_OTSU_NEG_MIN_BASE_BOOST <- 0.35
+UNB_OTSU_NEG_DIST_POWER <- 1
+UNB_OTSU_NEG_KEEP_HI <- 0.45
+UNB_OTSU_NEG_DROP_LO <- 0.15
+UNB_OTSU_NEG_USE_DROP <- TRUE
+# GATE 6.4 (2026-06-11): the dead `UNB_OTSU_NEG_USE_REVIEW` /
+# `UNB_OTSU_NEG_USE_KEEP` / `UNB_OTSU_NEG_REVIEW_MAX_S_PATCH` /
+# `UNB_OTSU_NEG_KEEP_MAX_S_PATCH` placeholders were removed (Otsu review/keep are
+# never negatives — they were already excluded by train_final_model_direct()).
+# Only the `drop` path remains.
+UNB_OTSU_NEG_DROP_MAX_S_PATCH <- 0.15
+# GATE 6.2 (2026-06-11): `UNB_OTSU_NEG_SAMPLE_N` / `UNB_OTSU_NEG_SAMPLE_PROPS` /
+# `UNB_OTSU_NEG_RANDOM_SEED` placeholders removed with the Otsu generation-side
 # pre-thinning. cap_otsu (otsu_unburned_to_burned_ratio) is the sole Otsu
 # selector; the full valid Otsu drop pool flows on.
-UNB_LEGACY_EXCL_BUFFER_M <- 0
-UNB_LEGACY_MIN_AREA_HA <- 0
-UNB_LEGACY_REUSE_EXISTING <- TRUE
-UNB_LEGACY_WRITE_OUTPUT <- TRUE
+UNB_OTSU_NEG_EXCL_BUFFER_M <- 0
+UNB_OTSU_NEG_MIN_AREA_HA <- 0
+UNB_OTSU_NEG_REUSE_EXISTING <- TRUE
+UNB_OTSU_NEG_WRITE_OUTPUT <- TRUE
 
 # ======================================================================
 # USER CONFIGURATION - fill in these paths for your machine before running.
@@ -442,8 +443,8 @@ run_supervised_pipeline <- function(target_year, scenario,
   deterministic_common_unb_dir <- file.path(
     data_base, "Results", target_year, result_name, "DETERMINISTIC", "_COMMON_UNBURNED"
   )
-  legacy_unb_root_dir <- file.path(result_dir, "_LEGACY_UNBURNED")
-  
+  otsu_negative_root_dir <- file.path(result_dir, "_OTSU_NEGATIVE")
+
   # Salida final unburned por escenario
   unb_out_gpkg <- file.path(
     deterministic_dir, "UNBURNED",
@@ -453,7 +454,7 @@ run_supervised_pipeline <- function(target_year, scenario,
   
   dir.create(deterministic_common_unb_dir, recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(unb_out_gpkg), recursive = TRUE, showWarnings = FALSE)
-  dir.create(legacy_unb_root_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(otsu_negative_root_dir, recursive = TRUE, showWarnings = FALSE)
   
   # Prefixes
   prefix_oof <- sprintf("%d_%s_%s", target_year, scenario, prefix_oof_base)
@@ -595,7 +596,7 @@ run_supervised_pipeline <- function(target_year, scenario,
 
   # ---- RUN inputs: cfg value %||% convention ----------------------------
   # peninsula_shapefile is a RUN input only for the CORINE Otsu modes inside
-  # the legacy unburned builder; the orchestrator itself never reads it. It is
+  # the Otsu negative builder; the orchestrator itself never reads it. It is
   # threaded to the unburned builders via supervised-pools.R (config$inputs),
   # so it is intentionally NOT reconstructed or validated here.
   topo_path <- .cfg_input_path("topo") %||%
@@ -776,11 +777,12 @@ run_supervised_pipeline <- function(target_year, scenario,
   # byte-identical:
   #   * config is the supervised config S3 object (threaded explicitly by the
   #     dispatcher). The stage resolves the deterministic decisions path, every
-  #     UNB_* / UNB_LEGACY_* parameter and the four tool paths straight from
+  #     UNB_* / UNB_OTSU_NEG_* parameter and the four tool paths straight from
   #     config (same defaults as .of_supervised_engine_bindings()), so the two
   #     unburned-builder calls, the random-background seed (UNB_RANDOM_SEED = 42;
-  #     GATE 6.2 removed the legacy-Otsu sampling seed) and the det-then-legacy
-  #     call ordering are unchanged -> identical RNG stream + random negatives.
+  #     GATE 6.2 removed the Otsu-negative sampling seed) and the
+  #     det-then-Otsu-negative call ordering are unchanged -> identical RNG
+  #     stream + random negatives.
   #   * deterministic_decisions = NULL so the stage uses the canonical
   #     config$inputs$internal_decisions path (== the orchestrator's
   #     internal_decisions_gpkg, the single source of truth).
@@ -1194,10 +1196,10 @@ run_supervised_pipeline <- function(target_year, scenario,
     result_dir  = result_dir,
     timing_csv  = timing_csv,
     unb_out_gpkg = unb_out_path_actual,
-    # §N+26: always all_sources, so common_unb_dir is always the legacy
-    # unburned root. (The deterministic_common_unb_dir is still created above
+    # §N+26: always all_sources, so common_unb_dir is always the Otsu residual
+    # negative root. (The deterministic_common_unb_dir is still created above
     # as a byte-identical filesystem side effect, but is no longer selected.)
-    common_unb_dir = legacy_unb_root_dir,
+    common_unb_dir = otsu_negative_root_dir,
     # Gate 1E (2026-06-09): the runtime feature-schema parity guard manifest
     # (OOF/FINAL/scoring fingerprints, counts, contract version, pass/abort).
     # NULL when modeling did not run this invocation.

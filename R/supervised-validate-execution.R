@@ -1154,7 +1154,7 @@ validate_supervised_execution <- function(config,
   ci_path <- .of_sup_input_path(config, "change_index") %||% ""
   id_path <- .of_sup_input_path(config, "internal_decisions") %||% ""
   bm_path <- .of_sup_input_path(config, "burnable_mask") %||% ""
-  legacy_param_fingerprint_unb_legacy(list(
+  otsu_negative_param_fingerprint(list(
     neg_pool_policy         = "all_sources",
     b4_domain_decision      = "burnable_restricted",
     b4_burnable_mask_path   = bm_path,
@@ -1163,10 +1163,11 @@ validate_supervised_execution <- function(config,
     b4_n_random_cells       = o$unb_n_random_cells %||% 1500,
     b4_random_patch_size    = o$unb_random_patch_size_cells %||% 3,
     b4_exclude_buffer_m     = o$unb_excl_buffer_m %||% 500,
-    # GATE 6.2 (2026-06-11): `legacy_random_seed` / `legacy_sample_n` dropped to
-    # stay in lockstep with the build-time neg-pool fingerprint (the Otsu
-    # generation-side pre-thinning was removed; cap_otsu is the sole selector).
-    legacy_otsu_mode        = o$legacy_otsu_mode %||% "burnable_only",
+    # GATE 6.2 (2026-06-11): `otsu_negative_random_seed` /
+    # `otsu_negative_sample_n` dropped to stay in lockstep with the build-time
+    # neg-pool fingerprint (the Otsu generation-side pre-thinning was removed;
+    # cap_otsu is the sole selector).
+    otsu_negative_mode      = o$otsu_negative_mode %||% "burnable_only",
     target_year             = as.integer(target_year),
     scenario                = config$scenario,
     change_index            = ci_path,
@@ -1206,7 +1207,7 @@ validate_supervised_execution <- function(config,
   inp <- function(nm) .of_sup_input_path(config, nm) %||% ""
   caps <- tc$caps %||% list()
   seeds <- tc$seeds %||% list()
-  legacy_param_fingerprint_unb_legacy(list(
+  otsu_negative_param_fingerprint(list(
     scenario                = config$scenario,
     target_year             = as.integer(config$target_year),
     run_name                = config$run_name %||% "",

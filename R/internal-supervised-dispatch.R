@@ -8,7 +8,7 @@
 # package. An interim refactor replaced it with a per-call execution
 # environment whose parent was the package namespace, switching the
 # orchestrator function's environment so its lexical lookups (data_base,
-# composite_base, UNB_LEGACY_*, REGISTRY_*, ...) resolved there first.
+# composite_base, UNB_OTSU_NEG_*, REGISTRY_*, ...) resolved there first.
 #
 # BUG 3 Phase 1b (2026-06-05): that env-injection bridge is now removed too.
 # `.of_supervised_engine_bindings(config)` still builds the named list of
@@ -32,7 +32,7 @@
     data_base                = config$options$data_base,
     # BUG 3 Phase 1b (2026-06-05): dropped the `script_base = NULL` binding (and
     # its orchestrator placeholder). `script_base` was dead plumbing into
-    # source_legacy_unburned_helpers(), which ignores it; the arg has been
+    # verify_otsu_negative_helpers(), which ignores it; the arg has been
     # removed end-to-end.
     composite_base           = config$options$composite_base,
     result_name              = config$options$result_name %||% "Min_Min",
@@ -59,8 +59,9 @@
     # only former reader, the common_unb_dir selection, is hardwired to the
     # all_sources path), so nothing needs to be threaded here.
     UNB_VERBOSE              = config$options$unb_verbose %||% TRUE,
-    # GATE 6.4 (2026-06-11): `UNB_LEGACY_CODE_DIR` (legacy_code_dir) binding
-    # removed — the legacy helpers are in-package, so it had no live consumer.
+    # GATE 6.4 (2026-06-11): `UNB_OTSU_NEG_CODE_DIR` (otsu_negative_code_dir)
+    # binding removed — the Otsu negative helpers are in-package, so it had no
+    # live consumer.
     # B2 (2026-06-05): shared deterministic-decision negative parameters
     # (det drops + random burnable background). Previously pinned at the
     # orchestrator placeholders; now overridable via config$options with the
@@ -76,42 +77,43 @@
     # the historical "patch" / "patch_certified" run prefixes exactly.
     prefix_oof_base          = config$options$prefix_oof_base %||% "patch",
     prefix_base              = config$options$prefix_base %||% "patch_certified",
-    UNB_LEGACY_OTSU_MODE     = config$options$legacy_otsu_mode %||% "burnable_only",
-    UNB_LEGACY_OTSU_THRESHOLD = config$options$legacy_otsu_threshold %||% 0,
-    UNB_LEGACY_REFERENCE_OTSU_THRESHOLD =
-      config$options$legacy_reference_otsu_threshold %||% 100,
-    # B2 (2026-06-05): remaining legacy Otsu params, previously pinned at the
+    UNB_OTSU_NEG_MODE        = config$options$otsu_negative_mode %||% "burnable_only",
+    UNB_OTSU_NEG_THRESHOLD   = config$options$otsu_negative_threshold %||% 0,
+    UNB_OTSU_NEG_REFERENCE_THRESHOLD =
+      config$options$otsu_negative_reference_threshold %||% 100,
+    # B2 (2026-06-05): remaining Otsu negative params, previously pinned at the
     # orchestrator placeholders. Defaults match the current hardcoded values.
-    UNB_LEGACY_MIN_OTSU_THRESHOLD_VALUE =
-      config$options$legacy_min_otsu_threshold_value %||% 0,
-    UNB_LEGACY_MIN_PIXELS    = config$options$legacy_min_pixels %||% 8,
-    UNB_LEGACY_BUFFERS_M     = config$options$legacy_buffers_m %||% 90,
-    UNB_LEGACY_CORE_THR      = config$options$legacy_core_thr %||% 0.60,
-    UNB_LEGACY_ALPHA_BOOST   = config$options$legacy_alpha_boost %||% 0.25,
-    UNB_LEGACY_MIN_BASE_BOOST = config$options$legacy_min_base_boost %||% 0.35,
-    UNB_LEGACY_DIST_POWER    = config$options$legacy_dist_power %||% 1,
-    UNB_LEGACY_KEEP_HI       = config$options$legacy_keep_hi %||% 0.45,
-    UNB_LEGACY_DROP_LO       = config$options$legacy_drop_lo %||% 0.15,
-    UNB_LEGACY_EXCL_BUFFER_M = config$options$legacy_excl_buffer_m %||% 0,
-    UNB_LEGACY_MIN_AREA_HA   = config$options$legacy_min_area_ha %||% 0,
-    # GATE 6.2 (2026-06-11): `legacy_sample_n` / `legacy_sample_props` /
-    # `legacy_random_seed` bindings removed with the Otsu generation-side
-    # pre-thinning. cap_otsu (otsu_unburned_to_burned_ratio) is the sole Otsu
-    # selector; the full valid Otsu drop pool flows into the negative pool.
-    UNB_LEGACY_REUSE_EXISTING = config$options$legacy_reuse_existing %||% TRUE,
-    UNB_LEGACY_WRITE_OUTPUT   = config$options$legacy_write_output %||% TRUE,
-    # GATE 6.4 (2026-06-11): only `legacy_use_drop` (the live path) is exposed.
-    # The dead `legacy_use_review` / `legacy_use_keep` / `legacy_review_max_s_patch`
-    # / `legacy_keep_max_s_patch` bindings were removed (Otsu review/keep are
-    # never negatives).
-    UNB_LEGACY_USE_DROP      = config$options$legacy_use_drop   %||% TRUE,
-    # AS03 (0.3.0): expose the drop S_PATCH cap. Other UNB_LEGACY_* parameters
+    UNB_OTSU_NEG_MIN_THRESHOLD_VALUE =
+      config$options$otsu_negative_min_threshold_value %||% 0,
+    UNB_OTSU_NEG_MIN_PIXELS  = config$options$otsu_negative_min_pixels %||% 8,
+    UNB_OTSU_NEG_BUFFERS_M   = config$options$otsu_negative_buffers_m %||% 90,
+    UNB_OTSU_NEG_CORE_THR    = config$options$otsu_negative_core_thr %||% 0.60,
+    UNB_OTSU_NEG_ALPHA_BOOST = config$options$otsu_negative_alpha_boost %||% 0.25,
+    UNB_OTSU_NEG_MIN_BASE_BOOST = config$options$otsu_negative_min_base_boost %||% 0.35,
+    UNB_OTSU_NEG_DIST_POWER  = config$options$otsu_negative_dist_power %||% 1,
+    UNB_OTSU_NEG_KEEP_HI     = config$options$otsu_negative_keep_hi %||% 0.45,
+    UNB_OTSU_NEG_DROP_LO     = config$options$otsu_negative_drop_lo %||% 0.15,
+    UNB_OTSU_NEG_EXCL_BUFFER_M = config$options$otsu_negative_excl_buffer_m %||% 0,
+    UNB_OTSU_NEG_MIN_AREA_HA = config$options$otsu_negative_min_area_ha %||% 0,
+    # GATE 6.2 (2026-06-11): `otsu_negative_sample_n` /
+    # `otsu_negative_sample_props` / `otsu_negative_random_seed` bindings removed
+    # with the Otsu generation-side pre-thinning. cap_otsu
+    # (otsu_unburned_to_burned_ratio) is the sole Otsu selector; the full valid
+    # Otsu drop pool flows into the negative pool.
+    UNB_OTSU_NEG_REUSE_EXISTING = config$options$otsu_negative_reuse_existing %||% TRUE,
+    UNB_OTSU_NEG_WRITE_OUTPUT   = config$options$otsu_negative_write_output %||% TRUE,
+    # GATE 6.4 (2026-06-11): only `otsu_negative_use_drop` (the live path) is
+    # exposed. The dead `otsu_negative_use_review` / `otsu_negative_use_keep` /
+    # `otsu_negative_review_max_s_patch` / `otsu_negative_keep_max_s_patch`
+    # bindings were removed (Otsu review/keep are never negatives).
+    UNB_OTSU_NEG_USE_DROP    = config$options$otsu_negative_use_drop   %||% TRUE,
+    # AS03 (0.3.0): expose the drop S_PATCH cap. Other UNB_OTSU_NEG_* parameters
     # remain pinned at orchestrator defaults. GATE 6.2 (2026-06-11):
-    # `UNB_LEGACY_RANDOM_SEED` (legacy_random_seed) removed — it seeded ONLY the
-    # now-deleted Otsu generation-side pre-thinning.
-    UNB_LEGACY_DROP_MAX_S_PATCH   = config$options$legacy_drop_max_s_patch   %||% 0.15,
+    # `UNB_OTSU_NEG_RANDOM_SEED` (otsu_negative_random_seed) removed — it seeded
+    # ONLY the now-deleted Otsu generation-side pre-thinning.
+    UNB_OTSU_NEG_DROP_MAX_S_PATCH   = config$options$otsu_negative_drop_max_s_patch   %||% 0.15,
     # AS01 (0.3.0): plumb external-tool paths from config$tool_paths.
-    # Default NULL — the legacy pipeline stops with a clear message if a
+    # Default NULL — the Otsu negative pipeline stops with a clear message if a
     # path it needs is missing, instead of falling through to a hard-coded
     # Olga.Viedma default.
     python_exe               = config$tool_paths$python_exe,

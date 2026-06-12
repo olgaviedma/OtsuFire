@@ -42,7 +42,7 @@
 #   1. contextual exclusions  (deterministic DROP, non-spectral)   cap 0.25 x n_burned
 #   2. spectral hard negatives (deterministic DROP, spectral)      cap 1.0  x n_burned (pkg default; see 02_phaseB for 2.0)
 #   3. random burnable bg      (burnable cells outside buffers)    cap 1.0  x n_burned
-#   4. otsu unburned           (legacy Otsu residual patches)      cap 1.0  x n_burned
+#   4. otsu unburned           (Otsu residual negative patches)    cap 1.0  x n_burned
 #
 # HOW TO RUN
 #   This script does NOT execute heavy work when sourced (for a parse/syntax
@@ -75,13 +75,13 @@ paths <- list(
   # Optional external burned reference (only consumed by validate_fire_maps()).
   reference_burned   = "<PATH_TO_Effis_CA_YEAR_maskKeep_summer.shp>", # TODO or NULL
 
-  # Roots forwarded into cfg$options for the legacy all_sources Otsu builder.
+  # Roots forwarded into cfg$options for the all_sources Otsu residual negative builder.
   data_base          = "<PATH_TO_1_DATA>",                        # TODO
   composite_base     = "<PATH_TO_1_DATA/Imagery/Composites_90m>", # TODO
   output_dir         = "<PATH_TO_1_DATA/Results>"                 # root; package appends <year>/<run>/SUPERVISED/<scenario>
 )
 
-# External GDAL/Python tool paths (the all_sources legacy Otsu builder needs them).
+# External GDAL/Python tool paths (the all_sources Otsu residual negative builder needs them).
 tool_paths <- list(
   python_exe             = "<PATH_TO_python.exe>",                # TODO
   gdal_polygonize_script = "<PATH_TO_gdal_polygonize.py>",        # TODO
@@ -135,11 +135,11 @@ main <- function() {
       data_base                       = paths$data_base,
       composite_base                  = paths$composite_base,
       result_name                     = run_name,
-      legacy_otsu_mode                = "burnable_only",
-      legacy_otsu_threshold           = 0,
-      legacy_reference_otsu_threshold = 100,
-      legacy_reuse_existing           = TRUE,
-      legacy_write_output             = TRUE,
+      otsu_negative_mode                = "burnable_only",
+      otsu_negative_threshold           = 0,
+      otsu_negative_reference_threshold = 100,
+      otsu_negative_reuse_existing           = TRUE,
+      otsu_negative_write_output             = TRUE,
       unb_verbose                     = TRUE
     )
   )
@@ -216,12 +216,9 @@ main <- function() {
 if (isTRUE(RUN)) {
   main()
 } else {
-  message("01_supervised_oneyear_legacy.R sourced with RUN=FALSE (no compute). ",
+  message("01_supervised_oneyear_otsu_negative.R sourced with RUN=FALSE (no compute). ",
           "Edit the CONFIG block, set RUN <- TRUE, then source again.")
 }
 # =============================================================================
 # End of canonical one-year supervised script.
-# (Filename retains the historical "legacy" suffix for the in-repo sync
-#  contract; it no longer refers to any training-protocol choice — OtsuFire
-#  always uses inner-early-stopping selection + full-data refit.)
 # =============================================================================

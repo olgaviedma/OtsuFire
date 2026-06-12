@@ -559,7 +559,7 @@ make_block_folds <- function(
 # IDENTICAL fingerprint; the wall-clock `created_at` is recorded separately by
 # the caller and is intentionally NOT fed in here. Base R only (no `digest` in
 # Imports): sorted key=value text plus a small order-stable rolling checksum,
-# mirroring `legacy_param_fingerprint_unb_legacy()`.
+# mirroring `otsu_negative_param_fingerprint()`.
 make_fold_fingerprint <- function(params, selected, train_with_folds,
                                   fold_cols, id_col = NULL) {
   flat1 <- function(v) {

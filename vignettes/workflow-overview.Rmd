@@ -127,16 +127,25 @@ sup_run <- run_oneyear_supervised_pipeline(
 )
 ```
 
-The negative-pool strategy is no longer configurable. Every run uses
-`all_sources` implicitly: a burnable-only, four-bucket unburned
-taxonomy (contextual exclusions, spectral hard negatives, random
-burnable background, and Otsu current-year residual patches) with
-independent caps relative to the burned count. The random background
-bucket draws its sample (and computes its percentile) only within the
-burnable domain, after the burnable mask and all exclusions/buffers.
-CORINE × ecoregion stratification is used only in the deterministic
-delineation stage, not in the supervised negative pool. The former
-user-selectable `negative_pool_policy` knob and its
+The supervised model uses **two explicit negative sources: random
+background and Otsu residuals.** The negative-pool strategy is no longer
+configurable. Every run uses `all_sources` implicitly: a burnable-only
+unburned pool assembled from exactly two buckets — random burnable
+background and Otsu current-year residual patches — each with its own
+cap relative to the burned count. The two caps are the typed PUBLIC
+block `negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` (the
+single source of truth; an `Inf` cap disables that bucket's cap),
+mirrored into `cfg$train_control$caps`. The random-background RNG seed
+lives in `cfg$train_control$seeds$random_seed` (builder argument
+`random_seed`); the technical toggles live in `runtime_options =
+list(reuse_existing = TRUE, write_outputs = TRUE, verbose = TRUE)` and do
+not change which negatives are selected. The random background bucket
+draws its sample (and computes its percentile) only within the burnable
+domain, after the burnable mask and all exclusions/buffers; a location
+that is both a random cell and an Otsu patch is kept once (Otsu has
+priority). CORINE × ecoregion stratification is used only in the
+deterministic delineation stage, not in the supervised negative pool.
+The former user-selectable `negative_pool_policy` knob and its
 `"deterministic_direct"` baseline were removed on 2026-06-05;
 `negative_pool_policy = "all_sources"` is accepted as a no-op, and any
 other value errors. The pipeline is entirely package-internal: no
@@ -145,8 +154,8 @@ external `sys.source()` of legacy scripts and no namespace mutation.
 Training eligibility is defined by **explicit class, never by negation**.
 A row with `class == "burned"` is a positive (always kept). A row with
 `class == "unburned"` is a negative **only** when it resolves to exactly
-one of the four valid buckets above (contextual, spectral, random,
-otsu); Otsu review / keep patches are excluded and logged. Any other
+one of the two valid buckets above (random, otsu); Otsu review / keep
+patches are excluded and logged. Any other
 case — `class` missing or unknown, or an unburned row with no valid
 bucket — is a hard error. Review / keep / `NA` / unknown rows can never
 silently become negatives (the old "negatives = everything that is not

@@ -1,3 +1,47 @@
+# OtsuFire (development version)
+
+## BREAKING CHANGE — final two-source negative architecture (random + Otsu residual)
+
+* **The supervised negative pool now has exactly TWO sources: random background
+  and Otsu residual.** GATE 6 removed the contextual and spectral negative
+  buckets entirely; a deterministic drop is no longer a training negative (those
+  ambiguous drops stay scoreable but unlabelled). An audit across six years
+  showed no contextual category is a reliable negative and the spectral bucket's
+  supply is effectively zero in modern data years.
+* **`cap_contextual` / `cap_spectral` removed** (G6.1, G6.5), together with
+  `contextual_exclusion_to_burned_ratio` / `spectral_to_burned_ratio` and the
+  contextual/spectral negative generators. Passing any of them now errors.
+* **Otsu residual generator renamed** `legacy_*` → `otsu_negative_*`
+  ("Otsu residual negative generator", `R/internal-sup-otsu-negative.R`) across
+  the full public + internal surface (G6.6). **Old caches are invalidated; there
+  is no migration** — the negative-pool fingerprint changes, so a stale cache is
+  rebuilt rather than silently reused.
+* **`legacy_sample_n` removed** (G6.2): the Otsu generation-side pre-thinning is
+  gone; `cap_otsu` (`otsu_unburned_to_burned_ratio`) is now the SOLE, seeded Otsu
+  selector. A new **Otsu > random spatial dedup** runs before capping: a location
+  that is both a random background cell and an Otsu patch is kept once, with Otsu
+  given priority (`otsu_random_dedup_audit`, folded into the fingerprint).
+* **Dead Otsu review/keep parameters removed** (G6.4).
+* **Typed public negative-pool API** (G6.7): `negative_pool_params = list(random
+  = list(n_cells, rbr_quantile), otsu = list(candidate_threshold,
+  reference_threshold), caps = c(random, otsu))` and `runtime_options =
+  list(reuse_existing, write_outputs, verbose)`. **Caps are single-source**
+  inside `negative_pool_params$caps` (no top-level `cap_*` args; passing them
+  errors) and are mirrored into `cfg$train_control$caps`. The negative-pool
+  random-background seed `random_seed` lives in the canonical seeds block
+  `cfg$train_control$seeds$random_seed`. The runtime toggles are technical only
+  and are EXCLUDED from the methodological fingerprint; unknown keys in either
+  typed block error. The remaining low-level Otsu-residual knobs (mode
+  `burnable_only`, min pixels, buffers, core threshold, boosts, distance power,
+  keep/drop confidence, exclusion buffer, min area, `use_drop`,
+  `drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal validated
+  defaults, not user-settable.
+* **Documentation aligned to the final two-source architecture** (G6.8): roxygen,
+  `man/*.Rd`, the vignette, the METHODS_BOOK supervised + one-year chapters, the
+  `inst/scripts` (incl. the manual and long-run runners) and the in-tree READMEs
+  now describe only random background + Otsu residual; every trace of the old
+  contextual/spectral/legacy/four-caps API was removed from the public docs.
+
 # OtsuFire 0.9.0 (2026-06-11)
 
 ## Methodological fix — supervised eligibility defined by EXPLICIT class

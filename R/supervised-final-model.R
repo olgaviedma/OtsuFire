@@ -312,7 +312,8 @@ train_final_burned_model <- function(
   # ---------------------------------------------------------------------------
   # 3) Train (faithful MOVE of the fused wrapper's train_final_model_direct
   #    call). Every argument/value matches the historical wrapper -> orchestrator
-  #    call: the four caps, the whitelist override + weights, the `qa` OOF
+  #    call: the two caps (random + Otsu residual), the whitelist override +
+  #    weights, the `qa` OOF
   #    aggregate, overwrite/verbose. The engine's own sampling/training seeds
   #    (sampling_seed = 999, seed = 999) are its untouched defaults -> identical
   #    RNG stream -> byte-identical model.

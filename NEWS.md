@@ -1,4 +1,4 @@
-# OtsuFire (development version)
+# OtsuFire 0.10.0 (2026-06-12)
 
 ## BREAKING CHANGE — final two-source negative architecture (random + Otsu residual)
 

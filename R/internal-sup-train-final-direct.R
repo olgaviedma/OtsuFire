@@ -5,10 +5,12 @@ train_final_model_direct <- function(
     labelled_layer = "train_features",
     id_col = "fire_uid",
     class_col = "class",
-    # --- Deterministic-drop negative groups (replaces old hard_negative_source) ---
-    # Source field identifying all deterministic-drop polygons. All deterministic
-    # drops route to the contextual_exclusion bucket.
-    deterministic_drop_source = c("deterministic_drop_hard"),
+    # GATE 6.5 (2026-06-12): the contextual (deterministic-drop) negative bucket
+    # was REMOVED. `deterministic_drop_source` and
+    # `contextual_exclusion_to_burned_ratio` are gone; the negative architecture
+    # is TWO sources only (random background + Otsu residual). Deterministic-drop
+    # rows are never written as unburned negatives upstream, so they cannot reach
+    # this engine as training rows.
     # Gate 1B (2026-06-07): the negative-bucket caps, seeds, val_frac, group_col,
     # nrounds/early-stop and imputation rules are now REQUIRED resolved args with
     # NO methodological defaults. The single source of truth is cfg$train_control
@@ -16,7 +18,6 @@ train_final_model_direct <- function(
     # train_final_burned_model() forwards the resolved values. A dropped argument
     # ERRORS here (see the missing()-guard block below) rather than silently
     # reverting to a hardcoded default.
-    contextual_exclusion_to_burned_ratio,
     # --- Random-background cells (low-RBR cell-scale, easy cold) ---
     random_background_source = c("random_burnable_background"),
     random_to_burned_ratio,
@@ -135,8 +136,7 @@ train_final_model_direct <- function(
   # single source of truth is cfg$train_control / cfg$model_params, threaded by
   # train_final_burned_model().) Placed AFTER the cheap input-shape validation
   # so genuinely-malformed feature_weights still report their own error first.
-  .req <- c("contextual_exclusion_to_burned_ratio",
-            "random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+  .req <- c("random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
             "sampling_seed", "group_col", "val_frac", "seed",
             "nrounds_max", "early_stopping_rounds",
             "impute_numeric", "impute_factor_missing", "model_params_base")
@@ -165,22 +165,12 @@ train_final_model_direct <- function(
 
   L[[id_col]] <- as.character(L[[id_col]])
   L[[class_col]] <- as.character(L[[class_col]])
-  deterministic_drop_source        <- unique(as.character(stats::na.omit(deterministic_drop_source)))
   random_background_source         <- unique(as.character(stats::na.omit(random_background_source)))
   otsu_unburned_source             <- unique(as.character(stats::na.omit(otsu_unburned_source)))
   otsu_unburned_exclude_neg_types  <- unique(as.character(stats::na.omit(otsu_unburned_exclude_neg_types)))
 
   burned_pool <- L |>
     dplyr::filter(.data[[class_col]] == "burned")
-
-  # contextual_exclusion: all deterministic drops -- geographically or
-  # data-quality excluded polygons (e.g. geo_excluded_hot). Capped at a low
-  # ratio because these are spectrally hotter than burned, not cold.
-  contextual_exclusion_pool <- L |>
-    dplyr::filter(
-      .data[[class_col]] == "unburned",
-      .data[["source"]] %in% deterministic_drop_source
-    )
 
   # random_background_sampled: low-RBR cell-scale polygons (background_cell neg_type).
   # Spectrally cold and unambiguous. No exclusions needed -- this source never
@@ -207,7 +197,6 @@ train_final_model_direct <- function(
     )
 
   n_burned          <- nrow(burned_pool)
-  target_contextual <- ceiling(n_burned * contextual_exclusion_to_burned_ratio)
   target_random_bg  <- ceiling(n_burned * random_to_burned_ratio)
   target_otsu       <- ceiling(n_burned * otsu_unburned_to_burned_ratio)
 
@@ -218,7 +207,7 @@ train_final_model_direct <- function(
   # positive / one-of-three-valid-buckets / excluded(otsu review/keep) / ERROR
   # (unburned with no bucket, NA/unknown class). `.of_cap_negative_buckets()`
   # then applies the SAME canonical capping (one set.seed(sampling_seed); bucket
-  # order contextual -> random -> otsu). The previous per-pool
+  # order random -> otsu). The previous per-pool
   # `sample.int()` blocks (one per bucket) are removed; the `sampled_*` frames
   # are now derived by sub-setting L to the helper's selected row indices.
   L_class    <- as.character(L[[class_col]])
@@ -228,14 +217,12 @@ train_final_model_direct <- function(
 
   final_elig <- .of_resolve_supervised_eligibility(
     id = L_id, class = L_class, source = L_source, neg_type = L_neg_type,
-    deterministic_drop_source        = deterministic_drop_source,
     random_background_source         = random_background_source,
     otsu_unburned_source             = otsu_unburned_source,
     otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
     origin_stage = "FINAL"
   )
   final_caps <- c(
-    contextual = contextual_exclusion_to_burned_ratio,
     random     = random_to_burned_ratio,
     otsu       = otsu_unburned_to_burned_ratio
   )
@@ -256,7 +243,6 @@ train_final_model_direct <- function(
     idx <- intersect(final_elig$negatives_by_bucket[[b]], .sel_set)
     L[idx, , drop = FALSE]
   }
-  sampled_contextual <- .bucket_sel("contextual")
   sampled_random_bg  <- .bucket_sel("random")
   sampled_otsu       <- .bucket_sel("otsu")
 
@@ -266,14 +252,6 @@ train_final_model_direct <- function(
       training_selected = 1L,
       training_group = "burned_all",
       training_reason = "all_burned_pool"
-    )
-  }
-  if (nrow(sampled_contextual)) {
-    sampled_contextual <- dplyr::mutate(
-      sampled_contextual,
-      training_selected = 1L,
-      training_group = "contextual_exclusion",
-      training_reason = "sampled_contextual_exclusion"
     )
   }
   if (nrow(sampled_random_bg)) {
@@ -294,14 +272,12 @@ train_final_model_direct <- function(
   }
 
   L_ok <- dplyr::bind_rows(
-    burned_pool, sampled_contextual, sampled_random_bg, sampled_otsu
+    burned_pool, sampled_random_bg, sampled_otsu
   ) |>
     dplyr::distinct(.data[[id_col]], .keep_all = TRUE)
 
   msg("Direct training selection:")
   msg("  burned selected=%d", nrow(burned_pool))
-  msg("  contextual_exclusion selected=%d (cap=%.2fx, available=%d)",
-      nrow(sampled_contextual), contextual_exclusion_to_burned_ratio, nrow(contextual_exclusion_pool))
   msg("  random_background_sampled selected=%d (cap=%.2fx, available=%d)",
       nrow(sampled_random_bg), random_to_burned_ratio, nrow(random_background_pool))
   msg("  otsu_unburned_sampled selected=%d (cap=%.2fx, available=%d)",
@@ -427,9 +403,6 @@ train_final_model_direct <- function(
   nested_audit$prefix <- prefix
   # Per-bucket available / cap / selected (caps applied upstream to L_ok).
   nested_audit$n_burned                   <- nrow(burned_pool)
-  nested_audit$contextual_available       <- nrow(contextual_exclusion_pool)
-  nested_audit$contextual_cap             <- target_contextual
-  nested_audit$contextual_selected        <- nrow(sampled_contextual)
   nested_audit$random_bg_available        <- nrow(random_background_pool)
   nested_audit$random_bg_cap              <- target_random_bg
   nested_audit$random_bg_selected         <- nrow(sampled_random_bg)
@@ -525,16 +498,12 @@ train_final_model_direct <- function(
       inputs = list(labelled_gpkg = labelled_gpkg, labelled_layer = labelled_layer),
       selection = list(
         selection_mode = "direct_pool_sampling",
-        deterministic_drop_source = deterministic_drop_source,
-        contextual_exclusion_to_burned_ratio = contextual_exclusion_to_burned_ratio,
         random_background_source = random_background_source,
         random_to_burned_ratio = random_to_burned_ratio,
         otsu_unburned_source = otsu_unburned_source,
         otsu_unburned_to_burned_ratio = otsu_unburned_to_burned_ratio,
         otsu_unburned_exclude_neg_types = otsu_unburned_exclude_neg_types,
         burned_selected = nrow(burned_pool),
-        contextual_exclusion_available = nrow(contextual_exclusion_pool),
-        contextual_exclusion_selected = nrow(sampled_contextual),
         random_background_available = nrow(random_background_pool),
         random_background_selected = nrow(sampled_random_bg),
         otsu_unburned_available = nrow(otsu_unburned_pool),
@@ -671,9 +640,6 @@ train_final_model_direct <- function(
       paste0("labelled_layer: ", labelled_layer),
       paste0("selection_mode: direct_pool_sampling"),
       paste0("burned_selected: ", nrow(burned_pool)),
-      paste0("contextual_exclusion_available: ", nrow(contextual_exclusion_pool)),
-      paste0("contextual_exclusion_selected: ", nrow(sampled_contextual)),
-      paste0("contextual_exclusion_to_burned_ratio: ", contextual_exclusion_to_burned_ratio),
       paste0("random_background_available: ", nrow(random_background_pool)),
       paste0("random_background_selected: ", nrow(sampled_random_bg)),
       paste0("random_to_burned_ratio: ", random_to_burned_ratio),
@@ -696,9 +662,6 @@ train_final_model_direct <- function(
       "",
       "[training_selection]",
       paste0("burned_selected: ", nrow(burned_pool)),
-      paste0("contextual_exclusion_available: ", nrow(contextual_exclusion_pool)),
-      paste0("contextual_exclusion_selected: ", nrow(sampled_contextual)),
-      paste0("contextual_exclusion_to_burned_ratio: ", contextual_exclusion_to_burned_ratio),
       paste0("random_background_available: ", nrow(random_background_pool)),
       paste0("random_background_selected: ", nrow(sampled_random_bg)),
       paste0("random_to_burned_ratio: ", random_to_burned_ratio),

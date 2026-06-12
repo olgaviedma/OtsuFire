@@ -1,5 +1,6 @@
 # =============================================================================
-# Supervised ELIGIBILITY resolver contract (2026-06-11 methodological fix).
+# Supervised ELIGIBILITY resolver contract (2026-06-11 methodological fix;
+# GATE 6.5 2026-06-12: contextual bucket removed).
 #
 # The supervised training population is defined by EXPLICIT class, NEVER by
 # negation. This suite proves `.of_resolve_supervised_eligibility()`:
@@ -10,6 +11,12 @@
 #   - class NA / unknown                    -> ERROR (strict);
 # and that review / keep(ambiguous) / NA / unknown rows can NEVER become
 # negatives, regardless of any toggle.
+#
+# GATE 6.5: the CONTEXTUAL (deterministic-drop) bucket was removed. The valid
+# negative buckets are now {random, otsu} ONLY. A deterministic-drop row that
+# reaches the resolver as an unburned negative has NO valid bucket and therefore
+# hits the strict ERROR (it should never reach here, because det drops are no
+# longer written as unburned upstream).
 # =============================================================================
 
 ns_elig <- asNamespace("OtsuFire")
@@ -24,7 +31,6 @@ OTSU_EXCL <- c("otsu_patch_review", "otsu_patch_keep")
 resolve_default <- function(df, origin = "TEST") {
   resolve_elig(
     id = df$id, class = df$class, source = df$source, neg_type = df$neg_type,
-    deterministic_drop_source        = DET_SRC,
     random_background_source         = RAND_SRC,
     otsu_unburned_source             = OTSU_SRC,
     otsu_unburned_exclude_neg_types  = OTSU_EXCL,
@@ -32,8 +38,8 @@ resolve_default <- function(df, origin = "TEST") {
   )
 }
 
-# A row builder mirroring the 2017 balanced DEFAULT structure. All det-drop rows
-# route to the contextual bucket (the spectral bucket was removed in GATE 6.1).
+# A row builder mirroring the 2017 balanced DEFAULT structure. GATE 6.5: the
+# negative pool is random + otsu ONLY (no deterministic-drop negatives).
 mk_default_pool <- function() {
   rows <- list()
   add <- function(k, cls, src, ngt) for (i in seq_len(k)) {
@@ -42,7 +48,6 @@ mk_default_pool <- function() {
                                              stringsAsFactors = FALSE)
   }
   add(20, "burned",   "burned_truth",               NA_character_)
-  add(24, "unburned", DET_SRC,                      "geo_excluded_hot")        # contextual
   add(24, "unburned", RAND_SRC,                     "background_cell")         # random
   add(12, "unburned", OTSU_SRC,                     "otsu_patch_drop")         # otsu
   d <- do.call(rbind, rows)
@@ -56,23 +61,25 @@ test_that("burned -> positive; each unburned bucket -> the right negative bucket
   e <- resolve_default(d)
   expect_equal(length(e$positive_idx), 20L)
   expect_true(all(d$class[e$positive_idx] == "burned"))
-  expect_equal(length(e$negatives_by_bucket$contextual), 24L)
   expect_equal(length(e$negatives_by_bucket$random),     24L)
   expect_equal(length(e$negatives_by_bucket$otsu),       12L)
+  # GATE 6.5: contextual bucket no longer exists.
+  expect_null(e$negatives_by_bucket$contextual)
   # Spectral bucket no longer exists.
   expect_null(e$negatives_by_bucket$spectral)
   expect_setequal(names(e$negatives_by_bucket),
-                  c("contextual", "random", "otsu"))
+                  c("random", "otsu"))
   # No excluded / error in the clean default pool.
   expect_equal(nrow(e$excluded), 0L)
   # Audit table has the canonical rows + actions.
   expect_true(all(c("keep positive", "eligible", "excluded") %in% e$audit$action))
   expect_equal(e$audit$n[e$audit$class == "burned"], 20L)
-  # No spectral row in the audit table.
+  # No contextual / spectral row in the audit table.
+  expect_false("contextual" %in% e$audit$bucket)
   expect_false("spectral" %in% e$audit$bucket)
 })
 
-test_that("the three bucket index sets are DISJOINT and cover all eligible negatives", {
+test_that("the two bucket index sets are DISJOINT and cover all eligible negatives", {
   d <- mk_default_pool()
   e <- resolve_default(d)
   all_neg <- unlist(e$negatives_by_bucket, use.names = FALSE)
@@ -80,9 +87,9 @@ test_that("the three bucket index sets are DISJOINT and cover all eligible negat
   expect_setequal(sort(all_neg), sort(e$negative_idx))
 })
 
-test_that("ONLY three negative buckets exist (contextual, random, otsu)", {
+test_that("ONLY two negative buckets exist (random, otsu)", {
   expect_equal(get(".of_valid_negative_buckets", envir = ns_elig)(),
-               c("contextual", "random", "otsu"))
+               c("random", "otsu"))
 })
 
 test_that("otsu review/keep are EXCLUDED + logged, never negatives, never error", {
@@ -136,6 +143,19 @@ test_that("unburned with NO resolvable bucket (and not excludable) -> ERROR (str
                regexp = "NO valid negative bucket and NOT a known-excluded type")
 })
 
+test_that("GATE 6.5: a deterministic_drop_hard unburned row -> strict ERROR (no contextual bucket)", {
+  # A deterministic-drop row reaching the resolver as an unburned negative has
+  # NO valid bucket (contextual was removed) and is not an otsu-excluded type,
+  # so it MUST hit the strict unknown-bucket error. This guards against silently
+  # re-creating the contextual bucket.
+  d <- mk_default_pool()
+  d <- rbind(d, data.frame(class = "unburned", source = DET_SRC,
+                           neg_type = "geo_excluded_hot", id = "det1",
+                           stringsAsFactors = FALSE))
+  expect_error(resolve_default(d),
+               regexp = "NO valid negative bucket and NOT a known-excluded type")
+})
+
 test_that("unburned with neg_type NA but a VALID source still buckets (random/otsu)", {
   # random_background and otsu sources are defined by SOURCE; neg_type NA still
   # buckets random; otsu with NA neg_type is not in the exclude list -> otsu.
@@ -150,26 +170,11 @@ test_that("unburned with neg_type NA but a VALID source still buckets (random/ot
   expect_equal(length(e$negatives_by_bucket$otsu), 1L)
 })
 
-test_that("ALL det-drop rows route to contextual regardless of neg_type (spectral bucket removed)", {
-  # GATE 6.1: the spectral bucket is dead. A det-drop carrying the former
-  # spectral neg_type ("spectral_reject_medium") is now a plain contextual
-  # negative -- NOT a spectral bucket member, and NOT an error.
-  d <- data.frame(
-    class    = c("burned", "unburned", "unburned"),
-    source   = c("burned_truth", DET_SRC, DET_SRC),
-    neg_type = c(NA_character_, "geo_excluded_hot", "spectral_reject_medium"),
-    id       = c("b1", "c1", "s1"), stringsAsFactors = FALSE
-  )
-  e <- resolve_default(d)
-  expect_setequal(d$id[e$negatives_by_bucket$contextual], c("c1", "s1"))
-  expect_null(e$negatives_by_bucket$spectral)
-})
-
 test_that("toggling otsu-exclude membership does NOT turn excluded rows into negatives", {
-  # otsu_patch_review is excluded by default. Even if a (hypothetical) different
-  # exclude-list were passed, a row whose source has no bucket and is not
-  # excluded would ERROR -- it can never silently become a negative. Here we keep
-  # the canonical exclude-list: the review row is excluded, not a negative.
+  # otsu_patch_review is excluded by default. A row whose source has no bucket
+  # and is not excluded would ERROR -- it can never silently become a negative.
+  # Here we keep the canonical exclude-list: the review row is excluded, not a
+  # negative.
   d <- data.frame(
     class    = c("burned", "unburned"),
     source   = c("burned_truth", OTSU_SRC),
@@ -181,13 +186,13 @@ test_that("toggling otsu-exclude membership does NOT turn excluded rows into neg
   expect_equal(nrow(e$excluded), 1L)
 })
 
-test_that("det-drop neg_type is NEVER NA upstream (case_when TRUE ~ 'drop_hard' fallback)", {
-  # The deterministic builder's case_when has a `TRUE ~ \"drop_hard\"` terminal
-  # fallback, so every deterministic_drop_hard row carries a non-NA neg_type ->
-  # the unbucketed-det-drop case is VACUOUS by construction. Confirm the fallback
-  # literal is present in the builder source.
+test_that("GATE 6.5: the deterministic builder no longer stamps det drops as unburned", {
+  # The former block filtered class_final=="drop" and stamped
+  # class="unburned" + source="deterministic_drop_hard". GATE 6.5 removed it, so
+  # the builder source must no longer turn drops into unburned negatives.
   src <- paste(deparse(
     body(get("build_unburned_from_deterministic_decisions", envir = ns_elig))),
     collapse = "\n")
-  expect_true(grepl('TRUE ~ "drop_hard"', src, fixed = TRUE))
+  expect_false(grepl('source = "deterministic_drop_hard"', src, fixed = TRUE))
+  expect_false(grepl('class_final == "drop"', src, fixed = TRUE))
 })

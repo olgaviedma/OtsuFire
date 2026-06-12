@@ -87,15 +87,15 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' rows with `class == "burned"` (positives) and rows with `class == "unburned"`
-#' that resolve to one of the three valid negative buckets (contextual,
-#' random, otsu) enter training. Review / keep / `NA` / unknown rows never become
+#' that resolve to one of the two valid negative buckets (random, otsu) enter
+#' training. Review / keep / `NA` / unknown rows never become
 #' negatives. OOF and FINAL share one internal eligibility resolver and one
 #' capping helper, so the two stages cannot diverge on which rows are eligible
 #' or on how negatives are capped.
-#' @param contextual_exclusion_to_burned_ratio,random_to_burned_ratio,otsu_unburned_to_burned_ratio
-#'   Numeric. The three negative-bucket caps forwarded to the OOF chain so OOF
+#' @param random_to_burned_ratio,otsu_unburned_to_burned_ratio
+#'   Numeric. The two negative-bucket caps forwarded to the OOF chain so OOF
 #'   sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
-#'   (`0.25`, `1.0`, `1.0`).
+#'   (`1.0`, `1.0`).
 #' @param val_frac Numeric. Inner validation fraction for the nested-refit
 #'   per-fold split. Default `0.15`.
 #' @param impute_numeric Character. `"median"` (default) or `"zero"`; numeric
@@ -179,7 +179,6 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 nrounds_max = NULL,
                                 early_stop = NULL,
                                 seed_base = NULL,
-                                contextual_exclusion_to_burned_ratio   = NULL,
                                 random_to_burned_ratio                 = NULL,
                                 otsu_unburned_to_burned_ratio          = NULL,
                                 val_frac = NULL,
@@ -245,7 +244,6 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   seed_base   <- .shim(seed_base,   .tc$seeds$oof_seed_base, "oof_seed_base", "seed_base")
   feature_whitelist_override <- .shim(feature_whitelist_override, .tc$feature_whitelist_override, "feature_whitelist_override")
   feature_weights            <- .shim(feature_weights,            .tc$feature_weights, "feature_weights")
-  contextual_exclusion_to_burned_ratio   <- .shim(contextual_exclusion_to_burned_ratio,   .tc$caps$contextual, "cap_contextual", "contextual_exclusion_to_burned_ratio")
   random_to_burned_ratio                 <- .shim(random_to_burned_ratio,                 .tc$caps$random,     "cap_random",     "random_to_burned_ratio")
   otsu_unburned_to_burned_ratio          <- .shim(otsu_unburned_to_burned_ratio,          .tc$caps$otsu,       "cap_otsu",       "otsu_unburned_to_burned_ratio")
   val_frac              <- .shim(val_frac,              .tc$val_frac,        "val_frac")
@@ -389,10 +387,10 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     feature_whitelist_override = feature_whitelist_override,
     feature_weights            = feature_weights,
 
-    # The 3 cap ratios (the SAME variables forwarded to FINAL) so the OOF chain
+    # The cap ratios (the SAME variables forwarded to FINAL) so the OOF chain
     # carries identical values. OOF always uses the capped negative-sampling
-    # policy, applied independently within each training fold (no toggle).
-    contextual_exclusion_to_burned_ratio   = contextual_exclusion_to_burned_ratio,
+    # policy, applied independently within each training fold (no toggle). GATE
+    # 6.5: contextual cap removed (random + otsu only).
     random_to_burned_ratio                 = random_to_burned_ratio,
     otsu_unburned_to_burned_ratio          = otsu_unburned_to_burned_ratio,
     val_frac          = val_frac,

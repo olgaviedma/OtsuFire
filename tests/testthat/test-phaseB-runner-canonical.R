@@ -3,11 +3,11 @@
 # methodological params via the cfg BUILDER (no deprecated function-level
 # shims), so the canonical run is WARNING-FREE.
 #
-# GATE 6.1 (2026-06-11): the dead spectral negative bucket was removed
-# end-to-end. The former Phase-B spectral=2.0 axis no longer exists. This file
-# now asserts the builder-path canonical contract on an OPERATIVE cap
-# (cap_contextual): a builder-set cap is provenance "user", reaches BOTH the OOF
-# and FINAL engines, and the canonical call sites stay warning-free.
+# GATE 6.1 (2026-06-11): the dead spectral negative bucket was removed.
+# GATE 6.5 (2026-06-12): the contextual (deterministic-drop) bucket was removed.
+# This file now asserts the builder-path canonical contract on an OPERATIVE cap
+# (cap_random): a builder-set cap is provenance "user", reaches BOTH the OOF and
+# FINAL engines, and the canonical call sites stay warning-free.
 # =============================================================================
 
 ns <- asNamespace("OtsuFire")
@@ -41,24 +41,24 @@ mk_pb_final_gpkg <- function() {
   g
 }
 
-# A canonical (builder-path) cfg with a USER contextual cap.
+# A canonical (builder-path) cfg with a USER random cap.
 build_canonical_cfg <- function() {
   build_supervised_burned_config(
     scenario           = "balanced",
     internal_decisions = mk_pb_gpkg(),
     change_index       = mk_pb_tif(),
     target_year        = 2017L,
-    cap_contextual     = 1.0
+    cap_random         = 0.5
   )
 }
 
-# Capture the contextual cap each engine receives, engines mocked so no real fit.
-capture_oof_contextual <- function(cfg, train_feats) {
+# Capture the random cap each engine receives, engines mocked so no real fit.
+capture_oof_random <- function(cfg, train_feats) {
   captured <- new.env()
   testthat::local_mocked_bindings(
     run_dm_oof_pipeline = function(...) {
       a <- list(...)
-      captured$contextual <- a$contextual_exclusion_to_burned_ratio
+      captured$random <- a$random_to_burned_ratio
       list(dm = NULL, oof = list(oof_agg = NULL, oof_long = NULL), files = list())
     },
     .package = "OtsuFire"
@@ -66,14 +66,14 @@ capture_oof_contextual <- function(cfg, train_feats) {
   run_oof_diagnostics(train_features = train_feats,
                       scoring_features = train_feats, config = cfg,
                       out_dir = tempfile(), matrix_dir = tempfile())
-  captured$contextual
+  captured$random
 }
-capture_final_contextual <- function(cfg, train_gpkg) {
+capture_final_random <- function(cfg, train_gpkg) {
   captured <- new.env()
   testthat::local_mocked_bindings(
     train_final_model_direct = function(...) {
       a <- list(...)
-      captured$contextual <- a$contextual_exclusion_to_burned_ratio
+      captured$random <- a$random_to_burned_ratio
       list(model = NULL, recipe = NULL, training_ok_sf = NULL, split = NULL,
            files = list())
     },
@@ -81,21 +81,20 @@ capture_final_contextual <- function(cfg, train_gpkg) {
   )
   train_final_burned_model(train_features = train_gpkg, config = cfg,
                            out_dir = tempfile())
-  captured$contextual
+  captured$random
 }
 
-test_that("canonical cfg: builder-set contextual cap 1.0 with provenance 'user'", {
+test_that("canonical cfg: builder-set random cap 0.5 with provenance 'user'", {
   cfg <- build_canonical_cfg()
-  expect_equal(cfg$train_control$caps$contextual, 1.0)
-  expect_equal(cfg$train_control$caps$random, 1.0)
+  expect_equal(cfg$train_control$caps$random, 0.5)
   expect_equal(cfg$train_control$caps$otsu, 1.0)
-  # Only three buckets exist (GATE 6.1).
+  # Only two buckets exist (GATE 6.5).
   expect_setequal(names(cfg$train_control$caps),
-                  c("contextual", "random", "otsu"))
+                  c("random", "otsu"))
   expect_equal(cfg$train_control$training_protocol, "nested_refit")
   expect_equal(cfg$train_control$oof_sampling, "capped")
   prov <- cfg$resolved_params_provenance$train_control
-  expect_equal(prov$cap_contextual, "user")
+  expect_equal(prov$cap_random, "user")
 })
 
 test_that("canonical OOF call is warning-free and the builder cap reaches the OOF engine", {
@@ -103,12 +102,12 @@ test_that("canonical OOF call is warning-free and the builder cap reaches the OO
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
   cfg <- build_canonical_cfg()
-  oof_ctx <- NULL
+  oof_rnd <- NULL
   expect_no_warning(
-    oof_ctx <- capture_oof_contextual(cfg, mk_pb_oof_feats()),
+    oof_rnd <- capture_oof_random(cfg, mk_pb_oof_feats()),
     class = "otsufire_deprecated_param"
   )
-  expect_equal(oof_ctx, 1.0)
+  expect_equal(oof_rnd, 0.5)
 })
 
 test_that("canonical FINAL call is warning-free and the builder cap reaches the FINAL engine", {
@@ -116,12 +115,12 @@ test_that("canonical FINAL call is warning-free and the builder cap reaches the 
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
   cfg <- build_canonical_cfg()
-  final_ctx <- NULL
+  final_rnd <- NULL
   expect_no_warning(
-    final_ctx <- capture_final_contextual(cfg, mk_pb_final_gpkg()),
+    final_rnd <- capture_final_random(cfg, mk_pb_final_gpkg()),
     class = "otsufire_deprecated_param"
   )
-  expect_equal(final_ctx, 1.0)
+  expect_equal(final_rnd, 0.5)
 })
 
 test_that("the cap reaching OOF and FINAL is identical (single source of truth)", {
@@ -129,8 +128,8 @@ test_that("the cap reaching OOF and FINAL is identical (single source of truth)"
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))
   cfg <- build_canonical_cfg()
-  oof_ctx   <- capture_oof_contextual(cfg, mk_pb_oof_feats())
-  final_ctx <- capture_final_contextual(cfg, mk_pb_final_gpkg())
-  expect_equal(oof_ctx, final_ctx)
-  expect_equal(oof_ctx, 1.0)
+  oof_rnd   <- capture_oof_random(cfg, mk_pb_oof_feats())
+  final_rnd <- capture_final_random(cfg, mk_pb_final_gpkg())
+  expect_equal(oof_rnd, final_rnd)
+  expect_equal(oof_rnd, 0.5)
 })

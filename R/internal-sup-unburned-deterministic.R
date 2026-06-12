@@ -156,12 +156,21 @@ expand_cells_to_square_patch_unb <- function(cells, template_r, patch_size_cells
   unique(as.integer(unlist(out, use.names = FALSE)))
 }
 
-#' Build the deterministic-drop + random-burnable-background negative sub-pool
+#' Build the random-burnable-background negative sub-pool
 #'
 #' @description
-#' Internal builder for the B4 negative bucket. Returns the deterministic-drop
-#' "hard" negatives plus a random burnable BACKGROUND drawn from the immediate
-#' change-index raster, restricted to the burnable domain.
+#' Internal builder for the B4 negative bucket. Returns a random burnable
+#' BACKGROUND drawn from the immediate change-index raster, restricted to the
+#' burnable domain.
+#'
+#' GATE 6.5 (2026-06-12): the deterministic-drop "hard" negatives were REMOVED
+#' from the training negative pool. An audit across 6 years proved no contextual
+#' (deterministic-drop) category is a reliable unburned negative; a deterministic
+#' drop does NOT automatically become an unburned label. `unburned_hard` is now
+#' always an EMPTY sf (carrying the canonical column schema only) so the random
+#' background flows on unchanged and the deterministic-drop rows reach the scoring
+#' pool exclusively via their independent path (internal_qc -> scoring_pool in
+#' supervised-pools.R), where they remain scoreable.
 #'
 #' @section Burnable-domain contract (Gate 1C.2):
 #' Two domains are defined and used SEPARATELY, and BOTH are restricted to the
@@ -187,7 +196,8 @@ expand_cells_to_square_patch_unb <- function(cells, template_r, patch_size_cells
 #' (3c) — flagged to the director as an explicit ordering choice, not silently
 #' changed.
 #'
-#' @return A list including `unburned_hard`, `unburned_random`, `unburned_final`,
+#' @return A list including `unburned_hard` (always EMPTY since GATE 6.5),
+#'   `unburned_random`, `unburned_final`,
 #'   `exclusion_buffer`, `rbr_threshold`, `burnable_mask_hash` (stable identity
 #'   of the aligned burnable mask, for the negative-pool fingerprint), and
 #'   `b4_audit` (per-stage cell accounting + the no-observation-outside-burnable
@@ -309,29 +319,26 @@ build_unburned_from_deterministic_decisions <- function(
   )$aligned
   rbr_r <- template_r
 
-  unburned_hard <- internal_decisions |>
-    dplyr::filter(
-      class_final == "drop"
-    ) |>
+  # GATE 6.5 (2026-06-12): the deterministic-drop rows are NO LONGER stamped as
+  # `class="unburned"` training negatives. The former block filtered
+  # `class_final=="drop"` and stamped class=unburned + neg_type +
+  # source="deterministic_drop_hard"; that turned data-quality / insufficient-
+  # support drops into negatives, which the 6-year audit rejected (a deterministic
+  # drop does NOT automatically become an unburned label). `unburned_hard` is now
+  # an EMPTY sf carrying ONLY the canonical column schema (built from a zero-row
+  # slice of the decisions plus the stamped columns) so all downstream
+  # consumers (unburned_final assembly, the unburned_random schema reference, the
+  # `unburned_hard` GPKG layer) keep an identical shape with zero rows. The
+  # deterministic-drop polygons reach the scoring pool unchanged through their
+  # independent internal_qc -> scoring_pool path in supervised-pools.R.
+  unburned_hard <- internal_decisions[0, , drop = FALSE] |>
     dplyr::mutate(
-      class = "unburned",
-      neg_type = dplyr::case_when(
-        filter_1 == "drop" & reason_1 == "outside_burnable" ~ "drop_outside_burnable",
-        filter_1 == "drop" & reason_1 == "corine_na_high"   ~ "geo_excluded_hot",
-        filter_1 == "drop" & !is.na(reason_1) ~ paste0("drop_", reason_1),
-        filter_2 == "drop" & !is.na(reason_2) ~ paste0("drop_", reason_2),
-        filter_3 == "drop" & !is.na(reason_3) ~ paste0("drop_", reason_3),
-        TRUE ~ "drop_hard"
-      ),
-      source = "deterministic_drop_hard"
+      class = character(0),
+      neg_type = character(0),
+      source = character(0)
     ) |>
     sanitize_polygons_unb() |>
     ensure_area_ha_unb()
-
-  if ("poly_id" %in% names(unburned_hard)) {
-    unburned_hard <- unburned_hard |>
-      dplyr::distinct(poly_id, .keep_all = TRUE)
-  }
 
   geom_col <- attr(internal_decisions, "sf_column")
   exclude_sf <- internal_decisions[, geom_col, drop = FALSE] |>

@@ -30,7 +30,6 @@ build_supervised_burned_config(
   group_col = NULL,
   impute_numeric = NULL,
   impute_factor_missing = NULL,
-  cap_contextual = NULL,
   cap_random = NULL,
   cap_otsu = NULL,
   feature_whitelist_override = NULL,
@@ -162,13 +161,18 @@ recipe's numeric imputation rule (`"median"` or `"zero"`) and the sentinel
 level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
 Stored in `cfg$train_control` and applied identically at OOF and FINAL.}
 
-\item{cap_contextual, cap_random, cap_otsu}{Numeric `>= 0`
-(`Inf` disables the cap) or `NULL`. The three negative-bucket caps, each
-expressed as a multiple of the number of burned labels (`n_burned`). They
-control the size of the contextual, random-background and Otsu
-negative buckets respectively (see \strong{Details}). `NULL` uses the
-general package defaults `0.25` / `1.0` / `1.0`. Stored in
-`cfg$train_control$caps`.}
+\item{cap_random, cap_otsu}{Numeric `>= 0`
+  (`Inf` disables the cap) or `NULL`. The two negative-bucket caps, each
+  expressed as a multiple of the number of burned labels (`n_burned`). They
+  control the size of the random-background and Otsu negative buckets
+  respectively (see \strong{Details}). `NULL` uses the general package
+  defaults `1.0` / `1.0`. Stored in `cfg$train_control$caps`.
+
+  GATE 6.5 (2026-06-12): the former `cap_contextual` argument was REMOVED
+  together with the contextual (deterministic-drop) negative bucket. A
+  deterministic drop is NOT a training negative; the negative architecture is
+  two sources only (random background + Otsu residual). Passing
+  `cap_contextual` now errors with an unused-argument error.}
 
 \item{feature_whitelist_override, feature_weights}{Optional feature controls,
 or `NULL`. `feature_whitelist_override` is a character subset of the
@@ -280,7 +284,7 @@ full-data refit for both the OOF folds and the FINAL model).
 
 Training eligibility is defined by EXPLICIT class, never by negation: only
 explicit burned rows (positives) and explicit unburned rows that resolve to a
-valid negative bucket (contextual, random, otsu) enter training;
+valid negative bucket (random, otsu) enter training;
 review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
 share one internal eligibility resolver and one capping helper.
 
@@ -311,17 +315,16 @@ share one internal eligibility resolver and one capping helper.
 }
 
 \subsection{Negative pools}{
-  The negative (unburned) training pool is assembled from three buckets:
+  The negative (unburned) training pool is assembled from two buckets
+  (GATE 6.5, 2026-06-12: the deterministic-drop "contextual" bucket was
+  removed — a deterministic drop is not a training negative):
   \itemize{
-    \item \strong{contextual} --- deterministic-decision drops and
-      context-derived negatives;
     \item \strong{random} --- random burnable-background cells;
     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
   }
-  Each bucket is capped by `cap_contextual` / `cap_random` /
-  `cap_otsu`, expressed as a multiple of the number of burned labels; an
-  `Inf` cap disables capping for that bucket. The general package defaults
-  are `0.25` / `1.0` / `1.0`.
+  Each bucket is capped by `cap_random` / `cap_otsu`, expressed as a multiple
+  of the number of burned labels; an `Inf` cap disables capping for that
+  bucket. The general package defaults are `1.0` / `1.0`.
 }
 
 \subsection{OOF and FINAL}{
@@ -432,7 +435,6 @@ cfg <- build_supervised_burned_config(
   target_year          = 2017,
   output_dir           = "results/",
   run_name             = "balanced_2017",
-  cap_contextual       = 0.25,
   cap_random           = 1.0,
   cap_otsu             = 1.0
 )

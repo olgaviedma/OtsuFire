@@ -41,7 +41,8 @@ test_that("Gate 1B: canonical train_control holds the UNIFIED canonical values",
   expect_equal(.canon_tc$group_col, "block_id")
   expect_equal(.canon_tc$impute_numeric, "median")
   expect_equal(.canon_tc$impute_factor_missing, "MISSING")
-  expect_equal(.canon_tc$caps$contextual, 0.25)
+  # GATE 6.5: the contextual cap was removed.
+  expect_null(.canon_tc$caps$contextual)
   expect_null(.canon_tc$caps$spectral)
   expect_equal(.canon_tc$caps$random, 1.0)
   expect_equal(.canon_tc$caps$otsu, 1.0)

@@ -54,7 +54,7 @@ HOTSPOTS <- file.path(DATA_BASE, "Hotspots",
                       sprintf("hotspots_iberia_%d.geojson", YEAR))
 
 cfg <- OtsuFire::build_supervised_burned_config(
-  scenario = SCENARIO,
+  run_label = SCENARIO,
   internal_decisions = INTERNAL_DECISIONS,
   change_index = CHANGE_INDEX,
   hotspots = HOTSPOTS,

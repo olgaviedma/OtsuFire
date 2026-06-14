@@ -43,7 +43,7 @@ stopifnot(file.exists(INTERNAL_DECISIONS),
 
 # Construir config
 cfg <- OtsuFire::build_supervised_burned_config(
-  scenario = SCENARIO,
+  run_label = SCENARIO,
   internal_decisions = INTERNAL_DECISIONS,
   change_index = CHANGE_INDEX,
   hotspots = HOTSPOTS,

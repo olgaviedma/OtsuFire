@@ -74,7 +74,7 @@ The most important object to inspect after this run is `internal_decisions.gpkg`
 ```r
 sup_cfg <- build_supervised_burned_config(
   target_year = 2025,
-  scenario = "balanced",
+  run_label = "balanced",
   result_name = "Min_Min"
 )
 

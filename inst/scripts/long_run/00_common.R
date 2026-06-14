@@ -319,7 +319,7 @@ validate_shared_inputs <- function(log = NULL, out_csv = NULL,
 .mk_long_cfg <- function(feature_whitelist_override = NULL,
                          out_base = LONG_RESULTS_BASE) {
   cfg <- build_supervised_burned_config(
-    scenario             = scenario,
+    run_label            = scenario,
     internal_decisions   = internal_decisions,
     change_index         = change_index,
     hotspots             = hotspots,

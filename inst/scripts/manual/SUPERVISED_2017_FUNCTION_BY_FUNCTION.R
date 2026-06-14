@@ -198,7 +198,7 @@ cat("=================================================\n")
 #                provenance, and feature override count.
 # #############################################################################
 B01_cfg <- build_supervised_burned_config(
-  scenario             = scenario,
+  run_label            = scenario,
   internal_decisions   = internal_decisions,
   change_index         = change_index,
   hotspots             = hotspots,

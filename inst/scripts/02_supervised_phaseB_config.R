@@ -76,7 +76,7 @@ main <- function() {
 
   # ---- Build the PHASE B cfg: two-source caps via the builder. ---------------
   cfg <- build_supervised_burned_config(
-    scenario             = scenario,
+    run_label            = scenario,
     internal_decisions   = paths$internal_decisions,
     change_index         = paths$change_index,
     hotspots             = paths$hotspots,

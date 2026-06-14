@@ -1,3 +1,56 @@
+# OtsuFire 0.10.1 (2026-06-14)
+
+## Observability gate — `validate_fire_maps()` only (no methodological contract change)
+
+This is a patch release. It touches `validate_fire_maps()`, its observability
+preprocessing, cache robustness, audit/reporting, documentation and tests only.
+The deterministic phase, the supervised model, scoring and the `p_burned`
+threshold are unchanged, and the 2017 reference metrics are bit-for-bit
+identical (TP=450746, FP=52060, FN=241280, TN=37704260, Precision=0.8964611,
+Recall=0.6513426, F1=0.7544927, IoU=0.6057714, N_observable=663, N_excluded=14,
+detected=431).
+
+* **Frozen temporal observability semantics.** Observability in
+  `validate_fire_maps()` is defined temporally at the reference-fire level: a
+  reference fire with no valid observable DOY, or whose date is after the last
+  observation, is excluded from the reference **before** rasterization, so it
+  contributes 0 TP / 0 FN / 0 evaluated area and never enters omission, recall,
+  F1, IoU or per-fire detection. It is **not** a pixel-level cloud / valid-data
+  mask; partially observed fires are kept whole and no per-pixel denominator is
+  introduced.
+* **Content-aware reference/observability cache.** The reference cache key now
+  folds the CONTENT and methodological identity of every input that shapes the
+  cached artifact (observability raster content + band + DOY columns + rule
+  version; burnable raster grid / CRS / extent / content; study-area mask;
+  burnable thresholding; reference content; min-area / dissolve options). The
+  filename tag is `obs-<hash>_dom-<hash>_ref-<hash>`; the prediction cache also
+  folds in the burnable-domain identity. A changed input busts the cache
+  automatically; `force_reprocess_ref = TRUE` still forces a full rebuild.
+  `buffer` is intentionally excluded (it is applied downstream, not cached).
+  New internal helpers in `R/internal-validate-cache.R`.
+* **Partial-observability audit (informative only).** `validate_fire_maps()`
+  now returns `observability_audit` and writes `OBSERVABILITY_AUDIT_<year>.csv`,
+  `OBSERVABILITY_EXCLUDED_FIRES_<year>.csv` and
+  `OBSERVABILITY_PARTIAL_FIRES_<year>.csv` to `02_OBSERVABILITY`, plus per-fire
+  `total_pixels` / `observable_pixels` / `non_observable_pixels` /
+  `observable_fraction` columns on `reference_observability`. These outputs
+  never change TP/FP/FN/TN or coverage. New helper in
+  `R/internal-validate-observability-audit.R`.
+* **GPKG overwrite hotfix (deterministic, I/O only).** The three stage-2
+  scoring writers propagate `delete_dsn = isTRUE(overwrite)` for a robust GPKG
+  replace on Windows; geometries, attributes, counts and deterministic results
+  are unchanged.
+* **Tests.** Added the 10 mandatory cache-invalidation cases
+  (`test-validate-cache-key.R`), the frozen-semantics + audit tests
+  (`test-observability-audit.R`) and the GPKG overwrite tests
+  (`test-deterministic-gpkg-overwrite-deldsn.R`).
+
+Diagnostic note (not a code change): the 2017 omission is **not** explained by
+observability. Of the omitted observable fires, 232 of 236 have no
+deterministic candidate (98.3% of omitted fires, 94.3% of omitted area). The
+next gate is the deterministic candidate-generation ceiling, addressed
+separately.
+
 # OtsuFire 0.10.0 (2026-06-12)
 
 ## BREAKING CHANGE — final two-source negative architecture (random + Otsu residual)

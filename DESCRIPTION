@@ -1,7 +1,7 @@
 Package: OtsuFire
 Title: Otsu-Based Burned-Area Mapping with rule-based unsupervised filters and supervised classification
-Version: 0.10.0
-Date: 2026-06-12
+Version: 0.10.1
+Date: 2026-06-14
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
              person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
              person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),

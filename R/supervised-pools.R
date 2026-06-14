@@ -1,3 +1,35 @@
+# Resolve the negative-pool (unburned) output locations. The random/
+# deterministic unburned GPKG and the Otsu-negative working root are normally
+# scenario-scoped. Because the negatives only depend on the YEAR (not on the
+# keep / review / drop decisions), a caller may pin them to a shared,
+# scenario-independent base via `config$options$unburned_base_dir`; both then
+# live under it, so identical negatives are generated once per year and reused
+# across scenarios. When the option is absent the historical scenario-scoped
+# paths are returned unchanged (byte-identical default).
+.of_resolve_unburned_paths <- function(config, target_year, result_name,
+                                       scenario, result_dir) {
+  unburned_base_dir <- config$options$unburned_base_dir
+  if (!is.null(unburned_base_dir) && is.character(unburned_base_dir) &&
+      length(unburned_base_dir) == 1L && nzchar(unburned_base_dir)) {
+    return(list(
+      unb_out_gpkg = file.path(unburned_base_dir, "UNBURNED",
+                               sprintf("%d_unburned.gpkg", target_year)),
+      otsu_negative_root_dir = file.path(unburned_base_dir, "_OTSU_NEGATIVE")
+    ))
+  }
+  deterministic_dir <- file.path(
+    config$options$data_base, "Results", target_year, result_name,
+    "DETERMINISTIC", scenario
+  )
+  list(
+    unb_out_gpkg = file.path(
+      deterministic_dir, "UNBURNED",
+      sprintf("%d_%s_unburned.gpkg", target_year, scenario)
+    ),
+    otsu_negative_root_dir = file.path(result_dir, "_OTSU_NEGATIVE")
+  )
+}
+
 #' Build burned and negative training pools for supervised learning
 #'
 #' @description
@@ -232,15 +264,15 @@ build_supervised_training_pools <- function(config,
     cand
   }
 
-  # Unburned output roots, replicating the orchestrator ROOT PATHS block.
-  deterministic_dir <- file.path(
-    data_base, "Results", target_year, result_name, "DETERMINISTIC", scenario
+  # Unburned output roots. Negatives are year-based, so callers may share them
+  # across scenarios via config$options$unburned_base_dir (see
+  # .of_resolve_unburned_paths). Default = the historical scenario-scoped paths.
+  .unb_paths <- .of_resolve_unburned_paths(
+    config = config, target_year = target_year, result_name = result_name,
+    scenario = scenario, result_dir = result_dir
   )
-  otsu_negative_root_dir <- file.path(result_dir, "_OTSU_NEGATIVE")
-  unb_out_gpkg <- file.path(
-    deterministic_dir, "UNBURNED",
-    sprintf("%d_%s_unburned.gpkg", target_year, scenario)
-  )
+  unb_out_gpkg           <- .unb_paths$unb_out_gpkg
+  otsu_negative_root_dir <- .unb_paths$otsu_negative_root_dir
   dir.create(dirname(unb_out_gpkg), recursive = TRUE, showWarnings = FALSE)
   dir.create(otsu_negative_root_dir, recursive = TRUE, showWarnings = FALSE)
 

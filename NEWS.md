@@ -1,3 +1,20 @@
+# OtsuFire 0.10.2 (2026-06-14)
+
+## Shareable, year-scoped negative pool (additive, backward-compatible)
+
+* **New option `options$unburned_base_dir` for `build_supervised_burned_config()`.**
+  The negative (unburned) pool only depends on the year, not on the
+  keep/review/drop decisions, so several scenarios of the same year can now
+  reuse one shared set of negatives instead of regenerating identical ones.
+  When set, both the random/deterministic unburned GPKG
+  (`<unburned_base_dir>/UNBURNED/<year>_unburned.gpkg`) and the Otsu-negative
+  working root (`<unburned_base_dir>/_OTSU_NEGATIVE`) live under it; the heavy
+  Otsu stages (year + parameter keyed) are then generated once and reused across
+  scenarios. When the option is absent the historical scenario-scoped paths are
+  used — **byte-identical default behaviour**, so existing runs are unaffected.
+  Path resolution is centralised in the internal `.of_resolve_unburned_paths()`
+  (`R/supervised-pools.R`) with unit tests (`test-unburned-base-dir.R`).
+
 # OtsuFire 0.10.1 (2026-06-14)
 
 ## Observability gate — `validate_fire_maps()` only (no methodological contract change)

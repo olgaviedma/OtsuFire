@@ -113,6 +113,36 @@ The supervised configuration object is the single source of truth for the run in
 - Inspect `09_FINAL_MAP` for `final_map_full`, `final_map`, and `burned_like_scored`.
 - For external validation, threshold `p_burned` or `p_burned_current_year` first, then validate the resulting prediction layer with `validate_fire_maps()` against the EFFIS reference. Remember that these external metrics (omission, commission, F1, IoU) are computed against a different reference than the OOF metrics and are not comparable to OOF AUC / PR-AUC.
 
+### Observability in external validation (temporal, whole-fire)
+
+`validate_fire_maps()` accepts an optional `observability_raster` (a
+day-of-year raster). Observability is assessed **temporally at the
+reference-fire level**: a reference fire whose date is after the last
+observation, or that has no valid observable DOY, is excluded from the
+reference **before** rasterization, so it contributes 0 TP / 0 FN / 0
+evaluated area and never enters omission, recall, F1, IoU or per-fire
+detection. It is **not** a pixel-level cloud or valid-data mask — partially
+observed fires are kept whole and no per-pixel denominator is introduced.
+Residual per-pixel non-observability inside kept fires is reported only for
+audit (`observability_audit`, the `02_OBSERVABILITY/OBSERVABILITY_*` CSVs)
+and never changes any metric. The reference cache is **content-aware**: it
+rebuilds automatically when the observability raster content/band/rule, the
+burnable mask, resolution, CRS, grid, study-area mask, reference content or
+burnable thresholding changes (`force_reprocess_ref = TRUE` forces a
+rebuild).
+
+::: {.callout-note}
+## What the 2017 observability diagnostic established
+Observability is **not** the cause of the high omission. For 2017, of 677
+reference fires entering the validator, 14 were temporally non-observable
+(excluded; 3676.59 ha) and 663 were evaluated. Within the kept fires only
+18 pixels / 14.58 ha were partially non-observable (~0.01% of FN). The
+omission is dominated by reference fires with **no deterministic candidate**
+(232 of 236 omitted observable fires; 98.3% of omitted fires and 94.3% of
+omitted area). The next gate is therefore the **deterministic
+candidate-generation ceiling**, not observability.
+:::
+
 ## Annual Output Layout
 
 The current folder conventions are part of the workflow and should be understood as stable interpretive units.

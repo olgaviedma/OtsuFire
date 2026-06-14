@@ -218,6 +218,20 @@ External metrics are computed against a *different reference* (EFFIS)
 than the OOF metrics (deterministic-decision labels). They are **not
 comparable** to OOF AUC / PR-AUC — keep the two evaluations distinct.
 
+**Temporal observability.** When an `observability_raster` (a day-of-year
+raster) is supplied, observability is assessed **temporally at the
+reference-fire level**: a reference fire whose date falls after the last
+observation, or that has no valid observable DOY, is excluded from the
+reference *before* rasterization, so it contributes 0 TP / 0 FN / 0
+evaluated area and never enters omission, recall, F1 or IoU. This is **not**
+a pixel-level cloud mask — partially observed fires are kept whole. Residual
+per-pixel non-observability inside kept fires is reported for audit
+(`observability_audit`, `OBSERVABILITY_*` CSVs) but never changes any
+metric. The reference cache is content-aware: it rebuilds automatically when
+the observability raster, burnable mask, resolution, CRS, grid, study-area
+mask, reference content or the observability rule changes
+(`force_reprocess_ref = TRUE` forces a rebuild).
+
 ### Corrected defect: OOF / FINAL `_isNA` divergence
 
 A defect was found and corrected during Gate 1D.8, before the smoke run

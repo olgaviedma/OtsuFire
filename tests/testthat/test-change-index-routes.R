@@ -30,7 +30,7 @@ test_that("PIECE 3: immediate_change_index_path is honoured (canonical immediate
   skip_if_not_installed("sf"); skip_if_not_installed("terra")
   id <- mk_tmp_gpkg_cr(); imm <- mk_tmp_tif_cr()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     immediate_change_index_path = imm, target_year = 2017L
   )
   expect_identical(cfg$inputs$change_index$path, norm(imm))
@@ -42,7 +42,7 @@ test_that("PIECE 3: delayed_change_index_path is honoured (canonical delayed rou
   skip_if_not_installed("sf"); skip_if_not_installed("terra")
   id <- mk_tmp_gpkg_cr(); imm <- mk_tmp_tif_cr(); del <- mk_tmp_tif_cr()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     immediate_change_index_path = imm, delayed_change_index_path = del,
     target_year = 2017L
   )
@@ -57,7 +57,7 @@ test_that("PIECE 3: historical change_index / delayed_change_index aliases still
   skip_if_not_installed("sf"); skip_if_not_installed("terra")
   id <- mk_tmp_gpkg_cr(); ci <- mk_tmp_tif_cr(); del <- mk_tmp_tif_cr()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     delayed_change_index = del, target_year = 2017L
   )
   expect_identical(cfg$inputs$change_index$path, norm(ci))
@@ -73,7 +73,7 @@ test_that("PIECE 3: same value via both names is accepted; a genuine conflict ER
 
   # identical -> accepted
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, immediate_change_index_path = ci, target_year = 2017L
   )
   expect_identical(cfg$inputs$change_index$path, norm(ci))
@@ -81,7 +81,7 @@ test_that("PIECE 3: same value via both names is accepted; a genuine conflict ER
   # conflicting immediate -> error
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id,
+      run_label = "balanced", internal_decisions = id,
       change_index = ci, immediate_change_index_path = other,
       target_year = 2017L
     ),
@@ -90,7 +90,7 @@ test_that("PIECE 3: same value via both names is accepted; a genuine conflict ER
   # conflicting delayed -> error
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id, change_index = ci,
+      run_label = "balanced", internal_decisions = id, change_index = ci,
       delayed_change_index = ci, delayed_change_index_path = other,
       target_year = 2017L
     ),
@@ -103,7 +103,7 @@ test_that("PIECE 3: the immediate route is REQUIRED (neither name supplied -> er
   id <- mk_tmp_gpkg_cr()
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id, target_year = 2017L
+      run_label = "balanced", internal_decisions = id, target_year = 2017L
     ),
     regexp = "change_index.*required|required.*change_index|immediate_change_index_path"
   )

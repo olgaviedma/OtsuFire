@@ -41,7 +41,7 @@ test_that("PIECE 1: .of_sup_input_path returns the cfg path for a path spec", {
   id          <- mk_tmp_gpkg_inv()
 
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = sentinel_ci, hotspots = sentinel_hs, target_year = 2017L
   )
 
@@ -57,7 +57,7 @@ test_that("PIECE 1: .of_sup_input_path is NULL-safe (absent / in-memory / NULL c
 
   id <- mk_tmp_gpkg_inv(); ci <- mk_tmp_tif_inv()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = 2017L  # no hotspots -> optional input absent
   )
   expect_null(resolve(cfg, "hotspots"))          # absent optional input
@@ -67,7 +67,7 @@ test_that("PIECE 1: .of_sup_input_path is NULL-safe (absent / in-memory / NULL c
   # In-memory change_index spec -> no on-disk path -> accessor returns NULL.
   ci_mem <- terra::rast(ncol = 4, nrow = 4, vals = 1:16)
   cfg2 <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci_mem,
+    run_label = "balanced", internal_decisions = id, change_index = ci_mem,
     target_year = 2017L
   )
   expect_null(resolve(cfg2, "change_index"))
@@ -124,7 +124,7 @@ test_that("PIECE 1: pre-MODIS config validates + proceeds with hotspots = NULL",
 
   id <- mk_tmp_gpkg_inv(); ci <- mk_tmp_tif_inv()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = 1985L  # pre-MODIS year: no hotspots layer exists
   )
   # hotspots is a declared cfg$inputs field, validated-as-optional -> NULL.

@@ -1,4 +1,24 @@
-# OtsuFire 0.10.2 (2026-06-14)
+# OtsuFire 0.11.0 (2026-06-14)
+
+## BREAKING CHANGE — supervised config 'scenario' argument renamed to 'run_label'
+
+* **`build_supervised_burned_config()` no longer takes a `scenario` enum
+  argument.** The former `scenario = c("balanced", "original", "lax",
+  "restrictive")` argument had **no methodological effect**: it only labelled the
+  run and named its output sub-folders / file prefixes. It is replaced by a
+  free-text `run_label` argument (default `"balanced"`, so the default naming is
+  unchanged). Any non-empty character string is accepted; there is no `match.arg`
+  / enum validation anymore (an empty string or a non-character value errors with
+  a `run_label`-specific message).
+* **The internal `config$scenario` field is unchanged.** `run_label` is stored
+  verbatim as `config$scenario`, so every downstream supervised stage that reads
+  `config$scenario` for naming/routing behaves **identically** when the same
+  label is passed — output paths and file prefixes are byte-identical to passing
+  the old `scenario = <same value>`.
+* **The DETERMINISTIC phase is untouched.** The deterministic stage's own
+  `scenario` concept (a separate, meaningful notion) is unaffected.
+* **Migration:** callers of `build_supervised_burned_config()` must rename
+  `scenario = "..."` to `run_label = "..."`. No other change is required.
 
 ## Shareable, year-scoped negative pool (additive, backward-compatible)
 

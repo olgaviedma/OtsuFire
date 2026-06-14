@@ -176,7 +176,7 @@ make_rep_cfg <- function(dir, year = 2017L, scenario = "balanced") {
   if (!file.exists(dec)) writeLines("decisions", dec)
   if (!file.exists(ci))  writeLines("change-index", ci)
   build_supervised_burned_config(
-    scenario = scenario, internal_decisions = dec, change_index = ci,
+    run_label = scenario, internal_decisions = dec, change_index = ci,
     target_year = year, output_dir = dir
   )
 }

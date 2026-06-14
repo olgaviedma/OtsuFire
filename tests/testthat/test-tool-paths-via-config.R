@@ -26,7 +26,7 @@ test_that("T18: cfg$tool_paths is populated and exposed via dispatcher", {
   ci <- mk_tmp_tif_tp()
   id <- mk_tmp_gpkg_tp()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -78,7 +78,7 @@ test_that("AS03 / GATE 6.7: dispatcher exposes the FIXED drop max_s_patch cap (i
   # default (0.15), no longer a free-form option. A stale option is ignored
   # (not read); the binding always carries the internal-defaults value.
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -104,7 +104,7 @@ test_that("B2: dispatcher binding defaults match the orchestrator hardcoded valu
   ci <- mk_tmp_tif_tp()
   id <- mk_tmp_gpkg_tp()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -150,7 +150,7 @@ test_that("GATE 6.7: the PUBLIC negative_pool_params knobs + random_seed reach t
   # thresholds + caps) and the canonical random_seed. They flow into the
   # dispatcher bindings from cfg$negative_pool_params / train_control$seeds.
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -191,7 +191,7 @@ test_that("GATE 6.7: the FORMERLY free-form unb_* / otsu_negative_* options are 
   # config still carrying them does NOT override the bindings: the single source
   # of truth is the internal-defaults block.
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,

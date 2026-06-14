@@ -17,7 +17,7 @@ mk_cfg_m <- function() {
   ci <- mk_tmp_tif_m()
   id <- mk_tmp_gpkg_m()
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2025L
   )
 }

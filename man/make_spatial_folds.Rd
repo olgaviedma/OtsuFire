@@ -78,7 +78,7 @@ calling it directly produces byte-identical fold outputs to a full run.
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(
-  scenario = "balanced", internal_decisions = "decisions.gpkg",
+  run_label = "balanced", internal_decisions = "decisions.gpkg",
   change_index = "rbr.tif", target_year = 2017L
 )
 pools <- build_supervised_training_pools(cfg)

@@ -64,7 +64,7 @@ mk_vse_cfg <- function(out_dir = tempfile("vse_cfg_"),
                delete_dsn = TRUE)
 
   build_supervised_burned_config(
-    scenario = scenario, internal_decisions = id_p, change_index = ci_p,
+    run_label = scenario, internal_decisions = id_p, change_index = ci_p,
     target_year = target_year, output_dir = out_dir,
     topo = topo_p, corine_raster = cor_p,
     burnable_mask = if (isTRUE(write_mask)) mask_p else NULL)
@@ -75,7 +75,7 @@ rebuild_cfg_with <- function(cfg, ...) {
   ov <- list(...)
   g <- function(nm) OtsuFire:::.of_sup_input_path(cfg, nm)
   args <- list(
-    scenario = cfg$scenario,
+    run_label = cfg$scenario,
     internal_decisions = g("internal_decisions"),
     change_index = g("change_index"),
     target_year = cfg$target_year, output_dir = cfg$output_dir,
@@ -347,7 +347,7 @@ test_that("a cfg field change produces a DIFFERENT fingerprint", {
   # Different year + different output route -> a genuinely different cfg.
   cfgB <- mk_vse_cfg(out_dir = td2, target_year = 2017L)
   cfgB2 <- build_supervised_burned_config(
-    scenario = cfgB$scenario,
+    run_label = cfgB$scenario,
     internal_decisions = OtsuFire:::.of_sup_input_path(cfgB, "internal_decisions"),
     change_index = OtsuFire:::.of_sup_input_path(cfgB, "change_index"),
     target_year = cfgB$target_year, output_dir = cfgB$output_dir,
@@ -370,7 +370,7 @@ test_that("changing a cfg input path changes the consumed input + fingerprint", 
   ci_b <- file.path(td, "MinMin_2017_mosaic_res90m_ALT.tif")
   file.copy(ci_a, ci_b, overwrite = TRUE)
   cfgB <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = OtsuFire:::.of_sup_input_path(cfgA, "internal_decisions"),
     change_index = ci_b, target_year = 2017L, output_dir = td,
     topo = OtsuFire:::.of_sup_input_path(cfgA, "topo"),

@@ -29,7 +29,7 @@ mk_gpkg <- function() {
 }
 mk_cfg <- function(...) {
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = mk_gpkg(),
+    run_label = "balanced", internal_decisions = mk_gpkg(),
     change_index = mk_tif(), target_year = 2025L, ...
   )
 }

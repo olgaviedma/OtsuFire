@@ -166,7 +166,7 @@ test_that("GATE 6.5: cap_contextual passed to build_supervised_burned_config ERR
                      overwrite = TRUE)
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = f, change_index = tif,
+      run_label = "balanced", internal_decisions = f, change_index = tif,
       target_year = 2017L, cap_contextual = 0.25),
     regexp = "cap_contextual|unused argument"
   )
@@ -182,7 +182,7 @@ test_that("GATE 6.5: contextual_exclusion_to_burned_ratio passed to a public sta
   terra::writeRaster(terra::rast(ncol = 4, nrow = 4, vals = 1:16), tif,
                      overwrite = TRUE)
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = f, change_index = tif,
+    run_label = "balanced", internal_decisions = f, change_index = tif,
     target_year = 2017L)
   gpkg <- tempfile(fileext = ".gpkg")
   sf::st_write(sf::st_sf(fire_uid = "a", class = "burned", geometry = sfc),

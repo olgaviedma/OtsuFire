@@ -74,7 +74,7 @@ sc_decisions_gpkg <- function() {
 # defaults to 2025L (the value the caps / single-source suites used).
 sc_min_cfg <- function(...) {
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = sc_decisions_gpkg(),
+    run_label = "balanced", internal_decisions = sc_decisions_gpkg(),
     change_index = sc_change_index_tif(), target_year = 2025L, ...
   )
 }

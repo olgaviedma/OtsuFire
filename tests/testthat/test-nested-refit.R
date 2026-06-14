@@ -350,7 +350,7 @@ test_that("Contract #10: passing training_protocol to a public fn ERRORS", {
   # build_supervised_burned_config / train_final_burned_model / run_oof_diagnostics
   # have no `...`, so R raises "unused argument".
   expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                    internal_decisions = tempfile(fileext = ".gpkg"),
                                    change_index = tempfile(fileext = ".tif"),
                                    target_year = 2017L,
@@ -403,7 +403,7 @@ test_that("passing oof_sampling to a public fn ERRORS", {
   # build_supervised_burned_config / run_oof_diagnostics / validate_supervised_execution
   # have no `...`, so R raises "unused argument".
   expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                    internal_decisions = tempfile(fileext = ".gpkg"),
                                    change_index = tempfile(fileext = ".tif"),
                                    target_year = 2017L,

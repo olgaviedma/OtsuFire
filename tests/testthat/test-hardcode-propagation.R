@@ -181,7 +181,7 @@ test_that("D1 FINAL override reaches train_final_model_direct", {
   sf::st_write(sf::st_sf(id = 1L, geometry = sfc), id, quiet = TRUE,
                delete_dsn = TRUE)
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2025L
   )
 
@@ -249,7 +249,7 @@ test_that("D1 OOF override reaches run_dm_oof_pipeline", {
   sf::st_write(sf::st_sf(id = 1L, geometry = sfc), id, quiet = TRUE,
                delete_dsn = TRUE)
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2025L
   )
 

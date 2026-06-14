@@ -25,7 +25,7 @@ test_that("T11: cfg$output_routes folder names match runtime convention", {
   ci <- mk_tmp_tif_routes()
   id <- mk_tmp_gpkg_routes()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -64,7 +64,7 @@ test_that("output_routes$base coincides with the legacy engine reconstruction fo
   scenario    <- "balanced"
 
   cfg <- build_supervised_burned_config(
-    scenario = scenario,
+    run_label = scenario,
     internal_decisions = id,
     change_index = ci,
     target_year = target_year,
@@ -91,7 +91,7 @@ test_that("config output_routes do NOT advertise the legacy folder names", {
   ci <- mk_tmp_tif_routes()
   id <- mk_tmp_gpkg_routes()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,

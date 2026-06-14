@@ -453,7 +453,7 @@ cat("\n========== BLOQUE 1: CONFIG ==========\n")
 # --- Construir el cfg -------------------------------------------------------
 
 cfg <- build_supervised_burned_config(
-  scenario                  = SCENARIO,
+  run_label                 = SCENARIO,
   internal_decisions        = INTERNAL_DECISIONS,
   change_index              = CHANGE_INDEX,        # mosaico summer (RBR + DOY)
   delayed_change_index      = RBR_AUTUMN,          # autumn-winter (cosmetico, §N+25)

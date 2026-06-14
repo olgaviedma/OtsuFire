@@ -58,7 +58,7 @@ main <- function() {
   stopifnot(utils::packageVersion("OtsuFire") >= "0.5.0")
 
   cfg <- build_supervised_burned_config(
-    scenario           = scenario,
+    run_label          = scenario,
     internal_decisions = paths$internal_decisions,
     change_index       = paths$change_index,
     hotspots           = hotspots,            # NULL

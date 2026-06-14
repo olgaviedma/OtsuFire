@@ -122,7 +122,7 @@ main <- function() {
 
   # ---- STEP 1. Build the cfg (single source of truth). Nothing computed yet. --
   cfg <- build_supervised_burned_config(
-    scenario             = scenario,
+    run_label            = scenario,
     internal_decisions   = paths$internal_decisions,
     change_index         = paths$change_index,
     hotspots             = paths$hotspots,

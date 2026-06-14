@@ -497,6 +497,23 @@ validate_fire_maps <- function(input_shapefile,
     ref_area_pix[is.na(ref_area_pix)] <- 0
     ref_area_domain_ha <- ref_area_pix * cell_area_ha
 
+    # Per-fire PARTIAL-observability audit counts (informative only; they do NOT
+    # change the whole-fire observability rule, the reference filtering, or any
+    # metric). `obs_r` is already aligned to and NA outside the burnable domain,
+    # so a finite obs value marks a domain cell that carries an observation.
+    # total_pixels      = burnable-domain cells under the fire (= ref_area_pix);
+    # observable_pixels = those that ALSO carry a finite observation DOY;
+    # non_observable_pixels / observable_fraction follow.
+    obs_finite_r <- terra::ifel(is.finite(obs_r), 1, 0)
+    obs_finite_r[is.na(domain_mask)] <- NA
+    obs_valid_pix <- terra::extract(obs_finite_r, ref_v, fun = sum, na.rm = TRUE)[, 2]
+    obs_valid_pix[is.na(obs_valid_pix)] <- 0
+    total_pixels <- ref_area_pix
+    observable_pixels <- pmin(obs_valid_pix, total_pixels)
+    non_observable_pixels <- pmax(total_pixels - observable_pixels, 0)
+    observable_fraction <- ifelse(total_pixels > 0,
+                                  observable_pixels / total_pixels, NA_real_)
+
     end_doy <- if (has_end_doy) {
       suppressWarnings(as.numeric(ref_polygons[[ref_end_doy_col]]))
     } else {
@@ -534,6 +551,10 @@ validate_fire_maps <- function(input_shapefile,
     out[, obs_doy_margin := obs_doy_margin]
     out[, observable_flag := observable_flag]
     out[, observable_reason := observable_reason]
+    out[, total_pixels := as.integer(round(total_pixels))]
+    out[, observable_pixels := as.integer(round(observable_pixels))]
+    out[, non_observable_pixels := as.integer(round(non_observable_pixels))]
+    out[, observable_fraction := round(observable_fraction, 6)]
     out
   }
 
@@ -802,6 +823,7 @@ validate_fire_maps <- function(input_shapefile,
   # ---- build/load reference (vector + raster mask) ----
   reference_observability <- NULL
   ref_not_observable <- NULL
+  observability_audit <- NULL
   observability_applied <- !is.null(observability_raster)
   n_reference_excluded_observability <- 0L
   n_reference_observable <- NA_integer_
@@ -939,6 +961,32 @@ validate_fire_maps <- function(input_shapefile,
 
   if (is.null(reference_observability) && !is.null(observability_raster)) {
     n_reference_observable <- nrow(ref_polygons)
+  }
+
+  # ---- partial-observability audit (INFORMATIVE ONLY) ----
+  # Summarizes excluded fires and, within KEPT fires, partial spatial
+  # observability. Writes three CSVs to 02_OBSERVABILITY and returns the audit
+  # on the result. It never alters TP/FP/FN/TN/coverage or the reference filter.
+  if (!is.null(reference_observability) && nrow(reference_observability) > 0L) {
+    observability_audit <- .vfm_observability_audit(
+      reference_observability = reference_observability,
+      cell_area_ha = cell_area_ha
+    )
+    data.table::fwrite(
+      observability_audit$summary,
+      validation_output_path(observability_output_dir,
+        sprintf("OBSERVABILITY_AUDIT_%s.csv", year_target))
+    )
+    data.table::fwrite(
+      observability_audit$excluded,
+      validation_output_path(observability_output_dir,
+        sprintf("OBSERVABILITY_EXCLUDED_FIRES_%s.csv", year_target))
+    )
+    data.table::fwrite(
+      observability_audit$partial,
+      validation_output_path(observability_output_dir,
+        sprintf("OBSERVABILITY_PARTIAL_FIRES_%s.csv", year_target))
+    )
   }
 
   # ---- normalize input list ----
@@ -1400,6 +1448,7 @@ validate_fire_maps <- function(input_shapefile,
     metrics            = if (metrics_type %in% c("all", "pixel")) all_metrics else NULL,
     polygon_summary    = if (metrics_type %in% c("all", "area")) all_polygon_summary else NULL,
     reference_observability = reference_observability,
+    observability_audit = observability_audit,
     pixel_by_stratum   = if (length(strata_table_list))  data.table::rbindlist(strata_table_list,  fill = TRUE) else NULL,
     stratum_global     = if (length(strata_global_list)) data.table::rbindlist(strata_global_list, fill = TRUE) else NULL,
     diagnostics_strata = if (length(strata_diag_list))   data.table::rbindlist(strata_diag_list,   fill = TRUE) else NULL,

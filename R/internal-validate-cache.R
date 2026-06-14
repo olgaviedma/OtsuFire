@@ -29,6 +29,14 @@
 # observability fingerprint so a rule change invalidates every reference cache.
 .VFM_OBS_RULE_VERSION <- "obsrule-1:temporal-wholefire:obs_doy_margin>=0"
 
+# Bump this whenever the SCHEMA of the cached reference artifact changes (e.g.
+# new columns on the cached reference_observability table). It is folded into the
+# reference cache key so a schema change rebuilds the cache instead of serving a
+# structurally incompatible one. v2 adds the per-fire partial-observability
+# audit columns (total_pixels / observable_pixels / non_observable_pixels /
+# observable_fraction).
+.VFM_REF_CACHE_SCHEMA <- "refschema-2"
+
 .vfm_cache_safe_tag <- function(x) {
   x <- paste(x, collapse = "_")
   x <- gsub("[^A-Za-z0-9]+", "-", x)
@@ -215,7 +223,8 @@
     "minha", if (is.null(min_area_reference_ha)) "none" else
       format(min_area_reference_ha, scientific = FALSE),
     "|dslv", if (is.null(dissolve_ref_by)) "none" else
-      paste(dissolve_ref_by, collapse = "-")
+      paste(dissolve_ref_by, collapse = "-"),
+    "|", .VFM_REF_CACHE_SCHEMA
   )
   paste0(
     obs_cache_tag, "_", dom_cache_tag, "_ref-",

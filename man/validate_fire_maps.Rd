@@ -153,7 +153,13 @@ A named list containing the available validation outputs:
   \item{`polygon_summary`}{Global polygon- and area-based metrics, or
     `NULL` when `metrics_type = "pixel"`.}
   \item{`reference_observability`}{Reference-polygon observability
-    diagnostics, or `NULL` when `observability_raster = NULL`.}
+    diagnostics (one row per ORIGINAL reference fire, including the
+    per-fire `total_pixels` / `observable_pixels` /
+    `non_observable_pixels` / `observable_fraction` audit columns), or
+    `NULL` when `observability_raster = NULL`.}
+  \item{`observability_audit`}{Informative partial-observability audit
+    (`summary`, `excluded`, `partial`), or `NULL` when
+    `observability_raster = NULL`. Never affects the metrics.}
   \item{`pixel_by_stratum`}{Per-stratum pixel metrics, or `NULL` when
     `strata_raster` is not supplied.}
   \item{`stratum_global`}{Aggregate metrics over the stratified
@@ -303,21 +309,57 @@ behaviour, set `threshold_min_detected = 0`.
 
 \strong{Temporal observability filter}
 
-When `observability_raster` is supplied, `validate_fire_maps()`
-checks whether each reference fire was observable in the imagery used
-for mapping. The function compares the fire day of year, derived from
-`ref_end_doy_col` with fallback to `ref_start_doy_col`, against the
-maximum observable day of year inside each reference polygon.
+Observability in `validate_fire_maps()` is defined \emph{temporally} at
+the reference-fire level. It assesses whether the available observation
+window extends to or beyond the fire date. It is \strong{not} a
+pixel-level cloud or valid-data mask: the function never trims partially
+observed fires and never introduces per-pixel observability denominators.
 
-For each reference polygon, the function records `obs_ref_doy`,
-`obs_doy_max`, `obs_doy_margin`, `observable_flag`, and
-`observable_reason`. Non-observable reference polygons are excluded
-from the validated reference set, and the observability summary table
-is returned as `reference_observability` and written to
-`validation_dir/VALIDATION/reference_observability_<year>_<tag>.csv`.
-This is useful when the prediction map is based on annual or seasonal
-composites that may not contain valid post-fire observations for all
-reference events.
+Mechanics. When `observability_raster` is supplied (a day-of-year raster;
+if multi-band, the band named `doy`, case-insensitive, is auto-selected),
+it is aligned to the burnable-domain grid. For each reference polygon the
+function computes `obs_doy_max`, the maximum finite observable DOY inside
+the polygon (a pixel counts as observable when its DOY is finite), and
+`obs_ref_doy`, the fire date taken from `ref_end_doy_col` with fallback to
+`ref_start_doy_col`. The margin `obs_doy_margin = obs_doy_max - obs_ref_doy`
+drives a single whole-fire decision recorded in `observable_flag` /
+`observable_reason`:
+\itemize{
+  \item `observable` -- both DOYs available and `obs_doy_margin >= 0`; the
+    fire is kept \strong{whole} inside the burnable domain;
+  \item `missing_reference_doy` -- no usable fire DOY -> excluded;
+  \item `no_observability_data` -- no finite observable DOY in the polygon
+    -> excluded;
+  \item `obs_before_reference_doy` -- the last observation precedes the fire
+    (`obs_doy_margin < 0`) -> excluded.
+}
+
+Excluded (temporally non-observable) reference fires are removed from the
+reference set \strong{before} rasterization, so each contributes 0 TP,
+0 FN and 0 evaluated area and never enters omission, recall, F1, IoU or
+per-fire detection. The per-fire diagnostics are returned as
+`reference_observability` and written to
+`validation_dir/VALIDATION/02_OBSERVABILITY/reference_fires_observability_<year>_<tag>.csv`;
+the excluded geometries are written to
+`reference_fires_not_observable_<year>_<tag>.gpkg`.
+
+\strong{Partial-observability audit (informative only)}
+
+Within the fires the contract keeps whole, some burnable-domain pixels may
+still lack an observation. This is reported for audit but \strong{never}
+modifies the validation contract (no TP/FP/FN/TN/coverage figure changes,
+no per-pixel denominator is introduced). `validate_fire_maps()` returns
+`observability_audit` and writes three CSVs to `02_OBSERVABILITY`:
+`OBSERVABILITY_AUDIT_<year>.csv` (counts: `n_reference_fires_original`,
+`_observable`, `_excluded`, `_partially_observable`,
+`excluded_reference_area_ha`, `partial_non_observable_pixels`,
+`partial_non_observable_area_ha`), `OBSERVABILITY_EXCLUDED_FIRES_<year>.csv`
+and `OBSERVABILITY_PARTIAL_FIRES_<year>.csv` (per partial fire: burnable
+area, total / temporally-valid / non-observable pixels, non-observable
+area, observable fraction, and a `contract_keeps_whole_fire` confirmation).
+
+Pixel-level (spatial) observability masking is intentionally out of scope
+for this version and is recorded only as possible future work.
 
 \strong{Polygon-level omission and commission by class}
 
@@ -349,17 +391,31 @@ calculation.
 \strong{Caching and reprocessing}
 
 The function caches intermediate masked reference and prediction
-layers in `validation_dir/VALIDATION/`. This avoids repeating
+layers in `validation_dir/VALIDATION/_CACHE/`. This avoids repeating
 expensive spatial preprocessing when the same validation setup is run
 multiple times.
 
-Use `force_reprocess_ref = TRUE` when changes to the reference-side
-settings require rebuilding the reference cache, especially after
-changing `min_area_reference_ha`, `observability_raster`,
-`dissolve_ref_by`, or the burnable-domain settings. Use
-`force_reprocess_pred = TRUE` when the prediction layer or
-prediction-side settings have changed and the cached prediction
-products should be rebuilt.
+The cache key is \strong{content-aware}: it is derived from the content
+and methodological identity of every input that shapes the cached
+reference artifact, not merely a file basename or layer name. The
+reference cache filename carries an `obs-<hash>_dom-<hash>_ref-<hash>`
+tag and is invalidated automatically when any of the following changes:
+the observability raster content, its band/layer or the DOY columns; the
+observability rule itself; the burnable raster (including resolution, CRS
+and grid/extent); the study-area mask; the burnable thresholding
+(`binary_burnable`, `burnable_classes`, `burnable_threshold`); the EFFIS
+reference content; and `min_area_reference_ha` / `dissolve_ref_by`. The
+prediction cache additionally folds in the burnable-domain identity. File
+content is fingerprinted by size, mtime and (for files below 64 MB) an
+md5 of the bytes, with a structural fingerprint for in-memory objects.
+`buffer` is deliberately not part of the key: it is applied downstream to
+the loaded reference at detection time and never shapes the cached
+artifact.
+
+Use `force_reprocess_ref = TRUE` to force a full rebuild of the reference
+cache regardless of the key (e.g. after mutating an input in place);
+`force_reprocess_pred = TRUE` does the same for the cached prediction
+products.
 }
 \note{
 This is the canonical v2 validation implementation. Deprecated v1
@@ -370,7 +426,12 @@ Version 0.2.1 added `Specificity`, `BalancedAccuracy`, and
 summaries plus `Detected_Definition` to the polygon outputs; and the
 `threshold_min_detected`, `dissolve_ref_by`, and `dissolve_input_by`
 controls. Version 0.5.0 adds the optional temporal observability
-filter controlled by `observability_raster`.
+filter controlled by `observability_raster`. Version 0.10.1 makes the
+reference/observability cache key content-aware (it now invalidates on a
+change to the observability raster content, band or rule, the burnable
+mask, resolution, CRS, grid, study-area mask, reference content or
+burnable thresholding) and adds the informative `observability_audit`
+of partial spatial observability, which never changes any metric.
 }
 \examples{
 \dontrun{

@@ -662,3 +662,22 @@ val <- validate_fire_maps(
 This subsection is currently a draft. Later revisions will execute these
 steps interactively and discuss the intermediate outputs.
 :::
+
+::: {.callout-important}
+## Observability is temporal, not a pixel mask
+`observability_raster` triggers a **temporal, whole-fire** observability
+filter. For each reference fire the function compares the fire DOY
+(`ref_end_doy_col`, fallback `ref_start_doy_col`) against the maximum
+observable DOY inside the polygon. A fire with no valid observable DOY, or
+whose date is after the last observation, is dropped from the reference
+*before* rasterization — it contributes 0 TP / 0 FN / 0 evaluated area and
+is absent from omission, recall, F1, IoU and per-fire detection. It is
+**not** a pixel-level cloud/valid-data mask: partially observed fires are
+kept whole, and no per-pixel denominator is introduced. Residual per-pixel
+non-observability inside kept fires is reported only for audit, in
+`val$observability_audit` and the `02_OBSERVABILITY/OBSERVABILITY_*` CSVs,
+and never changes any metric. The reference cache is content-aware and
+rebuilds automatically when the observability raster, burnable mask,
+resolution, CRS, grid, study-area mask, reference content or the
+observability rule changes; `force_reprocess_ref = TRUE` forces a rebuild.
+:::

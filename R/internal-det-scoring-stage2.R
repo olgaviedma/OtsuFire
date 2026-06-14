@@ -784,7 +784,12 @@ scoring_internal_burned_area <- function(
       gpkg_path <- file.path(out_dir, sprintf("%s_phase1.gpkg", prefix))
       if (isTRUE(overwrite) && file.exists(gpkg_path)) unlink(gpkg_path)
 
-      sf::st_write(out, gpkg_path, layer = "stage2_flagged", quiet = quiet)
+      # 2026-06-12 overwrite fix: rely on delete_dsn for a robust replace.
+      # A bare unlink() can silently fail on Windows when a stale GPKG from a
+      # previous failed run is still present, leaving st_write to hit an
+      # existing dataset ("Creation failed."). delete_dsn lets GDAL drop it.
+      sf::st_write(out, gpkg_path, layer = "stage2_flagged",
+                   delete_dsn = isTRUE(overwrite), quiet = quiet)
       sf::st_write(stage2_keep_review, gpkg_path, layer = "stage2_keep_review", append = TRUE, quiet = quiet)
       sf::st_write(stage2_dropped, gpkg_path, layer = "stage2_dropped", append = TRUE, quiet = quiet)
 
@@ -1346,7 +1351,10 @@ scoring_reference_burned_area <- function(
       gpkg_path <- file.path(out_dir, sprintf("%s_reference.gpkg", prefix))
       if (isTRUE(overwrite) && file.exists(gpkg_path)) unlink(gpkg_path)
 
-      sf::st_write(out, gpkg_path, layer = "ref_flagged", quiet = quiet)
+      # 2026-06-12 overwrite fix (see _phase1 writer): delete_dsn makes the
+      # replace robust against a stale GPKG that unlink() failed to remove.
+      sf::st_write(out, gpkg_path, layer = "ref_flagged",
+                   delete_dsn = isTRUE(overwrite), quiet = quiet)
       sf::st_write(ref_flagged_clean, gpkg_path, layer = "ref_flagged_clean", append = TRUE, quiet = quiet)
       sf::st_write(ref_kept, gpkg_path, layer = "ref_kept", append = TRUE, quiet = quiet)
       sf::st_write(ref_dropped, gpkg_path, layer = "ref_dropped", append = TRUE, quiet = quiet)
@@ -1568,7 +1576,10 @@ scoring_validation_burned_area <- function(
       gpkg_path <- file.path(out_dir, sprintf("%s_validation.gpkg", prefix))
       if (isTRUE(overwrite) && file.exists(gpkg_path)) unlink(gpkg_path)
 
-      sf::st_write(tmp_ref$ref_flagged, gpkg_path, layer = "ref_flagged", quiet = quiet)
+      # 2026-06-12 overwrite fix (see _phase1 writer): delete_dsn makes the
+      # replace robust against a stale GPKG that unlink() failed to remove.
+      sf::st_write(tmp_ref$ref_flagged, gpkg_path, layer = "ref_flagged",
+                   delete_dsn = isTRUE(overwrite), quiet = quiet)
       sf::st_write(tmp_int$internal_flagged, gpkg_path, layer = "internal_flagged", append = TRUE, quiet = quiet)
 
       if (isTRUE(save_splits)) {

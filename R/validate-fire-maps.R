@@ -433,115 +433,17 @@ validate_fire_maps <- function(input_shapefile,
       dplyr::summarise(do_union = TRUE, .groups = "drop")
   }
 
-  make_cache_safe_tag <- function(x) {
-    x <- paste(x, collapse = "_")
-    x <- gsub("[^A-Za-z0-9]+", "-", x)
-    x <- gsub("(^-+|-+$)", "", x)
-    if (!nzchar(x)) "na" else substr(x, 1L, 80L)
-  }
-
-  make_short_cache_hash <- function(...) {
-    x <- paste(unlist(list(...), use.names = FALSE), collapse = "|")
-    ints <- utf8ToInt(enc2utf8(x))
-    if (!length(ints)) return("00000000")
-    mod <- 2147483647
-    h <- 0
-    for (ii in ints) {
-      h <- (h * 131 + ii) %% mod
-    }
-    hx <- toupper(as.character(as.hexmode(h)))
-    hx <- paste0(strrep("0", 8L), hx)
-    substr(hx, nchar(hx) - 7L, nchar(hx))
-  }
-
-  observability_cache_tag <- function(observability_raster,
-                                      ref_end_doy_col,
-                                      ref_start_doy_col) {
-    if (is.null(observability_raster)) return("obs-none")
-    obs_id <- NULL
-    layer_id <- NULL
-    if (inherits(observability_raster, "SpatRaster")) {
-      src <- tryCatch(terra::sources(observability_raster), error = function(e) character())
-      src <- src[nzchar(src)]
-      obs_id <- if (length(src)) basename(src[[1]]) else sprintf(
-        "spatraster-%sx%s-res%s",
-        terra::nrow(observability_raster),
-        terra::ncol(observability_raster),
-        paste(format(terra::res(observability_raster), trim = TRUE), collapse = "x")
-      )
-      layer_id <- paste(names(observability_raster), collapse = "+")
-    } else if (is.character(observability_raster) && length(observability_raster) == 1L) {
-      obs_id <- basename(normalizePath(observability_raster, winslash = "/", mustWork = FALSE))
-      layer_id <- paste(names(terra::rast(observability_raster)), collapse = "+")
-    } else {
-      obs_id <- class(observability_raster)[1]
-      layer_id <- obs_id
-    }
-    paste0(
-      "obs-",
-      make_short_cache_hash(
-        make_cache_safe_tag(obs_id),
-        make_cache_safe_tag(layer_id),
-        make_cache_safe_tag(ref_end_doy_col),
-        make_cache_safe_tag(ref_start_doy_col)
-      )
-    )
-  }
-
-  # Content/identity fingerprint of a vector input (path on disk OR in-memory
-  # sf). Used to make raster caches input-aware so that a changed input on disk
-  # busts the cache automatically, without requiring force_reprocess_*=TRUE.
-  # - For a path: hash normalized path + mtime + size of the file (and, for
-  #   shapefiles, the .dbf sidecar which holds attributes).
-  # - For an in-memory sf: hash a structural fingerprint (nrow + bbox + crs +
-  #   geometry type) since there is no file mtime to consult.
-  vector_input_cache_tag <- function(x) {
-    if (is.null(x)) return("in-none")
-    parts <- character(0)
-    if (is.character(x) && length(x) == 1L && nzchar(x)) {
-      np <- normalizePath(x, winslash = "/", mustWork = FALSE)
-      parts <- c(parts, "path", basename(np))
-      sidecars <- np
-      if (identical(tolower(tools::file_ext(np)), "shp")) {
-        sidecars <- c(np, sub("\\.shp$", ".dbf", np, ignore.case = TRUE))
-      }
-      for (f in sidecars) {
-        if (file.exists(f)) {
-          fi <- file.info(f)
-          parts <- c(
-            parts,
-            basename(f),
-            format(fi$mtime, "%Y%m%d%H%M%S", tz = "UTC"),
-            format(fi$size, scientific = FALSE)
-          )
-        }
-      }
-    } else if (inherits(x, "sf")) {
-      bb <- tryCatch(sf::st_bbox(x), error = function(e) NULL)
-      bb_str <- if (is.null(bb)) "nobbox" else paste(
-        format(as.numeric(bb), trim = TRUE, nsmall = 0), collapse = ","
-      )
-      crs_str <- tryCatch(
-        format(sf::st_crs(x)$wkt %||% sf::st_crs(x)$input %||% "nocrs"),
-        error = function(e) "nocrs"
-      )
-      geom_str <- tryCatch(
-        paste(as.character(sf::st_geometry_type(x, by_geometry = FALSE)), collapse = "+"),
-        error = function(e) "nogeom"
-      )
-      parts <- c(
-        parts, "sf",
-        format(nrow(x), scientific = FALSE),
-        bb_str, crs_str, geom_str
-      )
-    } else {
-      parts <- c(parts, class(x)[1])
-    }
-    paste0(
-      "in-",
-      make_short_cache_hash(make_cache_safe_tag(paste(parts, collapse = "|")))
-    )
-  }
+  # Content-aware cache keys live in R/internal-validate-cache.R as
+  # package-internal, side-effect-free helpers (so the cache contract is unit
+  # testable without running the full validator):
+  #   .vfm_observability_fingerprint(), .vfm_domain_fingerprint(),
+  #   .vfm_reference_cache_key(), .vfm_vector_fingerprint().
+  # They fold the CONTENT and methodological identity of every input that shapes
+  # the reference cache (observability raster content + layer + DOY columns +
+  # rule version; burnable raster grid/CRS/content; study-area mask; burnable
+  # thresholding; reference vector content; min-area / dissolve options), so a
+  # changed input busts the cache automatically. force_reprocess_ref = TRUE
+  # still forces a full rebuild regardless of the key.
 
   align_optional_raster <- function(x, template, mask_v) {
     xr <- if (inherits(x, "SpatRaster")) x else terra::rast(x)
@@ -829,19 +731,39 @@ validate_fire_maps <- function(input_shapefile,
   domain_mask[!is.na(domain_mask)] <- 1
 
   cell_area_ha <- abs(prod(terra::res(domain_mask))) / 10000
-  obs_cache_tag <- observability_cache_tag(
+  obs_cache_tag <- .vfm_observability_fingerprint(
     observability_raster = observability_raster,
     ref_end_doy_col = ref_end_doy_col,
     ref_start_doy_col = ref_start_doy_col
   )
 
-  # Input-aware reference cache key: the obs_cache_tag above only captures
-  # observability + DOY-column settings, NOT the identity of ref_shapefile. A
-  # changed reference layer on disk (same observability settings) would
-  # otherwise be silently reused. Fold a fingerprint of ref_shapefile into the
-  # tag so a changed reference busts the cache automatically (without requiring
-  # force_reprocess_ref = TRUE). Unchanged references reuse the cache as before.
-  ref_cache_tag <- paste0(obs_cache_tag, "_", vector_input_cache_tag(ref_shapefile))
+  # Burnable-domain identity (grid/CRS/extent/content of the burnable raster +
+  # study-area mask + burnable thresholding). Shared by the reference and the
+  # prediction caches, since both are rasterized onto / masked by this domain.
+  dom_cache_tag <- .vfm_domain_fingerprint(
+    burnable_raster = burnable_raster,
+    mask_shapefile = mask_shapefile,
+    binary_burnable = binary_burnable,
+    burnable_classes = burnable_classes,
+    burnable_threshold = burnable_threshold
+  )
+
+  # Content-aware reference cache key. Folds the CONTENT and methodological
+  # identity of every input that shapes the cached reference artifact:
+  # observability (raster content + layer + DOY columns + rule version),
+  # burnable domain (grid/CRS/content + mask + thresholding) and the reference
+  # vector content + reference-only options (min area, dissolve field). A change
+  # to any of them busts the cache automatically, without requiring
+  # force_reprocess_ref = TRUE. `buffer` is intentionally excluded: it is
+  # applied downstream to the loaded reference at detection time and never
+  # shapes the cached artifact.
+  ref_cache_tag <- .vfm_reference_cache_key(
+    obs_cache_tag = obs_cache_tag,
+    dom_cache_tag = dom_cache_tag,
+    ref_shapefile = ref_shapefile,
+    min_area_reference_ha = min_area_reference_ha,
+    dissolve_ref_by = dissolve_ref_by
+  )
 
   # ---- cache paths ----
   ref_vec_cache  <- validation_output_path(
@@ -1087,11 +1009,13 @@ validate_fire_maps <- function(input_shapefile,
     input_name <- input_names[k]
     message("Processing input: ", input_name)
 
-    # Input-aware cache key: fold a content/identity fingerprint of the
-    # prediction input into the filename so a changed input on disk (e.g.
-    # keep_only.gpkg rewritten) busts the cache automatically, even with
-    # force_reprocess_pred = FALSE. Unchanged inputs reuse the cache as before.
-    pred_in_tag <- vector_input_cache_tag(shp)
+    # Content-aware cache key: fold a content/identity fingerprint of the
+    # prediction input AND the burnable-domain identity into the filename. A
+    # changed input on disk (e.g. keep_only.gpkg rewritten) OR a changed
+    # burnable domain (the prediction is rasterized onto / masked by it) busts
+    # the cache automatically, even with force_reprocess_pred = FALSE. Unchanged
+    # inputs reuse the cache as before.
+    pred_in_tag <- paste0(.vfm_vector_fingerprint(shp), "_", dom_cache_tag)
     pred_tif <- validation_output_path(
       cache_output_dir,
       paste0("predicted_fire_mask_", year_target, "_", input_name, "_", pred_in_tag, ".tif")

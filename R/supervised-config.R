@@ -354,6 +354,15 @@
 #'       convention default paths for the optional inputs (see
 #'       \strong{Description}).
 #'     \item `result_name` --- run label used in convention paths.
+#'     \item `unburned_base_dir` --- optional shared, scenario-independent base
+#'       directory for the negative (unburned) pool. The negative pool only
+#'       depends on the year, so pinning it here lets several scenarios of the
+#'       same year reuse one set of negatives instead of regenerating identical
+#'       ones. When set, both the random/deterministic unburned GPKG
+#'       (`<unburned_base_dir>/UNBURNED/<year>_unburned.gpkg`) and the
+#'       Otsu-negative working root (`<unburned_base_dir>/_OTSU_NEGATIVE`) live
+#'       under it. When absent (default), the historical scenario-scoped paths
+#'       are used (byte-identical behaviour).
 #'     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
 #'       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
 #'       same names; surfaced on `cfg$tool_paths`.

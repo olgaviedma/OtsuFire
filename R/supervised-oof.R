@@ -150,7 +150,7 @@
 #' @examples
 #' \dontrun{
 #' cfg <- build_supervised_burned_config(
-#'   scenario = "balanced", internal_decisions = "decisions.gpkg",
+#'   run_label = "balanced", internal_decisions = "decisions.gpkg",
 #'   change_index = "rbr.tif", target_year = 2017L
 #' )
 #' feats <- extract_supervised_features(

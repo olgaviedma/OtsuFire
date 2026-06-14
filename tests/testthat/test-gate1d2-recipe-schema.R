@@ -193,7 +193,7 @@ g_mk_vse_cfg <- function(out_dir = tempfile("g1d2_cfg_"), target_year = 2017L) {
   sf::st_write(poly, id_p, layer = "internal_decisions", quiet = TRUE,
                delete_dsn = TRUE)
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id_p, change_index = ci_p,
+    run_label = "balanced", internal_decisions = id_p, change_index = ci_p,
     target_year = target_year, output_dir = out_dir,
     topo = topo_p, corine_raster = cor_p, burnable_mask = mask_p)
 }

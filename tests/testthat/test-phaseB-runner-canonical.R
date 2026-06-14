@@ -44,7 +44,7 @@ mk_pb_final_gpkg <- function() {
 # A canonical (builder-path) cfg with a USER random cap.
 build_canonical_cfg <- function() {
   build_supervised_burned_config(
-    scenario           = "balanced",
+    run_label          = "balanced",
     internal_decisions = mk_pb_gpkg(),
     change_index       = mk_pb_tif(),
     target_year        = 2017L,

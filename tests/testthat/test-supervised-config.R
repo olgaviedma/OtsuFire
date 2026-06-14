@@ -18,7 +18,7 @@ test_that("supervised config returns expected S3 and required fields", {
   ci <- mk_tmp_tif_s()
   id <- mk_tmp_gpkg_s()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced",
+    run_label = "balanced",
     internal_decisions = id,
     change_index = ci,
     target_year = 2025,
@@ -48,20 +48,20 @@ test_that("supervised config is always all_sources (knob removed, honest guard)"
 
   # No policy option: always all_sources, all scenarios.
   cfg_b <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2025L
   )
   expect_identical(cfg_b$negative_pool_policy, "all_sources")
 
   cfg_o <- build_supervised_burned_config(
-    scenario = "original", internal_decisions = id,
+    run_label = "original", internal_decisions = id,
     change_index = ci, target_year = 2025L
   )
   expect_identical(cfg_o$negative_pool_policy, "all_sources")
 
   # Historical canonical value accepted as a no-op (no error, no warning).
   cfg_over <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2025L,
     options = list(negative_pool_policy = "all_sources")
   )
@@ -70,7 +70,7 @@ test_that("supervised config is always all_sources (knob removed, honest guard)"
   # Any stale value errors via the honest guard.
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id,
+      run_label = "balanced", internal_decisions = id,
       change_index = ci, target_year = 2025L,
       options = list(negative_pool_policy = "deterministic_direct")
     ),
@@ -81,34 +81,58 @@ test_that("supervised config is always all_sources (knob removed, honest guard)"
 test_that("supervised config rejects invalid inputs", {
   ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
   expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                     internal_decisions = id,
                                     change_index = ci),
     regexp = "target_year"
   )
   expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                     change_index = ci, target_year = 2025L),
     regexp = "internal_decisions"
   )
   expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                     internal_decisions = id,
                                     target_year = 2025L),
     regexp = "change_index"
   )
   expect_error(
-    build_supervised_burned_config(scenario = "ultra",
-                                    internal_decisions = id,
-                                    change_index = ci, target_year = 2025L),
-    regexp = "should be one of"
-  )
-  expect_error(
-    build_supervised_burned_config(scenario = "balanced",
+    build_supervised_burned_config(run_label = "balanced",
                                     internal_decisions = id,
                                     change_index = ci, target_year = 2025L,
                                     min_burned_pool_n = -1),
     regexp = "min_burned_pool_n"
+  )
+})
+
+test_that("run_label is a free-text label (any non-empty string accepted)", {
+  # 2026-06-14 breaking change: `run_label` replaced the former `scenario`
+  # enum. There is NO match.arg / enum check anymore; any non-empty character
+  # string is a valid run label and is stored verbatim in cfg$scenario (the
+  # internal field name is unchanged and drives all downstream naming/routing).
+  ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
+
+  cfg_free <- build_supervised_burned_config(
+    run_label = "anything_free", internal_decisions = id,
+    change_index = ci, target_year = 2025L
+  )
+  expect_s3_class(cfg_free, "otsufire_supervised_burned_config")
+  expect_identical(cfg_free$scenario, "anything_free")
+
+  # An empty string is rejected with a run_label-specific message.
+  expect_error(
+    build_supervised_burned_config(run_label = "",
+                                    internal_decisions = id,
+                                    change_index = ci, target_year = 2025L),
+    regexp = "run_label"
+  )
+  # A non-character value is rejected too.
+  expect_error(
+    build_supervised_burned_config(run_label = 123,
+                                    internal_decisions = id,
+                                    change_index = ci, target_year = 2025L),
+    regexp = "run_label"
   )
 })
 
@@ -157,7 +181,7 @@ test_that("§N+25: RUN inputs default to the convention paths", {
   paths <- mk_fake_data_base(ty, cy)
 
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = ty,
     options = list(data_base = paths$data_base,
                    composite_base = paths$composite_base)
@@ -194,7 +218,7 @@ test_that("§N+25: a user-supplied RUN-input path overrides the convention", {
   my_corine <- mk_tmp_tif_s()
 
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = ty, corine_raster = my_corine,
     options = list(data_base = paths$data_base,
                    composite_base = paths$composite_base)
@@ -208,7 +232,7 @@ test_that("§N+25: config construction FAILS FAST on a missing RUN input", {
   missing_topo <- file.path(tempdir(), "does_not_exist_topo.tif")
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id, change_index = ci,
+      run_label = "balanced", internal_decisions = id, change_index = ci,
       target_year = 2012L, topo = missing_topo
     ),
     regexp = "topo.*does not exist|does not exist.*topo"
@@ -220,7 +244,7 @@ test_that("§N+25: VALIDATION-only inputs are NOT part of cfg$inputs", {
   # validate_fire_maps() call, not the supervised run config.
   ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = 2012L
   )
   expect_false(any(c("strata_tif", "strata_lut", "mask_tif", "mask_shp",
@@ -232,7 +256,7 @@ test_that("§N+25: a data_base-less config leaves RUN inputs deferred (NULL)", {
   # stay NULL (deferred to runtime) and construction does not fail.
   ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = 2012L
   )
   expect_null(cfg$inputs$topo)
@@ -270,7 +294,7 @@ test_that("supervised config rejects the removed otsu_unburned_generation knob",
   ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id,
+      run_label = "balanced", internal_decisions = id,
       change_index = ci, target_year = 2025L,
       options = list(negative_pool_policy = "otsu_unburned_generation")
     ),
@@ -278,7 +302,7 @@ test_that("supervised config rejects the removed otsu_unburned_generation knob",
   )
   expect_error(
     build_supervised_burned_config(
-      scenario = "balanced", internal_decisions = id,
+      run_label = "balanced", internal_decisions = id,
       change_index = ci, target_year = 2025L,
       options = list(otsu_unburned_generation = "otsu_unburned_generation")
     ),
@@ -341,7 +365,7 @@ test_that("PIECE 4: a cfg without any ecoregion input still builds + keeps corin
   skip_if_not_installed("sf"); skip_if_not_installed("terra")
   ci <- mk_tmp_tif_s(); id <- mk_tmp_gpkg_s()
   cfg <- build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id,
+    run_label = "balanced", internal_decisions = id,
     change_index = ci, target_year = 2017L
   )
   # No ecoregion input field exists; corine_raster remains a supervised input.
@@ -389,7 +413,7 @@ test_that("PIECE 4: DETERMINISTIC CORINE x ecoregion Otsu wiring is preserved", 
 
 mk_g67_cfg <- function(ci, id, ...) {
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id, change_index = ci,
+    run_label = "balanced", internal_decisions = id, change_index = ci,
     target_year = 2025L, ...)
 }
 

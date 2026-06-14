@@ -272,7 +272,7 @@ mk_cfg_with_decisions <- function(out_dir, poly_list, ids = NULL,
                delete_dsn = TRUE)
 
   build_supervised_burned_config(
-    scenario = "balanced", internal_decisions = id_p, change_index = ci_p,
+    run_label = "balanced", internal_decisions = id_p, change_index = ci_p,
     target_year = target_year, output_dir = out_dir,
     topo = topo_p, corine_raster = cor_p, burnable_mask = mask_p)
 }

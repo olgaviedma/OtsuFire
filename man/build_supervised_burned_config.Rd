@@ -5,7 +5,7 @@
 \title{Build a configuration object for the supervised burned-area workflow}
 \usage{
 build_supervised_burned_config(
-  scenario = c("balanced", "original", "lax", "restrictive"),
+  run_label = "balanced",
   internal_decisions,
   change_index,
   delayed_change_index = NULL,
@@ -40,10 +40,10 @@ build_supervised_burned_config(
 )
 }
 \arguments{
-\item{scenario}{Character scalar. Methodological preset that names the run
-and its output sub-folders. One of `"balanced"` (default), `"original"`,
-`"lax"`, `"restrictive"`. Consumed throughout the workflow for naming and
-routing.}
+\item{run_label}{Character scalar. Free-text label that names the run and its
+output sub-folders / file prefixes (consumed throughout the supervised
+workflow for naming and routing only; it has NO methodological effect). Any
+non-empty string. Default "balanced".}
 
 \item{internal_decisions}{sf POLYGON layer or a GPKG path. The deterministic
 decision layer (the labelled output of the deterministic stage) produced
@@ -464,9 +464,9 @@ share one internal eligibility resolver and one capping helper.
 }
 \examples{
 \dontrun{
-## Full configuration: balanced scenario, all inputs.
+## Full configuration: "balanced" run label, all inputs.
 cfg <- build_supervised_burned_config(
-  scenario             = "balanced",
+  run_label            = "balanced",
   internal_decisions   = "2017/internal_decisions.gpkg",
   change_index         = "MinMin_2017_mosaic_res90m.tif",
   delayed_change_index = "Autumn/mean_mean_2017_mosaic.tif",
@@ -489,7 +489,7 @@ pools <- build_supervised_training_pools(cfg)
 ## a whitelist override (see inst/scripts/ for the canonical versioned
 ## examples).
 cfg_nohs <- build_supervised_burned_config(
-  scenario                   = "balanced",
+  run_label                  = "balanced",
   internal_decisions         = "1994/internal_decisions.gpkg",
   change_index               = "MinMin_1994_mosaic_res90m.tif",
   hotspots                   = NULL,

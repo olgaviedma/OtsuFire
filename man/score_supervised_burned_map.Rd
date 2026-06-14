@@ -185,7 +185,7 @@ deliberate contracts, so they are NOT expected to have equal row counts:
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(
-  scenario = "balanced", internal_decisions = "decisions.gpkg",
+  run_label = "balanced", internal_decisions = "decisions.gpkg",
   change_index = "rbr.tif", target_year = 2017L
 )
 tm <- train_final_burned_model(

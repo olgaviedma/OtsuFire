@@ -52,10 +52,10 @@
 #' stays `NULL` and is resolved later by the stage that needs it. See the
 #' per-argument notes for the exact `NULL` behaviour.
 #'
-#' @param scenario Character scalar. Methodological preset that names the run
-#'   and its output sub-folders. One of `"balanced"` (default), `"original"`,
-#'   `"lax"`, `"restrictive"`. Consumed throughout the workflow for naming and
-#'   routing.
+#' @param run_label Character scalar. Free-text label that names the run and its
+#'   output sub-folders / file prefixes (consumed throughout the supervised
+#'   workflow for naming and routing only; it has NO methodological effect). Any
+#'   non-empty string. Default "balanced".
 #'
 #' @param internal_decisions sf POLYGON layer or a GPKG path. The deterministic
 #'   decision layer (the labelled output of the deterministic stage) produced
@@ -424,9 +424,9 @@
 #'
 #' @examples
 #' \dontrun{
-#' ## Full configuration: balanced scenario, all inputs.
+#' ## Full configuration: "balanced" run label, all inputs.
 #' cfg <- build_supervised_burned_config(
-#'   scenario             = "balanced",
+#'   run_label            = "balanced",
 #'   internal_decisions   = "2017/internal_decisions.gpkg",
 #'   change_index         = "MinMin_2017_mosaic_res90m.tif",
 #'   delayed_change_index = "Autumn/mean_mean_2017_mosaic.tif",
@@ -449,7 +449,7 @@
 #' ## a whitelist override (see inst/scripts/ for the canonical versioned
 #' ## examples).
 #' cfg_nohs <- build_supervised_burned_config(
-#'   scenario                   = "balanced",
+#'   run_label                  = "balanced",
 #'   internal_decisions         = "1994/internal_decisions.gpkg",
 #'   change_index               = "MinMin_1994_mosaic_res90m.tif",
 #'   hotspots                   = NULL,
@@ -477,7 +477,7 @@
 #' @family workflow
 #' @export
 build_supervised_burned_config <- function(
-    scenario = c("balanced", "original", "lax", "restrictive"),
+    run_label = "balanced",
     internal_decisions,
     change_index,
     delayed_change_index = NULL,
@@ -546,7 +546,10 @@ build_supervised_burned_config <- function(
     model_params               = NULL,
     options = list()
 ) {
-  scenario <- match.arg(scenario)
+  if (!is.character(run_label) || length(run_label) != 1L || is.na(run_label) ||
+      !nzchar(run_label)) {
+    stop("'run_label' must be a single non-empty character string.", call. = FALSE)
+  }
 
   if (missing(target_year) || is.null(target_year)) {
     stop("'target_year' is required.", call. = FALSE)
@@ -746,7 +749,7 @@ build_supervised_burned_config <- function(
 
   output_routes <- .of_build_supervised_output_routes(
     output_dir = output_dir, target_year = target_year,
-    run_name = run_name, scenario = scenario
+    run_name = run_name, scenario = run_label
   )
 
   # ---- Gate 1B (2026-06-07): resolve cfg$model_params + cfg$train_control ----
@@ -844,7 +847,7 @@ build_supervised_burned_config <- function(
   # 1E.6 as dead code with no live caller).
 
   cfg <- list(
-    scenario                 = scenario,
+    scenario                 = run_label,
     target_year              = target_year,
     inputs                   = inputs,
     run_name                 = run_name,

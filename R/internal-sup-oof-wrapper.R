@@ -127,6 +127,12 @@ run_dm_oof_pipeline <- function(
     # behaviour byte-for-byte.
     feature_whitelist_override = NULL,
     feature_weights = NULL,
+    # OPTIONAL shape/size block (OtsuFire 0.12.0, OFF by default). When TRUE the
+    # admissible feature universe becomes the canonical 50 + the 6 shape names
+    # (.supervised_feature_universe), so the OOF whitelist filter admits the
+    # shape columns (matching the FINAL engine exactly). FALSE -> byte-identical
+    # to today. Threaded from run_oof_diagnostics().
+    include_shape_features = FALSE,
     # The cap ratios are REQUIRED formals (no defaults) so a dropped argument
     # cannot silently revert a bucket to ratio 1.0. Forwarded to run_oof_xgb.
     # GATE 6.5 (2026-06-12): the contextual cap was removed (random + otsu only).
@@ -146,6 +152,15 @@ run_dm_oof_pipeline <- function(
     # removes the former hardcoded "block_id" literal that broke single-source
     # symmetry with the FINAL stage.
     group_col,
+    # PHASE 2 (artifact_hard): optional per-row source weighting forwarded to
+    # run_oof_xgb. `source_weights` is a NAMED numeric (source -> weight);
+    # `artifact_hard_source` marks promoted artifact_hard rows. Defaults
+    # (NULL / "artifact_hard") => NO per-row weighting when no source_weights
+    # override AND no artifact_hard row present => byte-identical to today.
+    source_weights = NULL,
+    artifact_hard_source = "artifact_hard",
+    # PHASE 2 (artifact_hard): pool-level weight balance forwarded to run_oof_xgb.
+    total_weight_ratio = 0.10,
     ...
 ) {
   if (!exists("build_design_matrix_patches")) stop("No encuentro build_design_matrix_patches() cargada en el entorno.")
@@ -231,6 +246,13 @@ run_dm_oof_pipeline <- function(
     drop_regex <- character(0)
   }
 
+  # OPTIONAL shape/size block (OtsuFire 0.12.0): THE admissible feature
+  # universe (canonical 50, or 50 + 6 shape names when include_shape_features =
+  # TRUE). The OOF stage MUST use the SAME helper as the FINAL engine so the
+  # intersect-based matrix builder and FINAL's inline filter admit IDENTICAL
+  # columns (the OOF==FINAL guarantee).
+  feature_universe <- .supervised_feature_universe(include_shape = include_shape_features)
+
   # 0.5.0: validate `feature_whitelist_override` (strict).
   if (!is.null(feature_whitelist_override)) {
     if (!is.character(feature_whitelist_override) ||
@@ -238,20 +260,21 @@ run_dm_oof_pipeline <- function(
       stop("`feature_whitelist_override` must be a non-empty character vector.",
            call. = FALSE)
     }
-    unknown <- setdiff(feature_whitelist_override, .supervised_feature_cols)
+    unknown <- setdiff(feature_whitelist_override, feature_universe)
     if (length(unknown) > 0) {
       stop(
-        "`feature_whitelist_override` contains names not in the canonical ",
-        "`.supervised_feature_cols`: ",
+        "`feature_whitelist_override` contains names not in the active ",
+        "feature universe (`.supervised_feature_universe(include_shape = ",
+        as.character(isTRUE(include_shape_features)), ")`): ",
         paste(unknown, collapse = ", "), ". The canonical list is fixed; ",
-        "this argument can only restrict it, not extend it.",
+        "this argument can only restrict the active universe, not extend it.",
         call. = FALSE
       )
     }
     feature_whitelist_override <- unique(feature_whitelist_override)
   }
   active_whitelist <- if (is.null(feature_whitelist_override)) {
-    .supervised_feature_cols
+    feature_universe
   } else {
     feature_whitelist_override
   }
@@ -382,7 +405,14 @@ run_dm_oof_pipeline <- function(
     # Gate 1B (2026-06-07): threaded from cfg$train_control$group_col via
     # run_oof_diagnostics() (was a hardcoded "block_id" literal).
     group_col         = group_col,
-    feature_weights   = feature_weights
+    feature_weights   = feature_weights,
+    # PHASE 2 (artifact_hard): forward the per-row weighting inputs + the
+    # artifact_hard source tag so run_oof_xgb's per-fold eligibility resolver
+    # admits the uncapped artifact_hard bucket and resolves the per-row weights.
+    # Default-off => byte-identical.
+    source_weights       = source_weights,
+    artifact_hard_source = artifact_hard_source,
+    total_weight_ratio   = total_weight_ratio
   )
   # val_frac / impute_* / caps are required by run_oof_xgb (validated present
   # above); forward each (the missing() guards are always TRUE here).

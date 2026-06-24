@@ -149,6 +149,13 @@
     ),
     feature_whitelist_override = NULL,
     feature_weights            = NULL,
+    # OPTIONAL shape/size feature block (OtsuFire 0.12.0). Canonical default
+    # FALSE: the resolved feature universe is the frozen 50-name whitelist and
+    # every model / OOF / FINAL / extraction output is byte-identical to 0.11.0.
+    # When TRUE the six .supervised_shape_feature_cols become eligible features
+    # (and feature extraction computes them). Experimental; see the NEWS.md
+    # SAMPLING-BIAS caveat.
+    include_shape_features     = FALSE,
     # Fixed internal constant (traceability / provenance only; NOT user-settable
     # and NOT an argument). OtsuFire always uses inner-early-stopping selection +
     # full-data refit. Kept as a constant so manifests / run fingerprints stay

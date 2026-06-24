@@ -201,6 +201,11 @@ score_burnedlike_and_export_final_map <- function(
       "temporal_penalty",
       "temporal_conflict_flag",
       "p_burned_oof",
+      # PHASE 2 (artifact_hard): surface p_burned_eval = coalesce(p_oof_mean,
+      # p_burned_model) in the public map too (added to final_map_full earlier).
+      # Only kept when present (public_cols filters to existing names), so the
+      # public-map schema is unchanged when scoring did not add it.
+      "p_burned_eval",
       "geom"
     )
     public_cols <- public_cols[public_cols %in% names(x)]
@@ -499,6 +504,15 @@ score_burnedlike_and_export_final_map <- function(
     drop_obsolete_fields() |>
     add_temporal_adjustment()
   final_map_full <- normalize_geom_name(final_map_full, "geom")
+
+  # PHASE 2 (artifact_hard): add p_burned_eval = coalesce(p_oof_mean,
+  # p_burned_model) as a NEW column at the END of scoring assembly (read-only to
+  # the model). Labeled rows (incl. artifact_hard) -> their held-out p_oof_mean
+  # (carried as p_burned_oof); pure scoring rows -> p_burned_model. No row is
+  # dropped and no public-map exclusion is added.
+  .pe_oof   <- suppressWarnings(as.numeric(final_map_full[["p_burned_oof"]]))
+  .pe_model <- suppressWarnings(as.numeric(final_map_full[["p_burned_model"]]))
+  final_map_full[["p_burned_eval"]] <- ifelse(is.finite(.pe_oof), .pe_oof, .pe_model)
 
   if (nrow(final_map_full) != nrow(S)) {
     stop(sprintf(

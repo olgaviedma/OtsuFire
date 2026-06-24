@@ -41,7 +41,14 @@
 # the ordering of the seeded draws (and therefore the selected ids) is one fixed
 # convention: random -> otsu. GATE 6.5 (2026-06-12): the "contextual" bucket was
 # removed (deterministic drops are no longer training negatives).
-.of_valid_negative_buckets <- function() {
+.of_valid_negative_buckets <- function(include_artifact_hard = FALSE) {
+  # DEFAULT stays c("random","otsu") so every existing caller / test that asserts
+  # the 2-bucket default is untouched. PHASE 2 (artifact_hard hard-negative
+  # mining): when include_artifact_hard = TRUE the optional third bucket is
+  # appended, in canonical order (random -> otsu -> artifact_hard).
+  if (isTRUE(include_artifact_hard)) {
+    return(c("random", "otsu", "artifact_hard"))
+  }
   c("random", "otsu")
 }
 
@@ -79,7 +86,15 @@
     random_background_source,
     otsu_unburned_source,
     otsu_unburned_exclude_neg_types,
-    origin_stage = "supervised"
+    origin_stage = "supervised",
+    # PHASE 2 (artifact_hard hard-negative mining): optional THIRD negative
+    # bucket. `artifact_hard_source` lists the `source` value(s) that mark a
+    # promoted artifact_hard negative (default character(0) => NO rows match =>
+    # NO behavior change; the bucket enum stays the canonical two). When a row's
+    # source is in this set it resolves to the "artifact_hard" bucket AND is the
+    # ONLY documented exception to the GATE-6.5 deterministic-drop-is-an-error
+    # guard (see below) -- every OTHER unbucketed unburned drop still ERRORS.
+    artifact_hard_source = character(0)
 ) {
   n <- length(class)
   if (length(id) != n || length(source) != n || length(neg_type) != n) {
@@ -91,16 +106,24 @@
   ngt <- as.character(neg_type)
   idv <- as.character(id)
 
-  valid_buckets <- .of_valid_negative_buckets()
+  # PHASE 2: the bucket enum gains the optional third bucket ONLY when an
+  # artifact_hard_source is supplied. With the default character(0) this is a
+  # no-op and valid_buckets stays the canonical two.
+  artifact_hard_source <- unique(as.character(stats::na.omit(artifact_hard_source)))
+  use_artifact_hard <- length(artifact_hard_source) > 0L
+  valid_buckets <- .of_valid_negative_buckets(include_artifact_hard = use_artifact_hard)
 
   # --- bucket predicates (mirror the FINAL pool filters exactly) -------------
   in_rand  <- !is.na(src) & (src %in% random_background_source)
   in_otsu  <- !is.na(src) & (src %in% otsu_unburned_source)
   otsu_excl <- !is.na(ngt) & (ngt %in% otsu_unburned_exclude_neg_types)
+  # PHASE 2: artifact_hard membership by source. All-FALSE when no source given.
+  in_ah    <- if (use_artifact_hard) !is.na(src) & (src %in% artifact_hard_source) else rep(FALSE, n)
 
   bucket_of <- function(i) {
     if (in_rand[i])               return("random")
     if (in_otsu[i] && !otsu_excl[i]) return("otsu")
+    if (in_ah[i])                 return("artifact_hard")
     NA_character_
   }
 
@@ -123,6 +146,15 @@
       next
     }
     # No valid bucket. Either a KNOWN-excluded type (log) or an ERROR (strict).
+    #
+    # PHASE 2 GATE-6.5 EXCEPTION (DOCUMENTED, NARROW): an artifact_hard_source
+    # row ALWAYS resolves to the "artifact_hard" bucket above (in_ah -> bucket
+    # "artifact_hard"), so it can never reach this stop. This is the ONLY
+    # carve-out from the "a deterministic drop reaching the resolver as an
+    # unburned negative is an ERROR" guard, and it is gated SOLELY on the row's
+    # source being in `artifact_hard_source` (a value the caller passes ONLY for
+    # rows it has explicitly promoted via .of_select_artifact_hard()). Every
+    # OTHER unbucketed unburned drop still ERRORS below, unchanged.
     if (in_otsu[i] && otsu_excl[i]) {
       excl_rows[[length(excl_rows) + 1L]] <- data.frame(
         id = idv[i], class = cls[i], source = src[i], neg_type = ngt[i],
@@ -188,6 +220,17 @@
                n = n_excluded_otsu_review,
                action = "excluded", stringsAsFactors = FALSE)
   )
+  # PHASE 2: append the artifact_hard bucket audit row ONLY when the bucket is
+  # active (an artifact_hard_source was supplied), so the audit shape is
+  # byte-identical to today when the feature is OFF.
+  if (use_artifact_hard) {
+    audit <- rbind(
+      audit,
+      data.frame(class = "unburned", bucket = "artifact_hard",
+                 n = length(negatives_by_bucket[["artifact_hard"]]),
+                 action = "eligible", stringsAsFactors = FALSE)
+    )
+  }
 
   list(
     positive_idx        = positive_idx,
@@ -238,7 +281,15 @@
     positive_idx, negatives_by_bucket, n_burned, caps, seed, id,
     context = NA_character_
 ) {
-  valid_buckets <- .of_valid_negative_buckets()
+  # PHASE 2: the canonical valid set is the two default buckets UNLESS the caller
+  # supplied an "artifact_hard" bucket / cap, in which case the optional third
+  # bucket is admitted. With the default (no artifact_hard key anywhere) this is
+  # byte-identical to the historical two-bucket behaviour. artifact_hard rows are
+  # admitted with cap = Inf for the experiment (all eligible enter; influence is
+  # via per-row weights, not subsampling).
+  use_artifact_hard <- ("artifact_hard" %in% names(negatives_by_bucket)) ||
+    ("artifact_hard" %in% names(caps))
+  valid_buckets <- .of_valid_negative_buckets(include_artifact_hard = use_artifact_hard)
 
   # --- strict validation: NO repair logic inside -----------------------------
   if (is.null(seed) || length(seed) != 1L || is.na(seed) || !is.finite(seed)) {

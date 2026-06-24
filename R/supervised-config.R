@@ -192,7 +192,37 @@
 #'       `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
 #'       `cfg$train_control$caps` and consumed end-to-end by the pool builder,
 #'       OOF and FINAL.
+#'     \item `artifact_hard = list(...)` --- the OPTIONAL artifact_hard
+#'       hard-negative bucket (Phase 2). \strong{OFF by default} (`enabled =
+#'       FALSE`); when disabled this sub-block selects no rows and the resolved
+#'       config / training / model is byte-identical to the no-artifact_hard
+#'       baseline. Keys:
+#'       \itemize{
+#'         \item `enabled` (logical, default `FALSE`) --- master switch.
+#'         \item `total_weight_ratio` (numeric `>= 0`, default `0.10`) --- the
+#'           TOTAL effective weight of the artifact_hard pool divided by the
+#'           TOTAL weight of the burned (positive) pool, i.e.
+#'           `sum(w[artifact_hard]) = total_weight_ratio * sum(w[burned])`. This
+#'           is the POOL-LEVEL balance, \strong{not} the per-polygon weight (each
+#'           row gets `total_weight_ratio * sum_w_pos / n_artifact_hard`). The
+#'           `0.10` default is a conservative starting point, NOT a recommended
+#'           universal value (the weight is year-dependent). An explicit
+#'           `source_weights` pin overrides it.
+#'         \item eligibility knobs (all configurable): `rbr_med_reference`
+#'           (`"negative"` | `"positive"`, default `"negative"` --- the pool whose
+#'           `rbr_med` quantile sets the RBR floor), `rbr_med_min_q` (`[0,1]`,
+#'           default `0.90`), `persist_ratio_max` (default `0.35`),
+#'           `persist_delta_max` (default `-100`), `area_ha_min` (default `500`),
+#'           `doy_iqr_max` (default `1`), `reason_whitelist` (character, default
+#'           `character(0)`).
+#'       }
 #'   }
+#'   With `artifact_hard$enabled = TRUE` the eligible deterministic-DROP polygons
+#'   are promoted into training as `unburned` negatives (see
+#'   \code{\link[=promote_artifact_hard_negatives]{promote_artifact_hard_negatives()}}),
+#'   weighted per `total_weight_ratio`, and the run writes a consolidated
+#'   `supervised_training_pool.gpkg` layer (see the \strong{Consolidated
+#'   training-pool layer} section in \strong{Details}).
 #'   GATE 6.7: the former top-level `cap_random` / `cap_otsu` builder arguments
 #'   were REMOVED; caps live ONLY in `negative_pool_params$caps`. Passing
 #'   `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
@@ -223,6 +253,22 @@
 #'   `feature_weights` is a named numeric vector of per-feature weights. Both
 #'   are stored in `cfg$train_control` and consumed identically by the OOF and
 #'   FINAL stages. `NULL` uses the full feature set with equal weights.
+#'
+#' @param include_shape_features Logical. OPTIONAL shape/size feature block
+#'   (OtsuFire 0.12.0), OFF by default (`FALSE`). When `TRUE` it (a) makes
+#'   feature extraction COMPUTE six geometric columns (`area_ha`, `n_pix`,
+#'   `log_area`, `perim_m`, `compactness`, `elongation`) and (b) makes them
+#'   ELIGIBLE model features: the admissible feature universe becomes the
+#'   canonical 50-name whitelist plus those six names
+#'   (`.supervised_feature_universe(TRUE)`). The OOF and FINAL stages both read
+#'   this single `cfg$train_control$include_shape_features` field, so they
+#'   cannot diverge on the active feature set. With `FALSE` (default) the
+#'   resolved feature universe and every model / OOF / FINAL / extraction output
+#'   are byte-identical to 0.11.0. SAMPLING-BIAS CAVEAT: the random-background
+#'   negatives are tiny fixed cells (~0.81 ha squares), so shape/area is partly
+#'   a sampling artifact rather than a physical signal; this block is intended
+#'   for experimentation only and its effect should be judged with EFFIS, not
+#'   the OOF metrics.
 #'
 #' @details
 #' OOF uses the same capped negative-sampling policy as the final model, applied
@@ -344,6 +390,52 @@
 #'   an external reference such as EFFIS, supplied via `reference_burned_map`.
 #' }
 #'
+#' \subsection{Consolidated training-pool layer}{
+#'   In addition to the separate burned / unburned pool outputs, the run writes a
+#'   single consolidated layer `supervised_training_pool.gpkg`
+#'   (layer `supervised_training_pool`) with one row per available training
+#'   example. The artifact_hard CANDIDATES (rows that satisfy the selection rule)
+#'   are computed and shown ALWAYS --- even with `artifact_hard$enabled = FALSE`
+#'   --- so the rule can be inspected without running two pipelines, WITHOUT those
+#'   rows entering training. Three states are kept distinct:
+#'   `artifact_hard_eligible` (satisfies the rule), `artifact_hard_enabled` (the
+#'   resolved-config switch) and `artifact_hard_used` (effectively promoted);
+#'   `used_in_training` is separate again (the row entered the FINAL DMatrix after
+#'   caps/filters). Columns: `year`, `fire_uid`, `poly_id`, `training_label`
+#'   (effective label, NA for non-trained candidates), `original_pool_source`
+#'   (provenance before promotion), `pool_source` (effective provenance:
+#'   `high_confidence_keep` / `random` / `otsu` / `artifact_hard` /
+#'   `deterministic_drop`, never mixed with the deterministic classes),
+#'   `artifact_hard_eligible`, `artifact_hard_enabled`, `artifact_hard_used`,
+#'   `used_in_training`, `sample_weight` (effective weight; NA when the row does
+#'   not enter training), `source_total_weight`, `deterministic_class`,
+#'   `deterministic_reason`, `fold_id`, `has_oof_prediction`, `p_burned_oof`, the
+#'   descriptive features `rbr_med`, `rbr_aw_med`, `persist_ratio`,
+#'   `persist_delta`, `area_ha`, `doy_iqr`, and the artifact_hard provenance
+#'   `artifact_hard_branch` (`persist_delta` / `large_single_doy` /
+#'   `reason_whitelist` / `multiple`), `artifact_hard_rbr_threshold`,
+#'   `artifact_hard_weight_ratio` (the CONFIGURED `total_weight_ratio` that would
+#'   apply, recorded for every eligible candidate even when disabled). It also
+#'   carries three review aids: `review_priority` (0--100 deterministic score
+#'   over the candidates --- higher = more likely a REAL FIRE wrongly flagged,
+#'   i.e. bright + persistent + large --- verify first), `review_tier`
+#'   (`high`/`medium`/`low`), `label_confidence` (0--1 trust in the training
+#'   label: a high flat base for the trusted buckets, and `1 - review_priority/100`
+#'   for candidates), and a BLANK `VISUAL` column (NA) for the user to fill during
+#'   visual review (1 = label confirmed, 0 = not). `used_in_training`
+#'   marks the rows in the FINAL capped set; `sample_weight` is re-resolved with
+#'   the same helper the engine uses. Open and filter it like any GPKG, e.g.
+#'   \preformatted{
+#'   pool <- sf::st_read(".../01_POOLS/supervised_training_pool.gpkg",
+#'                       layer = "supervised_training_pool")
+#'   # what the rule WOULD select (even with artifact_hard disabled):
+#'   cand <- pool[pool$artifact_hard_eligible, ]
+#'   table(cand$artifact_hard_branch)
+#'   # the rows actually trained on, by provenance bucket:
+#'   table(pool$pool_source[pool$used_in_training])
+#'   }
+#' }
+#'
 #' \subsection{Options}{
 #'   The `options` list carries technical and advanced settings. Keys fall into
 #'   three groups.
@@ -458,6 +550,33 @@
 #'   run_name                   = "no_hotspot_1994",
 #'   feature_whitelist_override = c("rbr_med", "rbr_p90", "elev_med", "slope_med")
 #' )
+#'
+#' ## artifact_hard hard-negative mining (Phase 2). OFF by default; enable it and
+#' ## set the pool-level weight explicitly (no universal weight is recommended).
+#' cfg_baseline <- build_supervised_burned_config(   # artifact_hard OFF (default)
+#'   run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
+#'   change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
+#'   output_dir = "results/")
+#'
+#' cfg_artifact_hard <- build_supervised_burned_config(
+#'   run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
+#'   change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
+#'   output_dir = "results/",
+#'   negative_pool_params = list(
+#'     artifact_hard = list(
+#'       enabled            = TRUE,
+#'       total_weight_ratio = 0.10,   # artifact_hard total / burned total
+#'       rbr_med_reference  = "negative",
+#'       rbr_med_min_q      = 0.90,
+#'       persist_ratio_max  = 0.35
+#'     )))
+#'
+#' ## After run_oneyear_supervised_pipeline(cfg_artifact_hard), open + filter the
+#' ## consolidated training pool:
+#' pool <- sf::st_read(
+#'   "results/1989/.../07_FINAL_MODEL_V2/supervised_training_pool.gpkg",
+#'   layer = "supervised_training_pool")
+#' table(pool$pool_source[pool$used_in_training])
 #' }
 #'
 #' @seealso
@@ -543,6 +662,13 @@ build_supervised_burned_config <- function(
     runtime_options            = list(),
     feature_whitelist_override = NULL,
     feature_weights            = NULL,
+    # OPTIONAL shape/size feature block (OtsuFire 0.12.0, OFF by default).
+    # When TRUE it makes feature extraction COMPUTE the six shape columns
+    # AND makes them ELIGIBLE model features (the active feature universe
+    # becomes the canonical 50 + the 6 shape names). FALSE (default)
+    # leaves the resolved feature universe and every model byte-identical
+    # to 0.11.0. Experimental; see the SAMPLING-BIAS caveat in NEWS.md.
+    include_shape_features     = FALSE,
     model_params               = NULL,
     options = list()
 ) {
@@ -801,7 +927,8 @@ build_supervised_burned_config <- function(
     # caps source. The train_control resolver no longer accepts cap_* args.
     caps                       = np_res$values$caps,
     feature_whitelist_override = feature_whitelist_override,
-    feature_weights            = feature_weights
+    feature_weights            = feature_weights,
+    include_shape_features     = include_shape_features
   )
 
   # ---- Gate 1B / Precision 1 (2026-06-07): provenance of each methodological
@@ -834,6 +961,10 @@ build_supervised_burned_config <- function(
     feature_whitelist_override =
       if (is.null(feature_whitelist_override)) "default" else "user",
     feature_weights       = if (is.null(feature_weights))       "default" else "user",
+    # OPTIONAL shape/size block (OtsuFire 0.12.0). "user" only when the
+    # caller flipped it ON; the FALSE default is "default" so the OFF
+    # baseline provenance is unchanged.
+    include_shape_features = if (isTRUE(include_shape_features)) "user" else "default",
     model_params          = if (.model_params_user_set)         "user"    else "default"
   )
 
@@ -1038,7 +1169,8 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     random_seed,
     val_frac, group_col, impute_numeric, impute_factor_missing,
     caps,
-    feature_whitelist_override, feature_weights) {
+    feature_whitelist_override, feature_weights,
+    include_shape_features = FALSE) {
 
   tc <- .of_canonical_train_control()
 
@@ -1132,6 +1264,18 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     tc$feature_weights <- feature_weights
   }
 
+  # --- OPTIONAL shape/size block (OtsuFire 0.12.0, OFF by default) ------------
+  # Single boolean stored on the resolved train_control. THE single source of
+  # truth read by extract_supervised_features() (compute the columns) and by
+  # the OOF + FINAL engines (make them eligible model features via
+  # .supervised_feature_universe()). FALSE -> baseline unchanged.
+  if (!is.logical(include_shape_features) ||
+      length(include_shape_features) != 1L || is.na(include_shape_features)) {
+    stop("'include_shape_features' must be a single TRUE or FALSE.",
+         call. = FALSE)
+  }
+  tc$include_shape_features <- isTRUE(include_shape_features)
+
   # OtsuFire OOF always uses the capped negative-sampling policy (the SAME one
   # the FINAL model uses), applied independently within each training fold.
   # tc$oof_sampling is a FIXED traceability constant ("capped") from
@@ -1168,7 +1312,33 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
       candidate_threshold = 0,
       reference_threshold = 100
     ),
-    caps = c(random = 1.0, otsu = 1.0)
+    caps = c(random = 1.0, otsu = 1.0),
+    # PHASE 2 (artifact_hard hard-negative mining): ADDITIVE + OFF BY DEFAULT.
+    # With enabled = FALSE this sub-block selects NO rows and the resolver MUST
+    # NOT alter caps / enum / anything observable -- the resolved value stays
+    # byte-identical to the pre-Phase-2 default (asserted by a baseline test).
+    artifact_hard = list(
+      enabled            = FALSE,           # master switch (OFF by default)
+      # total_weight_ratio: the TOTAL effective weight of the artifact_hard pool
+      # divided by the TOTAL weight of the burned (positive) pool, i.e.
+      # sum(w[artifact_hard]) == total_weight_ratio * sum(w[burned]). This is the
+      # POOL-LEVEL balance knob, NOT the per-polygon weight: each artifact_hard
+      # row gets total_weight_ratio * sum_w_pos / n_artifact_hard. Configurable;
+      # the 0.10 default is a conservative starting point, NOT a universally
+      # recommended value (the weight x year sweep showed the right weight is
+      # year-dependent). An explicit `source_weights` pin overrides this.
+      total_weight_ratio = 0.10,
+      persist_ratio_max  = 0.35,
+      rbr_med_reference  = "negative",      # "negative" (existing neg pool) | "positive"
+      rbr_med_min_q      = 0.90,            # quantile of the reference pool's rbr_med (runtime)
+      reason_whitelist   = character(0),    # explicit artifact reason_1 values (user fills)
+      persist_delta_max  = -100,
+      area_ha_min        = 500,
+      doy_iqr_max        = 1
+    ),
+    # PHASE 2: optional per-row source weighting. NULL (default) => NO weight
+    # vector is ever set => byte-identical to today.
+    source_weights = NULL
   )
 }
 
@@ -1306,10 +1476,117 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     caps_user$otsu   <- TRUE
   }
 
+  # --- PHASE 2: artifact_hard sub-block (ADDITIVE, OFF BY DEFAULT) ------------
+  # When the user supplies nothing this resolves to the OFF default block and
+  # selects NO rows. Unknown keys ERROR (mirrors every other sub-block). The
+  # resolved scalar types are validated so a malformed override fails fast, but
+  # NONE of this alters the caps / enum / training rows when enabled = FALSE.
+  ah_def <- defs$artifact_hard
+  ah_in  <- if (is.null(np$artifact_hard)) list() else np$artifact_hard
+  .of_check_named_list(ah_in, "negative_pool_params$artifact_hard")
+  .of_check_unknown_keys(ah_in, names(ah_def), "negative_pool_params$artifact_hard")
+  chk_lgl1 <- function(v, nm) {
+    if (!is.logical(v) || length(v) != 1L || is.na(v)) {
+      stop(sprintf("'%s' must be a single TRUE/FALSE.", nm), call. = FALSE)
+    }
+    as.logical(v)
+  }
+  chk_num1_ah <- function(v, nm) {
+    if (!is.numeric(v) || length(v) != 1L || !is.finite(v)) {
+      stop(sprintf("'%s' must be a single finite numeric value.", nm),
+           call. = FALSE)
+    }
+    as.numeric(v)
+  }
+  ah_enabled <- ah_def$enabled
+  if (!is.null(ah_in$enabled)) ah_enabled <- chk_lgl1(ah_in$enabled,
+    "negative_pool_params$artifact_hard$enabled")
+  # total_weight_ratio: pool-level balance (artifact_hard total weight / burned
+  # total weight). Single finite numeric >= 0. Not used when enabled = FALSE.
+  ah_total_weight_ratio <- ah_def$total_weight_ratio
+  if (!is.null(ah_in$total_weight_ratio)) {
+    twr <- ah_in$total_weight_ratio
+    if (!is.numeric(twr) || length(twr) != 1L || !is.finite(twr) || twr < 0) {
+      stop("'negative_pool_params$artifact_hard$total_weight_ratio' must be a ",
+           "single finite numeric >= 0 (artifact_hard total weight / burned ",
+           "total weight).", call. = FALSE)
+    }
+    ah_total_weight_ratio <- as.numeric(twr)
+  }
+  ah_persist_ratio_max <- ah_def$persist_ratio_max
+  if (!is.null(ah_in$persist_ratio_max)) ah_persist_ratio_max <- chk_num1_ah(
+    ah_in$persist_ratio_max, "negative_pool_params$artifact_hard$persist_ratio_max")
+  ah_rbr_med_min_q <- ah_def$rbr_med_min_q
+  if (!is.null(ah_in$rbr_med_min_q)) {
+    q <- ah_in$rbr_med_min_q
+    if (!is.numeric(q) || length(q) != 1L || is.na(q) || q < 0 || q > 1) {
+      stop("'negative_pool_params$artifact_hard$rbr_med_min_q' must be a single ",
+           "number in [0, 1].", call. = FALSE)
+    }
+    ah_rbr_med_min_q <- as.numeric(q)
+  }
+  ah_rbr_med_reference <- ah_def$rbr_med_reference
+  if (!is.null(ah_in$rbr_med_reference)) {
+    rr <- ah_in$rbr_med_reference
+    if (!is.character(rr) || length(rr) != 1L || !(rr %in% c("negative", "positive"))) {
+      stop("'negative_pool_params$artifact_hard$rbr_med_reference' must be ",
+           "\"negative\" or \"positive\".", call. = FALSE)
+    }
+    ah_rbr_med_reference <- rr
+  }
+  ah_reason_whitelist <- ah_def$reason_whitelist
+  if (!is.null(ah_in$reason_whitelist)) {
+    rw <- ah_in$reason_whitelist
+    if (!is.character(rw)) {
+      stop("'negative_pool_params$artifact_hard$reason_whitelist' must be a ",
+           "character vector (possibly empty).", call. = FALSE)
+    }
+    ah_reason_whitelist <- as.character(rw)
+  }
+  ah_persist_delta_max <- ah_def$persist_delta_max
+  if (!is.null(ah_in$persist_delta_max)) ah_persist_delta_max <- chk_num1_ah(
+    ah_in$persist_delta_max, "negative_pool_params$artifact_hard$persist_delta_max")
+  ah_area_ha_min <- ah_def$area_ha_min
+  if (!is.null(ah_in$area_ha_min)) ah_area_ha_min <- chk_num1_ah(
+    ah_in$area_ha_min, "negative_pool_params$artifact_hard$area_ha_min")
+  ah_doy_iqr_max <- ah_def$doy_iqr_max
+  if (!is.null(ah_in$doy_iqr_max)) ah_doy_iqr_max <- chk_num1_ah(
+    ah_in$doy_iqr_max, "negative_pool_params$artifact_hard$doy_iqr_max")
+  artifact_hard <- list(
+    enabled            = ah_enabled,
+    total_weight_ratio = ah_total_weight_ratio,
+    persist_ratio_max  = ah_persist_ratio_max,
+    rbr_med_reference  = ah_rbr_med_reference,
+    rbr_med_min_q      = ah_rbr_med_min_q,
+    reason_whitelist   = ah_reason_whitelist,
+    persist_delta_max  = ah_persist_delta_max,
+    area_ha_min        = ah_area_ha_min,
+    doy_iqr_max        = ah_doy_iqr_max
+  )
+
+  # --- PHASE 2: source_weights (optional per-row weighting; NULL = OFF) -------
+  source_weights <- NULL
+  if (!is.null(np$source_weights)) {
+    sw <- np$source_weights
+    if (!is.numeric(sw) || is.null(names(sw)) || any(!nzchar(names(sw)))) {
+      stop("'negative_pool_params$source_weights' must be a NAMED numeric ",
+           "vector (source -> weight) or NULL.", call. = FALSE)
+    }
+    if (any(is.na(sw)) || any(sw < 0)) {
+      stop("'negative_pool_params$source_weights' values must be finite and ",
+           ">= 0.", call. = FALSE)
+    }
+    source_weights <- sw
+  }
+
   values <- list(
     random = list(n_cells = n_cells, rbr_quantile = rbr_q),
     otsu   = list(candidate_threshold = cand_thr, reference_threshold = ref_thr),
-    caps   = caps
+    caps   = caps,
+    # PHASE 2 additive keys. With the defaults (enabled = FALSE, weights NULL)
+    # these are inert: no row is selected, no weight vector is built.
+    artifact_hard  = artifact_hard,
+    source_weights = source_weights
   )
   provenance <- list(
     random = list(
@@ -1323,7 +1600,19 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
     caps = list(
       random = if (caps_user$random) "user" else "default",
       otsu   = if (caps_user$otsu)   "user" else "default"
-    )
+    ),
+    artifact_hard = list(
+      enabled            = if (is.null(ah_in$enabled))            "default" else "user",
+      total_weight_ratio = if (is.null(ah_in$total_weight_ratio)) "default" else "user",
+      persist_ratio_max = if (is.null(ah_in$persist_ratio_max)) "default" else "user",
+      rbr_med_reference = if (is.null(ah_in$rbr_med_reference)) "default" else "user",
+      rbr_med_min_q     = if (is.null(ah_in$rbr_med_min_q))     "default" else "user",
+      reason_whitelist  = if (is.null(ah_in$reason_whitelist))  "default" else "user",
+      persist_delta_max = if (is.null(ah_in$persist_delta_max)) "default" else "user",
+      area_ha_min       = if (is.null(ah_in$area_ha_min))       "default" else "user",
+      doy_iqr_max       = if (is.null(ah_in$doy_iqr_max))       "default" else "user"
+    ),
+    source_weights = if (is.null(np$source_weights)) "default" else "user"
   )
   list(values = values, provenance = provenance)
 }

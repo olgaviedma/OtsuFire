@@ -121,6 +121,142 @@
   "hs_only_buffer_support"
 )
 
+#' OPTIONAL shape/size feature block (OtsuFire 0.12.0, OFF by default).
+#'
+#' The six geometric columns the supervised model MAY additionally see
+#' when the experimental `include_shape_features` flag is TRUE. This is
+#' a SEPARATE constant from the frozen canonical 50-name
+#' `.supervised_feature_cols` (which must NOT grow without a major
+#' bump). `area_ha` and `n_pix` ride along as pool-builder columns; the
+#' remaining four (`log_area`, `perim_m`, `compactness`, `elongation`)
+#' are computed by `shape_features()` only when the flag is ON.
+#'
+#' SAMPLING-BIAS CAVEAT: the random-background negatives are tiny fixed
+#' cells (~0.81 ha squares), so shape/area is partly a sampling
+#' artifact, not a physical signal. This block is OFF by default and is
+#' intended for experimentation only; judge its effect with EFFIS, not
+#' OOF. See NEWS.md 0.12.0.
+#'
+#' @keywords internal
+#' @noRd
+.supervised_shape_feature_cols <- c(
+  "area_ha", "n_pix", "log_area", "perim_m", "compactness", "elongation"
+)
+
+#' THE admissible supervised-feature universe (single source of truth).
+#'
+#' Returns the canonical 50-name whitelist, optionally extended with the
+#' six `.supervised_shape_feature_cols` when `include_shape = TRUE`. This
+#' ONE helper is the definition of the admissible feature set everywhere
+#' (validation, active-whitelist default, the OOF/FINAL allowed-column
+#' invariants). Routing every site through it eliminates the two-filter
+#' asymmetry that previously let a column appear "in OOF but not FINAL".
+#'
+#' @param include_shape Logical. When TRUE the six shape columns are
+#'   appended to the canonical list. Default FALSE -> byte-identical to
+#'   `.supervised_feature_cols`.
+#' @keywords internal
+#' @noRd
+.supervised_feature_universe <- function(include_shape = FALSE) {
+  c(.supervised_feature_cols,
+    if (isTRUE(include_shape)) .supervised_shape_feature_cols)
+}
+
+# Min/max side length of a (rotated-rectangle) polygon. Package-level
+# twin of the deterministic stage's `get_wd_ln_from_mrr()` closure
+# (internal-det-polygon-metrics.R), lifted here so the supervised shape
+# helper can reuse the SAME MRR length/width math without depending on
+# the deterministic function's closure environment. Returns c(wd, ln).
+#
+# @keywords internal
+# @noRd
+.of_shape_wd_ln <- function(poly) {
+  tryCatch({
+    ls <- sf::st_cast(poly, "LINESTRING", warn = FALSE)
+    coords <- sf::st_coordinates(ls)[, 1:2, drop = FALSE]
+    if (nrow(coords) < 2) return(c(wd = NA_real_, ln = NA_real_))
+    if (all(coords[1, ] == coords[nrow(coords), ]))
+      coords <- coords[-nrow(coords), , drop = FALSE]
+    if (nrow(coords) < 2) return(c(wd = NA_real_, ln = NA_real_))
+    prev <- rbind(coords[nrow(coords), , drop = FALSE],
+                  coords[-nrow(coords), , drop = FALSE])
+    segs <- sqrt(rowSums((coords - prev) ^ 2))
+    segs <- segs[is.finite(segs) & segs > 0]
+    if (length(segs) == 0) return(c(wd = NA_real_, ln = NA_real_))
+    c(wd = min(segs, na.rm = TRUE), ln = max(segs, na.rm = TRUE))
+  }, error = function(e) c(wd = NA_real_, ln = NA_real_))
+}
+
+# Per-polygon shape/size math for the OPTIONAL shape block (OtsuFire
+# 0.12.0). Computes the four shape columns the model MAY use when
+# include_shape_features is ON, keyed by `id_col`:
+#   * log_area    = log1p(area_ha), area_ha = st_area / 1e4
+#   * perim_m     = perimeter via the MULTILINESTRING-length idiom
+#                   (utils-polygon-metrics.R:19-21)
+#   * compactness = Polsby-Popper 4*pi*A / P^2
+#                   (utils-polygon-metrics.R:22-24)
+#   * elongation  = min-rotated-rectangle length / width (>= 1), reusing
+#                   the deterministic stage's MRR side-length extraction
+#                   (.of_shape_wd_ln), with a base sf::st_bbox aspect-
+#                   ratio fallback for degenerate geometries.
+# `polys` must be a NON-empty sf in a metric CRS (the supervised stack is
+# EPSG:3035). area_ha / n_pix already ride along as pool-builder columns,
+# so only these four are produced here. Uses base sf only (no lwgeom).
+#
+# @keywords internal
+# @noRd
+.of_shape_features <- function(polys, id_col = "fire_uid") {
+  stopifnot(inherits(polys, "sf"), nrow(polys) > 0L)
+  geom <- sf::st_geometry(polys)
+
+  area_m2 <- as.numeric(sf::st_area(polys))
+  area_ha <- area_m2 / 1e4
+  log_area <- log1p(area_ha)
+
+  perim_m <- vapply(
+    geom,
+    function(gi) as.numeric(
+      sf::st_length(sf::st_cast(gi, "MULTILINESTRING", warn = FALSE))
+    ),
+    numeric(1)
+  )
+
+  compactness <- ifelse(perim_m > 0,
+                        4 * pi * area_m2 / (perim_m^2),
+                        NA_real_)
+
+  bbox_ratio <- function(gi) {
+    bb <- tryCatch(sf::st_bbox(gi), error = function(e) NULL)
+    if (is.null(bb)) return(NA_real_)
+    dx <- as.numeric(bb[["xmax"]] - bb[["xmin"]])
+    dy <- as.numeric(bb[["ymax"]] - bb[["ymin"]])
+    lo <- min(dx, dy); hi <- max(dx, dy)
+    if (!is.finite(lo) || !is.finite(hi) || lo <= 0) return(NA_real_)
+    hi / lo
+  }
+  mrr_elong <- function(gi) {
+    tryCatch({
+      mrr <- sf::st_minimum_rotated_rectangle(gi)
+      wl  <- .of_shape_wd_ln(sf::st_geometry(mrr)[[1]])
+      wd  <- wl[["wd"]]; ln <- wl[["ln"]]
+      if (!is.finite(wd) || !is.finite(ln) || wd <= 0) return(bbox_ratio(gi))
+      ln / wd
+    }, error = function(e) bbox_ratio(gi))
+  }
+  elongation <- vapply(geom, mrr_elong, numeric(1))
+
+  out <- data.frame(
+    .id_tmp     = as.character(polys[[id_col]]),
+    log_area    = as.numeric(log_area),
+    perim_m     = as.numeric(perim_m),
+    compactness = as.numeric(compactness),
+    elongation  = as.numeric(elongation),
+    stringsAsFactors = FALSE
+  )
+  names(out)[1L] <- id_col
+  out
+}
+
 # Legacy deny list — RETAINED as an audit log of historically known
 # deterministic-stage residuals and sampling-biased columns. Under
 # 0.4.0 this list is NOT applied as a runtime filter by

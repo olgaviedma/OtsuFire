@@ -64,6 +64,16 @@
 #'   is forced off. When `TRUE` the block is enabled if and only if the loaded
 #'   hotspot layer has rows with a usable CRS (the orchestrator's runtime
 #'   `use_hotspots_flag`). Default `FALSE`.
+#' @param use_shape Logical. OPTIONAL shape/size feature block (OtsuFire
+#'   0.12.0), OFF by default (`FALSE`). When `TRUE` the engine computes four
+#'   geometric columns (`log_area`, `perim_m`, `compactness`, `elongation`;
+#'   `area_ha` / `n_pix` already ride along as pool-builder columns) and
+#'   left-joins them onto BOTH the train and scoring feature layers. When left
+#'   at its `FALSE` default it is driven from the config
+#'   (`cfg$train_control$include_shape_features` or the convenience
+#'   `options$use_shape`), so the orchestrator turns it on via config. With the
+#'   block off no join runs and the extraction output is byte-identical to
+#'   today. SAMPLING-BIAS CAVEAT: see [build_supervised_burned_config()].
 #' @param out_dir Character or `NULL`. Output folder for the `03_FEATURES`
 #'   outputs. Defaults to `config$output_routes$features_dir`.
 #' @param write_outputs Logical. Whether to write the `features_geometry.gpkg`
@@ -107,6 +117,7 @@
 #' }
 extract_supervised_features <- function(train_with_folds, scoring_pool, config,
                                         use_hotspots = FALSE,
+                                        use_shape = FALSE,
                                         out_dir = NULL,
                                         write_outputs = TRUE,
                                         .aligned_rasters = NULL,
@@ -139,6 +150,20 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
   if (!is.logical(use_hotspots) || length(use_hotspots) != 1L ||
       is.na(use_hotspots)) {
     stop("'use_hotspots' must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(use_shape) || length(use_shape) != 1L ||
+      is.na(use_shape)) {
+    stop("'use_shape' must be TRUE or FALSE.", call. = FALSE)
+  }
+  # OPTIONAL shape/size block (OtsuFire 0.12.0). When the explicit
+  # use_shape arg is left at its FALSE default, drive it from the config:
+  # the resolved train_control flag include_shape_features (canonical
+  # single source of truth) OR the convenience options$use_shape toggle.
+  # An explicit use_shape = TRUE always wins. OFF everywhere ->
+  # byte-identical extraction.
+  if (!isTRUE(use_shape)) {
+    use_shape <- isTRUE(config$train_control$include_shape_features) ||
+      isTRUE(config$options$use_shape)
   }
   if (!is.logical(write_outputs) || length(write_outputs) != 1L ||
       is.na(write_outputs)) {
@@ -537,6 +562,9 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
       use_aw       = TRUE,
       use_nbr      = FALSE,
       use_hotspots = use_hotspots_flag,
+      # OPTIONAL shape/size block (OtsuFire 0.12.0). OFF by default ->
+      # no shape join in the engine -> byte-identical features.
+      use_shape    = use_shape,
 
       max_cells_in_memory      = NULL,
       return_features          = TRUE,

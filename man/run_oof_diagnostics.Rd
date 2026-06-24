@@ -12,6 +12,7 @@ run_oof_diagnostics(
   params = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
+  include_shape_features = NULL,
   nrounds_max = NULL,
   early_stop = NULL,
   seed_base = NULL,
@@ -21,6 +22,9 @@ run_oof_diagnostics(
   impute_numeric = NULL,
   impute_factor_missing = NULL,
   group_col = NULL,
+  source_weights = NULL,
+  artifact_hard_source = NULL,
+  total_weight_ratio = NULL,
   out_dir = NULL,
   matrix_dir = NULL,
   labelled_gpkg = NULL,
@@ -61,6 +65,15 @@ the historical orchestrator params block is rebuilt inline (see Details).}
 \item{feature_weights}{Named numeric vector of per-feature weights, or
 `NULL` (default). Forwarded to [run_dm_oof_pipeline()].}
 
+\item{include_shape_features}{Logical or `NULL`. OPTIONAL shape/size feature
+block (OtsuFire 0.12.0). `NULL` (default) reads
+`cfg$train_control$include_shape_features` — the SAME field the FINAL stage
+reads, so OOF and FINAL cannot diverge on the active feature set. A
+non-`NULL` logical overrides cfg for standalone use. When effectively
+`TRUE` the OOF whitelist universe becomes the canonical 50 names plus the
+six shape names (so the shape columns and their `_isNA` companions enter
+the OOF DMatrix exactly as in FINAL). OFF -> byte-identical OOF.}
+
 \item{nrounds_max}{Integer. Maximum xgboost boosting rounds for the OOF
 per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
 FINAL-model default (was `3000`). User-overridable.}
@@ -92,6 +105,19 @@ block-CV used by the OOF engine. `NULL` (default) means "read from
 `"block_id"`); a non-NULL value overrides cfg for standalone use. This is
 the SAME knob the FINAL stage sources from `cfg$train_control$group_col`,
 so OOF and FINAL never diverge.}
+
+\item{source_weights}{Named numeric vector of per-row weights keyed by the
+`source` column, or `NULL` (default). Phase 2 (artifact_hard). `NULL` reads
+the cfg value (`config$negative_pool_params$source_weights`, off by
+default). With no override AND no artifact_hard row present, no weight
+vector is built (OOF predictions are byte-identical to today).}
+
+\item{artifact_hard_source}{Character vector of `source` value(s) marking
+promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
+`"artifact_hard"` when the cfg has the artifact_hard feature enabled, else
+`character(0)` (off). Threaded to the per-fold eligibility resolver (so
+promoted rows enter the uncapped artifact_hard bucket) and the per-row
+sample-weight resolver in [run_oof_xgb()].}
 
 \item{out_dir}{Character or `NULL`. Output folder for the `05_OOF` outputs.
 Defaults to `config$output_routes$oof_dir`.}
@@ -223,6 +249,7 @@ Other workflow:
 \code{\link{change_index_mosaic}()},
 \code{\link{extract_supervised_features}()},
 \code{\link{make_spatial_folds}()},
+\code{\link{promote_artifact_hard_negatives}()},
 \code{\link{run_deterministic_pipeline}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{score_supervised_burned_map}()},

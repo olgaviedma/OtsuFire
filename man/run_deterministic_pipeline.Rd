@@ -136,6 +136,7 @@ Other workflow:
 \code{\link{change_index_mosaic}()},
 \code{\link{extract_supervised_features}()},
 \code{\link{make_spatial_folds}()},
+\code{\link{promote_artifact_hard_negatives}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{run_oof_diagnostics}()},
 \code{\link{score_supervised_burned_map}()},

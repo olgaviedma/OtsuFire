@@ -40,6 +40,20 @@ train_final_model_direct <- function(
     early_stopping_rounds,
     feature_whitelist_override = NULL,
     feature_weights = NULL,
+    # OPTIONAL shape/size block (OtsuFire 0.12.0, OFF by default). When TRUE the
+    # admissible feature universe becomes the canonical 50 + the 6 shape names
+    # (.supervised_feature_universe), so a feature_whitelist_override may name a
+    # shape column AND the shape columns survive the whitelist filter. FALSE ->
+    # byte-identical to today. Threaded from train_final_burned_model().
+    include_shape_features = FALSE,
+    # PHASE 2 (artifact_hard): optional per-source weights (NAMED numeric,
+    # source -> weight) and the source value(s) marking artifact_hard rows. NULL
+    # / default => NO per-row weighting => byte-identical to today.
+    source_weights = NULL,
+    artifact_hard_source = "artifact_hard",
+    # PHASE 2 (artifact_hard): pool-level weight balance (artifact_hard total
+    # weight / burned total weight). Forwarded to .of_resolve_sample_weights().
+    total_weight_ratio = 0.10,
     impute_numeric,
     impute_factor_missing,
     # Gate 1B (2026-06-07): cfg$model_params (canonical xgb block WITHOUT
@@ -92,6 +106,14 @@ train_final_model_direct <- function(
 
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
 
+  # OPTIONAL shape/size block (OtsuFire 0.12.0): THE admissible feature
+  # universe. With include_shape_features = FALSE this is exactly the frozen
+  # 50-name `.supervised_feature_cols`; with TRUE it additionally admits the 6
+  # `.supervised_shape_feature_cols`. Routing validation, the active-whitelist
+  # default, and the allowed-column invariant through this ONE helper keeps
+  # FINAL admissible columns identical to OOF (no "in OOF but not FINAL" drift).
+  feature_universe <- .supervised_feature_universe(include_shape = include_shape_features)
+
   # 0.5.0: validate `feature_whitelist_override` (strict).
   if (!is.null(feature_whitelist_override)) {
     if (!is.character(feature_whitelist_override) ||
@@ -99,21 +121,25 @@ train_final_model_direct <- function(
       stop("`feature_whitelist_override` must be a non-empty character vector.",
            call. = FALSE)
     }
-    unknown <- setdiff(feature_whitelist_override, .supervised_feature_cols)
+    unknown <- setdiff(feature_whitelist_override, feature_universe)
     if (length(unknown) > 0) {
       stop(
-        "`feature_whitelist_override` contains names not in the canonical ",
-        "`.supervised_feature_cols`: ",
+        "`feature_whitelist_override` contains names not in the active ",
+        "feature universe (`.supervised_feature_universe(include_shape = ",
+        as.character(isTRUE(include_shape_features)), ")`): ",
         paste(unknown, collapse = ", "), ". Allowed names: see ",
-        "OtsuFire:::.supervised_feature_cols. The canonical list is ",
-        "fixed; this argument can only restrict it, not extend it.",
+        "OtsuFire:::.supervised_feature_cols (+ ",
+        "OtsuFire:::.supervised_shape_feature_cols when ",
+        "include_shape_features = TRUE). The canonical list is ",
+        "fixed; this argument can only restrict the active universe, not ",
+        "extend it.",
         call. = FALSE
       )
     }
     feature_whitelist_override <- unique(feature_whitelist_override)
   }
   active_whitelist <- if (is.null(feature_whitelist_override)) {
-    .supervised_feature_cols
+    feature_universe
   } else {
     feature_whitelist_override
   }
@@ -215,17 +241,32 @@ train_final_model_direct <- function(
   L_neg_type <- if ("neg_type" %in% names(L)) as.character(L[["neg_type"]]) else rep(NA_character_, nrow(L))
   L_id       <- as.character(L[[id_col]])
 
+  # PHASE 2 (artifact_hard): thread artifact_hard_source into the eligibility
+  # resolver so a promoted artifact_hard row (class="unburned",
+  # source="artifact_hard") resolves to the optional "artifact_hard" bucket
+  # instead of hitting the GATE-6.5 "unburned with no valid bucket" ERROR. The
+  # default (character(0) / no artifact_hard row present) keeps the canonical
+  # two-bucket behaviour, byte-identical to today.
+  .ah_source_final <- unique(as.character(stats::na.omit(artifact_hard_source)))
   final_elig <- .of_resolve_supervised_eligibility(
     id = L_id, class = L_class, source = L_source, neg_type = L_neg_type,
     random_background_source         = random_background_source,
     otsu_unburned_source             = otsu_unburned_source,
     otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
-    origin_stage = "FINAL"
+    origin_stage = "FINAL",
+    artifact_hard_source = .ah_source_final
   )
   final_caps <- c(
     random     = random_to_burned_ratio,
     otsu       = otsu_unburned_to_burned_ratio
   )
+  # PHASE 2: when the artifact_hard bucket is present (the feature is ON and
+  # promoted rows exist) it enters UNCAPPED -- all eligible promoted rows train;
+  # its influence is controlled by the per-row sample weights, not by a cap. With
+  # no artifact_hard rows (default) this branch is inert -> byte-identical.
+  if ("artifact_hard" %in% names(final_elig$negatives_by_bucket)) {
+    final_caps["artifact_hard"] <- Inf
+  }
   final_cap <- .of_cap_negative_buckets(
     positive_idx        = final_elig$positive_idx,
     negatives_by_bucket = final_elig$negatives_by_bucket,
@@ -245,6 +286,13 @@ train_final_model_direct <- function(
   }
   sampled_random_bg  <- .bucket_sel("random")
   sampled_otsu       <- .bucket_sel("otsu")
+  # PHASE 2: the promoted artifact_hard rows selected by the capping helper
+  # (uncapped -> all eligible). Empty 0-row frame when the feature is OFF.
+  sampled_artifact_hard <- if ("artifact_hard" %in% names(final_elig$negatives_by_bucket)) {
+    .bucket_sel("artifact_hard")
+  } else {
+    L[integer(0), , drop = FALSE]
+  }
 
   if (nrow(burned_pool)) {
     burned_pool <- dplyr::mutate(
@@ -270,9 +318,19 @@ train_final_model_direct <- function(
       training_reason = "sampled_otsu_unburned"
     )
   }
+  # PHASE 2: stamp the promoted artifact_hard rows the same way (additive; the
+  # frame is empty -> no-op when the feature is OFF).
+  if (nrow(sampled_artifact_hard)) {
+    sampled_artifact_hard <- dplyr::mutate(
+      sampled_artifact_hard,
+      training_selected = 1L,
+      training_group = "artifact_hard_sampled",
+      training_reason = "promoted_artifact_hard"
+    )
+  }
 
   L_ok <- dplyr::bind_rows(
-    burned_pool, sampled_random_bg, sampled_otsu
+    burned_pool, sampled_random_bg, sampled_otsu, sampled_artifact_hard
   ) |>
     dplyr::distinct(.data[[id_col]], .keep_all = TRUE)
 
@@ -282,6 +340,11 @@ train_final_model_direct <- function(
       nrow(sampled_random_bg), random_to_burned_ratio, nrow(random_background_pool))
   msg("  otsu_unburned_sampled selected=%d (cap=%.2fx, available=%d)",
       nrow(sampled_otsu), otsu_unburned_to_burned_ratio, nrow(otsu_unburned_pool))
+  # PHASE 2: report the promoted artifact_hard rows only when present (no line
+  # when the feature is OFF -> verbose output byte-identical to today).
+  if (nrow(sampled_artifact_hard)) {
+    msg("  artifact_hard_sampled selected=%d (uncapped)", nrow(sampled_artifact_hard))
+  }
   msg("  training_ok total=%d", nrow(L_ok))
 
   if (nrow(L_ok) < 20) stop("La seleccion directa dejo muy pocos rows para entrenar.")
@@ -334,6 +397,23 @@ train_final_model_direct <- function(
   #   - REFITS a fresh model on ALL of L_ok at best_iteration (no watchlist),
   #   - returns the refit model + refit medians (the deployed recipe).
   L_df_nested <- L_df
+  # PHASE 2: resolve per-row sample weights aligned to L_df_nested rows. NULL
+  # (the default) when there is no source_weights override AND no artifact_hard
+  # row present -> byte-identical to today.
+  .sw_src <- if ("source" %in% names(L_df_nested)) as.character(L_df_nested[["source"]]) else rep(NA_character_, nrow(L_df_nested))
+  .sw_res <- .of_resolve_sample_weights(
+    class = as.character(L_df_nested[[class_col]]), source = .sw_src,
+    source_weights = source_weights, artifact_hard_source = artifact_hard_source,
+    total_weight_ratio = total_weight_ratio)
+  sample_weights_vec <- .sw_res$weights
+  if (!is.null(sample_weights_vec) && isTRUE(verbose)) {
+    msg("PHASE 2 sample-weight log (FINAL):")
+    for (.i in seq_len(nrow(.sw_res$log))) {
+      msg("  source=%s n=%d per_row_w=%s total_w=%.4f",
+          .sw_res$log$source[.i], .sw_res$log$n[.i],
+          format(.sw_res$log$per_row_weight[.i]), .sw_res$log$total_weight[.i])
+    }
+  }
   fit <- .of_nested_refit_fit(
     train_df              = L_df_nested,
     feature_cols          = feat_cols,
@@ -345,6 +425,7 @@ train_final_model_direct <- function(
     sampling_seed         = sampling_seed,
     fold_seed             = seed,
     feature_weights       = feature_weights,
+    sample_weights        = sample_weights_vec,
     nrounds_max           = nrounds_max,
     early_stopping_rounds = early_stopping_rounds,
     impute_numeric        = impute_numeric,
@@ -751,6 +832,10 @@ train_final_model_direct <- function(
     # Gate 1E (2026-06-09): the FINAL structural feature-schema fingerprint
     # (asserted == canonical OOF when one was supplied; persisted in the recipe).
     schema_fingerprint = final_schema_fp,
+    # PHASE 2 (artifact_hard): the per-source sample-weight log (n / per-row /
+    # total weight per source). Empty 0-row frame on the OFF path (NULL weights),
+    # so a caller can always read it for traceability without an OFF/ON branch.
+    sample_weight_log = .sw_res$log,
     files = files
   ))
 }

@@ -929,6 +929,11 @@ run_supervised_pipeline <- function(target_year, scenario,
         scoring_pool     = gpkg_pools_out,
         config           = config,
         use_hotspots     = TRUE,
+        # OPTIONAL shape/size block (OtsuFire 0.12.0): compute the shape columns
+        # when the cfg flag is ON so the OOF + FINAL stages can use them. SAME
+        # cfg field the modeling block threads into OOF/FINAL. OFF (default) ->
+        # no shape join -> byte-identical features.
+        use_shape        = isTRUE(config$train_control$include_shape_features),
         out_dir          = dirs$`03_FEATURES`,
         write_outputs    = TRUE,
         .aligned_rasters = list(
@@ -954,6 +959,9 @@ run_supervised_pipeline <- function(target_year, scenario,
   # the modeling block (OOF -> FINAL -> scoring); pre-initialise it to NULL so the
   # run return can surface it whether or not modeling ran this invocation.
   schema_parity_manifest <- NULL
+  # PHASE 2 (artifact_hard): consolidated training-pool layer path, set inside
+  # the modeling block; pre-initialised so the run return surfaces it (or NULL).
+  training_pool_layer_path <- NULL
   if (isTRUE(DO_MODEL)) {
 
     msg("STEP C0 - Read features_geometry.gpkg (03_FEATURES)")
@@ -1001,7 +1009,102 @@ run_supervised_pipeline <- function(target_year, scenario,
         train_features |> left_join(folds_df, by = "fire_uid")
       })
     }
-    
+
+    # ============================================================
+    # PHASE 2 (artifact_hard hard-negative mining): ADDITIVE + OFF BY DEFAULT.
+    # Promote artifact_hard negatives from the deterministic scoring universe
+    # into the training features AFTER feature extraction (+ fold-join) and
+    # BEFORE the OOF/FINAL stages, so the promoted rows get fold assignments and
+    # appear in the OOF predictions, then are trained on by the FINAL model. The
+    # scoring_features layer is returned UNCHANGED (the promoted rows STAY in the
+    # scoring universe too). When the feature is disabled
+    # (negative_pool_params$artifact_hard$enabled = FALSE, the default), this is
+    # a STRICT NO-OP and the entire modeling chain is byte-identical to today.
+    # ------------------------------------------------------------
+    .ah_cfg <- config$negative_pool_params$artifact_hard
+    .ah_on  <- isTRUE(.ah_cfg$enabled)
+    # Resolve the per-row weighting inputs ONCE here (single source = cfg). With
+    # the feature OFF these are NULL / character(0) so the OOF + FINAL stages
+    # resolve NO weight vector -> byte-identical.
+    .ah_source_weights <- config$negative_pool_params$source_weights
+    .ah_source_tag     <- if (.ah_on) "artifact_hard" else character(0)
+    .ah_total_weight_ratio <-
+      config$negative_pool_params$artifact_hard$total_weight_ratio %||% 0.10
+    # PHASE 2 (artifact_hard): the promotion result is hoisted here (NULL when
+    # the feature is OFF) so the consolidated training-pool layer can record the
+    # per-row eligibility / branch / threshold after the FINAL stage.
+    promo              <- NULL
+    .gpkg_train_aug    <- gpkg_features
+    if (.ah_on) {
+      msg("STEP C0e - PHASE 2 artifact_hard promotion (enabled)")
+      promo <- time_step("C0e promote_artifact_hard_negatives", {
+        promote_artifact_hard_negatives(
+          train_features   = train_features,
+          scoring_features = scoring_features,
+          config           = config,
+          enable_derived   = FALSE
+        )
+      })
+      train_aug <- promo$train_features
+      msg(" - artifact_hard promoted rows: %d", promo$n_promoted)
+
+      if (promo$n_promoted > 0L) {
+        # Assign block_id / fire_uid / fold_rep to the promoted rows (mirror the
+        # verified runner run_one()): unique block_id "AH_*", a unique fire_uid
+        # disjoint from the existing rows, and a distributed fold per fold_rep so
+        # every promoted row gets a held-out OOF prediction.
+        train_aug <- sf::st_as_sf(train_aug)
+        train_aug$fire_uid <- as.character(train_aug$fire_uid)
+        ah_mask <- !is.na(train_aug$source) & train_aug$source == "artifact_hard"
+        n_ah <- sum(ah_mask)
+        train_aug$block_id[ah_mask] <- paste0("AH_", seq_len(n_ah))
+        uid <- as.character(train_aug$fire_uid[ah_mask])
+        bad <- is.na(uid) | uid == "" | duplicated(uid) |
+          (uid %in% as.character(train_aug$fire_uid[!ah_mask]))
+        uid[bad] <- paste0("AH_uid_", which(ah_mask)[bad])
+        train_aug$fire_uid[ah_mask] <- uid
+        ah_fold_cols <- c("fold_rep1", "fold_rep2")
+        kvals <- sort(unique(c(as.integer(train_aug$fold_rep1),
+                               as.integer(train_aug$fold_rep2))))
+        kvals <- kvals[is.finite(kvals)]
+        nk <- length(kvals)
+        if (nk > 0L) {
+          set.seed(20260615)
+          for (fc in ah_fold_cols) {
+            assign_k <- kvals[(seq_len(n_ah) - 1L) %% nk + 1L]
+            assign_k <- sample(assign_k)
+            train_aug[[fc]][ah_mask] <- assign_k
+          }
+        }
+
+        # Persist the augmented train_features into a SEPARATE features GPKG (the
+        # scoring_features layer is copied UNCHANGED). The OOF + FINAL + scoring
+        # stages below read from this augmented GPKG instead of gpkg_features, so
+        # the promoted rows flow through the whole modeling chain. The original
+        # gpkg_features is left untouched.
+        .gpkg_train_aug <- file.path(dirs$`03_FEATURES`,
+                                     "features_geometry_artifact_hard.gpkg")
+        if (file.exists(.gpkg_train_aug)) unlink(.gpkg_train_aug, force = TRUE)
+        sf::st_write(train_aug, .gpkg_train_aug, layer = "train_features",
+                     quiet = TRUE)
+        sf::st_write(sf::st_as_sf(scoring_features), .gpkg_train_aug,
+                     layer = "scoring_features", quiet = TRUE, append = TRUE)
+        # The in-memory train_features handed to run_oof_diagnostics below is the
+        # augmented frame.
+        train_features <- train_aug
+
+        # Per-source traceability: write the promotion audit alongside the model
+        # outputs.
+        .ah_audit_csv <- file.path(dirs$`07_FINAL_MODEL_V2`,
+                                   paste0(prefix, "_artifact_hard_promotion_audit.csv"))
+        if (isTRUE(overwrite) || !file.exists(.ah_audit_csv)) {
+          utils::write.csv(promo$audit, .ah_audit_csv, row.names = FALSE)
+        }
+      } else {
+        msg(" - no rows promoted; modeling chain unchanged")
+      }
+    }
+
     # BUG 3 Phase 2 (2026-06-05): the OOF-diagnostics stage (STEP C1-C2:
     # build XGB params -> design matrix -> OOF) is now a single exported
     # function, `run_oof_diagnostics()` (R/supervised-oof.R). The
@@ -1014,6 +1117,12 @@ run_supervised_pipeline <- function(target_year, scenario,
     # `class`; factor conversion happens only inside
     # build_design_matrix_patches) still holds inside run_oof_diagnostics.
     stopifnot(inherits(config, "otsufire_supervised_burned_config"))
+    # OPTIONAL shape/size block (OtsuFire 0.12.0): ONE config-derived local fed
+    # to BOTH run_oof_diagnostics() and train_final_burned_model() (so OOF and
+    # FINAL receive the value from the SAME cfg field and cannot diverge), and
+    # already fed to extract_supervised_features() above so the columns are
+    # actually computed when the flag is on. OFF (FALSE) -> byte-identical.
+    include_shape_features <- isTRUE(config$train_control$include_shape_features)
     msg("STEP C1-C2 - DM -> OOF (diagnostic) via run_oof_diagnostics()")
     pipe1 <- time_step("C2 run_dm_oof_pipeline", {
       stopifnot(!is.null(train_with_folds_gpkg) && file.exists(train_with_folds_gpkg))
@@ -1032,15 +1141,36 @@ run_supervised_pipeline <- function(target_year, scenario,
         params           = NULL,
         feature_whitelist_override = feature_whitelist_override,
         feature_weights            = feature_weights,
+        # OPTIONAL shape/size block (OtsuFire 0.12.0): the SAME cfg-derived local
+        # fed to FINAL below (single cfg field -> OOF/FINAL cannot diverge).
+        include_shape_features     = include_shape_features,
         # 2026-06-05 (D1 expose): forward OOF training knobs.
         nrounds_max      = oof_nrounds_max,
         early_stop       = oof_early_stop,
         seed_base        = oof_seed_base,
         out_dir          = dirs$`05_OOF`,
         matrix_dir       = dirs$`04_MATRIX`,
-        labelled_gpkg    = train_with_folds_gpkg,
-        labelled_layer   = "train_with_folds",
+        # PHASE 2 (artifact_hard): when promotion ran, the labelled-summary
+        # geometry must come from the AUGMENTED train_features layer (which
+        # carries the promoted rows), not the pre-promotion train_with_folds
+        # GPKG. Off / no-promotion -> the canonical train_with_folds GPKG, so the
+        # labeled_oof_summary join is byte-identical to today.
+        labelled_gpkg    = if (identical(.gpkg_train_aug, gpkg_features)) {
+                             train_with_folds_gpkg
+                           } else {
+                             .gpkg_train_aug
+                           },
+        labelled_layer   = if (identical(.gpkg_train_aug, gpkg_features)) {
+                             "train_with_folds"
+                           } else {
+                             "train_features"
+                           },
         overwrite        = overwrite,
+        # PHASE 2 (artifact_hard): per-row source weighting + the artifact_hard
+        # source tag (OFF -> NULL / character(0) -> byte-identical).
+        source_weights       = .ah_source_weights,
+        artifact_hard_source = .ah_source_tag,
+        total_weight_ratio   = .ah_total_weight_ratio,
         # Precision 1 (2026-06-07): shims already resolved at the public
         # boundary; suppress a second deprecation warning here.
         .internal_resolved = TRUE,
@@ -1073,7 +1203,10 @@ run_supervised_pipeline <- function(target_year, scenario,
       # Faithful split of the former fused wrapper: same engine args/values
       # (the 3 caps, whitelist/weights, the OOF `qa` aggregate, overwrite).
       tm <- train_final_burned_model(
-        train_features = gpkg_features,
+        # PHASE 2 (artifact_hard): read the AUGMENTED train_features (with the
+        # promoted rows) when promotion ran; otherwise the canonical features
+        # GPKG -> byte-identical.
+        train_features = .gpkg_train_aug,
         config         = config,
         oof_agg        = oof_agg_csv,
         random_to_burned_ratio                 = random_to_burned_ratio,
@@ -1081,6 +1214,14 @@ run_supervised_pipeline <- function(target_year, scenario,
         # 0.5.0: same feature space + weights as the OOF stage (KB1/KB2).
         feature_whitelist_override = feature_whitelist_override,
         feature_weights            = feature_weights,
+        # OPTIONAL shape/size block (OtsuFire 0.12.0): the SAME cfg-derived local
+        # fed to OOF above (single cfg field -> OOF/FINAL cannot diverge).
+        include_shape_features     = include_shape_features,
+        # PHASE 2 (artifact_hard): per-row source weighting + the artifact_hard
+        # source tag (OFF -> NULL / character(0) -> byte-identical).
+        source_weights             = .ah_source_weights,
+        artifact_hard_source       = .ah_source_tag,
+        total_weight_ratio         = .ah_total_weight_ratio,
         # 2026-06-05 (D1 expose): forward FINAL training knobs.
         sampling_seed              = final_sampling_seed,
         seed                       = final_seed,
@@ -1106,12 +1247,17 @@ run_supervised_pipeline <- function(target_year, scenario,
       # memory, the labelled-features + OOF-summary join inputs, the
       # CURRENTYEAR_* temporal thresholds, the 08_SCORED/09_FINAL_MAP dirs.
       sm <- score_supervised_burned_map(
-        scoring_features = gpkg_features,
+        # PHASE 2 (artifact_hard): the scoring universe is the UNCHANGED
+        # scoring_features layer (same row count whether or not promotion ran).
+        # labelled_features is the AUGMENTED train_features (so the promoted
+        # rows' held-out p_oof can join through to p_burned_eval). Off -> the
+        # canonical features GPKG -> byte-identical.
+        scoring_features = .gpkg_train_aug,
         model            = tm$model,
         recipe           = tm$recipe,
         config           = config,
         oof_summary      = oof_summary_gpkg,
-        labelled_features = gpkg_features,
+        labelled_features = .gpkg_train_aug,
         export_burned_like = TRUE,
         preyear_overlap_threshold = CURRENTYEAR_PREYEAR_OVERLAP_THR,
         hotspot_density_threshold = CURRENTYEAR_HOTSPOT_DENSITY_THR,
@@ -1183,6 +1329,40 @@ run_supervised_pipeline <- function(target_year, scenario,
     # abandoned research line. `pipe2$score$burned_like_scored` remains a
     # normal public output (written by C3 as `_burned_like_scored.gpkg`);
     # it is simply no longer routed into a registry.
+
+    # ============================================================
+    # PHASE 2 (artifact_hard): CONSOLIDATED supervised training-pool layer.
+    # A single, one-row-per-example view of the EXACT training rows + weights the
+    # engine received (used_in_training <=> FINAL capped frame; sample_weight
+    # re-resolved with the engine helper), plus the deterministic origin and the
+    # artifact_hard provenance. Written ALONGSIDE the existing separate
+    # burned/unburned pool outputs (additive). Emitted in BOTH modes: with
+    # artifact_hard OFF it describes the baseline pool (no artifact_hard rows,
+    # weight 1). It is a NEW file and does not change the model or any existing
+    # artifact, so OFF-baseline parity of the existing outputs is preserved.
+    # ------------------------------------------------------------
+    training_pool_layer_path <- time_step("C3b supervised_training_pool layer", {
+      tryCatch(
+        .of_write_supervised_training_pool(
+          train_features   = train_features,
+          scoring_features = scoring_features,
+          training_ok      = pipe2$train$training_ok,
+          oof_agg          = oof_agg_csv,
+          promo            = promo,
+          config           = config,
+          target_year      = target_year,
+          out_dir          = dirs$`07_FINAL_MODEL_V2`,
+          overwrite        = overwrite,
+          id_col           = "fire_uid"),
+        error = function(e) {
+          msg("WARN consolidated training-pool layer not written: %s",
+              conditionMessage(e))
+          NULL
+        })
+    })
+    if (!is.null(training_pool_layer_path)) {
+      msg("Consolidated training-pool layer: %s", training_pool_layer_path)
+    }
   }
 
   save_timelog()
@@ -1203,6 +1383,11 @@ run_supervised_pipeline <- function(target_year, scenario,
     # Gate 1E (2026-06-09): the runtime feature-schema parity guard manifest
     # (OOF/FINAL/scoring fingerprints, counts, contract version, pass/abort).
     # NULL when modeling did not run this invocation.
-    feature_schema_parity = schema_parity_manifest
+    feature_schema_parity = schema_parity_manifest,
+    # PHASE 2 (artifact_hard): path to the consolidated supervised training-pool
+    # layer (NULL when modeling did not run / it could not be written).
+    training_pool_layer =
+      if (exists("training_pool_layer_path", inherits = FALSE))
+        training_pool_layer_path else NULL
   ))
 }

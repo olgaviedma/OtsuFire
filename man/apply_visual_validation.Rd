@@ -48,8 +48,31 @@ A list with class \code{"otsufire_visual_validation"}:
 \description{
 Reads/annotates a visually-validated supervised training pool and resolves,
 per row, whether it enters training, following the \code{VISUAL} column
-semantics described in this file's header. The pool is used as a FIXED input
-and is never rebuilt.
+semantics described in Details. The pool is used as a FIXED input and is
+never rebuilt.
+}
+\details{
+The function consumes a pool whose \code{visual_col} (default \code{VISUAL})
+has been filled by a human reviewer with \code{0}, \code{1} or left blank /
+\code{NA}. The meaning depends on whether the row is an \code{artifact_hard}
+candidate (column \code{eligible_col}, default
+\code{artifact_hard_eligible == TRUE}) or an ordinary positive/background row:
+\itemize{
+  \item \code{VISUAL = NA} (blank, unreviewed): positives & background are
+    KEPT as training rows; artifact_hard candidates are NOT promoted (a
+    candidate enters only when explicitly confirmed).
+  \item \code{VISUAL = 0} (visually rejected): a positive/background row is
+    DROPPED from training; an \code{artifact_hard} candidate is read as a
+    REAL FIRE among the drops, so it is excluded from training and routed to
+    \code{$omissions} (\code{visual_action == "omitted_real_fire"}).
+  \item \code{VISUAL = 1} (visually confirmed): an \code{artifact_hard}
+    candidate is PROMOTED to a hard-negative and enters training; a
+    positive/background row is confirmed (kept).
+}
+In short, for artifact_hard candidates \code{VISUAL = 1} means
+"confirmed false positive -> usable as a hard negative", while
+\code{VISUAL = 0} means "actually a real fire -> must NOT be a negative".
+Values outside \{NA, 0, 1\} are handled per \code{on_invalid}.
 }
 \examples{
 \dontrun{

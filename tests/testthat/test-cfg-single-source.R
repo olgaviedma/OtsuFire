@@ -42,6 +42,7 @@ test_that("Gate 1B: cfg carries model_params + train_control with the canonical 
     c("nrounds_max", "early_stop", "seeds", "val_frac", "group_col",
       "impute_numeric", "impute_factor_missing", "caps",
       "feature_whitelist_override", "feature_weights",
+      "include_shape_features",
       "training_protocol", "oof_sampling")
   )
   # GATE 6.7 (2026-06-12): random_seed (negative-pool random background) moved

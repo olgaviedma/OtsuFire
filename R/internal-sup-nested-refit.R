@@ -384,6 +384,14 @@ apply_supervised_recipe <- function(df, recipe) {
 #' @param fold_seed integer; seeds BOTH the inner split and both xgb.train calls.
 #' @param feature_weights named numeric vector (full per-column weights aligned
 #'   to the design matrix) OR NULL.
+#' @param sample_weights PHASE 2 (artifact_hard): optional per-ROW weight vector
+#'   aligned to the rows of `train_df` (length == nrow(train_df)) OR NULL. When
+#'   non-NULL it is applied via `xgboost::setinfo(dmat, "weight", w)` right after
+#'   each `xgb.DMatrix(...)` (inner-train, inner-val, and the full refit), and
+#'   `scale_pos_weight` is recomputed from the WEIGHTED class sums
+#'   (`sum(w[neg]) / sum(w[pos])`) so the positives are not double-weighted. When
+#'   NULL, NO weight vector is set and spw uses the raw counts -- byte-identical
+#'   to the pre-Phase-2 behaviour.
 #' @param nrounds_max integer; max boosting rounds in the selection phase.
 #' @param early_stopping_rounds integer; early-stopping patience (selection
 #'   phase only).
@@ -414,6 +422,7 @@ apply_supervised_recipe <- function(df, recipe) {
                                  sampling_seed = 42L,
                                  fold_seed = 42L,
                                  feature_weights = NULL,
+                                 sample_weights = NULL,
                                  nrounds_max = 4000L,
                                  early_stopping_rounds = 80L,
                                  impute_numeric = c("median", "zero"),
@@ -424,6 +433,21 @@ apply_supervised_recipe <- function(df, recipe) {
   impute_numeric <- match.arg(impute_numeric)
   if (!is.data.frame(train_df)) stop(".of_nested_refit_fit(): train_df must be a data.frame.")
   if (!label_col %in% names(train_df)) stop(".of_nested_refit_fit(): missing label_col '", label_col, "'.")
+
+  # PHASE 2: validate the optional per-row sample weights (aligned to train_df).
+  use_sample_weights <- !is.null(sample_weights)
+  if (use_sample_weights) {
+    sample_weights <- as.numeric(sample_weights)
+    if (length(sample_weights) != nrow(train_df)) {
+      stop(".of_nested_refit_fit(): sample_weights must align to train_df rows ",
+           "(length ", length(sample_weights), " != nrow ", nrow(train_df), ").",
+           call. = FALSE)
+    }
+    if (any(!is.finite(sample_weights)) || any(sample_weights < 0)) {
+      stop(".of_nested_refit_fit(): sample_weights must be finite and >= 0.",
+           call. = FALSE)
+    }
+  }
 
   feature_cols <- intersect(feature_cols, names(train_df))
   if (length(feature_cols) == 0L) {
@@ -496,12 +520,27 @@ apply_supervised_recipe <- function(df, recipe) {
   y_val <- y_all[inner_val]
 
   d_inner_tr  <- xgboost::xgb.DMatrix(X_tr_mat,  label = y_tr,  missing = NA)
+  # PHASE 2: per-row weights (inner-train slice). NULL -> no weight set.
+  if (use_sample_weights) {
+    xgboost::setinfo(d_inner_tr, "weight", sample_weights[inner_tr])
+  }
   d_inner_val <- xgboost::xgb.DMatrix(X_val_mat, label = y_val, missing = NA)
+  if (use_sample_weights) {
+    xgboost::setinfo(d_inner_val, "weight", sample_weights[inner_val])
+  }
   apply_fw(d_inner_tr,  sel_x_cols)
   apply_fw(d_inner_val, sel_x_cols)
 
-  # (d) scale_pos_weight on inner_tr only.
-  spw_sel <- sum(y_tr == 0L) / max(1, sum(y_tr == 1L))
+  # (d) scale_pos_weight on inner_tr only. PHASE 2: when per-row weights are
+  # active, compute spw from the WEIGHTED class sums (sum(w[neg])/sum(w[pos]))
+  # so the positives are not double-weighted; when NULL, the raw count ratio
+  # (byte-identical to today).
+  if (use_sample_weights) {
+    w_tr <- sample_weights[inner_tr]
+    spw_sel <- sum(w_tr[y_tr == 0L]) / max(.Machine$double.eps, sum(w_tr[y_tr == 1L]))
+  } else {
+    spw_sel <- sum(y_tr == 0L) / max(1, sum(y_tr == 1L))
+  }
   params_sel <- params_fn(spw_sel)
 
   # (e) train with inner_val as the ONLY early-stopping set.
@@ -528,10 +567,20 @@ apply_supervised_recipe <- function(df, recipe) {
   refit_x_cols <- colnames(X_refit_mat)
 
   d_refit <- xgboost::xgb.DMatrix(X_refit_mat, label = y_all, missing = NA)
+  # PHASE 2: per-row weights (full refit). NULL -> no weight set.
+  if (use_sample_weights) {
+    xgboost::setinfo(d_refit, "weight", sample_weights)
+  }
   apply_fw(d_refit, refit_x_cols)
 
-  # (g) scale_pos_weight on the FULL train_df.
-  spw_refit <- n_neg / max(1, n_pos)
+  # (g) scale_pos_weight on the FULL train_df. PHASE 2: weighted sums when
+  # per-row weights are active (avoids double weighting); raw counts otherwise.
+  if (use_sample_weights) {
+    spw_refit <- sum(sample_weights[y_all == 0L]) /
+      max(.Machine$double.eps, sum(sample_weights[y_all == 1L]))
+  } else {
+    spw_refit <- n_neg / max(1, n_pos)
+  }
   params_refit <- params_fn(spw_refit)
 
   # (h) train a NEW model on ALL rows at nrounds = best_iteration, NO early

@@ -9,6 +9,7 @@ extract_supervised_features(
   scoring_pool,
   config,
   use_hotspots = FALSE,
+  use_shape = FALSE,
   out_dir = NULL,
   write_outputs = TRUE,
   .aligned_rasters = NULL,
@@ -38,6 +39,17 @@ change-index master template, and `target_year` / `scenario`.}
 is forced off. When `TRUE` the block is enabled if and only if the loaded
 hotspot layer has rows with a usable CRS (the orchestrator's runtime
 `use_hotspots_flag`). Default `FALSE`.}
+
+\item{use_shape}{Logical. OPTIONAL shape/size feature block (OtsuFire
+0.12.0), OFF by default (`FALSE`). When `TRUE` the engine computes four
+geometric columns (`log_area`, `perim_m`, `compactness`, `elongation`;
+`area_ha` / `n_pix` already ride along as pool-builder columns) and
+left-joins them onto BOTH the train and scoring feature layers. When left
+at its `FALSE` default it is driven from the config
+(`cfg$train_control$include_shape_features` or the convenience
+`options$use_shape`), so the orchestrator turns it on via config. With the
+block off no join runs and the extraction output is byte-identical to
+today. SAMPLING-BIAS CAVEAT: see [build_supervised_burned_config()].}
 
 \item{out_dir}{Character or `NULL`. Output folder for the `03_FEATURES`
 outputs. Defaults to `config$output_routes$features_dir`.}
@@ -136,6 +148,7 @@ Other workflow:
 \code{\link{build_supervised_training_pools}()},
 \code{\link{change_index_mosaic}()},
 \code{\link{make_spatial_folds}()},
+\code{\link{promote_artifact_hard_negatives}()},
 \code{\link{run_deterministic_pipeline}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{run_oof_diagnostics}()},

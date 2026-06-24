@@ -499,8 +499,12 @@ test_that("the resolved core-arg set partitions cleanly into shared + enumerated
                                                           "params_fn", "verbose"))
   # By design every methodological core arg is either SHARED across the two
   # stages or one of the enumerated legitimate differences.
+  # PHASE 2 (artifact_hard): `sample_weights` is a SHARED additive core arg --
+  # both OOF (run_oof_xgb) and FINAL (train_final_model_direct) resolve a per-row
+  # weight vector and hand it to the SAME shared core. NULL on both stages by
+  # default (OFF), so the shared-invariant symmetry is preserved.
   shared_args <- c("feature_cols", "label_col", "group_col", "block_col",
-                   "val_frac", "feature_weights", "nrounds_max",
+                   "val_frac", "feature_weights", "sample_weights", "nrounds_max",
                    "early_stopping_rounds", "impute_numeric",
                    "impute_factor_missing")
   # fold_seed / sampling_seed are the L3 (legitimate seed-derivation) difference.

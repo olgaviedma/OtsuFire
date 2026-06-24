@@ -56,6 +56,25 @@
 #'   [run_dm_oof_pipeline()].
 #' @param feature_weights Named numeric vector of per-feature weights, or
 #'   `NULL` (default). Forwarded to [run_dm_oof_pipeline()].
+#' @param include_shape_features Logical or `NULL`. OPTIONAL shape/size feature
+#'   block (OtsuFire 0.12.0). `NULL` (default) reads
+#'   `cfg$train_control$include_shape_features` — the SAME field the FINAL stage
+#'   reads, so OOF and FINAL cannot diverge on the active feature set. A
+#'   non-`NULL` logical overrides cfg for standalone use. When effectively
+#'   `TRUE` the OOF whitelist universe becomes the canonical 50 names plus the
+#'   six shape names (so the shape columns and their `_isNA` companions enter
+#'   the OOF DMatrix exactly as in FINAL). OFF -> byte-identical OOF.
+#' @param source_weights Named numeric vector of per-row weights keyed by the
+#'   `source` column, or `NULL` (default). Phase 2 (artifact_hard). `NULL` reads
+#'   the cfg value (`config$negative_pool_params$source_weights`, off by
+#'   default). With no override AND no artifact_hard row present, no weight
+#'   vector is built (OOF predictions are byte-identical to today).
+#' @param artifact_hard_source Character vector of `source` value(s) marking
+#'   promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
+#'   `"artifact_hard"` when the cfg has the artifact_hard feature enabled, else
+#'   `character(0)` (off). Threaded to the per-fold eligibility resolver (so
+#'   promoted rows enter the uncapped artifact_hard bucket) and the per-row
+#'   sample-weight resolver in [run_oof_xgb()].
 #' @param nrounds_max Integer. Maximum xgboost boosting rounds for the OOF
 #'   per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
 #'   FINAL-model default (was `3000`). User-overridable.
@@ -176,6 +195,12 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 # No literal methodological numbers live here.
                                 feature_whitelist_override = NULL,
                                 feature_weights = NULL,
+                                # OPTIONAL shape/size block (OtsuFire 0.12.0).
+                                # NULL = read cfg$train_control$include_shape_features
+                                # (single source of truth shared with FINAL). A
+                                # non-NULL logical overrides cfg for standalone use.
+                                # OFF -> byte-identical OOF.
+                                include_shape_features = NULL,
                                 nrounds_max = NULL,
                                 early_stop = NULL,
                                 seed_base = NULL,
@@ -185,6 +210,21 @@ run_oof_diagnostics <- function(train_features, scoring_features,
                                 impute_numeric = NULL,
                                 impute_factor_missing = NULL,
                                 group_col = NULL,
+                                # PHASE 2 (artifact_hard): optional per-row source
+                                # weighting forwarded to the OOF engine.
+                                # `source_weights` is a NAMED numeric
+                                # (source -> weight); `artifact_hard_source` marks
+                                # promoted artifact_hard rows. Both DEFAULT TO NULL
+                                # = "read from cfg$negative_pool_params"
+                                # (source_weights) / use the canonical
+                                # "artifact_hard" tag when the feature is enabled.
+                                # OFF by default -> byte-identical to today.
+                                source_weights = NULL,
+                                artifact_hard_source = NULL,
+                                # PHASE 2 (artifact_hard): pool-level weight
+                                # balance. NULL = read from
+                                # cfg$negative_pool_params$artifact_hard$total_weight_ratio.
+                                total_weight_ratio = NULL,
                                 out_dir = NULL,
                                 matrix_dir = NULL,
                                 labelled_gpkg = NULL,
@@ -255,6 +295,12 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   # hardcoded "block_id" literal in run_dm_oof_pipeline(); that literal is
   # removed and group_col is now threaded from here.
   group_col             <- .shim(group_col,            .tc$group_col,       "group_col")
+  # OPTIONAL shape/size block (OtsuFire 0.12.0): resolve from cfg when the arg
+  # is left NULL (single source of truth shared with FINAL via the SAME cfg
+  # field, so OOF and FINAL cannot diverge). Plain cfg-precedence %||% (no
+  # deprecation warning: the FALSE default is the canonical baseline).
+  include_shape_features <- include_shape_features %||% .tc$include_shape_features
+  include_shape_features <- isTRUE(include_shape_features)
   if (!is.character(fold_cols) || length(fold_cols) < 1L) {
     stop("'fold_cols' must be a non-empty character vector.", call. = FALSE)
   }
@@ -315,6 +361,22 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     }
     x
   }
+  # PHASE 2 (artifact_hard): resolve the per-row weighting inputs. source_weights
+  # defaults to the cfg value; artifact_hard_source defaults to the canonical tag
+  # when the feature is enabled, else character(0) (OFF -> NO weight vector ->
+  # byte-identical to today).
+  if (is.null(source_weights)) {
+    source_weights <- config$negative_pool_params$source_weights
+  }
+  if (is.null(artifact_hard_source)) {
+    .ah_enabled <- isTRUE(config$negative_pool_params$artifact_hard$enabled)
+    artifact_hard_source <- if (.ah_enabled) "artifact_hard" else character(0)
+  }
+  if (is.null(total_weight_ratio)) {
+    total_weight_ratio <-
+      config$negative_pool_params$artifact_hard$total_weight_ratio %||% 0.10
+  }
+
   train_features_sf   <- read_feature_layer(train_features,   "train_features")
   scoring_features_sf <- read_feature_layer(scoring_features, "scoring_features")
 
@@ -386,6 +448,9 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     # (KB1/KB2 symmetry).
     feature_whitelist_override = feature_whitelist_override,
     feature_weights            = feature_weights,
+    # OPTIONAL shape/size block (OtsuFire 0.12.0): forward the SAME flag the
+    # FINAL stage uses so the OOF whitelist universe matches FINAL exactly.
+    include_shape_features     = include_shape_features,
 
     # The cap ratios (the SAME variables forwarded to FINAL) so the OOF chain
     # carries identical values. OOF always uses the capped negative-sampling
@@ -399,6 +464,12 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     # Gate 1B (2026-06-07): thread the cfg-sourced grouped-CV column down to the
     # OOF engine (was a hardcoded "block_id" literal in the wrapper).
     group_col         = group_col,
+    # PHASE 2 (artifact_hard): forward the per-row weighting inputs + the
+    # artifact_hard source tag (run_dm_oof_pipeline threads them to run_oof_xgb).
+    # Default-off -> byte-identical.
+    source_weights       = source_weights,
+    artifact_hard_source = artifact_hard_source,
+    total_weight_ratio   = total_weight_ratio,
 
     labelled_gpkg  = labelled_gpkg,
     labelled_layer = labelled_layer

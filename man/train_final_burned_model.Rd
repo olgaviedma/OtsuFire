@@ -12,6 +12,7 @@ train_final_burned_model(
   otsu_unburned_to_burned_ratio = NULL,
   feature_whitelist_override = NULL,
   feature_weights = NULL,
+  include_shape_features = NULL,
   sampling_seed = NULL,
   seed = NULL,
   val_frac = NULL,
@@ -20,6 +21,9 @@ train_final_burned_model(
   early_stopping_rounds = NULL,
   impute_numeric = NULL,
   impute_factor_missing = NULL,
+  source_weights = NULL,
+  artifact_hard_source = NULL,
+  total_weight_ratio = NULL,
   labelled_layer = "train_features",
   out_dir = NULL,
   canonical_oof_fingerprint = NULL,
@@ -59,6 +63,15 @@ unburned-patch negatives. Default `1.0`.}
 \item{feature_weights}{Named numeric vector of per-feature weights, or
 `NULL` (default). Forwarded to [train_final_model_direct()].}
 
+\item{include_shape_features}{Logical or `NULL`. OPTIONAL shape/size feature
+block (OtsuFire 0.12.0). `NULL` (default) reads
+`cfg$train_control$include_shape_features` — the SAME field the OOF stage
+reads, so OOF and FINAL cannot diverge on the active feature set. A
+non-`NULL` logical overrides cfg for standalone use. When effectively
+`TRUE` the FINAL whitelist universe becomes the canonical 50 names plus the
+six shape names (so the shape columns + their `_isNA` companions enter the
+FINAL DMatrix exactly as in OOF). OFF -> byte-identical FINAL model.}
+
 \item{sampling_seed}{Integer. RNG seed for the negative-pool sampling step
 in [train_final_model_direct()]. Default `42`. FRENTE 1 (2026-06-05):
 UNIFIED with the OOF canonical seed (was `999`). User-overridable.}
@@ -86,6 +99,20 @@ the FINAL model. Default `80`. FRENTE 1: the OOF stage default was raised
 
 \item{impute_factor_missing}{Character. Sentinel level used for missing
 factor/character values. Default `"MISSING"`.}
+
+\item{source_weights}{Named numeric vector of per-row weights keyed by the
+`source` column (e.g. `c(artifact_hard = 0.3)`), or `NULL` (default).
+Phase 2 (artifact_hard hard-negative mining). `NULL` reads the cfg value
+(`config$negative_pool_params$source_weights`, off by default). With no
+override AND no artifact_hard row present, no weight vector is built and the
+model is byte-identical to today.}
+
+\item{artifact_hard_source}{Character vector of `source` value(s) marking
+promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
+`"artifact_hard"` when the cfg has the artifact_hard feature enabled, else
+`character(0)` (off). Threaded to the eligibility resolver (so promoted rows
+resolve to the optional uncapped artifact_hard bucket) and to the per-row
+sample-weight resolver.}
 
 \item{labelled_layer}{Character. Layer name read from `train_features` when
 it is a GPKG path. Default `"train_features"`.}
@@ -217,6 +244,7 @@ Other workflow:
 \code{\link{change_index_mosaic}()},
 \code{\link{extract_supervised_features}()},
 \code{\link{make_spatial_folds}()},
+\code{\link{promote_artifact_hard_negatives}()},
 \code{\link{run_deterministic_pipeline}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{run_oof_diagnostics}()},

@@ -35,6 +35,7 @@ build_supervised_burned_config(
   runtime_options = list(),
   feature_whitelist_override = NULL,
   feature_weights = NULL,
+  include_shape_features = FALSE,
   model_params = NULL,
   options = list()
 )
@@ -187,7 +188,37 @@ anywhere error):
     `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
     `cfg$train_control$caps` and consumed end-to-end by the pool builder,
     OOF and FINAL.
+  \item `artifact_hard = list(...)` --- the OPTIONAL artifact_hard
+    hard-negative bucket (Phase 2). \strong{OFF by default} (`enabled =
+    FALSE`); when disabled this sub-block selects no rows and the resolved
+    config / training / model is byte-identical to the no-artifact_hard
+    baseline. Keys:
+    \itemize{
+      \item `enabled` (logical, default `FALSE`) --- master switch.
+      \item `total_weight_ratio` (numeric `>= 0`, default `0.10`) --- the
+        TOTAL effective weight of the artifact_hard pool divided by the
+        TOTAL weight of the burned (positive) pool, i.e.
+        `sum(w[artifact_hard]) = total_weight_ratio * sum(w[burned])`. This
+        is the POOL-LEVEL balance, \strong{not} the per-polygon weight (each
+        row gets `total_weight_ratio * sum_w_pos / n_artifact_hard`). The
+        `0.10` default is a conservative starting point, NOT a recommended
+        universal value (the weight is year-dependent). An explicit
+        `source_weights` pin overrides it.
+      \item eligibility knobs (all configurable): `rbr_med_reference`
+        (`"negative"` | `"positive"`, default `"negative"` --- the pool whose
+        `rbr_med` quantile sets the RBR floor), `rbr_med_min_q` (`[0,1]`,
+        default `0.90`), `persist_ratio_max` (default `0.35`),
+        `persist_delta_max` (default `-100`), `area_ha_min` (default `500`),
+        `doy_iqr_max` (default `1`), `reason_whitelist` (character, default
+        `character(0)`).
+    }
 }
+With `artifact_hard$enabled = TRUE` the eligible deterministic-DROP polygons
+are promoted into training as `unburned` negatives (see
+\code{\link[=promote_artifact_hard_negatives]{promote_artifact_hard_negatives()}}),
+weighted per `total_weight_ratio`, and the run writes a consolidated
+`supervised_training_pool.gpkg` layer (see the \strong{Consolidated
+training-pool layer} section in \strong{Details}).
 GATE 6.7: the former top-level `cap_random` / `cap_otsu` builder arguments
 were REMOVED; caps live ONLY in `negative_pool_params$caps`. Passing
 `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
@@ -211,6 +242,22 @@ example, dropping the hotspot block to define a no-hotspot profile).
 `feature_weights` is a named numeric vector of per-feature weights. Both
 are stored in `cfg$train_control` and consumed identically by the OOF and
 FINAL stages. `NULL` uses the full feature set with equal weights.}
+
+\item{include_shape_features}{Logical. OPTIONAL shape/size feature block
+(OtsuFire 0.12.0), OFF by default (`FALSE`). When `TRUE` it (a) makes
+feature extraction COMPUTE six geometric columns (`area_ha`, `n_pix`,
+`log_area`, `perim_m`, `compactness`, `elongation`) and (b) makes them
+ELIGIBLE model features: the admissible feature universe becomes the
+canonical 50-name whitelist plus those six names
+(`.supervised_feature_universe(TRUE)`). The OOF and FINAL stages both read
+this single `cfg$train_control$include_shape_features` field, so they
+cannot diverge on the active feature set. With `FALSE` (default) the
+resolved feature universe and every model / OOF / FINAL / extraction output
+are byte-identical to 0.11.0. SAMPLING-BIAS CAVEAT: the random-background
+negatives are tiny fixed cells (~0.81 ha squares), so shape/area is partly
+a sampling artifact rather than a physical signal; this block is intended
+for experimentation only and its effect should be judged with EFFIS, not
+the OOF metrics.}
 
 \item{model_params}{Named list or `NULL`. Optional \emph{partial} override of
 the canonical XGBoost hyper-parameter block stored in `cfg$model_params`
@@ -414,6 +461,52 @@ share one internal eligibility resolver and one capping helper.
   an external reference such as EFFIS, supplied via `reference_burned_map`.
 }
 
+\subsection{Consolidated training-pool layer}{
+  In addition to the separate burned / unburned pool outputs, the run writes a
+  single consolidated layer `supervised_training_pool.gpkg`
+  (layer `supervised_training_pool`) with one row per available training
+  example. The artifact_hard CANDIDATES (rows that satisfy the selection rule)
+  are computed and shown ALWAYS --- even with `artifact_hard$enabled = FALSE`
+  --- so the rule can be inspected without running two pipelines, WITHOUT those
+  rows entering training. Three states are kept distinct:
+  `artifact_hard_eligible` (satisfies the rule), `artifact_hard_enabled` (the
+  resolved-config switch) and `artifact_hard_used` (effectively promoted);
+  `used_in_training` is separate again (the row entered the FINAL DMatrix after
+  caps/filters). Columns: `year`, `fire_uid`, `poly_id`, `training_label`
+  (effective label, NA for non-trained candidates), `original_pool_source`
+  (provenance before promotion), `pool_source` (effective provenance:
+  `high_confidence_keep` / `random` / `otsu` / `artifact_hard` /
+  `deterministic_drop`, never mixed with the deterministic classes),
+  `artifact_hard_eligible`, `artifact_hard_enabled`, `artifact_hard_used`,
+  `used_in_training`, `sample_weight` (effective weight; NA when the row does
+  not enter training), `source_total_weight`, `deterministic_class`,
+  `deterministic_reason`, `fold_id`, `has_oof_prediction`, `p_burned_oof`, the
+  descriptive features `rbr_med`, `rbr_aw_med`, `persist_ratio`,
+  `persist_delta`, `area_ha`, `doy_iqr`, and the artifact_hard provenance
+  `artifact_hard_branch` (`persist_delta` / `large_single_doy` /
+  `reason_whitelist` / `multiple`), `artifact_hard_rbr_threshold`,
+  `artifact_hard_weight_ratio` (the CONFIGURED `total_weight_ratio` that would
+  apply, recorded for every eligible candidate even when disabled). It also
+  carries three review aids: `review_priority` (0--100 deterministic score
+  over the candidates --- higher = more likely a REAL FIRE wrongly flagged,
+  i.e. bright + persistent + large --- verify first), `review_tier`
+  (`high`/`medium`/`low`), `label_confidence` (0--1 trust in the training
+  label: a high flat base for the trusted buckets, and `1 - review_priority/100`
+  for candidates), and a BLANK `VISUAL` column (NA) for the user to fill during
+  visual review (1 = label confirmed, 0 = not). `used_in_training`
+  marks the rows in the FINAL capped set; `sample_weight` is re-resolved with
+  the same helper the engine uses. Open and filter it like any GPKG, e.g.
+  \preformatted{
+  pool <- sf::st_read(".../01_POOLS/supervised_training_pool.gpkg",
+                      layer = "supervised_training_pool")
+  # what the rule WOULD select (even with artifact_hard disabled):
+  cand <- pool[pool$artifact_hard_eligible, ]
+  table(cand$artifact_hard_branch)
+  # the rows actually trained on, by provenance bucket:
+  table(pool$pool_source[pool$used_in_training])
+  }
+}
+
 \subsection{Options}{
   The `options` list carries technical and advanced settings. Keys fall into
   three groups.
@@ -498,6 +591,33 @@ cfg_nohs <- build_supervised_burned_config(
   run_name                   = "no_hotspot_1994",
   feature_whitelist_override = c("rbr_med", "rbr_p90", "elev_med", "slope_med")
 )
+
+## artifact_hard hard-negative mining (Phase 2). OFF by default; enable it and
+## set the pool-level weight explicitly (no universal weight is recommended).
+cfg_baseline <- build_supervised_burned_config(   # artifact_hard OFF (default)
+  run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
+  change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
+  output_dir = "results/")
+
+cfg_artifact_hard <- build_supervised_burned_config(
+  run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
+  change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
+  output_dir = "results/",
+  negative_pool_params = list(
+    artifact_hard = list(
+      enabled            = TRUE,
+      total_weight_ratio = 0.10,   # artifact_hard total / burned total
+      rbr_med_reference  = "negative",
+      rbr_med_min_q      = 0.90,
+      persist_ratio_max  = 0.35
+    )))
+
+## After run_oneyear_supervised_pipeline(cfg_artifact_hard), open + filter the
+## consolidated training pool:
+pool <- sf::st_read(
+  "results/1989/.../07_FINAL_MODEL_V2/supervised_training_pool.gpkg",
+  layer = "supervised_training_pool")
+table(pool$pool_source[pool$used_in_training])
 }
 
 }
@@ -521,6 +641,7 @@ Other workflow:
 \code{\link{change_index_mosaic}()},
 \code{\link{extract_supervised_features}()},
 \code{\link{make_spatial_folds}()},
+\code{\link{promote_artifact_hard_negatives}()},
 \code{\link{run_deterministic_pipeline}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{run_oof_diagnostics}()},

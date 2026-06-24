@@ -51,6 +51,12 @@ extract_features <- function(
     use_aw  = TRUE,
     use_nbr = FALSE,
     use_hotspots = TRUE,
+    # OPTIONAL shape/size block (OtsuFire 0.12.0, OFF by default). When
+    # TRUE the per-polygon shape_features() helper computes log_area,
+    # perim_m, compactness and elongation and they are left-joined onto
+    # BOTH the train and scoring feature tables. With use_shape = FALSE
+    # no join runs => extraction output is byte-identical to today.
+    use_shape = FALSE,
 
     # --- Hotspots by year logic ---
     year_target = NULL,            # e.g., 2022
@@ -597,7 +603,34 @@ extract_features <- function(
         hs_only_buffer_support = ifelse(hotspot_available == 1L & hs_in_poly == 0L & hs_in_buffer > 0L, 1L, 0L)
       )
   }
-  
+
+  # OPTIONAL shape/size feature helper (OtsuFire 0.12.0). Guards empties
+  # with the engine's existing safe_make_valid / drop_empty_sf helpers,
+  # then delegates the geometry math to the package-level, unit-testable
+  # `.of_shape_features()` (defined in internal-sup-residual-cols.R). The
+  # right_join to base_ids preserves coverage + order (NA for any id
+  # dropped as empty/invalid). CRS is the metric target (EPSG:3035).
+  shape_features <- function(polys) {
+    all_ids  <- unique(as.character(polys[[id_col]]))
+    base_ids <- tibble(!!id_col := all_ids)
+
+    polys  <- safe_make_valid(polys)
+    polys2 <- drop_empty_sf(polys)
+
+    if (nrow(polys2) == 0) {
+      return(base_ids %>%
+               dplyr::mutate(
+                 log_area    = NA_real_,
+                 perim_m     = NA_real_,
+                 compactness = NA_real_,
+                 elongation  = NA_real_
+               ))
+    }
+
+    shp <- .of_shape_features(polys2, id_col = id_col)
+    base_ids %>% dplyr::left_join(shp, by = id_col)
+  }
+
   # ---------------------------
   # Checks (inputs)
   # ---------------------------
@@ -737,7 +770,13 @@ extract_features <- function(
     if (use_hotspots) {
       train_feat_tbl <- train_feat_tbl %>% dplyr::left_join(hotspot_features(train_folds), by = id_col)
     }
-    
+
+    # OPTIONAL shape/size block (TRAIN). OFF by default -> no join -> the
+    # train feature table is byte-identical to today.
+    if (use_shape) {
+      train_feat_tbl <- dplyr::left_join(train_feat_tbl, shape_features(train_folds), by = id_col)
+    }
+
     unl_feat_tbl <- tibble(!!id_col := as.character(unlabeled[[id_col]])) %>%
       dplyr::left_join(zonal_numeric_stats(unlabeled, rbr_summer, prefix = "rbr"), by = id_col) %>%
       dplyr::left_join(corine_group_fractions(unlabeled, cor_groups), by = id_col)
@@ -768,11 +807,33 @@ extract_features <- function(
     if (use_hotspots) {
       unl_feat_tbl <- unl_feat_tbl %>% dplyr::left_join(hotspot_features(unlabeled), by = id_col)
     }
-    
+
+    # OPTIONAL shape/size block (SCORING). Same single extract_features()
+    # invocation feeds both train + scoring pools, so both layers get the
+    # columns. OFF by default -> no join -> byte-identical scoring table.
+    if (use_shape) {
+      unl_feat_tbl <- dplyr::left_join(unl_feat_tbl, shape_features(unlabeled), by = id_col)
+    }
+
+    # When the shape block is ON, the four computed columns (log_area,
+    # perim_m, compactness, elongation) may already exist on the input
+    # pools as legacy deterministic-residual columns. Dropping the input
+    # copies before the join makes the freshly-computed shape values
+    # authoritative and avoids dplyr `.x` / `.y` name collisions. With
+    # use_shape = FALSE these columns are never in the feature table, so
+    # this prunes nothing and the join is byte-identical to today.
+    if (use_shape) {
+      .shape_computed <- c("log_area", "perim_m", "compactness", "elongation")
+      train_meta  <- train_meta[, setdiff(names(train_meta), .shape_computed), drop = FALSE]
+      unl_meta    <- unl_meta[,   setdiff(names(unl_meta),   .shape_computed), drop = FALSE]
+      train_folds <- train_folds[, setdiff(names(train_folds), .shape_computed), drop = FALSE]
+      unlabeled   <- unlabeled[,   setdiff(names(unlabeled),   .shape_computed), drop = FALSE]
+    }
+
     train_feat <- train_meta %>% dplyr::left_join(train_feat_tbl, by = id_col)
     unl_feat   <- unl_meta   %>% dplyr::left_join(unl_feat_tbl,   by = id_col)
   }
-  
+
   # ---------------------------
   # Optionally add geometry back
   # IMPORTANT: join ONLY pure feature tables to avoid duplicate columns

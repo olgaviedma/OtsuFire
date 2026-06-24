@@ -69,7 +69,14 @@ run_oof_xgb <- function(
     # removed; `deterministic_drop_source` / contextual cap are gone.
     random_background_source = c("random_burnable_background"),
     otsu_unburned_source = c("otsu_patch_residual"),
-    otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep")
+    otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep"),
+    # PHASE 2 (artifact_hard): optional per-source weights + artifact_hard source
+    # tag. NULL / default => NO per-row weighting => byte-identical to today.
+    source_weights = NULL,
+    artifact_hard_source = "artifact_hard",
+    # PHASE 2 (artifact_hard): pool-level weight balance forwarded to
+    # .of_resolve_sample_weights() (artifact_hard total / burned total).
+    total_weight_ratio = 0.10
 ) {
   if (!requireNamespace("xgboost", quietly = TRUE)) stop("Instala xgboost")
   if (!requireNamespace("dplyr", quietly = TRUE)) stop("Instala dplyr")
@@ -142,7 +149,8 @@ run_oof_xgb <- function(
         random_background_source         = random_background_source,
         otsu_unburned_source             = otsu_unburned_source,
         otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
-        origin_stage = "OOF"
+        origin_stage = "OOF",
+        artifact_hard_source = artifact_hard_source
       )
       n_burned <- length(elig$positive_idx)
 
@@ -150,6 +158,13 @@ run_oof_xgb <- function(
         random     = random_to_burned_ratio,
         otsu       = otsu_unburned_to_burned_ratio
       )
+      # PHASE 2: when the artifact_hard bucket is present (M1) it enters UNCAPPED
+      # (all eligible promoted rows train); its influence is controlled by the
+      # per-row sample weights, not by a cap. With no artifact_hard rows (M0 /
+      # default), this branch is inert -> byte-identical to today.
+      if ("artifact_hard" %in% names(elig$negatives_by_bucket)) {
+        caps["artifact_hard"] <- Inf
+      }
       capres <- .of_cap_negative_buckets(
         positive_idx        = elig$positive_idx,
         negatives_by_bucket = elig$negatives_by_bucket,
@@ -241,6 +256,18 @@ run_oof_xgb <- function(
         if (has_block) train_df[[group_col]] <- labelled_df[[group_col]][keep_tr]
         train_df <- train_df[, intersect(cols_for_core, names(train_df)), drop = FALSE]
 
+        # PHASE 2: per-row sample weights aligned to the capped train rows
+        # (keep_tr), resolved from class + source. NULL (default) when no
+        # source_weights override and no artifact_hard row -> byte-identical.
+        sw_class <- as.character(labelled_df[[class_col]])[keep_tr]
+        sw_src <- if (has_source) as.character(labelled_df[["source"]])[keep_tr] else rep(NA_character_, length(keep_tr))
+        sw_res <- .of_resolve_sample_weights(
+          class = sw_class, source = sw_src,
+          source_weights = source_weights,
+          artifact_hard_source = artifact_hard_source,
+          total_weight_ratio = total_weight_ratio)
+        sample_weights_vec <- sw_res$weights
+
         fit <- .of_nested_refit_fit(
           train_df              = train_df,
           feature_cols          = feat_model_cols,
@@ -252,6 +279,7 @@ run_oof_xgb <- function(
           sampling_seed         = fold_seed,
           fold_seed             = fold_seed,
           feature_weights       = feature_weights,
+          sample_weights        = sample_weights_vec,
           nrounds_max           = nrounds_max,
           early_stopping_rounds = early_stop,
           impute_numeric        = impute_numeric,

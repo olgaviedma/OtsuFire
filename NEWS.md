@@ -1,3 +1,190 @@
+# OtsuFire (development) — OPTIONAL shape/size feature block
+
+**ADDITIVE + OFF BY DEFAULT.** Every change below is inert with the default
+config. With `include_shape_features = FALSE` (the default) the resolved
+feature universe, extracted feature tables, OOF DMatrix, FINAL DMatrix, model
+bytes and scoring are byte-identical to 0.11.0. The flag is a single boolean
+that controls the whole block.
+
+* **New config flag `include_shape_features = FALSE`** on
+  `build_supervised_burned_config()`. Resolved into
+  `cfg$train_control$include_shape_features` (canonical default `FALSE`,
+  recorded in `resolved_params_provenance$train_control`). The OOF and FINAL
+  stages BOTH read this single field, so they cannot diverge on the active
+  feature set.
+* **New constant `.supervised_shape_feature_cols`** =
+  `c("area_ha","n_pix","log_area","perim_m","compactness","elongation")`. The
+  frozen 50-name `.supervised_feature_cols` is UNTOUCHED.
+* **New universe helper `.supervised_feature_universe(include_shape = FALSE)`** —
+  THE single definition of the admissible feature set everywhere (validation,
+  the active-whitelist default, and the OOF/FINAL allowed-column invariants all
+  route through it). This collapses the former two-filter asymmetry that could
+  let a column appear "in OOF but not FINAL".
+* **Feature extraction gains `use_shape` (`extract_features()` /
+  `extract_supervised_features()`).** When ON a per-polygon `shape_features()`
+  helper computes `log_area`, `perim_m`, `compactness` (Polsby-Popper) and
+  `elongation` (min-rotated-rectangle length/width, with a base `st_bbox` ratio
+  fallback) in the metric CRS (EPSG:3035) using the package's own base-sf
+  idioms (no `lwgeom`), and left-joins them onto BOTH the train and scoring
+  layers. OFF -> no join -> byte-identical features.
+* **`include_shape_features` threaded** through `run_oof_diagnostics()`,
+  `train_final_burned_model()`, the OOF + FINAL engines and the orchestrator
+  (the orchestrator feeds the SAME cfg-derived value to extraction, OOF and
+  FINAL).
+* **SAMPLING-BIAS caveat.** The random-background negatives are tiny fixed
+  cells (~0.81 ha squares), so shape/area is partly a sampling artifact, not a
+  physical signal. This block is OFF by default and intended for
+  experimentation; judge its effect with EFFIS, not OOF.
+
+# OtsuFire (development) — Phase 2: artifact_hard hard-negative mining
+
+**ADDITIVE + OFF BY DEFAULT.** Every change below is inert with the default
+config: with `negative_pool_params$artifact_hard$enabled = FALSE` and
+`negative_pool_params$source_weights = NULL` (the defaults) the resolved config,
+training rows, DMatrices, model bytes, OOF and scoring outputs are byte-identical
+to 0.11.0. The 1989 parity proof reproduces the saved `p_burned_model` to machine
+epsilon (max abs diff ~4.4e-16) and the full prior testthat suite stays green.
+
+* **New config sub-block `negative_pool_params$artifact_hard`** (defaults:
+  `enabled = FALSE`, `persist_ratio_max = 0.35`, `rbr_med_min_q = 0.25`,
+  `reason_whitelist = character(0)`, `persist_delta_max = -100`,
+  `area_ha_min = 500`, `doy_iqr_max = 1`) and optional
+  `negative_pool_params$source_weights` (default `NULL`). Unknown-key validation
+  is preserved; the resolved value for the existing keys is unchanged when the
+  block is absent.
+* **Optional third negative bucket `artifact_hard`.**
+  `.of_valid_negative_buckets()` keeps `c("random","otsu")` as the default and
+  gains `include_artifact_hard = FALSE`. The shared eligibility resolver gains an
+  optional `artifact_hard_source` (default `character(0)` → no behaviour change)
+  with a narrow, documented GATE-6.5 exception ONLY for those rows.
+* **New exported helper `promote_artifact_hard_negatives()`** — augments
+  `train_features` with eligible artifact_hard negatives BEFORE the spatial
+  folds; a strict no-op (returns `train_features` unchanged) when disabled.
+* **New internal selection `.of_select_artifact_hard()`** implementing the exact
+  eligibility rule, returning artifact_hard / artifact_uncertain / audit; the 3
+  derived persistence-shape features are attached only under the M3 flag.
+* **Per-row sample weights** in the shared nested-refit core
+  (`.of_nested_refit_fit(sample_weights = …)`, threaded through OOF and FINAL):
+  applied via `xgboost::setinfo(dmat, "weight", w)`, with `scale_pos_weight`
+  recomputed from WEIGHTED class sums to avoid double-weighting. artifact_hard
+  rows are weighted so `sum(w[artifact_hard]) = 0.5 * sum(w[positive])`. NULL
+  weights set no weight vector (byte-identical to today).
+* **New scoring column `p_burned_eval = coalesce(p_oof_mean, p_burned_model)`**
+  added at the end of scoring assembly. No scoring row is dropped; no public-map
+  exclusion is added. `p_burned_eval` is now also carried in the public
+  `final_map` layer (added to `make_public_final_map()` `public_cols`).
+
+## Phase A — end-to-end wiring into the PUBLIC wrappers (additive, OFF by default)
+
+artifact_hard now works end-to-end from the public API; the experimental runner
+(`_experiments/runner_artifact_hard.R`) is no longer needed to activate it.
+
+* **`train_final_model_direct()` (engine)** now threads `artifact_hard_source`
+  into its FINAL `.of_resolve_supervised_eligibility()` call and admits the
+  uncapped `artifact_hard` bucket (`caps["artifact_hard"] <- Inf`), so promoted
+  artifact_hard rows are selected into the training pool instead of hitting the
+  GATE-6.5 "unburned with no valid bucket" error. The per-row sample-weight log
+  is returned as `sample_weight_log`.
+* **`train_final_burned_model()` / `run_oof_diagnostics()` wrappers** gain
+  `source_weights` + `artifact_hard_source` params (default `NULL` → read from
+  `cfg$negative_pool_params$source_weights` / use the canonical `"artifact_hard"`
+  tag when enabled, else off). Forwarded to the engine / `run_oof_xgb`
+  (the OOF wrapper `run_dm_oof_pipeline()` now forwards them too).
+* **`run_oneyear_supervised_pipeline()` orchestrator** inserts
+  `promote_artifact_hard_negatives()` AFTER feature extraction (+ fold-join) and
+  BEFORE OOF/FINAL when enabled. Promoted rows get `block_id` `AH_*`, a unique
+  `fire_uid`, and distributed per-rep fold assignments (mirroring the verified
+  runner), then flow through OOF + FINAL + scoring via a separate augmented
+  features GPKG; the `scoring_features` universe is unchanged. The promotion
+  audit + per-source sample-weight log are written under `07_FINAL_MODEL_V2`.
+* **All of the above is OFF by default** (`artifact_hard$enabled = FALSE`,
+  `source_weights = NULL`): no promotion runs, no weight vector is built, and the
+  resolved args / training rows / model bytes / scored universe are byte-identical
+  to 0.11.0 (proven by `tests/testthat/test-artifact-hard-e2e.R`, incl. a
+  runner↔wrapper exact-equivalence test).
+
+## Consolidation — public weight knob + consolidated training-pool layer (additive, OFF by default)
+
+Closes the artifact_hard infrastructure as a configurable, OFF-by-default feature.
+The weight×year calibration sweep (1985/1988/1989 × {0.10, 0.25, 0.50}) showed the
+intervention is year-dependent and net-harmful on 1985/1988, so it is NOT enabled
+by default and NO universal weight is recommended; the knob is exposed for the
+user to set per case.
+
+* **New public weight knob `negative_pool_params$artifact_hard$total_weight_ratio`**
+  (default `0.10`). Defined as the TOTAL effective weight of the `artifact_hard`
+  pool divided by the TOTAL weight of the `burned` (positive) pool, i.e.
+  `sum(w[artifact_hard]) = total_weight_ratio * sum(w[burned])`. It is the
+  POOL-LEVEL balance, NOT the per-polygon weight (each row gets
+  `total_weight_ratio * sum_w_pos / n_artifact_hard`). The `0.10` default is a
+  conservative starting point, NOT a recommended universal value. An explicit
+  `source_weights` pin still overrides it. Threaded end-to-end (config →
+  `train_final_burned_model()` / `run_oof_diagnostics()` →
+  `train_final_model_direct()` / `run_oof_xgb()` → `.of_resolve_sample_weights()`)
+  and recorded in the resolved config + its provenance.
+* **All eligibility parameters remain user-configurable**: `rbr_med_reference`,
+  `rbr_med_min_q`, `persist_ratio_max`, `persist_delta_max`, `area_ha_min`,
+  `doy_iqr_max`, `reason_whitelist`.
+* **`scale_pos_weight` is recomputed from the WEIGHTED class sums** at both OOF
+  and FINAL whenever per-row weights are active (`sum(w[neg]) / sum(w[pos])`),
+  so the positives are never double-weighted; unweighted runs keep the raw count
+  ratio (byte-identical).
+* **New consolidated layer `supervised_training_pool.gpkg`** (written under
+  `07_FINAL_MODEL_V2`, ALONGSIDE the existing separate burned/unburned pool
+  outputs). One row per available training example, representing EXACTLY the rows
+  and weights the engine receives (`used_in_training` ⇔ the FINAL capped frame;
+  `sample_weight` re-resolved with the same helper). It can be built BEFORE
+  training: `.of_write_supervised_training_pool(training_ok = NULL, oof_agg =
+  NULL)` derives `used_in_training` + `sample_weight` purely from the pool +
+  config via the same eligibility resolver + capping helper + seed the engine
+  uses (proven equivalent to the engine's `training_ok`), leaving `p_burned_oof`
+  NA — so the pools can be inspected before any model is fit; the one-call
+  orchestrator still writes it post-model with `p_burned_oof` filled. Columns:
+  `year`, `fire_uid`,
+  `poly_id`, `training_label`, `pool_source`
+  (`high_confidence_keep`/`random`/`otsu`/`artifact_hard` — never mixed with the
+  deterministic classes), `deterministic_class`, `deterministic_reason`,
+  `used_in_training`, `sample_weight`, `source_total_weight`, `fold_id`,
+  `has_oof_prediction`, `p_burned_oof`, `rbr_med`, `rbr_aw_med`, `persist_ratio`,
+  `persist_delta`, `area_ha`, `doy_iqr`, `artifact_hard_eligible`,
+  `artifact_hard_branch` (`persist_delta`/`large_single_doy`/`reason_whitelist`/
+  `multiple`), `artifact_hard_rbr_threshold`, `artifact_hard_weight_ratio`. The
+  layer is emitted in BOTH modes (with artifact_hard OFF it describes the baseline
+  pool) and is a NEW file, so the existing artifacts' OFF-baseline parity is
+  preserved. Surfaced on the run return as `training_pool_layer`.
+* **Visual-review aids on the consolidated layer.** Three deterministic columns
+  to drive curating a training pool by eye: `review_priority` (0--100 over the
+  artifact_hard candidates --- higher = more likely a REAL FIRE wrongly flagged:
+  bright RBR + persistent + large; weights 0.45/0.30/0.25, tunable),
+  `review_tier` (`high`/`medium`/`low`), and `label_confidence` (0--1 trust in
+  the training label: high flat base for trusted buckets, `1 - review_priority/100`
+  for candidates). Plus a BLANK `VISUAL` column (all NA) for the user to fill in
+  QGIS (1 = label confirmed, 0 = not) so a confirmed per-era pool can be assembled
+  afterwards.
+* **artifact_hard candidates are shown ALWAYS, even with `enabled = FALSE`.** The
+  consolidated layer computes the eligibility rule over the scoring universe
+  regardless of the switch and APPENDS the eligible-but-not-promoted candidates as
+  candidate-only rows (no model impact), so the rule can be audited without running
+  two pipelines. Three states are kept distinct via separate columns:
+  `artifact_hard_eligible` (satisfies the rule), `artifact_hard_enabled` (the
+  resolved-config switch), `artifact_hard_used` (effectively promoted), plus
+  `used_in_training` (entered the FINAL DMatrix). Added `original_pool_source`
+  (provenance before promotion) vs `pool_source` (effective). With `enabled =
+  FALSE` candidates carry `artifact_hard_eligible = TRUE`, `artifact_hard_used =
+  FALSE`, `sample_weight = NA`, and `artifact_hard_weight_ratio` = the configured
+  `total_weight_ratio` (the value that WOULD apply), and they do NOT touch the
+  baseline DMatrix/weights/model. `.of_build/.of_write_supervised_training_pool`
+  gain a `scoring_features` argument for this.
+* **Tests** (`test-artifact-hard-training-pool-layer.R`,
+  `test-artifact-hard-weights.R`): identical eligible set with `enabled` FALSE vs
+  TRUE; OFF leaves the baseline rows/weights/membership byte-identical and
+  `sample_weight = NA` for candidates; ON promotes eligibles
+  (`artifact_hard_used = TRUE`) and `sum(weight[artifact_hard]) = total_weight_ratio
+  * sum(weight[burned])` for 0.10 / 0.25 / 0.50; `used_in_training` == the engine
+  DMatrix rows; changing the ratio never changes the eligible set; no
+  geometry/list-columns among the descriptive features; `0.10` lives in the
+  resolved config and the layer.
+
 # OtsuFire 0.11.0 (2026-06-14)
 
 ## BREAKING CHANGE — supervised config 'scenario' argument renamed to 'run_label'

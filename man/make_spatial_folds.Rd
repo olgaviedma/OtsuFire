@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-folds.R
 \name{make_spatial_folds}
 \alias{make_spatial_folds}
-\title{Create spatial block-CV folds for supervised burned-area diagnostics}
+\title{Build spatial block cross-validation folds for the supervised pipeline}
 \usage{
 make_spatial_folds(
   train_labelled,
@@ -61,20 +61,46 @@ A named list with both the objects and the written paths:
   }
 }
 \description{
-Supervised-pipeline stage B (spatial folds). Builds spatial block grids,
-auto-tunes the `(block_size, k)` configuration against per-fold acceptance
-gates, assigns repeated block-CV folds (kept together by `split_unit`),
-propagates the unit-level folds back to the polygon table, and writes the
-canonical `02_FOLDS` outputs (`<year>_blocks_<bs>m.gpkg`,
-`<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv`,
-`<year>_train_with_folds_<bs>m.gpkg`). When no candidate passes the
-acceptance gate the best non-OK candidate is used and a
-`_FOLD_FALLBACK.txt` audit file is written (loud `warning()`).
+Assigns spatially blocked cross-validation folds to the labelled training
+pool, so that out-of-fold diagnostics measure spatial transferability rather
+than memorisation of nearby polygons. This is the folds stage of the
+supervised pipeline; its `train_with_folds` output then feeds
+[extract_supervised_features()] and [run_oof_diagnostics()].
 
-This is the standalone, exported implementation of the folds stage that the
-one-year orchestrator [run_oneyear_supervised_pipeline()] delegates to, so
-calling it directly produces byte-identical fold outputs to a full run.
+Run it after the pools stage ([build_supervised_training_pools()]) and before
+feature extraction. Pass the labelled training pool and the configuration
+from [build_supervised_burned_config()]. Calling this function directly
+produces the same fold outputs as the equivalent stage of the full pipeline
+[run_oneyear_supervised_pipeline()].
 }
+\section{What it does}{
+
+\enumerate{
+  \item Builds candidate square block grids over the polygons, trying each
+    `block_sizes_m` from larger (stricter) to smaller (looser).
+  \item Auto-tunes the `(block_size, k)` combination against per-fold
+    acceptance gates (minimum burned units and positive blocks per fold).
+  \item Assigns repeated block-CV folds, keeping each `split_unit` (a whole
+    fire or a single polygon) together within one fold.
+  \item Propagates the unit-level folds back onto the polygon table.
+  \item Writes the `02_FOLDS` outputs and returns the in-memory objects.
+}
+When no candidate passes the acceptance gate, the best non-passing candidate
+is used, a `_FOLD_FALLBACK.txt` audit file is written, and a loud
+`warning()` is raised.
+}
+
+\section{Outputs}{
+
+Written under the `02_FOLDS` folder:
+\itemize{
+  \item `<year>_blocks_<bs>m.gpkg` — the selected block grid.
+  \item `<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv` — fold assignments.
+  \item `<year>_train_with_folds_<bs>m.gpkg` — polygons with `fold_rep*`
+    columns.
+}
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(
@@ -87,6 +113,10 @@ folds$train_with_folds_gpkg
 }
 }
 \seealso{
+[build_supervised_burned_config()], [build_supervised_training_pools()],
+[extract_supervised_features()], [run_oof_diagnostics()],
+[validate_supervised_execution()], [run_oneyear_supervised_pipeline()]
+
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},

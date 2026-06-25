@@ -40,16 +40,15 @@ is forced off. When `TRUE` the block is enabled if and only if the loaded
 hotspot layer has rows with a usable CRS (the orchestrator's runtime
 `use_hotspots_flag`). Default `FALSE`.}
 
-\item{use_shape}{Logical. OPTIONAL shape/size feature block (OtsuFire
-0.12.0), OFF by default (`FALSE`). When `TRUE` the engine computes four
-geometric columns (`log_area`, `perim_m`, `compactness`, `elongation`;
-`area_ha` / `n_pix` already ride along as pool-builder columns) and
-left-joins them onto BOTH the train and scoring feature layers. When left
-at its `FALSE` default it is driven from the config
-(`cfg$train_control$include_shape_features` or the convenience
-`options$use_shape`), so the orchestrator turns it on via config. With the
-block off no join runs and the extraction output is byte-identical to
-today. SAMPLING-BIAS CAVEAT: see [build_supervised_burned_config()].}
+\item{use_shape}{Logical. Optional shape/size feature block, off by default
+(`FALSE`). When `TRUE` the engine computes four geometric columns
+(`log_area`, `perim_m`, `compactness`, `elongation`; `area_ha` / `n_pix`
+already ride along as pool-builder columns) and left-joins them onto both
+the train and scoring feature layers. When left at its `FALSE` default it
+is driven from the config (`cfg$train_control$include_shape_features` or
+the convenience `options$use_shape`); an explicit `TRUE` always wins. With
+the block off no join runs and the extraction output is unchanged. See the
+sampling-bias note in [build_supervised_burned_config()].}
 
 \item{out_dir}{Character or `NULL`. Output folder for the `03_FEATURES`
 outputs. Defaults to `config$output_routes$features_dir`.}
@@ -81,51 +80,53 @@ A named list with both the objects and the written paths:
   }
 }
 \description{
-Supervised-pipeline stage B3 (feature extraction). This is the standalone,
-exported implementation of the feature-extraction stage that the one-year
-orchestrator [run_oneyear_supervised_pipeline()] delegates to, so calling it
-directly produces byte-identical `03_FEATURES` outputs to a full run.
+Computes the per-polygon predictor features the burned-area model is trained
+and scored on, for both the labelled training polygons and the deterministic
+scoring universe. This is the feature-extraction stage of the supervised
+pipeline; its `features_geometry.gpkg` output then feeds the OOF and
+final-model stages.
 
-It loads + aligns the supervised raster support stack (RBR summer, post-fire
-DOY, autumn-winter RBR, DEM, slope, CORINE) to the change-index master
-template, optionally loads the target-year hotspot layer, then wraps the
-internal patch-level feature engine [extract_features()] with the exact
-arguments and values the orchestrator passed (the same `id_col`, the
-`use_aw = TRUE` / `use_nbr = FALSE` switches, every `hs_*` parameter, the
-CORINE group LUT, the year, and the `train`/`scoring` feature basenames and
-layer names). It writes the canonical `03_FEATURES` outputs
-(`features_geometry.gpkg` carrying the `train_features` + `scoring_features`
-layers, plus `train_features.rds` and `scoring_features.rds`) and returns
-both the in-memory feature objects and the written paths.
+Run it after the folds stage and before [run_oof_diagnostics()]. Pass the
+train-with-folds layer, the scoring pool, and the configuration from
+[build_supervised_burned_config()]. Calling this function directly produces
+the same `03_FEATURES` outputs as the equivalent stage of the full pipeline
+[run_oneyear_supervised_pipeline()].
 }
 \details{
-**Self-contained raster loading.** The aligned raster stack, the hotspot
-layer and the CORINE group LUT are used ONLY by this stage (the pools /
-unburned / folds stages build their own inputs from paths). To make the
-function self-contained, it resolves the raster input paths from
-`config$options$data_base` / `config$options$composite_base` /
-`config$options$result_name` (the INPUT-imagery authority, exactly as the
-orchestrator does) and runs the SAME `align_to_template()` alignment the
-orchestrator ran. When the orchestrator delegates to this function it passes
-its already-built objects through the dot-prefixed internal arguments
-`.aligned_rasters` / `.hotspots_sf` / `.cor_groups`, so no raster is loaded
-or aligned twice and the engine call is byte-identical.
+\strong{Self-contained raster loading.} The aligned raster stack, hotspot
+layer and CORINE group lookup are used only by this stage. When called
+standalone the function resolves the raster input paths from
+`config$options$data_base` / `composite_base` / `result_name` and runs the
+alignment itself. When the orchestrator delegates to this function it passes
+its already-built objects through the internal arguments `.aligned_rasters` /
+`.hotspots_sf` / `.cor_groups`, so no raster is loaded or aligned twice.
 
-**Staleness rebuild.** When `features_geometry.gpkg` already exists the
-function applies the orchestrator's staleness logic verbatim: it is rebuilt
-when it is older than the pools / folds inputs, when it is missing the
-`train_features` / `scoring_features` layers, or when its layer row counts do
-not match the train-with-folds / scoring-pool row counts; otherwise it is
-reused.
+\strong{Staleness rebuild.} When `features_geometry.gpkg` already exists it
+is rebuilt when it is older than the pools / folds inputs, when it is missing
+the `train_features` / `scoring_features` layers, or when its layer row
+counts do not match the train-with-folds / scoring-pool row counts; otherwise
+it is reused.
 
-**`use_hotspots`.** The engine's hotspot block is enabled by a runtime flag
-derived from whether the loaded hotspot layer has rows (after CRS handling),
-exactly as the orchestrator computed `use_hotspots_flag`. The public
-`use_hotspots` argument lets a caller force the hotspot block off (set
-`FALSE`) regardless of the loaded layer; the default `FALSE` matches the
-uniform modular signature, while the orchestrator delegation passes the
-runtime flag so production behaviour is unchanged.
+\strong{Hotspots.} The engine's hotspot block is enabled only when the loaded
+hotspot layer has rows with a usable CRS. Setting `use_hotspots = FALSE`
+(the default) forces the block off regardless of the loaded layer.
 }
+\section{What it does}{
+
+\enumerate{
+  \item Loads and aligns the supervised raster support stack (RBR summer,
+    post-fire DOY, autumn-winter RBR, DEM, slope, CORINE) to the
+    change-index master template.
+  \item Optionally loads the target-year hotspot layer.
+  \item Runs the patch-level feature engine [extract_features()] on the
+    labelled and scoring polygons with the pipeline's standard settings.
+  \item Optionally appends shape/size features (see `use_shape`).
+  \item Writes `features_geometry.gpkg` (carrying the `train_features` and
+    `scoring_features` layers) plus `train_features.rds` and
+    `scoring_features.rds`, and returns the in-memory objects.
+}
+}
+
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(
@@ -142,6 +143,11 @@ feats$features_geometry_gpkg
 }
 }
 \seealso{
+[build_supervised_burned_config()], [make_spatial_folds()],
+[run_oof_diagnostics()], [train_final_burned_model()],
+[score_supervised_burned_map()], [validate_supervised_execution()],
+[run_oneyear_supervised_pipeline()]
+
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},

@@ -1,36 +1,57 @@
 #' Run out-of-fold (OOF) diagnostics for the supervised burned-area model
 #'
 #' @description
-#' Supervised-pipeline stage C (OOF diagnostics). Builds the XGBoost design
-#' matrix from the extracted features, runs repeated block-CV out-of-fold
-#' scoring, computes the per-threshold OOF metrics, picks the recommended /
-#' best thresholds, and writes the canonical `05_OOF` + `04_MATRIX` outputs
-#' (`<prefix>_oof_agg.csv`, `<prefix>_oof_long.csv`,
-#' `<prefix>_oof_metrics_by_threshold.csv`, `<prefix>_oof_metrics_summary.txt`,
-#' `<prefix>_oof_best_thresholds.csv`, `<prefix>_labeled_oof_summary.gpkg`, and
-#' the design-matrix bundle under `04_MATRIX`). The `<prefix>` is
-#' `"<year>_<scenario>_patch"`.
+#' Cross-validates the burned-area model on the spatial folds and reports how
+#' well it separates burned from unburned at every probability threshold. This
+#' is the diagnostics stage of the supervised pipeline: it tells you which score
+#' threshold to use and how the model is expected to perform before you train
+#' and apply the final model.
 #'
-#' This is the standalone, exported implementation of the OOF stage that the
-#' one-year orchestrator [run_oneyear_supervised_pipeline()] delegates to, so
-#' calling it directly produces byte-identical OOF outputs to a full run.
+#' Run it after the features stage and before [train_final_burned_model()]. Pass
+#' the labelled and scoring features and the configuration from
+#' [build_supervised_burned_config()]; the methodological settings (XGBoost
+#' parameters, negative-pool caps, feature whitelist/weights, seeds) are read
+#' from the configuration, so calling this function directly produces the same
+#' result as the equivalent stage of the full pipeline
+#' [run_oneyear_supervised_pipeline()].
+#'
+#' @section What it does:
+#' \enumerate{
+#'   \item Builds the XGBoost design matrix from the extracted features.
+#'   \item Runs repeated spatially blocked out-of-fold scoring (each fold is
+#'     predicted by a model that never saw it).
+#'   \item Computes per-threshold OOF metrics and picks the recommended and best
+#'     thresholds.
+#'   \item Writes the `05_OOF` metric outputs and the `04_MATRIX` design-matrix
+#'     bundle.
+#' }
+#'
+#' @section Outputs:
+#' Files are prefixed `"<year>_<scenario>_patch"`:
+#' \itemize{
+#'   \item `<prefix>_oof_agg.csv`, `<prefix>_oof_long.csv` — per-unit and
+#'     per-fold OOF scores.
+#'   \item `<prefix>_oof_metrics_by_threshold.csv`,
+#'     `<prefix>_oof_metrics_summary.txt`, `<prefix>_oof_best_thresholds.csv` —
+#'     the threshold sweep and chosen thresholds.
+#'   \item `<prefix>_labeled_oof_summary.gpkg` — OOF scores joined back to
+#'     geometry (when a labelled GPKG is available).
+#'   \item the design-matrix bundle under `04_MATRIX`.
+#' }
 #'
 #' @details
-#' When `params = NULL` the XGBoost parameter block is built from the single
-#' canonical source of truth [.of_canonical_xgb_params()] -- the SAME builder
-#' the FINAL-model stage uses -- so OOF and FINAL can never diverge (FRENTE 1,
-#' 2026-06-05). The canonical block uses booster `gbtree`, objective
-#' `binary:logistic`, an `eval_metric` vector with `logloss` FIRST (drives
-#' early stopping) and `aucpr` second (visible only), `eta = 0.05`,
-#' `max_depth = 5`, `min_child_weight = 5`, `subsample = 0.8`,
-#' `colsample_bytree = 0.75`, `gamma = 0`, `lambda = 1`, `alpha = 0`, and
-#' `scale_pos_weight = n_unburned / n_burned` computed here from the OOF
-#' training labels.
+#' The OOF stage and the final-model stage share one training core, so their
+#' diagnostics and the fitted model cannot diverge. With `params = NULL` the
+#' XGBoost parameter block is the canonical one used by both stages (booster
+#' `gbtree`, objective `binary:logistic`, `eval_metric` of `logloss` first —
+#' which drives early stopping — then `aucpr`, `eta = 0.05`, `max_depth = 5`,
+#' `min_child_weight = 5`, `subsample = 0.8`, `colsample_bytree = 0.75`,
+#' `gamma = 0`, `lambda = 1`, `alpha = 0`), with `scale_pos_weight` computed
+#' here as `n_unburned / n_burned` from the OOF training labels.
 #'
-#' `feature_whitelist_override` and `feature_weights` are forwarded verbatim to
-#' [run_dm_oof_pipeline()] so the OOF stage trains under the SAME feature space
-#' and per-feature weights as the final model (KB1/KB2 symmetry); this is why
-#' both knobs are part of the signature.
+#' `feature_whitelist_override` and `feature_weights` are forwarded so the OOF
+#' stage trains under the same feature space and per-feature weights as the
+#' final model; this is why both are part of the signature.
 #'
 #' @param train_features sf / data.frame OR a single GPKG path. The labelled
 #'   training features produced by the features stage (the `train_features`
@@ -49,41 +70,39 @@
 #' @param fold_cols Character vector of fold column names. Default
 #'   `c("fold_rep1", "fold_rep2")`.
 #' @param params Optional named list of XGBoost params. When `NULL` (default)
-#'   the historical orchestrator params block is rebuilt inline (see Details).
-#' @param feature_whitelist_override Character vector subset of the canonical
-#'   `.supervised_feature_cols` to use as the active OOF feature space, or
-#'   `NULL` (default) for the full whitelist. Forwarded to
-#'   [run_dm_oof_pipeline()].
+#'   the canonical parameter block is built (see Details).
+#' @param feature_whitelist_override Character vector restricting the active OOF
+#'   feature space to a subset of the canonical whitelist, or `NULL` (default)
+#'   for the full whitelist. Forwarded to [run_dm_oof_pipeline()].
 #' @param feature_weights Named numeric vector of per-feature weights, or
 #'   `NULL` (default). Forwarded to [run_dm_oof_pipeline()].
-#' @param include_shape_features Logical or `NULL`. OPTIONAL shape/size feature
-#'   block (OtsuFire 0.12.0). `NULL` (default) reads
-#'   `cfg$train_control$include_shape_features` — the SAME field the FINAL stage
-#'   reads, so OOF and FINAL cannot diverge on the active feature set. A
-#'   non-`NULL` logical overrides cfg for standalone use. When effectively
-#'   `TRUE` the OOF whitelist universe becomes the canonical 50 names plus the
-#'   six shape names (so the shape columns and their `_isNA` companions enter
-#'   the OOF DMatrix exactly as in FINAL). OFF -> byte-identical OOF.
+#' @param include_shape_features Logical or `NULL`. Optional shape/size feature
+#'   block. `NULL` (default) reads `cfg$train_control$include_shape_features` —
+#'   the same field the final stage reads, so OOF and final cannot diverge on
+#'   the active feature set. When effectively `TRUE` the OOF whitelist universe
+#'   gains the six shape names and their `_isNA` companions; when `FALSE` the
+#'   OOF output is unchanged.
 #' @param source_weights Named numeric vector of per-row weights keyed by the
-#'   `source` column, or `NULL` (default). Phase 2 (artifact_hard). `NULL` reads
-#'   the cfg value (`config$negative_pool_params$source_weights`, off by
-#'   default). With no override AND no artifact_hard row present, no weight
-#'   vector is built (OOF predictions are byte-identical to today).
+#'   `source` column, or `NULL` (default). `NULL` reads the configured value
+#'   (`config$negative_pool_params$source_weights`, off by default). With no
+#'   override and no artifact_hard rows present, no weight vector is built.
 #' @param artifact_hard_source Character vector of `source` value(s) marking
 #'   promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
-#'   `"artifact_hard"` when the cfg has the artifact_hard feature enabled, else
-#'   `character(0)` (off). Threaded to the per-fold eligibility resolver (so
-#'   promoted rows enter the uncapped artifact_hard bucket) and the per-row
-#'   sample-weight resolver in [run_oof_xgb()].
-#' @param nrounds_max Integer. Maximum xgboost boosting rounds for the OOF
-#'   per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
-#'   FINAL-model default (was `3000`). User-overridable.
-#' @param early_stop Integer. xgboost early-stopping patience for the OOF
-#'   per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
-#'   (was `75`). User-overridable.
-#' @param seed_base Integer. Base RNG seed for the repeated block-CV OOF runs.
-#'   Default `42` (the canonical seed; the FINAL stage seeds were moved
-#'   `999` -> `42` to match). User-overridable.
+#'   `"artifact_hard"` when that feature is enabled, else `character(0)` (off).
+#'   Used by the per-fold eligibility resolver (promoted rows enter the uncapped
+#'   artifact_hard bucket) and the per-row sample-weight resolver.
+#' @param total_weight_ratio Numeric or `NULL`. Pool-level weight balance
+#'   (artifact_hard total weight / burned total weight). `NULL` (default) reads
+#'   `config$negative_pool_params$artifact_hard$total_weight_ratio`.
+#' @param nrounds_max Integer or `NULL`. Maximum XGBoost boosting rounds for the
+#'   OOF per-fold models. `NULL` (default) reads the configured value (matches
+#'   the final-model default).
+#' @param early_stop Integer or `NULL`. XGBoost early-stopping patience for the
+#'   OOF per-fold models. `NULL` (default) reads the configured value (matches
+#'   the final stage).
+#' @param seed_base Integer or `NULL`. Base RNG seed for the repeated block-CV
+#'   OOF runs. `NULL` (default) reads the configured value (matches the final
+#'   stage).
 #' @param out_dir Character or `NULL`. Output folder for the `05_OOF` outputs.
 #'   Defaults to `config$output_routes$oof_dir`.
 #' @param matrix_dir Character or `NULL`. Output folder for the `04_MATRIX`
@@ -98,45 +117,36 @@
 #'   `"train_with_folds"`.
 #' @details
 #' OOF uses the same capped negative-sampling policy as the final model, applied
-#' independently within each training fold. Each OUTER fold runs through the
-#' shared leakage-free core ([.of_nested_refit_fit()]) — per-fold medians +
-#' `scale_pos_weight` fit on the outer-train only, an inner-validation split as
-#' the sole early-stopping set, a refit on all outer-train rows at
-#' `best_iteration`, then prediction of the untouched outer-test fold.
+#' independently within each training fold. Each outer fold runs through the
+#' shared leakage-free core: per-fold medians and `scale_pos_weight` are fit on
+#' the outer-train rows only, an inner-validation split is the sole
+#' early-stopping set, the model is refit on all outer-train rows at the best
+#' iteration, and the untouched outer-test fold is predicted.
 #'
-#' Training eligibility is defined by EXPLICIT class, never by negation: only
-#' rows with `class == "burned"` (positives) and rows with `class == "unburned"`
-#' that resolve to one of the two valid negative buckets (random, otsu) enter
-#' training. Review / keep / `NA` / unknown rows never become
-#' negatives. OOF and FINAL share one internal eligibility resolver and one
-#' capping helper, so the two stages cannot diverge on which rows are eligible
-#' or on how negatives are capped.
+#' Training eligibility is defined by explicit class, never by negation: only
+#' explicit burned rows (positives) and explicit unburned rows that resolve to a
+#' valid negative bucket (random, otsu) enter training; review / keep / `NA` /
+#' unknown rows never become negatives. The OOF and final stages share one
+#' eligibility resolver and one capping helper, so they cannot diverge on which
+#' rows are used or how negatives are capped.
 #' @param random_to_burned_ratio,otsu_unburned_to_burned_ratio
-#'   Numeric. The two negative-bucket caps forwarded to the OOF chain so OOF
-#'   sees the SAME caps as the FINAL model. Defaults match the FINAL defaults
-#'   (`1.0`, `1.0`).
-#' @param val_frac Numeric. Inner validation fraction for the nested-refit
-#'   per-fold split. Default `0.15`.
-#' @param impute_numeric Character. `"median"` (default) or `"zero"`; numeric
-#'   imputation rule used by the nested-refit core.
-#' @param impute_factor_missing Character. Sentinel level for missing
-#'   factor/character values in the nested-refit core. Default `"MISSING"`.
+#'   Numeric or `NULL`. The two negative-bucket caps forwarded to the OOF chain
+#'   so OOF sees the same caps as the final model. `NULL` (default) reads the
+#'   configured caps.
+#' @param val_frac Numeric or `NULL`. Inner validation fraction for the
+#'   per-fold split. `NULL` (default) reads the configured value.
+#' @param impute_numeric Character or `NULL`. Numeric-imputation rule
+#'   (`"median"` or `"zero"`). `NULL` (default) reads the configured value.
+#' @param impute_factor_missing Character or `NULL`. Sentinel level for missing
+#'   factor/character values. `NULL` (default) reads the configured value.
 #' @param group_col Character or `NULL`. Grouping column for the grouped
-#'   block-CV used by the OOF engine. `NULL` (default) means "read from
-#'   `cfg$train_control$group_col`" (single source of truth, canonical
-#'   `"block_id"`); a non-NULL value overrides cfg for standalone use. This is
-#'   the SAME knob the FINAL stage sources from `cfg$train_control$group_col`,
-#'   so OOF and FINAL never diverge.
+#'   block-CV. `NULL` (default) reads `cfg$train_control$group_col` (the same
+#'   field the final stage reads, so OOF and final never diverge).
 #' @param overwrite Logical. Forwarded to [run_dm_oof_pipeline()] (controls
-#'   whether the design-matrix bundle is recomputed/clobbered). Default `TRUE`
-#'   (historical behaviour).
-#' @param .internal_resolved Internal use only; set automatically by the
-#'   orchestrator and not intended for direct callers. When `TRUE` it signals
-#'   that the deprecated methodological shims were ALREADY resolved (warned /
-#'   conflict-checked / provenance-recorded) at the
-#'   [run_oneyear_supervised_pipeline()] boundary, so this function skips
-#'   re-warning to avoid double-warning on the orchestrated path. Direct callers
-#'   leave it at the default `FALSE` and get the full deprecated-shim treatment.
+#'   whether the design-matrix bundle is recomputed/clobbered). Default `TRUE`.
+#' @param .internal_resolved Internal use only; set by the orchestrator. When
+#'   `TRUE` the deprecated methodological shims were already resolved upstream,
+#'   so this boundary skips re-warning. Direct callers leave it `FALSE`.
 #'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{
@@ -151,17 +161,22 @@
 #'       `labeled_oof_summary_gpkg`, `design_bundle_rds` — written paths.
 #'   }
 #'
-#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
+#' @section Deprecated function-level parameter shims:
 #' The methodological / training-control arguments here (`nrounds_max`,
-#' `early_stop`, `seed_base`, the four `*_to_burned_ratio` caps,
+#' `early_stop`, `seed_base`, the `*_to_burned_ratio` caps,
 #' `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
-#' `group_col`) are DEPRECATED COMPATIBILITY
-#' SHIMS. Set these in [build_supervised_burned_config()] instead
-#' (`cfg$train_control`, the single source of truth). A non-`NULL` override of a
-#' canonical-default field emits a deprecation warning of class
-#' `"otsufire_deprecated_param"`; an override conflicting with an EXPLICIT
-#' builder-user value errors. REMOVAL PLAN: deprecated now (warn) -> removed in a
-#' future minor version; the canonical path is the builder.
+#' `group_col`) are deprecated compatibility shims. Set them in
+#' [build_supervised_burned_config()] instead (`cfg$train_control`), which every
+#' stage reads. A non-`NULL` override of a canonical-default field emits a
+#' deprecation warning of class `"otsufire_deprecated_param"`; an override that
+#' conflicts with an explicit builder value errors. These shims are scheduled
+#' for removal in a future minor version.
+#'
+#' @seealso
+#' [build_supervised_burned_config()], [extract_supervised_features()],
+#' [train_final_burned_model()], [score_supervised_burned_map()],
+#' [make_spatial_folds()], [validate_supervised_execution()],
+#' [run_oneyear_supervised_pipeline()]
 #'
 #' @family workflow
 #' @export

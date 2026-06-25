@@ -993,18 +993,23 @@ run_supervised_pipeline <- function(target_year, scenario,
       safe_read_gpkg(gpkg_features, "scoring_features", "scoring_features")
     })
     
-    needed_folds <- c("block_id","fold_rep1","fold_rep2")
-    if (!all(needed_folds %in% names(train_features))) {
+    # Join the block-CV folds into train_features when they are not already there.
+    # The fold-rep columns to carry are detected DYNAMICALLY from train_with_folds
+    # (not hard-coded fold_rep1/2): identical for the canonical two repeats, robust
+    # if make_spatial_folds ever produces more.
+    if (!("block_id" %in% names(train_features)) ||
+        length(.of_fold_rep_cols(train_features)) == 0L) {
       msg("STEP C0c - train_features no tiene folds; haciendo join desde train_with_folds")
-      
+
       stopifnot(!is.null(train_with_folds_gpkg) && file.exists(train_with_folds_gpkg))
       train_with_folds <- time_step("C0c Read train_with_folds", {
         safe_read_gpkg(train_with_folds_gpkg, "train_with_folds", "train_with_folds")
       })
-      
+
+      needed_folds <- c("block_id", .of_fold_rep_cols(train_with_folds))
       folds_df <- sf::st_drop_geometry(train_with_folds) |>
         select(fire_uid, any_of(needed_folds))
-      
+
       train_features <- time_step("C0d Join folds into train_features", {
         train_features |> left_join(folds_df, by = "fire_uid")
       })

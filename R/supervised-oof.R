@@ -445,7 +445,7 @@ run_oof_diagnostics <- function(train_features, scoring_features,
     prefix      = prefix_oof,
 
     id_cols     = c("fire_uid", "class", "source", "poly_id", "block_id",
-                    "fold_rep1", "fold_rep2"),
+                    fold_cols),   # fold-rep columns dynamic (was hard-coded fold_rep1/2)
     # 0.4.0 (Agent H): the orchestrator does not pass drop_regex. The OOF
     # wrapper applies the canonical whitelist filter directly; drop_regex is a
     # no-op since 0.4.0. 2026-06-05: ecoregions removed; no categorical

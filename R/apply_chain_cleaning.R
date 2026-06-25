@@ -89,7 +89,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' refine <- file.path("1_DATA/Results/1985/DETERMINISTIC/1985_permissive_omission_push",
+#' refine <- file.path("1_DATA/Results/1985/DETERMINISTIC/1985_very_permissive",
 #'                     "02_REFINE/BA_1985_REFINE_MERGED_otsu285_d115_seed12_whitebox.gpkg")
 #' # cut necks up to 180 m wide on chained blobs only:
 #' res <- apply_chain_cleaning(refine, dechain_distance_m = 180)

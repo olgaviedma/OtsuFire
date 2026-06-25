@@ -171,10 +171,9 @@ recipe's numeric imputation rule (`"median"` or `"zero"`) and the sentinel
 level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
 Stored in `cfg$train_control` and applied identically at OOF and FINAL.}
 
-\item{negative_pool_params}{Named typed list. The PUBLIC negative-pool
-methodological block (GATE 6.7, 2026-06-12) and the \strong{single source of
-truth} for the two negative-bucket caps. Recognized keys (unknown keys
-anywhere error):
+\item{negative_pool_params}{Named typed list. The public negative-pool
+methodological block and the \strong{single source of truth} for the two
+negative-bucket caps. Recognized keys (unknown keys anywhere error):
 \itemize{
   \item `random = list(n_cells, rbr_quantile)` --- the random
     burnable-background bucket size (`n_cells`, integer `> 0`) and the RBR
@@ -189,7 +188,7 @@ anywhere error):
     `cfg$train_control$caps` and consumed end-to-end by the pool builder,
     OOF and FINAL.
   \item `artifact_hard = list(...)` --- the OPTIONAL artifact_hard
-    hard-negative bucket (Phase 2). \strong{OFF by default} (`enabled =
+    hard-negative bucket. \strong{OFF by default} (`enabled =
     FALSE`); when disabled this sub-block selects no rows and the resolved
     config / training / model is byte-identical to the no-artifact_hard
     baseline. Keys:
@@ -219,8 +218,8 @@ are promoted into training as `unburned` negatives (see
 weighted per `total_weight_ratio`, and the run writes a consolidated
 `supervised_training_pool.gpkg` layer (see the \strong{Consolidated
 training-pool layer} section in \strong{Details}).
-GATE 6.7: the former top-level `cap_random` / `cap_otsu` builder arguments
-were REMOVED; caps live ONLY in `negative_pool_params$caps`. Passing
+The former top-level `cap_random` / `cap_otsu` builder arguments
+were removed; caps live ONLY in `negative_pool_params$caps`. Passing
 `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
 now errors with an unused-argument error. The remaining negative-pool /
 Otsu-residual engine knobs (random exclusion buffer + patch size; Otsu mode
@@ -229,8 +228,8 @@ power, keep/drop confidence, exclusion buffer, min area, `use_drop`,
 `drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal defaults,
 not user-settable.}
 
-\item{runtime_options}{Named typed list of TECHNICAL runtime toggles
-(GATE 6.7): `reuse_existing`, `write_outputs`, `verbose` (each a single
+\item{runtime_options}{Named typed list of TECHNICAL runtime toggles:
+`reuse_existing`, `write_outputs`, `verbose` (each a single
 TRUE/FALSE; unknown keys error). Defaults all `TRUE`. These are technical
 only and do NOT change WHICH negatives are selected, so they are EXCLUDED
 from the methodological fingerprint. Stored in `cfg$negative_pool_runtime`.}
@@ -396,8 +395,8 @@ share one internal eligibility resolver and one capping helper.
 
 \subsection{Negative pools}{
   The negative (unburned) training pool is assembled from two buckets
-  (GATE 6.5, 2026-06-12: the deterministic-drop "contextual" bucket was
-  removed — a deterministic drop is not a training negative):
+  (a deterministic drop is not a training negative, so there is no
+  deterministic-drop "contextual" bucket):
   \itemize{
     \item \strong{random} --- random burnable-background cells;
     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
@@ -531,7 +530,7 @@ share one internal eligibility resolver and one capping helper.
       same names; surfaced on `cfg$tool_paths`.
   }
 
-  GATE 6.7 (2026-06-12): the negative-pool knobs are no longer free-form
+  The negative-pool knobs are no longer free-form
   options. The user-settable subset lives in the typed `negative_pool_params`
   block (random `n_cells` / `rbr_quantile`, Otsu `candidate_threshold` /
   `reference_threshold`, `caps`), the random-background seed lives in
@@ -592,7 +591,7 @@ cfg_nohs <- build_supervised_burned_config(
   feature_whitelist_override = c("rbr_med", "rbr_p90", "elev_med", "slope_med")
 )
 
-## artifact_hard hard-negative mining (Phase 2). OFF by default; enable it and
+## artifact_hard hard-negative mining. OFF by default; enable it and
 ## set the pool-level weight explicitly (no universal weight is recommended).
 cfg_baseline <- build_supervised_burned_config(   # artifact_hard OFF (default)
   run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",

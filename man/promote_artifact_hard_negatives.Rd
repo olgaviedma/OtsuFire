@@ -51,9 +51,13 @@ to the supervised training features, so the model learns from confusing
 near-misses. The promoted rows are added to `train_features`; they also stay
 in the scoring set, so `scoring_features` is returned unchanged.
 
-Run it after feature extraction and before [make_spatial_folds()], so the
-promoted rows receive fold assignments, appear in the out-of-fold predictions,
-and are trained on by the final model.
+Run it AFTER feature extraction and the spatial folds, and BEFORE the OOF /
+final-model stages. It selects candidates from `scoring_features` (which only
+exists post-extraction), so it cannot run before [make_spatial_folds()].
+Promoted rows receive synthetic per-repeat folds plus a unique
+`block_id`/`fire_uid` (assigned by the orchestrator after promotion);
+[make_spatial_folds()] is not re-run. This way the promoted rows still appear
+in the out-of-fold predictions and are trained on by the final model.
 
 This step is additive and off by default. When the `artifact_hard` option is
 disabled, the function is a strict no-op: it returns `train_features`

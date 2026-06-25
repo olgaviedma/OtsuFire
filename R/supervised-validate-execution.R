@@ -785,17 +785,22 @@
   oof_sampling      <- config$train_control$oof_sampling %||% "capped"
   run_check("contradictory_config", "blocking", {
     if (!is.null(feature_whitelist_override)) {
-      canon <- tryCatch(get(".supervised_feature_cols",
-                            envir = asNamespace("OtsuFire")),
+      # The admissible universe is the canonical 50 PLUS the 6 shape features when
+      # include_shape_features is on -- the SAME universe the trainer validates
+      # the override against (.supervised_feature_universe). Reading only the
+      # canonical 50 here would wrongly reject a valid shape override.
+      inc_shape <- isTRUE(config$train_control$include_shape_features)
+      canon <- tryCatch(.supervised_feature_universe(include_shape = inc_shape),
                         error = function(e) NULL)
       if (!is.null(canon)) {
         extra <- setdiff(feature_whitelist_override, canon)
         if (length(extra)) {
           stop(sprintf(paste0("validate_supervised_execution(): contradictory ",
                               "configuration -- feature_whitelist_override ",
-                              "contains name(s) not in the canonical whitelist: ",
-                              "%s. The override can only RESTRICT the canonical ",
-                              "50-feature list."),
+                              "contains name(s) not in the active feature ",
+                              "universe: %s. The override can only RESTRICT the ",
+                              "canonical feature list (plus the 6 shape features ",
+                              "when include_shape_features = TRUE)."),
                        paste(utils::head(extra, 10L), collapse = ", ")),
                call. = FALSE)
         }

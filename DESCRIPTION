@@ -44,6 +44,12 @@ Suggests:
     lwgeom,
     Matrix,
     igraph,
+    effectsize,
+    vegan,
+    spatialEco,
+    varSel,
+    MASS,
+    ggplot2,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown

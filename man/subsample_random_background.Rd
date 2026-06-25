@@ -36,7 +36,8 @@ the champion pool on disk: random 51693 -> 714 = 0.5 x 1428 positives (NOT
 0.5 of the random bucket). Only \code{random_source} rows are touched;
 positives, Otsu residual and artifact_hard are left intact. Reproducible
 under \code{seed}.
-
+}
+\details{
 The default \code{seed = 42L} is the project's canonical seed and reproduces
 the champion \code{premodis_training_pool_CHAMPION_RAND05.gpkg} EXACTLY
 (714/714 random rows, verified by per-row \code{fire_uid} identity). NOTE:

@@ -23,6 +23,19 @@ test_that(".of_fold_rep_cols ignores non-matching names and returns empty when n
   expect_identical(OtsuFire:::.of_fold_rep_cols(df), character(0))
 })
 
+test_that("run_dm_oof_pipeline id_cols default tracks fold_cols (dynamic)", {
+  # The wrapper's id_cols default now references fold_cols, so the non-feature
+  # fold columns are whatever fold_cols is. Identical to the old hard-coded set
+  # for the canonical two repeats; extends to a 3rd repeat.
+  e <- new.env(); e$fold_cols <- c("fold_rep1", "fold_rep2")
+  expect_identical(
+    eval(formals(OtsuFire:::run_dm_oof_pipeline)$id_cols, e),
+    c("fire_uid", "class", "source", "neg_type", "poly_id", "block_id",
+      "fold_rep1", "fold_rep2"))
+  e$fold_cols <- c("fold_rep1", "fold_rep2", "fold_rep3")
+  expect_true("fold_rep3" %in% eval(formals(OtsuFire:::run_dm_oof_pipeline)$id_cols, e))
+})
+
 test_that("the value passed to run_oof_diagnostics is the dynamic detection", {
   # The orchestrator computes fold_cols <- .of_fold_rep_cols(train_features) and
   # forwards it verbatim. Assert that, for the canonical 2-rep training frame, the

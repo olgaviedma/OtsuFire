@@ -102,7 +102,7 @@ run_dm_oof_pipeline <- function(
     # bucketing (which keys off source + neg_type, exactly like FINAL) can run.
     # `neg_type` is still a NON-feature column (in id_cols) so it never enters
     # the design matrix; adding it here only preserves it for bucketing.
-    id_cols     = c("fire_uid", "class", "source", "neg_type", "poly_id", "block_id", "fold_rep1", "fold_rep2"),
+    id_cols     = c("fire_uid", "class", "source", "neg_type", "poly_id", "block_id", fold_cols),
     # 0.4.0 (Agent H): `drop_regex` is DEPRECATED in the OOF stage.
     # The OOF wrapper now applies a whitelist filter against
     # `.supervised_feature_cols` (+ `_isNA` companions) to

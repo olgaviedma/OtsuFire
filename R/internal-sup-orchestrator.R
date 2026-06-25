@@ -1063,9 +1063,13 @@ run_supervised_pipeline <- function(target_year, scenario,
           (uid %in% as.character(train_aug$fire_uid[!ah_mask]))
         uid[bad] <- paste0("AH_uid_", which(ah_mask)[bad])
         train_aug$fire_uid[ah_mask] <- uid
-        ah_fold_cols <- c("fold_rep1", "fold_rep2")
-        kvals <- sort(unique(c(as.integer(train_aug$fold_rep1),
-                               as.integer(train_aug$fold_rep2))))
+        # Detect the fold-rep columns DYNAMICALLY (do NOT hard-code fold_rep1/2):
+        # identical when only fold_rep1/fold_rep2 exist, robust if make_spatial_folds
+        # ever produces more repeats. (make_spatial_folds is NOT re-run; promoted
+        # rows get synthetic folds across whatever fold_rep* columns are present.)
+        ah_fold_cols <- grep("^fold_rep\\d+$", names(train_aug), value = TRUE)
+        kvals <- sort(unique(unlist(lapply(
+          ah_fold_cols, function(fc) as.integer(train_aug[[fc]])))))
         kvals <- kvals[is.finite(kvals)]
         nk <- length(kvals)
         if (nk > 0L) {

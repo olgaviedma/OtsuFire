@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-artifact-hard.R
 \name{promote_artifact_hard_negatives}
 \alias{promote_artifact_hard_negatives}
-\title{Promote artifact_hard hard-negatives into the training features (Phase 2)}
+\title{Promote artifact_hard hard-negatives into the training features}
 \usage{
 promote_artifact_hard_negatives(
   train_features,
@@ -16,17 +16,17 @@ promote_artifact_hard_negatives(
 features (the \code{train_features} layer). Must carry \code{class} and the
 model feature columns.}
 
-\item{scoring_features}{sf / data.frame. The deterministic scoring universe
-(the \code{scoring_features} layer). Used as the source of artifact_hard
-candidates. Returned UNCHANGED.}
+\item{scoring_features}{sf / data.frame. The deterministic scoring set (the
+\code{scoring_features} layer). Used as the source of artifact_hard
+candidates. Returned unchanged.}
 
 \item{config}{An \code{otsufire_supervised_burned_config} (or any list
 carrying \code{negative_pool_params$artifact_hard}). Controls whether the
 promotion runs and with which thresholds.}
 
-\item{enable_derived}{Logical (M3 flag). When \code{TRUE}, the three derived
+\item{enable_derived}{Logical. When \code{TRUE}, three derived
 persistence-shape features are attached to the promoted rows. Default
-\code{FALSE} (M1: no extra features).}
+\code{FALSE} (no extra features).}
 }
 \value{
 A named list with:
@@ -38,7 +38,7 @@ A named list with:
     \item \code{artifact_hard} -- the promoted rows (0-row frame when none /
       disabled).
     \item \code{artifact_uncertain} -- the non-promoted deterministic drops
-      (audit only; NEVER trained).
+      (audit only; never trained).
     \item \code{audit} -- the per-clause selection audit (or an empty frame
       when disabled).
     \item \code{enabled} -- logical; whether promotion ran.
@@ -46,32 +46,44 @@ A named list with:
   }
 }
 \description{
-PHASE 2 (artifact_hard hard-negative mining). ADDITIVE + OFF BY DEFAULT.
+Mines "artifact_hard" negatives from the deterministic-drop set and adds them
+to the supervised training features, so the model learns from confusing
+near-misses. The promoted rows are added to `train_features`; they also stay
+in the scoring set, so `scoring_features` is returned unchanged.
 
-Augments the supervised training-feature frame with "artifact_hard" negatives
-mined from the deterministic-DROP universe, so they (a) receive spatial fold
-assignments, (b) appear in the OOF predictions (and so get a held-out
-`p_oof_mean`), and (c) are trained on by the FINAL model. The promoted rows
-are ADDED to `train_features`; `scoring_features` is returned UNCHANGED (the
-rows STAY in the scoring universe too -- they are never removed).
+Run it after feature extraction and before [make_spatial_folds()], so the
+promoted rows receive fold assignments, appear in the out-of-fold predictions,
+and are trained on by the final model.
 
-This helper is the single wiring point: it runs AFTER feature extraction and
-BEFORE the spatial folds are made, so the promoted rows are present when folds
-are assigned.
+This step is additive and off by default. When the `artifact_hard` option is
+disabled, the function is a strict no-op: it returns `train_features`
+unchanged (same rows, columns and order) and an empty audit, so the training
+population, folds, predictions, model and scoring are all unaffected.
 }
 \details{
-When `config$negative_pool_params$artifact_hard$enabled` is `FALSE` (the
-default) this function is a STRICT NO-OP: it returns `train_features`
-byte-identical to the input (same rows, same columns, same order) and an
-empty audit. This is the OFF-by-default contract: with the feature disabled
-the training population, folds, OOF, model and scoring are all unchanged.
-
-The eligibility rule is the exact, user-fixed rule implemented by
-\code{.of_select_artifact_hard()} (see the Phase 2 spec, section C). Reliable
-positives (the rbr_med reference for the runtime quantile threshold) are the
-training rows with \code{class == "burned"}.
+Candidate selection uses a fixed eligibility rule. By default the reference
+for the runtime RBR quantile floor is the existing negative pool's `rbr_med`
+(set `rbr_med_reference = "positive"` in the option to use the burned rows
+instead).
+}
+\examples{
+\dontrun{
+cfg <- build_supervised_burned_config(
+  run_label = "balanced", internal_decisions = "decisions.gpkg",
+  change_index = "rbr.tif", target_year = 2017L,
+  negative_pool_params = list(artifact_hard = list(enabled = TRUE))
+)
+feats <- extract_supervised_features(folds$train_with_folds, config = cfg)
+promoted <- promote_artifact_hard_negatives(
+  feats$train_features, feats$scoring_features, config = cfg
+)
+promoted$n_promoted
+}
 }
 \seealso{
+[extract_supervised_features()], [make_spatial_folds()],
+[build_supervised_training_pools()], [build_supervised_burned_config()]
+
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},

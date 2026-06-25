@@ -84,14 +84,21 @@
   list(part = part, omissions = omits)
 }
 
-#' Assemble a cross-year ERA training pool from visually-validated per-year pools
+#' Assemble a cross-year training pool from visually-validated per-year pools
 #'
-#' Merges the per-year \code{train_features} (positives + background, minus
-#' VISUAL=0 drops), the VISUAL=1 artifact_hard candidates (promoted from
-#' \code{scoring_features}), and routes the VISUAL=0 candidates to a separate
-#' omission layer. \code{fire_uid} and \code{block_id} are year-prefixed so they
-#' never collide across years. VISUAL is consumed via
-#' \code{\link{apply_visual_validation}}.
+#' @description
+#' Merges several years of visually-validated supervised pools into one
+#' trainable cross-year pool. Use it when you want to train a single model
+#' across multiple fire years instead of one model per year.
+#'
+#' For each year it keeps the positives and background from
+#' \code{train_features} (minus the rows a reviewer marked \code{VISUAL = 0}),
+#' promotes the \code{VISUAL = 1} artifact_hard candidates from
+#' \code{scoring_features} as hard negatives, and routes the \code{VISUAL = 0}
+#' candidates (real fires found among the drops) to a separate omissions layer.
+#' \code{fire_uid} and \code{block_id} are year-prefixed so they never collide
+#' across years, and hard-negative folds are assigned reproducibly. The visual
+#' decisions are read through \code{\link{apply_visual_validation}}.
 #'
 #' @param years A list of per-year inputs. Each element is a list with
 #'   \code{year} and either (a) \code{base_dir} (the standard
@@ -105,14 +112,19 @@
 #' @param on_invalid Passed to \code{\link{apply_visual_validation}}
 #'   (\code{"error"} or \code{"exclude"}).
 #' @return A list with \code{pool} (the merged \code{sf} training pool),
-#'   \code{omissions} (\code{sf} of VISUAL=0 real fires, or \code{NULL}) and
-#'   \code{summary} (per-year row counts).
+#'   \code{omissions} (\code{sf} of \code{VISUAL = 0} real fires, or
+#'   \code{NULL}) and \code{summary} (per-year row counts).
+#'
+#' @seealso
+#' \code{\link{apply_visual_validation}},
+#' \code{\link{export_visual_validation_pools}},
+#' \code{\link{build_supervised_training_pools}}
 #'
 #' @examples
 #' \dontrun{
 #' era <- assemble_era_training_pool(list(
-#'   list(year = 1985, base_dir = ".../1985/SUPERVISED/1985_balanced_keepPool_2017_2022_2025"),
-#'   list(year = 1988, base_dir = ".../1988/SUPERVISED/1988_balanced_keepPool_2017_2022_2025")))
+#'   list(year = 1985, base_dir = ".../1985/SUPERVISED/1985_balanced_keepPool"),
+#'   list(year = 1988, base_dir = ".../1988/SUPERVISED/1988_balanced_keepPool")))
 #' nrow(era$pool); nrow(era$omissions)
 #' }
 #' @export

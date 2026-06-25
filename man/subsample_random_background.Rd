@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-pool-shape.R
 \name{subsample_random_background}
 \alias{subsample_random_background}
-\title{Subsample the random background bucket (SUBR05)}
+\title{Subsample the random background bucket relative to the positive count}
 \usage{
 subsample_random_background(
   pool,
@@ -19,10 +19,10 @@ and \code{class} columns.}
 \item{random_to_burned_ratio}{Numeric (default \code{0.5}). Target random
 count as a multiple of the positive (burned) count.}
 
-\item{seed}{Integer seed for the random selection (default \code{42L}, the
-canonical champion-pool seed).}
+\item{seed}{Integer seed for the random selection (default \code{42L}).}
 
-\item{random_source}{Source tag of the random background bucket.}
+\item{random_source}{Source tag of the random background bucket (default
+\code{"random_burnable_background"}).}
 
 \item{positive_class}{Class tag of positives (default \code{"burned"}).}
 }
@@ -30,18 +30,31 @@ canonical champion-pool seed).}
 \code{pool} with the random bucket subsampled (other rows unchanged).
 }
 \description{
-SUBR05 = the random background is reduced to
-\code{ceiling(random_to_burned_ratio * n_positives)} rows. Verified against
-the champion pool on disk: random 51693 -> 714 = 0.5 x 1428 positives (NOT
-0.5 of the random bucket). Only \code{random_source} rows are touched;
-positives, Otsu residual and artifact_hard are left intact. Reproducible
-under \code{seed}.
+Reduces the random synthetic background to
+\code{ceiling(random_to_burned_ratio * n_positives)} rows, sized as a
+multiple of the number of positives (burned rows), not as a fraction of the
+random bucket. Use it to rebalance a training pool whose random background
+dwarfs the positives.
+
+Only \code{random_source} rows are touched; positives, Otsu-residual and
+artifact_hard rows are left intact. The selection is reproducible under
+\code{seed}. If the random bucket is already at or below the target, the pool
+is returned unchanged.
+
+The default \code{seed = 42L} is the project's canonical seed. It is
+deliberately different from the seed used by
+\code{\link{add_pool_shape_features}}; the two operations are independent and
+keep their own seeds.
 }
-\details{
-The default \code{seed = 42L} is the project's canonical seed and reproduces
-the champion \code{premodis_training_pool_CHAMPION_RAND05.gpkg} EXACTLY
-(714/714 random rows, verified by per-row \code{fire_uid} identity). NOTE:
-this is a DIFFERENT seed from the shape-decorrelation step in
-\code{\link{add_pool_shape_features}} (seed \code{1985L}); the two operations
-are independent and must keep their own seeds.
+\examples{
+\dontrun{
+pool      <- sf::st_read("premodis_training_pool.gpkg")
+balanced  <- subsample_random_background(pool, random_to_burned_ratio = 0.5)
+table(balanced$source)
+}
+}
+\seealso{
+\code{\link{add_pool_shape_features}},
+\code{\link{assemble_era_training_pool}},
+\code{\link{build_supervised_training_pools}}
 }

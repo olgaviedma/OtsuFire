@@ -46,10 +46,13 @@ A list with class \code{"otsufire_visual_validation"}:
   }
 }
 \description{
-Reads/annotates a visually-validated supervised training pool and resolves,
-per row, whether it enters training, following the \code{VISUAL} column
-semantics described in Details. The pool is used as a FIXED input and is
-never rebuilt.
+Reads a visually-validated supervised training pool and resolves, per row,
+whether it enters training, following the \code{VISUAL} column semantics
+described in Details. The pool is used as a fixed input and is never rebuilt.
+
+Use it after a reviewer has filled the \code{VISUAL} column (in QGIS, on the
+pool exported by \code{\link{export_visual_validation_pools}}) to obtain the
+clean training subset plus full row-level traceability.
 }
 \details{
 The function consumes a pool whose \code{visual_col} (default \code{VISUAL})
@@ -83,4 +86,9 @@ nrow(vv$training)          # clean pool ready for training
 vv$summary                 # audit: how many kept / dropped / promoted / omitted
 table(vv$pool$used_for_training)
 }
+}
+\seealso{
+\code{\link{export_visual_validation_pools}},
+\code{\link{assemble_era_training_pool}},
+\code{\link{build_supervised_training_pools}}
 }

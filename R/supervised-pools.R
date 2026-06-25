@@ -33,56 +33,57 @@
 #' Build burned and negative training pools for supervised learning
 #'
 #' @description
-#' Supervised-pipeline stage A (training-pool construction). This is the
-#' standalone, exported implementation of the pools stage that the one-year
-#' orchestrator [run_oneyear_supervised_pipeline()] delegates to, so calling it
-#' directly produces byte-identical `01_POOLS` outputs to a full run.
+#' Builds the labelled training pools for the supervised burned-area pipeline:
+#' the burned (positive) pool, the negative (unburned) pool, and the review and
+#' scoring pools. This is the pools stage of the pipeline; its `train_labeled`
+#' output feeds [make_spatial_folds()] and the feature stage.
 #'
-#' Unlike the other modular stages (which wrap a single engine call), this is a
-#' SEQUENCE (orchestrator steps A1-A6): it reads the deterministic
-#' `internal_decisions` layer, runs the conservative QA relabelling
-#' ([audit_deterministic_pools()]), assembles the burned / review / scoring
-#' pools, builds the scenario `all_sources` negative pool from BOTH unburned
-#' builders ([build_unburned_from_deterministic_decisions()] = deterministic
-#' drops + random burnable background, and
-#' [build_otsu_negative_pipeline()] = Otsu current-year residual
-#' patches), merges the labelled training set (`burned + unburned`), and writes
-#' the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` (layers `burned_pool`,
-#' `unburned_pool`, `review_pool`, `scoring_pool`, `train_labeled`, plus the
-#' auxiliary unburned layers) and the QA CSV/GPKG audit files.
+#' Run it first, before folds and feature extraction. Pass the configuration
+#' from [build_supervised_burned_config()]. Calling this function directly
+#' produces the same `01_POOLS` outputs as the equivalent stage of the full
+#' pipeline [run_oneyear_supervised_pipeline()].
+#'
+#' @section What it does:
+#' \enumerate{
+#'   \item Reads the deterministic `internal_decisions` layer and runs the
+#'     conservative QA relabelling ([audit_deterministic_pools()]).
+#'   \item Assembles the burned, review and scoring pools.
+#'   \item Builds the negative (unburned) pool from two sources: the
+#'     deterministic drops plus a random burnable background
+#'     ([build_unburned_from_deterministic_decisions()]) and the Otsu
+#'     current-year residual patches ([build_otsu_negative_pipeline()]).
+#'   \item Merges the labelled training set (`burned + unburned`).
+#'   \item Writes the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` and the
+#'     QA audit files.
+#' }
 #'
 #' @details
-#' **Self-contained config resolution.** Every value the inlined orchestrator
-#' STEP A consumed as an injected bare-name local is resolved here straight
-#' from `config`: the ~30 `UNB_*` / `UNB_OTSU_NEG_*` negative-pool parameters from
-#' `config$options$*` (with the SAME defaults the engine bindings use, so
-#' default behaviour is byte-identical), the four external tool paths
-#' (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`, `ogr2ogr_exe`) from
-#' `config$tool_paths$*`, the INPUT imagery roots
-#' (`config$options$data_base` / `composite_base` / `result_name`), and the
-#' `01_POOLS` output folder + canonical `pools.gpkg` path from
-#' `config$output_routes`. The deterministic decisions GPKG is the
-#' user-supplied path (`config$inputs$internal_decisions`), exactly as the
-#' dispatcher resolves it.
+#' Every parameter the stage needs is resolved straight from `config`: the
+#' negative-pool (`UNB_*`) parameters from `config$options`, the external tool
+#' paths (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`,
+#' `ogr2ogr_exe`) from `config$tool_paths`, the input imagery roots, and the
+#' `01_POOLS` output folder and `pools.gpkg` path from `config$output_routes`.
 #'
-#' **RNG determinism.** The random burnable-background sampling
-#' (`UNB_RANDOM_SEED = 42`) is forwarded verbatim and the two unburned builders
-#' are invoked in the SAME order (deterministic-decisions first, Otsu negative second)
-#' so the RNG stream — and therefore the sampled random negatives — are identical
-#' to a full orchestrator run. GATE 6.2 (2026-06-11): the Otsu negative builder
-#' no longer performs any generation-side stratified sampling (the
-#' `otsu_negative_sample_n` / `otsu_negative_random_seed` pre-thinning was
-#' removed); the FULL valid Otsu drop
-#' pool flows on and the per-bucket cap `cap_otsu`
-#' (`otsu_unburned_to_burned_ratio`) is the sole, seeded Otsu selector.
+#' Determinism: the random burnable-background sampling uses a fixed seed and
+#' the two unburned builders run in a fixed order (deterministic decisions
+#' first, Otsu negative second), so the sampled negatives are reproducible. The
+#' Otsu negative builder passes its full valid drop pool forward; the per-bucket
+#' cap `cap_otsu` (`otsu_unburned_to_burned_ratio`) is the sole seeded Otsu
+#' selector.
+#'
+#' The random burnable-background bucket computes its change-index percentile
+#' and draws its sample only within the aligned burnable domain, so no selected
+#' cell falls outside burnable land. A location never enters the negative pool
+#' as both a random background cell and an Otsu residual patch: any random row
+#' whose polygon intersects an Otsu patch is removed (Otsu has priority) before
+#' capping and before the training set is assembled.
 #'
 #' @param config Required `otsufire_supervised_burned_config` (from
 #'   [build_supervised_burned_config()]). Source of every input path, output
 #'   route, `UNB_*` parameter and tool path used by the stage.
 #' @param deterministic_decisions Optional sf, SpatVector, or single GPKG path
 #'   to the deterministic decisions (layer `internal_decisions`). When `NULL`
-#'   (default) the canonical `config$inputs$internal_decisions` path is used
-#'   (the single source of truth already threaded into the config).
+#'   (default) the `config$inputs$internal_decisions` path is used.
 #' @param write_outputs Logical. Whether to write the pools GPKG + QA files.
 #'   Default `TRUE`.
 #' @param overwrite Logical. Forwarded to the deterministic-decisions unburned
@@ -93,8 +94,7 @@
 #'     \item `burned_pool`, `unburned_pool`, `review_pool`, `scoring_pool` —
 #'       the four pool sf objects.
 #'     \item `train_labeled` — the merged labelled training set
-#'       (`burned + unburned`), the `train_labeled` layer contents consumed by
-#'       [make_spatial_folds()].
+#'       (`burned + unburned`), consumed by [make_spatial_folds()].
 #'     \item `pools_gpkg` — written path of
 #'       `01_POOLS/<year>_<scenario>_pools.gpkg` (consumed by the folds and
 #'       feature stages).
@@ -102,42 +102,26 @@
 #'       `qa_reasons_csv` — the QA audit file paths.
 #'     \item `unburned_hard`, `unburned_random`, `unburned_final_raw`,
 #'       `exclusion_buffer` — the auxiliary unburned sub-pools.
-#'     \item `b4_audit` — Gate 1C.2 audit record for the random burnable
-#'       background: cell accounting at each stage (valid index, burnable,
-#'       per-rule exclusions), the percentile domain + value, eligible cells,
-#'       finally selected observations, and an explicit confirmation that NO
-#'       selected observation falls outside the burnable domain.
+#'     \item `b4_audit` — audit record for the random burnable background: cell
+#'       accounting at each stage (valid index, burnable, per-rule exclusions),
+#'       the percentile domain and value, eligible cells, finally selected
+#'       observations, and confirmation that no selected observation falls
+#'       outside the burnable domain.
 #'     \item `neg_pool_fingerprint` — deterministic `list(text, checksum)`
-#'       identity of the negative pool. It folds in the B4 burnable-domain
-#'       decision, the aligned-mask hash, the percentile config + value, the
-#'       RNG seeds, the exclusions and the relevant inputs, so any cache/pool
-#'       whose fingerprint predates the burnable-domain restriction is
-#'       INVALIDATED rather than silently reused. Also written as a sidecar
+#'       identity of the negative pool. It folds in the burnable-domain
+#'       decision, the aligned-mask hash, the percentile config and value, the
+#'       RNG seeds, the exclusions and the relevant inputs, so any cached pool
+#'       whose fingerprint no longer matches is invalidated rather than reused.
+#'       Also written as a sidecar
 #'       `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
-#'     \item `otsu_random_dedup_audit` — GATE 6.2 Otsu>random spatial-dedup
-#'       record: `random_before`, `random_removed_by_otsu`, `random_final`,
-#'       `area_removed` and `removed_ids_hash`. Random rows whose polygon
-#'       intersects any Otsu patch are removed (Otsu has priority) BEFORE
-#'       capping; this is also folded into `neg_pool_fingerprint`.
+#'     \item `otsu_random_dedup_audit` — Otsu-over-random spatial-dedup record:
+#'       `random_before`, `random_removed_by_otsu`, `random_final`,
+#'       `area_removed` and `removed_ids_hash`.
 #'   }
 #'
-#' @section Otsu > random spatial dedup (GATE 6.2):
-#' A location must not enter the negative pool as BOTH a random background cell
-#' AND an Otsu residual patch. After both unburned builders run, every random
-#' burnable-background row whose polygon intersects ANY Otsu patch (exact
-#' polygon-intersection unit, same CRS/grid, no extra buffer) is removed; Otsu
-#' rows are never removed. The dedup runs BEFORE `train_labeled` assembly and
-#' BEFORE the per-bucket capping, and is registered in
-#' `otsu_random_dedup_audit` + the `neg_pool_fingerprint`.
-#'
-#' @section Burnable-domain restriction (Gate 1C.2, INTENTIONAL pool change):
-#' The B4 random burnable-background bucket now computes its change-index
-#' percentile AND draws its sample ONLY within the (aligned) burnable domain.
-#' Previously the percentile was taken over the WHOLE change-index raster, so a
-#' run on this code produces a DIFFERENT negative pool than older runs. This is
-#' a deliberate methodological correction; the `neg_pool_fingerprint` changes
-#' accordingly so stale pools cannot be reused. The legacy single-fit and the
-#' nested_refit consumers both operate on this one upstream-built pool.
+#' @seealso
+#' [build_supervised_burned_config()], [make_spatial_folds()],
+#' [extract_supervised_features()], [run_oneyear_supervised_pipeline()]
 #'
 #' @family workflow
 #' @export
@@ -151,6 +135,7 @@
 #' )
 #' pools <- build_supervised_training_pools(cfg)
 #' pools$pools_gpkg
+#' folds <- make_spatial_folds(pools$pools_gpkg, config = cfg)
 #' }
 build_supervised_training_pools <- function(config,
                                             deterministic_decisions = NULL,

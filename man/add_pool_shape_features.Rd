@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-pool-shape.R
 \name{add_pool_shape_features}
 \alias{add_pool_shape_features}
-\title{Add the 6 champion shape/size features (+ decorrelate the random background)}
+\title{Add six shape/size features and decorrelate the random background}
 \usage{
 add_pool_shape_features(
   pool,
@@ -19,23 +19,42 @@ add_pool_shape_features(
 
 \item{id_col}{Join id (default \code{"fire_uid"}).}
 
-\item{decorrelate_random}{Logical (default \code{TRUE}).}
+\item{decorrelate_random}{Logical (default \code{TRUE}). Replace the random
+background rows' shape with a bootstrap of burned-row shapes.}
 
-\item{seed}{Integer seed for the decorrelation bootstrap (default \code{1985L}).}
+\item{seed}{Integer seed for the decorrelation bootstrap (default
+\code{1985L}).}
 
-\item{random_source}{Source tag of the random background bucket.}
+\item{random_source}{Source tag of the random background bucket (default
+\code{"random_burnable_background"}).}
 
 \item{positive_class}{Class tag of positives (default \code{"burned"}).}
 }
 \value{
-\code{pool} with the 6 shape columns added (geometry preserved).
+\code{pool} with the six shape columns added (geometry preserved).
 }
 \description{
-Mirrors \code{build_champion_pool.R}: \code{area_ha} from geometry,
-\code{n_pix} from the existing column, and \code{log_area}/\code{perim_m}/
-\code{compactness}/\code{elongation} from \code{.of_shape_features()}. With
-\code{decorrelate_random = TRUE} each \code{random_burnable_background} row's
-FULL shape tuple is replaced by a bootstrap copy of a randomly drawn
-burned-class row's tuple (so synthetic squares carry no geometric giveaway,
-while keep/otsu/hard-neg keep their real shape). Geometry is preserved.
+Post-processes an already-assembled supervised training pool by adding six
+shape and size features the model can use: \code{area_ha} (from geometry),
+\code{n_pix} (from the existing column), and \code{log_area}, \code{perim_m},
+\code{compactness} and \code{elongation} (derived from each polygon's
+geometry). Geometry is preserved and no model is trained.
+
+With \code{decorrelate_random = TRUE} (default) the synthetic random
+background rows have their full shape tuple replaced by a bootstrap copy of a
+randomly drawn burned row's shape, so the square synthetic backgrounds carry
+no geometric tell that the model could exploit. The real keep, Otsu-residual
+and hard-negative rows keep their own shapes.
+}
+\examples{
+\dontrun{
+pool  <- sf::st_read("premodis_training_pool.gpkg")
+pool2 <- add_pool_shape_features(pool, decorrelate_random = TRUE)
+head(pool2[, c("area_ha", "log_area", "compactness", "elongation")])
+}
+}
+\seealso{
+\code{\link{subsample_random_background}},
+\code{\link{assemble_era_training_pool}},
+\code{\link{build_supervised_training_pools}}
 }

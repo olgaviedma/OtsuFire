@@ -56,7 +56,7 @@ OF_SLIVER <- 0.01   # ha; below this a candidate overlap is treated as none
 
 #' @rdname omission_taxonomy_constants
 #' @export
-OF_SEED_THR <- c(permissive_omission_push = 285, permissive = 300, balanced = 310,
+OF_SEED_THR <- c(very_permissive = 285, permissive = 300, balanced = 310,
                  conservative = 400, very_conservative = 430)
 
 # ---- 7-class candidate-first omission taxonomy ------------------------------

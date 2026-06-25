@@ -162,6 +162,23 @@
     if (isTRUE(include_shape)) .supervised_shape_feature_cols)
 }
 
+#' Fold-repeat columns (`fold_rep1`, `fold_rep2`, ...) present in a frame.
+#'
+#' Detects the block-CV fold-repeat columns dynamically and returns them ordered
+#' by repeat NUMBER (so `fold_rep2` sorts before `fold_rep10`, not after).
+#' Accepts either a character vector of names or any object with `names()`.
+#' With only `fold_rep1`/`fold_rep2` present it returns
+#' `c("fold_rep1", "fold_rep2")`, identical to the previous hard-coded value.
+#'
+#' @keywords internal
+#' @noRd
+.of_fold_rep_cols <- function(x) {
+  nm <- if (is.character(x)) x else names(x)
+  fr <- grep("^fold_rep[0-9]+$", nm, value = TRUE)
+  if (length(fr) == 0L) return(character(0))
+  fr[order(as.integer(sub("^fold_rep", "", fr)))]
+}
+
 # Min/max side length of a (rotated-rectangle) polygon. Package-level
 # twin of the deterministic stage's `get_wd_ln_from_mrr()` closure
 # (internal-det-polygon-metrics.R), lifted here so the supervised shape

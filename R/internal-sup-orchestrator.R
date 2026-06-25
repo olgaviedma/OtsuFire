@@ -1127,6 +1127,24 @@ run_supervised_pipeline <- function(target_year, scenario,
     # already fed to extract_supervised_features() above so the columns are
     # actually computed when the flag is on. OFF (FALSE) -> byte-identical.
     include_shape_features <- isTRUE(config$train_control$include_shape_features)
+    # OOF cross-validates over the fold-repeat columns. Detect them DYNAMICALLY
+    # from the (possibly augmented) training frame that actually enters OOF, ordered
+    # by repeat number, instead of assuming exactly fold_rep1/fold_rep2. Identical
+    # to the old hard-coded c("fold_rep1","fold_rep2") when only those two exist
+    # (the fold-join above guarantees train_features carries the fold columns).
+    fold_cols <- .of_fold_rep_cols(train_features)
+    if (length(fold_cols) == 0L) {
+      stop("run_supervised_pipeline(): no fold_rep* columns found in the training ",
+           "frame fed to OOF (expected at least fold_rep1 -- did make_spatial_folds() ",
+           "run and the fold-join succeed?).", call. = FALSE)
+    }
+    .fold_na <- vapply(fold_cols,
+                       function(fc) anyNA(train_features[[fc]]), logical(1))
+    if (any(.fold_na)) {
+      warning("run_supervised_pipeline(): fold column(s) with NA in training rows: ",
+              paste(fold_cols[.fold_na], collapse = ", "),
+              " -- those rows get no held-out OOF prediction.", call. = FALSE)
+    }
     msg("STEP C1-C2 - DM -> OOF (diagnostic) via run_oof_diagnostics()")
     pipe1 <- time_step("C2 run_dm_oof_pipeline", {
       stopifnot(!is.null(train_with_folds_gpkg) && file.exists(train_with_folds_gpkg))
@@ -1136,7 +1154,7 @@ run_supervised_pipeline <- function(target_year, scenario,
         train_features   = train_features,
         scoring_features = scoring_features,
         config           = config,
-        fold_cols        = c("fold_rep1", "fold_rep2"),
+        fold_cols        = fold_cols,   # detected dynamically just above
         # params = NULL: build from the canonical source of truth
         # (.of_canonical_xgb_params): logloss-first eval_metric, eta 0.05,
         # depth 5, min_child_weight 5, subsample 0.8, colsample 0.75, gamma 0,

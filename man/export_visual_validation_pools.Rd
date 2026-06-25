@@ -94,5 +94,7 @@ vv$summary
 }
 }
 \seealso{
-\code{\link{apply_visual_validation}}
+\code{\link{apply_visual_validation}},
+\code{\link{assemble_era_training_pool}},
+\code{\link{build_supervised_training_pools}}
 }

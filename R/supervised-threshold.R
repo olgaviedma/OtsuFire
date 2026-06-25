@@ -18,43 +18,48 @@
 
 #' Threshold a scored supervised candidate set and write thresholded_burned.gpkg
 #'
+#' @description
 #' Takes candidates already scored by the supervised model (a \code{scored_all}
 #' set carrying a per-row probability column) and writes the burned polygons
-#' that pass an explicit probability threshold. This is the public, inspectable
-#' replacement for the manual champion \code{write_thr()} closure; it performs
-#' ONLY the threshold + write step (no scoring, no model, no retraining).
+#' that pass an explicit probability threshold. Use it as the final, inspectable
+#' threshold-and-write step of the supervised pipeline; it does only that step
+#' (no scoring, no model, no retraining).
 #'
-#' The keep rule mirrors the champion exactly:
-#' \code{is.finite(score) & score >= threshold}, followed by Z/M dropping,
-#' \code{\link[sf]{st_make_valid}}, and removal of empty geometries. CRS and all
-#' attribute columns (including the score column) are preserved.
+#' The keep rule is \code{is.finite(score) & score >= threshold}, followed by
+#' dropping Z/M dimensions, \code{\link[sf]{st_make_valid}}, and removal of empty
+#' geometries. CRS and all attribute columns (including the score column) are
+#' preserved.
 #'
 #' @param scored A scored candidate set: either a path to a GeoPackage (the
 #'   \code{scored_all} layer is used when present, otherwise the first layer),
 #'   or an in-memory \code{sf}.
 #' @param out_dir Directory to write into (created if needed).
 #' @param threshold Numeric operating threshold on \code{score_col}. Default
-#'   \code{0.50} (the champion operating threshold).
+#'   \code{0.50}.
 #' @param score_col Name of the model-probability column. Default
-#'   \code{"p_burned_model"} (written by the champion scorer).
+#'   \code{"p_burned_model"} (written by the supervised scorer).
 #' @param layer Output layer name. Default \code{"thresholded_burned"}.
 #' @param filename Output file name. Default \code{"thresholded_burned.gpkg"}.
 #' @param overwrite Logical. If \code{FALSE} (default) and the output file
 #'   already exists, the function stops; if \code{TRUE} the file (and any
 #'   \code{-wal}/\code{-shm} sidecars) is removed first.
 #' @param clean_geometry Logical (default \code{TRUE}). Drop Z/M dimensions,
-#'   make geometries valid, and drop empties before writing (champion behaviour).
+#'   make geometries valid, and drop empties before writing.
 #' @param verbose Logical (default \code{TRUE}). Emit a one-line summary message.
 #' @return Invisibly, a list with \code{path}, \code{layer}, \code{threshold},
 #'   \code{score_col}, \code{n_in}, \code{n_kept}, \code{n_nonfinite},
 #'   \code{n_dropped_empty}, \code{crs_epsg} and \code{overwrite}.
 #'
+#' @seealso
+#' \code{\link{score_supervised_burned_map}},
+#' \code{\link{train_final_burned_model}},
+#' \code{\link{run_oneyear_supervised_pipeline}}
+#'
 #' @examples
 #' \dontrun{
-#' pkgload::load_all("C:/.../OtsuFire_v02_rebuild")
-#' # Function-by-function: take the real 1985 scored_all and threshold it.
+#' # Take a scored candidate set and write the thresholded burned polygons.
 #' res <- write_thresholded_burned(
-#'   ".../champion/balanced/scored_all.gpkg",
+#'   ".../balanced/scored_all.gpkg",
 #'   out_dir   = ".../my_run/balanced",
 #'   threshold = 0.50,
 #'   overwrite = TRUE)

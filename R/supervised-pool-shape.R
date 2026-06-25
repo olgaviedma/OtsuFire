@@ -15,24 +15,44 @@
   c("area_ha", "n_pix", "log_area", "perim_m", "compactness", "elongation")
 }
 
-#' Add the 6 champion shape/size features (+ decorrelate the random background)
+#' Add six shape/size features and decorrelate the random background
 #'
-#' Mirrors \code{build_champion_pool.R}: \code{area_ha} from geometry,
-#' \code{n_pix} from the existing column, and \code{log_area}/\code{perim_m}/
-#' \code{compactness}/\code{elongation} from \code{.of_shape_features()}. With
-#' \code{decorrelate_random = TRUE} each \code{random_burnable_background} row's
-#' FULL shape tuple is replaced by a bootstrap copy of a randomly drawn
-#' burned-class row's tuple (so synthetic squares carry no geometric giveaway,
-#' while keep/otsu/hard-neg keep their real shape). Geometry is preserved.
+#' @description
+#' Post-processes an already-assembled supervised training pool by adding six
+#' shape and size features the model can use: \code{area_ha} (from geometry),
+#' \code{n_pix} (from the existing column), and \code{log_area}, \code{perim_m},
+#' \code{compactness} and \code{elongation} (derived from each polygon's
+#' geometry). Geometry is preserved and no model is trained.
+#'
+#' With \code{decorrelate_random = TRUE} (default) the synthetic random
+#' background rows have their full shape tuple replaced by a bootstrap copy of a
+#' randomly drawn burned row's shape, so the square synthetic backgrounds carry
+#' no geometric tell that the model could exploit. The real keep, Otsu-residual
+#' and hard-negative rows keep their own shapes.
 #'
 #' @param pool An \code{sf} training pool with \code{id_col}, \code{n_pix},
 #'   \code{source} and \code{class} columns.
 #' @param id_col Join id (default \code{"fire_uid"}).
-#' @param decorrelate_random Logical (default \code{TRUE}).
-#' @param seed Integer seed for the decorrelation bootstrap (default \code{1985L}).
-#' @param random_source Source tag of the random background bucket.
+#' @param decorrelate_random Logical (default \code{TRUE}). Replace the random
+#'   background rows' shape with a bootstrap of burned-row shapes.
+#' @param seed Integer seed for the decorrelation bootstrap (default
+#'   \code{1985L}).
+#' @param random_source Source tag of the random background bucket (default
+#'   \code{"random_burnable_background"}).
 #' @param positive_class Class tag of positives (default \code{"burned"}).
-#' @return \code{pool} with the 6 shape columns added (geometry preserved).
+#' @return \code{pool} with the six shape columns added (geometry preserved).
+#'
+#' @seealso
+#' \code{\link{subsample_random_background}},
+#' \code{\link{assemble_era_training_pool}},
+#' \code{\link{build_supervised_training_pools}}
+#'
+#' @examples
+#' \dontrun{
+#' pool  <- sf::st_read("premodis_training_pool.gpkg")
+#' pool2 <- add_pool_shape_features(pool, decorrelate_random = TRUE)
+#' head(pool2[, c("area_ha", "log_area", "compactness", "elongation")])
+#' }
 #' @export
 add_pool_shape_features <- function(pool, id_col = "fire_uid",
                                     decorrelate_random = TRUE, seed = 1985L,
@@ -71,31 +91,46 @@ add_pool_shape_features <- function(pool, id_col = "fire_uid",
   sf::st_sf(d, geometry = geom)
 }
 
-#' Subsample the random background bucket (SUBR05)
+#' Subsample the random background bucket relative to the positive count
 #'
-#' SUBR05 = the random background is reduced to
-#' \code{ceiling(random_to_burned_ratio * n_positives)} rows. Verified against
-#' the champion pool on disk: random 51693 -> 714 = 0.5 x 1428 positives (NOT
-#' 0.5 of the random bucket). Only \code{random_source} rows are touched;
-#' positives, Otsu residual and artifact_hard are left intact. Reproducible
-#' under \code{seed}.
+#' @description
+#' Reduces the random synthetic background to
+#' \code{ceiling(random_to_burned_ratio * n_positives)} rows, sized as a
+#' multiple of the number of positives (burned rows), not as a fraction of the
+#' random bucket. Use it to rebalance a training pool whose random background
+#' dwarfs the positives.
 #'
-#' The default \code{seed = 42L} is the project's canonical seed and reproduces
-#' the champion \code{premodis_training_pool_CHAMPION_RAND05.gpkg} EXACTLY
-#' (714/714 random rows, verified by per-row \code{fire_uid} identity). NOTE:
-#' this is a DIFFERENT seed from the shape-decorrelation step in
-#' \code{\link{add_pool_shape_features}} (seed \code{1985L}); the two operations
-#' are independent and must keep their own seeds.
+#' Only \code{random_source} rows are touched; positives, Otsu-residual and
+#' artifact_hard rows are left intact. The selection is reproducible under
+#' \code{seed}. If the random bucket is already at or below the target, the pool
+#' is returned unchanged.
+#'
+#' The default \code{seed = 42L} is the project's canonical seed. It is
+#' deliberately different from the seed used by
+#' \code{\link{add_pool_shape_features}}; the two operations are independent and
+#' keep their own seeds.
 #'
 #' @param pool An \code{sf} / \code{data.frame} training pool with \code{source}
 #'   and \code{class} columns.
 #' @param random_to_burned_ratio Numeric (default \code{0.5}). Target random
 #'   count as a multiple of the positive (burned) count.
-#' @param seed Integer seed for the random selection (default \code{42L}, the
-#'   canonical champion-pool seed).
-#' @param random_source Source tag of the random background bucket.
+#' @param seed Integer seed for the random selection (default \code{42L}).
+#' @param random_source Source tag of the random background bucket (default
+#'   \code{"random_burnable_background"}).
 #' @param positive_class Class tag of positives (default \code{"burned"}).
 #' @return \code{pool} with the random bucket subsampled (other rows unchanged).
+#'
+#' @seealso
+#' \code{\link{add_pool_shape_features}},
+#' \code{\link{assemble_era_training_pool}},
+#' \code{\link{build_supervised_training_pools}}
+#'
+#' @examples
+#' \dontrun{
+#' pool      <- sf::st_read("premodis_training_pool.gpkg")
+#' balanced  <- subsample_random_background(pool, random_to_burned_ratio = 0.5)
+#' table(balanced$source)
+#' }
 #' @export
 subsample_random_background <- function(pool, random_to_burned_ratio = 0.5, seed = 42L,
                                         random_source = "random_burnable_background",

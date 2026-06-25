@@ -121,7 +121,10 @@
 #' vv <- apply_visual_validation(edited)
 #' vv$summary
 #' }
-#' @seealso \code{\link{apply_visual_validation}}
+#' @seealso
+#' \code{\link{apply_visual_validation}},
+#' \code{\link{assemble_era_training_pool}},
+#' \code{\link{build_supervised_training_pools}}
 #' @export
 export_visual_validation_pools <- function(pool,
                                            out_path     = NULL,

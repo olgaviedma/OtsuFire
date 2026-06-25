@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-validate-execution.R
 \name{validate_supervised_execution}
 \alias{validate_supervised_execution}
-\title{Semantic + spatial pre-run validation of a resolved supervised configuration}
+\title{Validate a supervised run BEFORE any heavy compute}
 \usage{
 validate_supervised_execution(
   config,
@@ -45,152 +45,113 @@ convention roots, so the validator resolves the SAME input paths the
 orchestrator will consume (cfg path \%||\% convention).}
 }
 \value{
-A `data.frame` -- the structured report (see \strong{Structured
-  report}). Returned invisibly when `strict = TRUE` and all blocking checks
-  pass; returned visibly when `strict = FALSE`.
+The report `data.frame` (see \strong{The report}). Visible when
+  `strict = FALSE`; invisible when `strict = TRUE` and all blocking checks pass.
 }
 \description{
-`validate_supervised_execution()` is the canonical PRE-RUN validator for the
-one-year supervised pipeline. It accepts an ALREADY-RESOLVED configuration
-(the object returned by [build_supervised_burned_config()]) and runs ONCE,
-cheaply, BEFORE any heavy compute (training-pool construction, spatial folds,
-feature extraction, OOF / final model). It inspects only metadata and
-geometry (rasters are opened header-only via [terra::rast()]; the only
-cell-level read is the burnable-mask alignment), so a misconfigured run is
-caught in well under a second instead of 5-10 min into the chain after
-partial artefacts are produced.
+A fast, read-only pre-flight check for a supervised run. You hand it the
+configuration object from [build_supervised_burned_config()] and it verifies,
+in well under a second, that the inputs and settings are coherent BEFORE the
+expensive stages (pool build, spatial folds, feature extraction, OOF, final
+model). It opens only metadata and geometry (rasters header-only), writes
+nothing, and so catches a misconfigured run immediately instead of 5-10 min in.
 
-Unlike the previous internal-only contract (which `stop()`ed silently from
-inside the orchestrator), this function returns a STRUCTURED REPORT -- one row
-per check -- so a caller can INSPECT exactly which checks passed, failed, or
-could not be evaluated. The orchestrator calls this same function in
-`strict = TRUE` mode at the same early hook, so the report engine and the
-fail-fast behaviour share ONE implementation of the checks.
+It returns a tidy \strong{report} -- one row per check -- so you can see
+exactly what passed, failed, or could not be evaluated. With `strict = TRUE`
+it instead stops with a single aggregated error listing every blocking
+failure; that is how the pipeline aborts a bad run early.
 }
-\details{
-The 10 checks:
+\section{What it checks}{
+
 \enumerate{
-  \item \strong{CRS absent or invalid} on any spatial input that resolves to
-    an on-disk path (rasters: change_index / delayed_change_index / topo /
-    corine_raster / burnable_mask; vectors: internal_decisions / hotspots).
-  \item \strong{No spatial overlap} between the change-index template and
-    each other spatial input, tested on bounding geometries reprojected into
-    the template CRS (Gate 1C.1 extent-intersection logic).
-  \item \strong{Empty raster} -- a raster input with zero rows or columns.
-  \item \strong{Mask with ZERO burnable cells} -- the burnable mask aligned to
-    the change-index template via [.of_align_mask_to_template()].
-  \item \strong{Wrong year} (Gate 1D.3, robust evidence hierarchy). Inputs
-    are CLASSIFIED explicitly (\code{.of_vse_year_class()}): YEAR-SPECIFIC
-    inputs (internal_decisions, change_index, delayed_change_index, hotspots,
-    reference_burned_map) MUST agree with the resolved `config$target_year`;
-    ATEMPORAL inputs (topo, peninsula_shapefile, burnable_mask, and the CORINE
-    products -- CORINE encodes its OWN epoch, not the run year) are SKIPPED and
-    never failed for lacking the run year. For each year-specific input the
-    year is resolved via a strict HIERARCHY
-    (\code{.of_vse_resolve_input_year()}): (1) a `year`/`fire_year` column;
-    (2) explicit layer/raster metadata; (3) an UNAMBIGUOUS standalone 4-digit
-    filename token (CORINE epochs / resolution numbers are excluded by
-    construction). (A fourth level -- a cfg-registered declared year
-    (`spec$declared_year`) -- was scoped but is \strong{NOT IMPLEMENTED}: the
-    builder records no such field, so it was removed from the active flow in
-    1E.5 and is reserved as a future extension.)
-    A determinable year that DIFFERS from the expected year FAILs (blocking,
-    naming input + found + expected); a MATCH PASSes with evidence of the
-    level used; and an input with NO verifiable year at ANY level is recorded
-    NOT_VERIFIABLE (verifiable = FALSE) -- never a false PASS, and not blocking
-    by itself.
-  \item \strong{Required columns absent} -- internal_decisions missing its
-    label column `class_final`.
-  \item \strong{Incompatible types} -- the `class_final` label column is not
-    character/factor.
-  \item \strong{Incompatible feature schema} -- when a `model`/`recipe` is
-    supplied with `scoring_feature_names`, the scoring inputs are checked
-    against the model/recipe schema. Gate 1D.2 makes this RECIPE-DRIVEN and
-    ENFORCED on the main scoring path: the canonical schema is read from
-    `recipe$cols$feature_cols` (never re-derived from the scoring year), and
-    the check is aligned with the Gate 1C.3 5-case reconciliation policy -- a
-    missing / extra / type-changed / unknown-level / all-NA feature is
-    RECOVERABLE and PASSES (the reconciler heals + records it), while a
-    genuinely incompatible feature (uncoercible) FAILs (blocking). When only a
-    legacy schema (`recipe$feature_names` / `model$feature_names`) is
-    available the strict coverage semantics apply (any uncovered name FAILs).
-    The check is SKIPPED only when no model/recipe + names are supplied, and
-    NOT_VERIFIABLE when no schema can be introspected -- never a false PASS.
-    [score_supervised_burned_map()] runs this check (`strict = TRUE`) before
-    building the scoring matrix, so it is no longer best-effort on the main
-    path.
-  \item \strong{Contradictory configuration} -- mutually exclusive cfg
-    settings (e.g. `reuse_upstream = TRUE` with no upstream artefacts; a
-    `feature_whitelist_override` that is not a subset of the canonical list).
-  \item \strong{Cache belonging to ANOTHER cfg} -- a persisted negative-pool
-    fingerprint sidecar (Gate 1C.2) whose checksum disagrees with the
-    fingerprint recomputed from the CURRENT cfg. Under `reuse_upstream = TRUE`
-    this is a BLOCKING failure; otherwise it is a WARNING (the pool is rebuilt
-    this run).
-  \item \strong{internal_decisions polygon-sanitisation dry-run}
-    (`sanitize_decisions`) -- a NON-DESTRUCTIVE dry-run of the SAME canonical
-    polygon sanitiser the pools stage uses
-    (\code{.of_sanitize_supervised_polygons()}). Empty geometries are the
-    official drop policy, so their presence is NOT blocking: the check
-    reports `"PASS_WITH_SANITIZATION"` with the explicit counts (e.g.
-    1278 -> 1274, 4 dropped). It is BLOCKING only when sanitisation would
-    leave the layer COMPLETELY EMPTY (no usable polygon to train on). This
-    guards against the sf 1.0-20 defect where an indiscriminate
-    `st_collection_extract()` zeroed a layer that merely contained a few
-    empty geometries.
+  \item \strong{CRS} -- present and valid on every on-disk spatial input
+    (the change index, delayed change index, topography, CORINE, burnable
+    mask, decisions, hotspots).
+  \item \strong{Spatial overlap} -- the change-index template overlaps each
+    other input (bounding geometries, reprojected to the template CRS).
+  \item \strong{Empty raster} -- no raster has zero rows or columns.
+  \item \strong{Burnable mask} -- once aligned to the template, the mask has
+    at least one burnable cell.
+  \item \strong{Correct year} -- year-specific inputs (decisions, change
+    index, delayed change index, hotspots, reference map) match
+    `config$target_year`. Atemporal inputs (topography, peninsula, burnable
+    mask, CORINE -- which carries its own epoch) are skipped. A year that is
+    determinable but WRONG fails (blocking); an undeterminable year is recorded
+    as `NOT_VERIFIABLE`, never a silent PASS.
+  \item \strong{Required columns} -- `internal_decisions` has its label column
+    `class_final`.
+  \item \strong{Column types} -- `class_final` is character or factor.
+  \item \strong{Feature schema} -- when a `model`/`recipe` and
+    `scoring_feature_names` are supplied, the scoring inputs cover the schema
+    the model expects. Recoverable mismatches (missing / extra / type-changed /
+    all-NA) pass because the scorer heals them; a genuinely incompatible
+    feature fails. Skipped when no model/recipe is given.
+  \item \strong{Config not contradictory} -- e.g. `reuse_upstream = TRUE` with
+    no upstream artefacts, or a `feature_whitelist_override` outside the
+    canonical whitelist.
+  \item \strong{Cache provenance} -- a reused negative-pool cache actually
+    belongs to THIS config (fingerprint match). Blocking under
+    `reuse_upstream = TRUE`; a warning otherwise (the pool is just rebuilt).
+  \item \strong{Geometry sanitisation (dry-run)} -- a non-destructive preview
+    of the polygon sanitiser the pool stage uses. Dropping a few empty
+    geometries is normal and reports `"PASS_WITH_SANITIZATION"` with the
+    counts; it only blocks if sanitisation would empty the layer entirely.
 }
 }
-\section{Structured report}{
 
-The return value is a `data.frame` with one row per check and the columns:
+\section{The report (one row per check)}{
+
 \describe{
   \item{`check`}{Check id (e.g. `"crs_rasters"`, `"overlap"`).}
-  \item{`status`}{One of `"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (the check
-    could not be evaluated given the inputs -- e.g. an in-memory input with no
-    on-disk path), `"SKIPPED"` (the check is legitimately inapplicable --
-    e.g. no model supplied for the feature-schema check), or
-    `"PASS_WITH_SANITIZATION"` (the `sanitize_decisions` check passes after
-    the official drop of empty/non-polygonal geometries -- a non-blocking,
-    warning-severity outcome that records the drop counts).}
-  \item{`message`}{Human-readable outcome / failure message.}
-  \item{`evidence`}{What was inspected (path / CRS / year / column list).}
+  \item{`status`}{`"PASS"`, `"FAIL"`, `"NOT_VERIFIABLE"` (could not be
+    evaluated), `"SKIPPED"` (not applicable), or `"PASS_WITH_SANITIZATION"`
+    (passes after dropping a few empty geometries).}
+  \item{`message`}{Human-readable outcome.}
+  \item{`evidence`}{What was inspected (path / CRS / year / columns).}
   \item{`severity`}{`"blocking"`, `"warning"`, or `"info"`.}
-  \item{`verifiable`}{Logical -- could this check actually be evaluated for the
-    given inputs. A NOT_VERIFIABLE / SKIPPED row has `verifiable = FALSE`,
-    making it impossible to mistake an unevaluable check for a true PASS.}
+  \item{`verifiable`}{Was the check actually evaluable. A `NOT_VERIFIABLE` /
+    `SKIPPED` row is `FALSE`, so an unevaluable check can never look like a PASS.}
 }
 }
 
-\section{Strict mode}{
+\section{strict = TRUE vs FALSE}{
 
-With `strict = TRUE` the function raises a single aggregated error if ANY
-row with `severity == "blocking"` has `status == "FAIL"`, listing every
-failing check and its message; otherwise it returns the report invisibly.
-With `strict = FALSE` (default) it ALWAYS returns the report (visibly) and
-never errors on a check FAIL -- the caller decides what to do. (A non-blocking
-foreign-cache mismatch still emits a `warning()` in both modes, preserving the
-Gate 1C.4 behaviour.) The orchestrator invokes `strict = TRUE` so a
-misconfigured run aborts before heavy compute.
+`strict = FALSE` (default) ALWAYS returns the report and never errors on a
+check FAIL -- you decide what to do. `strict = TRUE` raises one aggregated
+error if any \strong{blocking} check failed (listing each), otherwise returns
+the report invisibly. A non-blocking cache mismatch still warns in both modes.
 }
 
-\section{Distinction from [validate_fire_maps()]}{
+\examples{
+\dontrun{
+cfg <- build_supervised_burned_config(
+  internal_decisions = "1985/05_DECISIONS/internal_decisions.gpkg",
+  change_index       = "MinMin_1985_mosaic_res90m.tif",
+  target_year        = 1985
+)
 
-These two validators are complementary and do NOT overlap:
-\itemize{
-  \item `validate_supervised_execution()` is a \strong{pre-run} validator: it
-    checks the supervised CONFIGURATION and its INPUTS (CRS, overlap, year,
-    decision columns, cfg contradictions, cache provenance) BEFORE any map is
-    produced. It reads only metadata/geometry and writes nothing.
-  \item [validate_fire_maps()] is a \strong{post-run} cartographic validator:
-    it scores PRODUCED burned-area maps against independent reference fire
-    perimeters (e.g. EFFIS), computing pixel/polygon agreement, omission and
-    commission. It operates on OUTPUT layers, not on the cfg.
-}
+# 1) Inspect the full report (never errors):
+rep <- validate_supervised_execution(cfg)
+rep[, c("check", "status", "severity")]
+
+# Show only what failed:
+rep[rep$status == "FAIL", c("check", "message")]
+
+# 2) Fail fast before heavy compute (what the pipeline does):
+validate_supervised_execution(cfg, strict = TRUE)
+
+# 3) Also check the scoring schema against a fitted model:
+validate_supervised_execution(
+  cfg,
+  model = final$model, recipe = final$recipe,
+  scoring_feature_names = names(sf::st_drop_geometry(scoring_features))
+)
 }
 
+}
 \seealso{
-[validate_fire_maps()] for post-run cartographic validation of
-  produced maps against reference perimeters (incl. EFFIS);
-  [build_supervised_burned_config()] for the configuration this function
-  validates.
+[validate_fire_maps()] validates PRODUCED maps against reference
+  perimeters such as EFFIS (post-run), where this validates the config and
+  inputs (pre-run); [build_supervised_burned_config()] builds the config this
+  function checks.
 }

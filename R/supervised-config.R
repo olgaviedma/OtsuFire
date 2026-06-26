@@ -145,6 +145,13 @@
 #'   used to name output folders and files. Single non-empty string. Defaults
 #'   to `"supervised_burned_map"`.
 #'
+#' @param flat_output_routes Logical. When `FALSE` (default) the output routes
+#'   use the canonical nested layout
+#'   `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`. When `TRUE`,
+#'   every product hangs DIRECTLY off `output_dir` (`<output_dir>/01_POOLS`,
+#'   `<output_dir>/03_FEATURES`, ...). Use `TRUE` when `output_dir` already IS
+#'   the per-run scenario folder, to avoid a duplicated nested path.
+#'
 #' @param min_burned_pool_n Integer `>= 0`. Sparse-year guard: the pipeline
 #'   aborts before training when fewer than this many keep-class (burned-label)
 #'   polygons remain after QA. Consumed by the pool builder / orchestrator.
@@ -616,6 +623,7 @@ build_supervised_burned_config <- function(
     target_year,
     output_dir = tempdir(),
     run_name = "supervised_burned_map",
+    flat_output_routes = FALSE,
     min_burned_pool_n = 5L,
     # §N+25 (2026-06-05): supervised-RUN inputs wired to the config. All
     # default NULL; when NULL they fall back to the EXACT convention path
@@ -874,7 +882,8 @@ build_supervised_burned_config <- function(
 
   output_routes <- .of_build_supervised_output_routes(
     output_dir = output_dir, target_year = target_year,
-    run_name = run_name, scenario = run_label
+    run_name = run_name, scenario = run_label,
+    flat = flat_output_routes
   )
 
   # ---- Gate 1B (2026-06-07): resolve cfg$model_params + cfg$train_control ----
@@ -1761,9 +1770,19 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' @keywords internal
 #' @noRd
 .of_build_supervised_output_routes <- function(output_dir, target_year,
-                                                run_name, scenario) {
-  base <- file.path(output_dir, as.character(target_year), run_name,
-                    "SUPERVISED", scenario)
+                                                run_name, scenario,
+                                                flat = FALSE) {
+  # `flat = TRUE` hangs every product DIRECTLY off output_dir (output_dir/01_POOLS,
+  # output_dir/03_FEATURES, ...) instead of the canonical deep
+  # <output_dir>/<year>/<run_name>/SUPERVISED/<scenario> tree. Use it when
+  # output_dir already IS the per-run scenario folder, so the layout is not
+  # duplicated. Default FALSE = the canonical nested layout (unchanged).
+  base <- if (isTRUE(flat)) {
+    output_dir
+  } else {
+    file.path(output_dir, as.character(target_year), run_name,
+              "SUPERVISED", scenario)
+  }
   prefix_oof <- sprintf("%d_%s_patch", target_year, scenario)
   prefix     <- sprintf("%d_%s_patch_certified", target_year, scenario)
   # Bug 1 (0.3.0): folder names match the operational runtime

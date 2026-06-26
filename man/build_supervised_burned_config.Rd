@@ -16,6 +16,7 @@ build_supervised_burned_config(
   target_year,
   output_dir = tempdir(),
   run_name = "supervised_burned_map",
+  flat_output_routes = FALSE,
   min_burned_pool_n = 5L,
   peninsula_shapefile = NULL,
   topo = NULL,
@@ -103,6 +104,13 @@ layout. Defaults to `tempdir()`.}
 \item{run_name}{Character scalar. Stable identifier for the supervised run,
 used to name output folders and files. Single non-empty string. Defaults
 to `"supervised_burned_map"`.}
+
+\item{flat_output_routes}{Logical. When `FALSE` (default) the output routes
+use the canonical nested layout
+`<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`. When `TRUE`,
+every product hangs DIRECTLY off `output_dir` (`<output_dir>/01_POOLS`,
+`<output_dir>/03_FEATURES`, ...). Use `TRUE` when `output_dir` already IS
+the per-run scenario folder, to avoid a duplicated nested path.}
 
 \item{min_burned_pool_n}{Integer `>= 0`. Sparse-year guard: the pipeline
 aborts before training when fewer than this many keep-class (burned-label)

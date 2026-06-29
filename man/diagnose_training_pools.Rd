@@ -26,6 +26,9 @@ diagnose_training_pools(
   run_permanova = FALSE,
   run_rs_separability = FALSE,
   run_probe_classifier = FALSE,
+  run_correlation = TRUE,
+  corr_method = "spearman",
+  corr_threshold = 0.9,
   balance_n = NULL,
   n_repeats = 1,
   output_dir = NULL,
@@ -70,6 +73,17 @@ reported.}
 
 \item{run_pairwise, run_pca, run_permanova, run_rs_separability, run_probe_classifier}{Module toggles.}
 
+\item{run_correlation}{If \code{TRUE} (default), compute the correlation /
+redundancy module (module H) whenever there are at least two numeric
+features; degrades gracefully (returns \code{NULL}) on degenerate input.}
+
+\item{corr_method}{Correlation method passed to \code{stats::cor} for module H
+(default \code{"spearman"}; \code{"pearson"}/\code{"kendall"} also accepted).}
+
+\item{corr_threshold}{Absolute correlation threshold (default \code{0.9}) at or
+above which two features are treated as redundant (placed in the same
+cluster) in module H.}
+
 \item{balance_n}{Optional per-group cap; groups are downsampled to this size
 (seeded) before stats.}
 
@@ -94,9 +108,12 @@ back to base graphics; never hard-fails).}
 An object of class \code{otsufire_pool_diagnostics}: a list with
   \code{summary}, \code{settings}, \code{feature_info}, \code{missingness},
   \code{zero_variance}, \code{kruskal}, \code{pairwise}, \code{feature_ranking},
-  \code{zscore_fingerprint}, \code{pca}, \code{permanova},
+  \code{correlation}, \code{zscore_fingerprint}, \code{pca}, \code{permanova},
   \code{rs_separability}, \code{probe_classifier}, \code{plot_paths} and
-  \code{output_dir}. Modules that are skipped are \code{NULL}.
+  \code{output_dir}. Modules that are skipped are \code{NULL}. The
+  \code{correlation} component (module H) is a list with \code{matrix},
+  \code{high_pairs}, \code{clusters}, \code{representative}, \code{reduced_set}
+  (the suggested non-redundant feature set) and \code{dropped}.
 }
 \description{
 Statistically assesses whether the categories of a supervised training pool
@@ -138,6 +155,20 @@ Modules:
     grouped (leave-fire/year-out) CV when a fire/year key is present; returns
     balanced accuracy, macro-F1 and a confusion matrix. Explicitly NOT the
     final model.}
+  \item{H. Correlation / redundancy (optional)}{a feature correlation matrix
+    (\code{corr_method}, default Spearman -- robust to the heavy-tailed
+    RBR/area distributions), the high-correlation pairs
+    (\eqn{|r| \ge} \code{corr_threshold}, family-tagged), greedy redundancy
+    clusters (connected components of the high-correlation graph), a
+    representative per cluster chosen as the feature with the HIGHEST
+    importance (epsilon^2 from module B; ties / missing importance fall back to
+    feature order), and a suggested NON-REDUNDANT \code{reduced_set} = all
+    cluster representatives plus all singletons. Dependency-light (base
+    \code{stats::cor}); never hard-fails. When \code{output_dir} is set it
+    writes \code{*_15_correlation_high_pairs.csv},
+    \code{*_16_correlation_clusters.csv} and
+    \code{*_17_correlation_reduced_set.csv}; an optional correlation heatmap
+    PNG is added when \code{make_plots} and \pkg{ggplot2} are available.}
 }
 }
 \section{Functions}{

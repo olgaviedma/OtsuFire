@@ -17,13 +17,15 @@
 #   E. PERMANOVA (optional)         .pool_permanova()
 #   F. RS separability (optional)   .pool_rs_separability()
 #   G. Probe classifier (optional)  .pool_probe()
+#   H. Correlation / redundancy     .pool_correlation()
 #   + console summary               .pool_console_summary()
 # =============================================================================
 
 # ggplot2 aes() uses non-standard evaluation; these are column names referenced
 # inside the plotting data.frames, not real R bindings. Declaring them silences
 # "no visible binding for global variable" NOTEs without changing behaviour.
-utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
+utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
+                         "f1", "f2", "r"))
 
 # ---- small internal utilities ----------------------------------------------
 
@@ -106,6 +108,136 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
   }
   if (nrow(out) == 0) return(NULL)
   out[order(-abs(out$cor)), , drop = FALSE]
+}
+
+# ---- H. correlation / redundancy --------------------------------------------
+# Full correlation matrix + high-|r| pairs + greedy redundancy clusters + a
+# suggested NON-REDUNDANT reduced feature set. Features whose |r| >= thr are put
+# in the same redundancy cluster (connected components of the |r| >= thr graph);
+# the representative of each cluster is the feature with the HIGHEST importance
+# (epsilon^2 from the univariate ranking), falling back to feature order when
+# importance is missing/tied. The reduced set is all cluster representatives plus
+# all singletons. Dependency-light (base stats::cor); never hard-fails.
+.pool_correlation <- function(df, features, family_fun = .pool_feature_family,
+                              importance = NULL, method = "spearman",
+                              thr = 0.9) {
+  tryCatch({
+    features <- intersect(features, names(df))
+    if (length(features) < 2) return(NULL)
+    m  <- as.matrix(df[, features, drop = FALSE])
+    cc <- suppressWarnings(stats::cor(m, use = "pairwise.complete.obs",
+                                      method = method))
+    if (is.null(cc) || all(is.na(cc))) return(NULL)
+    np <- length(features)
+
+    # family lookup (feature -> family)
+    fam    <- family_fun(features)
+    fam_of <- stats::setNames(fam$family, fam$feature)
+
+    # importance lookup (feature -> epsilon^2; higher = better). Accept either a
+    # named numeric vector or a feature_ranking-style data.frame.
+    imp_of <- stats::setNames(rep(NA_real_, np), features)
+    if (!is.null(importance)) {
+      if (is.data.frame(importance) && "feature" %in% names(importance)) {
+        ic <- intersect(c("epsilon_squared", "importance", "value"),
+                        names(importance))[1]
+        if (!is.na(ic)) {
+          keep <- importance$feature %in% features
+          imp_of[importance$feature[keep]] <- importance[[ic]][keep]
+        }
+      } else if (!is.null(names(importance))) {
+        keep <- names(importance) %in% features
+        imp_of[names(importance)[keep]] <- as.numeric(importance[keep])
+      }
+    }
+
+    # high-correlation pairs (|r| >= thr), family-tagged
+    pr <- data.frame(feature1 = character(0), feature2 = character(0),
+                     cor = numeric(0), family1 = character(0),
+                     family2 = character(0), stringsAsFactors = FALSE)
+    for (i in seq_len(np)) {
+      for (j in seq_len(i - 1L)) {
+        r <- cc[i, j]
+        if (!is.na(r) && abs(r) >= thr) {
+          pr <- rbind(pr, data.frame(
+            feature1 = features[i], feature2 = features[j], cor = r,
+            family1 = unname(fam_of[features[i]]),
+            family2 = unname(fam_of[features[j]]),
+            stringsAsFactors = FALSE))
+        }
+      }
+    }
+    if (nrow(pr)) pr <- pr[order(-abs(pr$cor)), , drop = FALSE]
+    rownames(pr) <- NULL
+
+    # greedy clusters: union-find over the |r| >= thr graph (connected comps)
+    parent <- seq_len(np)
+    findr  <- function(i) { while (parent[i] != i) {
+      parent[i] <<- parent[parent[i]]; i <- parent[i] }; i }
+    unite  <- function(a, b) { ra <- findr(a); rb <- findr(b)
+      if (ra != rb) parent[ra] <<- rb }
+    if (nrow(pr)) {
+      for (k in seq_len(nrow(pr))) {
+        unite(match(pr$feature1[k], features), match(pr$feature2[k], features))
+      }
+    }
+    roots      <- vapply(seq_len(np), findr, integer(1))
+    cluster_id <- match(roots, sort(unique(roots)))   # compact 1..K
+
+    # representative per cluster = highest importance; NA -> -Inf; ties -> order
+    rep_of <- character(np)
+    for (cl in sort(unique(cluster_id))) {
+      idx  <- which(cluster_id == cl)
+      impv <- imp_of[features[idx]]; impv[is.na(impv)] <- -Inf
+      best <- if (all(is.infinite(impv))) idx[1] else idx[which.max(impv)]
+      rep_of[idx] <- features[best]
+    }
+
+    clusters <- data.frame(
+      feature           = features,
+      family            = unname(fam_of[features]),
+      cluster           = cluster_id,
+      representative    = rep_of,
+      importance        = unname(imp_of[features]),
+      is_representative = features == rep_of,
+      dropped           = features != rep_of,
+      stringsAsFactors  = FALSE)
+    clusters <- clusters[order(clusters$cluster, !clusters$is_representative,
+                               clusters$feature), , drop = FALSE]
+    rownames(clusters) <- NULL
+
+    # reduced set = representatives + singletons (in original feature order)
+    reduced_set <- features[features %in% rep_of]
+
+    # per-cluster representative table
+    ucl <- sort(unique(cluster_id))
+    representative <- data.frame(
+      cluster        = ucl,
+      representative = vapply(ucl, function(cl) rep_of[which(cluster_id == cl)[1]],
+                              character(1)),
+      n_members      = vapply(ucl, function(cl) sum(cluster_id == cl), integer(1)),
+      stringsAsFactors = FALSE)
+    representative$family     <- unname(fam_of[representative$representative])
+    representative$importance <- unname(imp_of[representative$representative])
+
+    # dropped features mapped to their representative (+ |r| to it)
+    drop_idx <- which(features != rep_of)
+    dropped  <- data.frame(
+      feature        = features[drop_idx],
+      representative = rep_of[drop_idx],
+      cluster        = cluster_id[drop_idx],
+      cor            = vapply(drop_idx, function(i) cc[i, match(rep_of[i], features)],
+                              numeric(1)),
+      family         = unname(fam_of[features[drop_idx]]),
+      stringsAsFactors = FALSE)
+    if (nrow(dropped)) dropped <- dropped[order(-abs(dropped$cor)), , drop = FALSE]
+    rownames(dropped) <- NULL
+
+    list(method = method, threshold = thr, matrix = cc, high_pairs = pr,
+         clusters = clusters, representative = representative,
+         reduced_set = reduced_set, dropped = dropped,
+         n_features = np, n_reduced = length(reduced_set))
+  }, error = function(e) NULL)
 }
 
 # ---- B. univariate separability ---------------------------------------------
@@ -613,6 +745,19 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
   }
   add("")
 
+  add("-- H. Correlation / redundancy --")
+  if (!is.null(out$correlation)) {
+    cr <- out$correlation
+    add("   method = %s   threshold |r| >= %.2f", cr$method, cr$threshold)
+    add("   high-correlation pairs: %d   redundant features dropped: %d",
+        nrow(cr$high_pairs), nrow(cr$dropped))
+    add("   suggested non-redundant set: %d -> %d features",
+        cr$n_features, cr$n_reduced)
+  } else {
+    add("   (correlation module not run / < 2 features)")
+  }
+  add("")
+
   add("-- Interpretation --")
   topo_feats <- c("elev", "slope")
   if (!is.null(out$kruskal)) {
@@ -767,6 +912,32 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
     if (ok4) paths$pca_loadings <- p4
   }
 
+  # 5. correlation heatmap (ggplot2 only; skipped gracefully if ggplot2 absent)
+  if (has_gg && !is.null(out$correlation) && !is.null(out$correlation$matrix)) {
+    p5 <- file.path(fig_dir, paste0(prefix, "_correlation_heatmap.png"))
+    ok5 <- tryCatch({
+      cm <- out$correlation$matrix
+      fe <- rownames(cm)
+      long <- data.frame(
+        f1 = factor(rep(fe, times = length(fe)), levels = fe),
+        f2 = factor(rep(fe, each  = length(fe)), levels = rev(fe)),
+        r  = as.vector(cm), stringsAsFactors = FALSE)
+      g <- ggplot2::ggplot(long, ggplot2::aes(x = f1, y = f2, fill = r)) +
+        ggplot2::geom_tile() +
+        ggplot2::scale_fill_gradient2(low = "#2166AC", mid = "white",
+                                      high = "#B2182B", limits = c(-1, 1)) +
+        ggplot2::theme_minimal(base_size = 10) +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+        ggplot2::labs(title = sprintf("Feature correlation (%s)",
+                                      out$correlation$method),
+                      x = NULL, y = NULL, fill = "r")
+      ggplot2::ggsave(p5, g, width = 8, height = 7, dpi = 120)
+      TRUE
+    }, error = function(e) {
+      .pool_msg(verbose, "corr heatmap failed: %s", conditionMessage(e)); FALSE })
+    if (ok5) paths$correlation_heatmap <- p5
+  }
+
   paths
 }
 
@@ -815,6 +986,20 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
 #'     grouped (leave-fire/year-out) CV when a fire/year key is present; returns
 #'     balanced accuracy, macro-F1 and a confusion matrix. Explicitly NOT the
 #'     final model.}
+#'   \item{H. Correlation / redundancy (optional)}{a feature correlation matrix
+#'     (\code{corr_method}, default Spearman -- robust to the heavy-tailed
+#'     RBR/area distributions), the high-correlation pairs
+#'     (\eqn{|r| \ge} \code{corr_threshold}, family-tagged), greedy redundancy
+#'     clusters (connected components of the high-correlation graph), a
+#'     representative per cluster chosen as the feature with the HIGHEST
+#'     importance (epsilon^2 from module B; ties / missing importance fall back to
+#'     feature order), and a suggested NON-REDUNDANT \code{reduced_set} = all
+#'     cluster representatives plus all singletons. Dependency-light (base
+#'     \code{stats::cor}); never hard-fails. When \code{output_dir} is set it
+#'     writes \code{*_15_correlation_high_pairs.csv},
+#'     \code{*_16_correlation_clusters.csv} and
+#'     \code{*_17_correlation_reduced_set.csv}; an optional correlation heatmap
+#'     PNG is added when \code{make_plots} and \pkg{ggplot2} are available.}
 #' }
 #'
 #' @param pools A \code{data.frame}, \code{data.table}, \code{tibble} or \code{sf}
@@ -839,6 +1024,14 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
 #' @param print_pairwise_top_n Number of pairwise contrasts shown in the summary.
 #' @param run_pairwise,run_pca,run_permanova,run_rs_separability,run_probe_classifier
 #'   Module toggles.
+#' @param run_correlation If \code{TRUE} (default), compute the correlation /
+#'   redundancy module (module H) whenever there are at least two numeric
+#'   features; degrades gracefully (returns \code{NULL}) on degenerate input.
+#' @param corr_method Correlation method passed to \code{stats::cor} for module H
+#'   (default \code{"spearman"}; \code{"pearson"}/\code{"kendall"} also accepted).
+#' @param corr_threshold Absolute correlation threshold (default \code{0.9}) at or
+#'   above which two features are treated as redundant (placed in the same
+#'   cluster) in module H.
 #' @param balance_n Optional per-group cap; groups are downsampled to this size
 #'   (seeded) before stats.
 #' @param n_repeats Reserved repeat count for stochastic modules (currently 1).
@@ -852,9 +1045,12 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2"))
 #' @return An object of class \code{otsufire_pool_diagnostics}: a list with
 #'   \code{summary}, \code{settings}, \code{feature_info}, \code{missingness},
 #'   \code{zero_variance}, \code{kruskal}, \code{pairwise}, \code{feature_ranking},
-#'   \code{zscore_fingerprint}, \code{pca}, \code{permanova},
+#'   \code{correlation}, \code{zscore_fingerprint}, \code{pca}, \code{permanova},
 #'   \code{rs_separability}, \code{probe_classifier}, \code{plot_paths} and
-#'   \code{output_dir}. Modules that are skipped are \code{NULL}.
+#'   \code{output_dir}. Modules that are skipped are \code{NULL}. The
+#'   \code{correlation} component (module H) is a list with \code{matrix},
+#'   \code{high_pairs}, \code{clusters}, \code{representative}, \code{reduced_set}
+#'   (the suggested non-redundant feature set) and \code{dropped}.
 #'
 #' @examples
 #' \donttest{
@@ -906,6 +1102,9 @@ diagnose_training_pools <- function(
   run_permanova        = FALSE,
   run_rs_separability  = FALSE,
   run_probe_classifier = FALSE,
+  run_correlation      = TRUE,
+  corr_method          = "spearman",
+  corr_threshold       = 0.9,
   balance_n            = NULL,
   n_repeats            = 1,
   output_dir           = NULL,
@@ -987,6 +1186,17 @@ diagnose_training_pools <- function(
                                      "eta_squared", "p", "p_adj")]
   feature_ranking$rank <- seq_len(nrow(feature_ranking))
 
+  # === H. correlation / redundancy (importance from feature_ranking) ===
+  correlation <- NULL
+  if (isTRUE(run_correlation) && length(features) >= 2) {
+    imp_vec <- stats::setNames(feature_ranking$epsilon_squared,
+                               feature_ranking$feature)
+    correlation <- .pool_correlation(df_test, features,
+                                     family_fun = .pool_feature_family,
+                                     importance = imp_vec,
+                                     method = corr_method, thr = corr_threshold)
+  }
+
   # === C. z-score fingerprint ===
   zfp <- .pool_zscore(df_test, group_col, features)
 
@@ -1039,6 +1249,7 @@ diagnose_training_pools <- function(
     kruskal            = uni$kruskal,
     pairwise           = uni$pairwise,
     feature_ranking    = feature_ranking,
+    correlation        = correlation,
     zscore_fingerprint = zfp,
     pca                = pca,
     permanova          = permanova,
@@ -1091,6 +1302,15 @@ diagnose_training_pools <- function(
                        balanced_accuracy = probe$balanced_accuracy,
                        macro_f1 = probe$macro_f1, stringsAsFactors = FALSE)
       wr(pr,                           paste0(prefix, "_14_probe_classifier_results.csv"))
+    }
+    if (!is.null(correlation)) {
+      wr(correlation$high_pairs,       paste0(prefix, "_15_correlation_high_pairs.csv"))
+      wr(correlation$clusters,         paste0(prefix, "_16_correlation_clusters.csv"))
+      reduced_df <- data.frame(
+        feature    = correlation$reduced_set,
+        family     = .pool_feature_family(correlation$reduced_set)$family,
+        stringsAsFactors = FALSE)
+      wr(reduced_df,                   paste0(prefix, "_17_correlation_reduced_set.csv"))
     }
   }
 

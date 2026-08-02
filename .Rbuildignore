@@ -6,6 +6,8 @@
 ^\.DS_Store$
 ^.*\.Rproj$
 ^README\.Rmd$
+^README$
+^\.claude$
 ^cran-comments\.md$
 ^revdep$
 ^codecov\.yml$

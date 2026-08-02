@@ -90,7 +90,7 @@ sf::st_write(
 )
 
 cfg_sup <- build_supervised_burned_config(
-  scenario           = "balanced",
+  run_label          = "balanced",
   internal_decisions = decisions,
   change_index       = ci,
   target_year        = 2020L,

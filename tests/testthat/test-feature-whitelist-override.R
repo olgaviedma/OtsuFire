@@ -180,7 +180,7 @@ test_that("override with unknown name errors clearly", {
       labelled_layer = "train_features",
       feature_whitelist_override = c("rbr_med", "this_is_not_canonical")
     )),
-    regexp = "feature_whitelist_override.+not in the canonical"
+    regexp = "feature_whitelist_override.+not in the active feature universe"
   )
 })
 

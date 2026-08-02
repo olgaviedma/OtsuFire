@@ -51,6 +51,8 @@ Suggests:
     MASS,
     ggplot2,
     testthat (>= 3.0.0),
+    digest,
+    withr,
     knitr,
     rmarkdown
 SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,

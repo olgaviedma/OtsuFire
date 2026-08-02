@@ -107,7 +107,7 @@ per-patch burned **model score**.
 
 ```{r sup, purl = FALSE}
 sup_cfg <- build_supervised_burned_config(
-  scenario           = "balanced",
+  run_label          = "balanced",
   internal_decisions = det_run$internal_decisions_gpkg,
   change_index       = mosaic_path,
   hotspots           = "/path/to/Hotspots/hotspots_iberia_2020.geojson",

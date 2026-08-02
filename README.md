@@ -1241,7 +1241,7 @@ Please report any issue regarding the OtsuFire package to Dr. Olga Viedma ([olga
 
 ## Citing OtsuFire
 
-Quintero, N.; Viedma, O.; Achour, H.; and Moreno, J. M. (2025). OtsuFire: Fire Scars and Severity Mapping Using 'Otsu' Thresholding. Version 0.1.4, accessed on June 24, 2025. Available at: <https://cran.r-project.org/web/packages/OtsuFire/index.html>.
+Quintero, N.; Viedma, O.; Achour, H.; and Moreno, J. M. (2025). OtsuFire: Fire Scars and Severity Mapping Using 'Otsu' Thresholding. Version 0.1.4, accessed on June 24, 2025. Available at: <https://CRAN.R-project.org/package=OtsuFire>.
 
 ## Disclaimer
 

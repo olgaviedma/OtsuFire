@@ -8,6 +8,7 @@
 ^README\.Rmd$
 ^README$
 ^\.claude$
+^LICENSE$
 ^cran-comments\.md$
 ^revdep$
 ^codecov\.yml$

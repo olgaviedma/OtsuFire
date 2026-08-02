@@ -463,7 +463,12 @@ test_that("Contract #7: OOF and FINAL both call .of_nested_refit_fit (shared cor
 })
 
 test_that("neg_type is in the OOF id_cols default (per-fold bucketing)", {
-  idc <- eval(formals(run_dm_oof_fn())$id_cols)
+  # The `id_cols` default references the `fold_cols` formal of the same
+  # function (dynamic fold_rep detection), so it cannot be evaluated on its
+  # own -- bind fold_cols to ITS own default rather than hard-coding it, so
+  # this stays correct if the number of repeats ever changes.
+  fm  <- formals(run_dm_oof_fn())
+  idc <- eval(fm$id_cols, list(fold_cols = eval(fm$fold_cols)))
   expect_true("neg_type" %in% idc)
 })
 

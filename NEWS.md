@@ -1,4 +1,43 @@
-# OtsuFire (development) — OPTIONAL shape/size feature block
+# OtsuFire 2.0.0 (2026-08-02)
+
+## BREAKING CHANGE — complete rebuild of the package
+
+2.0.0 is a full rewrite of OtsuFire. It is **not** backward compatible with
+the 0.1.x line (0.1.4 on CRAN, 0.1.5 on GitHub). Code written against 0.1.x
+will not run unchanged.
+
+* **17 of the 19 functions exported by 0.1.x have been removed.** Only
+  `clean_raster_file()` and `validate_fire_maps()` survive under their old
+  names. Removed: `calculate_polygon_metrics()`, `corine_mask_reclass()`,
+  `download_zenodo_data()`, `erase_overlap_with_preyear()`,
+  `mask_mosaic_raster()`, `merge_aoi_shapefiles()`,
+  `merge_internal_with_effis_flags()`,
+  `phase4_diagnostics_internal_external()`,
+  `prepare_fire_polys_for_validation()`, `process_otsu_rasters_grow()`,
+  `score_rbr_keep_classes()`, `scoring_burned_area_stage2()`,
+  `scoring_internal_burned_area()`, `scoring_reference_burned_area()`,
+  `scoring_validation_burned_area()`, `segmentation_refinement()` and
+  `validation_statistics()`.
+* **The public API is now 43 exported functions** organised as four stages:
+  a mosaic stage (`change_index_mosaic()`, `mosaic_from_tiles()`), a
+  deterministic Otsu/grow segmentation workflow
+  (`build_burned_mapping_config()`, `run_deterministic_pipeline()`), a
+  supervised one-year probabilistic workflow
+  (`build_supervised_burned_config()`, `run_oneyear_supervised_pipeline()`)
+  and a workflow-independent validation utility (`validate_fire_maps()`).
+* **Runs are now driven by config objects** built by
+  `build_burned_mapping_config()` and `build_supervised_burned_config()`
+  rather than by long argument lists, so a run is reproducible from its
+  resolved config.
+* The supervised stage (training pools, spatial folds, out-of-fold
+  diagnostics, gradient-boosted scoring) is new in 2.0.0; it has no
+  counterpart in 0.1.x.
+
+Users of 0.1.x who need the old function set should pin the CRAN 0.1.4
+release. The sections below record the development history that produced
+2.0.0, newest first.
+
+## Optional shape/size feature block
 
 **ADDITIVE + OFF BY DEFAULT.** Every change below is inert with the default
 config. With `include_shape_features = FALSE` (the default) the resolved
@@ -36,7 +75,7 @@ that controls the whole block.
   physical signal. This block is OFF by default and intended for
   experimentation; judge its effect with EFFIS, not OOF.
 
-# OtsuFire (development) — Phase 2: artifact_hard hard-negative mining
+## Hard-negative mining — the artifact_hard bucket
 
 **ADDITIVE + OFF BY DEFAULT.** Every change below is inert with the default
 config: with `negative_pool_params$artifact_hard$enabled = FALSE` and
@@ -74,7 +113,7 @@ epsilon (max abs diff ~4.4e-16) and the full prior testthat suite stays green.
   exclusion is added. `p_burned_eval` is now also carried in the public
   `final_map` layer (added to `make_public_final_map()` `public_cols`).
 
-## Phase A — end-to-end wiring into the PUBLIC wrappers (additive, OFF by default)
+### Phase A — end-to-end wiring into the PUBLIC wrappers (additive, OFF by default)
 
 artifact_hard now works end-to-end from the public API; the experimental runner
 (`_experiments/runner_artifact_hard.R`) is no longer needed to activate it.
@@ -103,7 +142,7 @@ artifact_hard now works end-to-end from the public API; the experimental runner
   to 0.11.0 (proven by `tests/testthat/test-artifact-hard-e2e.R`, incl. a
   runner↔wrapper exact-equivalence test).
 
-## Consolidation — public weight knob + consolidated training-pool layer (additive, OFF by default)
+### Consolidation — public weight knob + consolidated training-pool layer (additive, OFF by default)
 
 Closes the artifact_hard infrastructure as a configurable, OFF-by-default feature.
 The weight×year calibration sweep (1985/1988/1989 × {0.10, 0.25, 0.50}) showed the

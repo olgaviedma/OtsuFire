@@ -258,7 +258,7 @@ make_sf_safety_kit <- function(dirs = NULL,
   
   check_exists <- function(x, label = deparse(substitute(x))) {
     if (!file.exists(x)) {
-      stop(sprintf("No existe: %s\n%s", label, x), call. = FALSE)
+      stop(sprintf("Does not exist: %s\n%s", label, x), call. = FALSE)
     }
   }
   
@@ -420,7 +420,7 @@ make_sf_safety_kit <- function(dirs = NULL,
   
   .pick_one <- function(x, what = "file") {
     if (length(x) == 0) return(NULL)
-    if (length(x) > 1) stop("Encontre mas de un ", what, " candidato.\n", paste(" -", x, collapse = "\n"))
+    if (length(x) > 1) stop("Found more than one ", what, " candidate.\n", paste(" -", x, collapse = "\n"))
     x[[1]]
   }
   

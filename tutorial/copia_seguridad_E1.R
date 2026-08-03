@@ -1,5 +1,5 @@
 # ============================================================
-# Snapshot E1 antes de seguir con más experimentos
+# E1 snapshot, before moving on to more experiments
 # ============================================================
 
 YEAR <- 2005L
@@ -14,7 +14,7 @@ production_dir <- file.path(RESULTS_BASE, as.character(YEAR), "Min_Min",
 # Snapshot E1
 e1_snap <- file.path(phase_b_root, "E1_no_hotspots")
 if (dir.exists(e1_snap)) {
-  cat("E1 snapshot ya existe, lo borramos para overwrite limpio.\n")
+  cat("E1 snapshot already exists; removing it for a clean overwrite.\n")
   unlink(e1_snap, recursive = TRUE, force = TRUE)
 }
 
@@ -28,7 +28,7 @@ R.utils::copyDirectory(production_dir, e1_snap,
 cat("\nSubdirs en E1 snapshot:\n")
 print(list.dirs(e1_snap, recursive = FALSE, full.names = FALSE))
 
-cat("\n¿Meta confirma E1?:\n")
+cat("\nDoes meta confirm E1?:\n")
 meta_path <- file.path(e1_snap, "07_FINAL_MODEL_V2",
                        "2005_balanced_patch_certified_meta.txt")
 print(grep("whitelist_override|n_x_cols|best_iteration|n_training",
@@ -51,7 +51,7 @@ production_dir <- file.path(RESULTS_BASE, as.character(YEAR), "Min_Min",
 
 e1_snap <- file.path(phase_b_root, "E1_no_hotspots")
 if (dir.exists(e1_snap)) {
-  cat("E1 snapshot ya existe, lo borramos para overwrite limpio.\n")
+  cat("E1 snapshot already exists; removing it for a clean overwrite.\n")
   unlink(e1_snap, recursive = TRUE, force = TRUE)
 }
 
@@ -64,7 +64,7 @@ R.utils::copyDirectory(production_dir, e1_snap,
 cat("\nSubdirs en E1 snapshot:\n")
 print(list.dirs(e1_snap, recursive = FALSE, full.names = FALSE))
 
-cat("\n¿Meta confirma E1?:\n")
+cat("\nDoes meta confirm E1?:\n")
 print(grep("whitelist_override|n_x_cols|best_iteration",
            readLines(file.path(e1_snap, "07_FINAL_MODEL_V2",
                                "2005_balanced_patch_certified_meta.txt")),

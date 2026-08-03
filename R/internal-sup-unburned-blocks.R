@@ -3,7 +3,7 @@
 # (lines 1..897). Only the three helpers used by the Otsu residual negative
 # pipeline are kept: polygonize_Otsu(), coverage_by_patch_raster(),
 # run_scenarios(). The rest of the source file (tag_fire_id,
-# coverage_by_fire, run_scenarios_fireonly_new, BLOQUE 3 helpers, ...)
+# coverage_by_fire, run_scenarios_fireonly_new, BLOCK 3 helpers, ...)
 # is intentionally NOT migrated - those are not part of the supervised
 # one-year chain.
 #
@@ -13,7 +13,7 @@
 #
 # NOT EXPORTED. NOT documented in roxygen.
 
-#### PRIMER BLOQUE ####
+#### FIRST BLOCK ####
 
 ##### POLIGONISATION #####
 
@@ -25,22 +25,22 @@ polygonize_Otsu <- function(
     n_rows = 2,
     n_cols = 3,
     tile_overlap = 1000,
-    dissolve_tiles = TRUE,    # <-- NUEVO: disolver costuras entre tiles por DN
-    min_pixels = NULL,        # numero minimo de pixeles por poligono
-    out_path = NULL,          # ruta opcional a .shp o .gpkg
-    ogr2ogr_exe = NULL        # ruta a ogr2ogr.exe (Anaconda / OSGeo / QGIS)
+    dissolve_tiles = TRUE,    # <-- NEW: dissolve the seams between tiles by DN
+    min_pixels = NULL,        # minimum number of pixels per polygon
+    out_path = NULL,          # optional path to a .shp or .gpkg
+    ogr2ogr_exe = NULL        # path to ogr2ogr.exe (Anaconda / OSGeo / QGIS)
 ) {
-  # 1) Entrada: aceptar ruta o SpatRaster
+  # 1) Input: accept either a path or a SpatRaster
   if (inherits(burn_raster, "character")) {
     if (length(burn_raster) != 1L) {
-      stop("'burn_raster' debe ser una sola ruta a un raster (.tif).")
+      stop("'burn_raster' must be a single path to a raster (.tif).")
     }
     if (!file.exists(burn_raster)) {
-      stop("El archivo especificado en 'burn_raster' no existe: ", burn_raster)
+      stop("The file given in 'burn_raster' does not exist: ", burn_raster)
     }
     burn_raster <- terra::rast(burn_raster)
   } else if (!inherits(burn_raster, "SpatRaster")) {
-    stop("'burn_raster' debe ser o bien una ruta a un .tif o un SpatRaster de terra.")
+    stop("'burn_raster' must be either a path to a .tif or a terra SpatRaster.")
   }
   
   # Asegurar 1 banda
@@ -48,13 +48,13 @@ polygonize_Otsu <- function(
     burn_raster <- burn_raster[[1]]
   }
   
-  # CRS de salida
+  # output CRS
   cr_out <- sf::st_crs(terra::crs(burn_raster, proj = TRUE))
   if (is.na(cr_out)) {
-    stop("El raster 'burn_raster' no tiene CRS definido.")
+    stop("The raster 'burn_raster' has no CRS defined.")
   }
   
-  # Area de una celda (en unidades del CRS, en tu caso m2)
+  # Area of one cell (in CRS units, m2 here)
   res_xy       <- terra::res(burn_raster)
   cell_area_u2 <- abs(res_xy[1] * res_xy[2])   # p.ej. 90*90 = 8100 m2
   
@@ -68,9 +68,9 @@ polygonize_Otsu <- function(
     file.exists(gdal_polygonize_script)
   
   if (use_tiles) {
-    message("Poligonizando con tiles + gdal_polygonize.py ...")
+    message("Polygonizing with tiles + gdal_polygonize.py ...")
     
-    # Directorio temporal para tiles
+    # Temporary directory for the tiles
     if (is.null(out_path)) {
       tile_dir <- file.path(tempdir(), "polygonize_tiles")
     } else {
@@ -118,12 +118,12 @@ polygonize_Otsu <- function(
     }
     
     if (!length(tile_shapefiles)) {
-      stop("No se generaron shapefiles de tiles en la poligonizacion.")
+      stop("Polygonization produced no tile shapefiles.")
     }
     
     #  2A) Merge + dissolve en C++ con ogr2ogr (si existe) 
     if (!is.null(ogr2ogr_exe) && file.exists(ogr2ogr_exe) && isTRUE(dissolve_tiles)) {
-      message("Uniendo y disolviendo tiles con ogr2ogr (GDAL, C++, usando GPKG intermedio) ...")
+      message("Merging and dissolving tiles with ogr2ogr (GDAL, C++, via an intermediate GPKG) ...")
       
       merged_gpkg    <- file.path(tile_dir, "tiles_merged.gpkg")
       dissolved_gpkg <- file.path(tile_dir, "tiles_dissolved.gpkg")
@@ -144,7 +144,7 @@ polygonize_Otsu <- function(
         if (length(side)) unlink(side)
       }
       
-      # 1) MERGE de todos los tiles a un solo GPKG (capa 'merged')
+      # 1) MERGE every tile into a single GPKG (layer 'merged')
       first <- TRUE
       for (shp in tile_shapefiles) {
         if (first) {
@@ -163,7 +163,7 @@ polygonize_Otsu <- function(
         system(cmd_merge)
       }
       
-      # 2) DISSOLVE por DN = 1 en el GPKG (dialecto sqlite)
+      # 2) DISSOLVE by DN = 1 in the GPKG (sqlite dialect)
       # OJO: si te da error "no such column: geom", cambia geom -> geometry
       sql <- "SELECT ST_Union(geom) AS geom, DN FROM merged WHERE DN = 1 GROUP BY DN"
       
@@ -177,7 +177,7 @@ polygonize_Otsu <- function(
         message(paste(ogr_out, collapse = "\n"))
       }
       
-      # 3) Convertir el resultado disuelto (GPKG) a Shapefile
+      # 3) Convert the dissolved result (GPKG) to Shapefile
       cmd_to_shp <- sprintf(
         '"%s" -f "ESRI Shapefile" "%s" "%s" -nln dissolved',
         ogr2ogr_exe, dissolved_shp, dissolved_gpkg
@@ -187,7 +187,7 @@ polygonize_Otsu <- function(
       
       # Comprobar shapefile final
       if (!file.exists(dissolved_shp) || file.info(dissolved_shp)$size == 0) {
-        stop("ogr2ogr no creo correctamente 'tiles_dissolved.shp'. Revisa los comandos OGR impresos arriba.")
+        stop("ogr2ogr did not create 'tiles_dissolved.shp' properly. Check the OGR commands printed above.")
       }
       
       polys <- sf::st_read(dissolved_shp, quiet = TRUE)
@@ -195,11 +195,11 @@ polygonize_Otsu <- function(
       polys <- sf::st_transform(polys, cr_out)
       
     } else {
-      #  2B) Fallback / sin disolver: unir tiles en R 
+      #  2B) Fallback / no dissolve: bind the tiles in R
       if (!isTRUE(dissolve_tiles)) {
-        message("dissolve_tiles = FALSE -> no se disuelven costuras entre tiles. Veras lineas rectas en los bordes de teselas (puedes disolver luego en ArcGIS/QGIS).")
+        message("dissolve_tiles = FALSE -> tile seams are not dissolved. Straight lines will show at the tile borders (they can be dissolved later in ArcGIS/QGIS).")
       } else {
-        message("ogr2ogr_exe no proporcionado o no encontrado. Uniendo tiles en R sin disolver (se veran lineas de costura).")
+        message("ogr2ogr_exe not supplied or not found. Merging tiles in R without dissolving (seam lines will show).")
       }
       
       polys <- do.call(
@@ -212,7 +212,7 @@ polygonize_Otsu <- function(
     }
   
     
-    # Limpiar tiles intermedios (.shp, .dbf, etc.)
+    # Clean up the intermediate tiles (.shp, .dbf, etc.)
     for (shp in tile_shapefiles) {
       shp_base <- tools::file_path_sans_ext(shp)
       for (ext in c(".shp", ".shx", ".dbf", ".prj", ".cpg")) {
@@ -222,8 +222,8 @@ polygonize_Otsu <- function(
     }
     
   } else {
-    # Fallback sin tiles (lento, pero simple) 
-    message("Poligonizando con terra::as.polygons() (fallback, sin tiles/GDAL)...")
+    # Fallback without tiles (slow, but simple)
+    message("Polygonizing with terra::as.polygons() (fallback, no tiles/GDAL)...")
     patch_poly <- terra::as.polygons(burn_raster, dissolve = TRUE, values = TRUE)
     
     val_col <- names(patch_poly)[1]
@@ -236,23 +236,23 @@ polygonize_Otsu <- function(
     sf::st_crs(polys) <- cr_out
   }
   
-  #  3) Limpiar DN y comprobar si hay poligonos 
+  #  3) Clean DN and check whether any polygons remain 
   if ("DN" %in% names(polys)) {
     polys <- polys[!is.na(polys$DN) & polys$DN != 0, , drop = FALSE]
   }
   
   if (!nrow(polys)) {
-    warning("No hay poligonos resultantes despues de la poligonizacion.")
+    warning("Polygonization left no polygons.")
     polys$patch_id <- integer(0)
     return(polys)
   }
   
-  # 4) Filtro por min_pixels + metricas de area 
+  # 4) min_pixels filter + area metrics 
   area_u2 <- as.numeric(sf::st_area(polys))
   
   if (!is.null(min_pixels)) {
     if (!is.numeric(min_pixels) || length(min_pixels) != 1L || min_pixels <= 0) {
-      stop("'min_pixels' debe ser un numero positivo de longitud 1.")
+      stop("'min_pixels' must be a positive number of length 1.")
     }
     min_area_u2 <- min_pixels * cell_area_u2
     keep <- area_u2 >= min_area_u2
@@ -260,7 +260,7 @@ polygonize_Otsu <- function(
     area_u2 <- area_u2[keep]
     
     if (!nrow(polys)) {
-      warning("Tras aplicar 'min_pixels' no queda ningun poligono.")
+      warning("No polygon survives the 'min_pixels' filter.")
       polys$patch_id <- integer(0)
       return(polys)
     }
@@ -273,7 +273,7 @@ polygonize_Otsu <- function(
   
   # 5) Escritura opcional a disco 
   if (!is.null(out_path)) {
-    message("Escribiendo shapefile/salida en: ", out_path)
+    message("Writing shapefile/output to: ", out_path)
     
     dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
     ext <- tolower(tools::file_ext(out_path))
@@ -302,24 +302,24 @@ polygonize_Otsu <- function(
       sf::st_write(polys, dsn = out_path, layer = layer_name, quiet = TRUE)
       
     } else {
-      warning("Extension de 'out_path' no reconocida: '", ext,
-              "'. Usa .shp o .gpkg. No se escribe a disco.")
+      warning("Unrecognised 'out_path' extension: '", ext,
+              "'. Use .shp or .gpkg. Nothing is written to disk.")
     }
   }
   
-  #  6) Devolver sf con patch_id 
+  #  6) Return the sf with patch_id 
   return(polys)
 }
 
 
-##### COBERTURA POR PARCHE RASTER#####
+##### RASTER PER-PATCH COVERAGE #####
 coverage_by_patch_raster <- function(
-    patches,            # sf o ruta a shapefile/gpkg/geojson con patch_id (o se crea)
-    ref_raster,         # SpatRaster (1 o varias capas) o lista de SpatRaster
-    ref_names = NULL,   # nombres para las columnas de cada referencia
-    out_path  = NULL    # ruta opcional para guardar el resultado
+    patches,            # sf object or path to shapefile/gpkg/geojson carrying patch_id (created if absent)
+    ref_raster,         # SpatRaster (one or several layers) or a list of SpatRaster
+    ref_names = NULL,   # column names for each reference
+    out_path  = NULL    # optional path to write the result to
 ) {
-  #  0) Preparar patches_sf 
+  #  0) Prepare patches_sf 
   if (inherits(patches, "sf")) {
     patches_sf <- patches
     
@@ -327,31 +327,31 @@ coverage_by_patch_raster <- function(
     ext <- tolower(tools::file_ext(patches))
     
     if (ext %in% c("shp", "gpkg", "geojson", "json")) {
-      message("Leyendo parches desde fichero vectorial: ", patches)
+      message("Reading patches from vector file: ", patches)
       patches_sf <- sf::st_read(patches, quiet = TRUE)
       
     } else if (ext %in% c("tif", "tiff")) {
       stop(
-        "Has pasado un raster (.tif) en 'patches'. ",
-        "Esta funcion espera parches ya poligonizados (sf).\n",
-        "-> Usa primero tu funcion de poligonizar (por ej. polygonize_Otsu())\n",
-        "  y pasale aqui el shapefile resultante o el objeto sf."
+        "A raster (.tif) was passed in 'patches'. ",
+        "This function expects patches that are already polygonized (sf).\n",
+        "-> Run your polygonizing function first (e.g. polygonize_Otsu())\n",
+        "  and pass the resulting shapefile or sf object here."
       )
     } else {
       stop(
-        "Extension de fichero no reconocida para 'patches': ", ext, "\n",
-        "Soporto: .shp, .gpkg, .geojson, .json (o directamente un objeto sf)."
+        "Unrecognised file extension for 'patches': ", ext, "\n",
+        "Supported: .shp, .gpkg, .geojson, .json (or an sf object directly)."
       )
     }
     
   } else {
-    stop("El argumento 'patches' debe ser un objeto 'sf' o una ruta a un fichero vectorial.")
+    stop("The 'patches' argument must be an 'sf' object or a path to a vector file.")
   }
   
-  #  Preparar ref_raster (multi-capa) 
-  # Puede ser:
-  #  - SpatRaster (1 o varias capas)
-  #  - lista de SpatRaster (se convierte a stack)
+  #  Prepare ref_raster (multi-layer) 
+  # It can be:
+  #  - a SpatRaster (one or several layers)
+  #  - a list of SpatRaster (converted into a stack)
   if (inherits(ref_raster, "SpatRaster")) {
     ref_stack <- ref_raster
   } else if (is.list(ref_raster) &&
@@ -359,17 +359,17 @@ coverage_by_patch_raster <- function(
     ref_stack <- terra::rast(ref_raster)
   } else {
     stop(
-      "'ref_raster' debe ser un SpatRaster (una o varias capas) ",
-      "o una lista de SpatRaster con misma resolucion/extent."
+      "'ref_raster' must be a SpatRaster (one or several layers) ",
+      "or a list of SpatRaster sharing the same resolution/extent."
     )
   }
   
   n_refs <- terra::nlyr(ref_stack)
   if (n_refs < 1) {
-    stop("El SpatRaster de referencia no tiene capas.")
+    stop("The reference SpatRaster has no layers.")
   }
   
-  # Nombres de columnas para cada referencia
+  # Column names for each reference
   if (is.null(ref_names)) {
     ref_names <- names(ref_stack)
     if (is.null(ref_names) || any(ref_names == "")) {
@@ -377,29 +377,29 @@ coverage_by_patch_raster <- function(
     }
   }
   if (length(ref_names) != n_refs) {
-    stop("'ref_names' debe tener la misma longitud que el numero de capas de ref_raster (",
+    stop("'ref_names' must have the same length as the number of layers in ref_raster (",
          n_refs, ").")
   }
   
-  # 2) Comprobaciones basicas
+  # 2) Basic checks
   # 2.1 Asegurar columna patch_id
   if (!"patch_id" %in% names(patches_sf)) {
     patches_sf$patch_id <- seq_len(nrow(patches_sf))
   }
   
-  # 2.2 Asegurar mismo CRS (proyectamos los parches al CRS del raster)
+  # 2.2 Ensure a common CRS (patches are projected onto the raster CRS)
   cr_ref <- sf::st_crs(terra::crs(ref_stack, proj = TRUE))
-  if (is.na(cr_ref)) stop("El raster de referencia no tiene CRS definido.")
-  if (is.na(sf::st_crs(patches_sf))) stop("Los parches no tienen CRS definido.")
+  if (is.na(cr_ref)) stop("The reference raster has no CRS defined.")
+  if (is.na(sf::st_crs(patches_sf))) stop("The patches have no CRS defined.")
   
   if (sf::st_crs(patches_sf)$wkt != cr_ref$wkt) {
-    message("Transformando parches al CRS del raster de referencia...")
+    message("Transforming patches to the reference raster CRS...")
     patches_sf <- sf::st_transform(patches_sf, cr_ref)
   }
   
-  # 3) Rasterizar patch_id sobre plantilla
-  message("Rasterizando patch_id sobre el raster de referencia...")
-  template  <- ref_stack[[1]]  # usamos la primera capa como plantilla
+  # 3) Rasterize patch_id onto the template
+  message("Rasterizing patch_id onto the reference raster...")
+  template  <- ref_stack[[1]]  # the first layer is used as the template
   patches_v <- terra::vect(patches_sf)
   
   patch_id_r <- terra::rasterize(
@@ -409,33 +409,33 @@ coverage_by_patch_raster <- function(
     background = NA_real_
   )
   
-  # Extraer patch_id una sola vez
+  # Extract patch_id only once
   pid_vals <- as.vector(patch_id_r[])
   valid    <- !is.na(pid_vals)
   pid_vals <- pid_vals[valid]
   
   if (!length(pid_vals)) {
-    stop("No hay celdas con patch_id (?no solapan parches y raster?).")
+    stop("There are no cells carrying patch_id (do patches and raster overlap?).")
   }
   
   pid_vals <- as.integer(round(pid_vals))
   
-  #  4) Tabla de celdas totales por parche
-  message("Contando celdas por parche (totales)...")
+  #  4) Table of total cells per patch
+  message("Counting cells per patch (totals)...")
   
   tab_total <- as.data.frame(table(pid_vals), stringsAsFactors = FALSE)
   names(tab_total) <- c("patch_id", "n_total")
   tab_total$patch_id <- as.integer(tab_total$patch_id)
   
-  # Esta sera la tabla acumulada
+  # This will be the accumulated table
   cov_tab <- tab_total
   
-  #5) Bucle sobre cada raster de referencia
-  message("Calculando cobertura para cada raster de referencia...")
+  #5) Loop over each reference raster
+  message("Computing coverage for each reference raster...")
   
   for (k in seq_len(n_refs)) {
     rk_name <- ref_names[k]
-    message("  - Procesando referencia: ", rk_name, " (capa ", k, "/", n_refs, ")")
+    message("  - Processing reference: ", rk_name, " (layer ", k, "/", n_refs, ")")
     
     ref_k <- ref_stack[[k]]
 
@@ -452,9 +452,9 @@ coverage_by_patch_raster <- function(
     ref_clean <- terra::ifel(is.na(ref_k) | ref_k == 0, 0, 1)
     
     ref_vals_all <- as.vector(ref_clean[])
-    ref_vals     <- ref_vals_all[valid]  # solo donde hay patch_id
+    ref_vals     <- ref_vals_all[valid]  # only where patch_id exists
     
-    # Sumar celdas "1" por parche
+    # Sum the "1" cells per patch
     tab_ref_k <- aggregate(ref_vals, by = list(patch_id = pid_vals), FUN = sum)
 
     n_col     <- paste0("n_", rk_name)
@@ -464,16 +464,16 @@ coverage_by_patch_raster <- function(
     # Unir a cov_tab
     cov_tab <- dplyr::full_join(cov_tab, tab_ref_k, by = "patch_id")
     
-    # Rellenar NA con 0 y calcular cobertura
-    cov_col <- rk_name                 # <<--- AQUI el truco: usar el nombre tal cual
+    # Fill NA with 0 and compute coverage
+    cov_col <- rk_name                 # <<--- the trick here: use the name as-is
     cov_tab[[n_col]]   <- ifelse(is.na(cov_tab[[n_col]]), 0, cov_tab[[n_col]])
     cov_tab[[cov_col]] <- cov_tab[[n_col]] / cov_tab[["n_total"]]
     
     
   }
   
-  # 6) Unir de vuelta a los poligonos 
-  message("Uniendo resultados a los parches originales...")
+  # 6) Join back onto the polygons
+  message("Joining the results back onto the original patches...")
   
   out <- dplyr::left_join(
     patches_sf,
@@ -507,9 +507,9 @@ coverage_by_patch_raster <- function(
       
     } else {
       warning(
-        "No escribo a disco porque la extension de 'out_path' no es soportada: ",
+        "Not writing to disk because the 'out_path' extension is unsupported: ",
         ext_out,
-        " (usa .shp, .gpkg o .geojson)"
+        " (use .shp, .gpkg or .geojson)"
       )
     }
   }
@@ -518,7 +518,7 @@ coverage_by_patch_raster <- function(
 }
 
 
-##### NUCLEOS  #####
+##### CORES #####
 run_scenarios <- function(
     patches_path,
     out_dir,
@@ -547,9 +547,9 @@ run_scenarios <- function(
     driver         = c("GPKG","ESRI Shapefile"),
     # --- Distancias: fiabilidad vs velocidad ---
     dist_mode      = c("edge","centroid"),
-    near_mode      = c("edge","centroid"),   # NUEVO: vecindad con poligonos o centroides
+    near_mode      = c("edge","centroid"),   # NEW: neighbourhood based on polygons or centroids
     # --- Geometria (opcional) ---
-    simplify_tol   = NULL,                   # NUEVO: tolerancia en metros para simplificar (NULL = no)
+    simplify_tol   = NULL,                   # NEW: simplification tolerance in metres (NULL = none)
     revalidate_on_write = FALSE
 ){
   # Block 7: require() calls removed. Imports declared in DESCRIPTION.
@@ -560,7 +560,7 @@ run_scenarios <- function(
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   msg <- function(...) message(sprintf(...))
   
-  # -------- IO helpers (igual que tu version, compacto)
+  # -------- IO helpers (same as the original, compacted)
   .dedup_case_insensitive <- function(nms){
     lower <- tolower(nms)
     uniq_lower <- make.unique(lower, sep = "_")
@@ -640,16 +640,16 @@ run_scenarios <- function(
   
   # ---- lectura base
   p0 <- sf::st_read(patches_path, quiet = TRUE)
-  if (is.na(sf::st_crs(p0))) stop("La capa no tiene CRS. Asigna EPSG:3035 o ajusta target_epsg.")
+  if (is.na(sf::st_crs(p0))) stop("The layer has no CRS. Assign EPSG:3035 or adjust target_epsg.")
   if (is.na(sf::st_crs(p0)$epsg) || sf::st_crs(p0)$epsg != target_epsg) p0 <- sf::st_transform(p0, target_epsg)
   
-  # make_valid una vez
+  # make_valid once
   inv <- !sf::st_is_valid(p0)
   if (any(inv, na.rm = TRUE)) {
     if (requireNamespace("lwgeom", quietly = TRUE)) p0[inv,] <- suppressWarnings(sf::st_make_valid(p0[inv,])) else p0[inv,] <- suppressWarnings(sf::st_make_valid(p0[inv,]))
   }
   
-  # simplificacion opcional (ojo: cambia geometria, pero acelera mucho st_is_within_distance en poligonos complejos)
+  # optional simplification (note: it changes geometry, but greatly speeds up st_is_within_distance on complex polygons)
   if (!is.null(simplify_tol) && is.finite(simplify_tol) && simplify_tol > 0) {
     msg("Simplificando geometria (tol=%.2f m)...", simplify_tol)
     # st_simplify es rapido; preserve_topology si tienes lwgeom
@@ -671,8 +671,8 @@ run_scenarios <- function(
   need_cent <- (dist_mode == "centroid") || (near_mode == "centroid")
   p_cent_all <- if (need_cent) sf::st_centroid(p0) else NULL
   
-  # punto representativo (siempre util para nucleos, evita st_point_on_surface por escenario)
-  msg("Precalculando punto representativo por parche (st_point_on_surface) UNA vez...")
+  # representative point (always useful for cores; avoids st_point_on_surface per scenario)
+  msg("Pre-computing the representative point per patch (st_point_on_surface) ONCE...")
   p_rep_all <- sf::st_point_on_surface(geom0)  # sfc POINT
   
   # ---- normalizacion rapida 0-1 (cache)
@@ -689,7 +689,7 @@ run_scenarios <- function(
     list(v = out, is_pct = is_pct)
   }
   
-  # cache weak_field (una sola vez)
+  # cache weak_field (only once)
   weak_cache <- NULL
   if (!is.null(weak_field) && weak_field %in% names(p0)) {
     tmp <- .norm01(p0[[weak_field]])
@@ -701,11 +701,11 @@ run_scenarios <- function(
   
   results <- list()
   
-  # ===== loop eficiente: 1) por cv_field (cachea cv y nucleos) 2) por buffer
+  # ===== efficient loop: 1) by cv_field (caches cv and cores) 2) by buffer
   for (cvf in unique(combos$cv_field)) {
     
     if (!cvf %in% names(p0)) {
-      msg("[!]  Campo %s no existe. Omito.", cvf)
+      msg("[!]  Field %s does not exist. Skipping.", cvf)
       next
     }
     
@@ -717,7 +717,7 @@ run_scenarios <- function(
     nuclei_idx <- which(nucleo_log)
     nuclei_pts <- if (length(nuclei_idx)) p_rep_all[nuclei_idx] else sf::st_sfc(crs = sf::st_crs(p0))
     
-    # si no hay nucleos, todo ira a review/drop sin vecindad (solo core no existe)
+    # with no cores, everything goes to review/drop without neighbourhood (core-only cannot exist)
     for (buf in unique(combos$buffer[combos$cv_field == cvf])) {
       
       id   <- gsub("\\D","", cvf); if (identical(id, "")) id <- cvf
@@ -808,7 +808,7 @@ run_scenarios <- function(
       has_w <- (alpha_boost_iter * w_dist) > 0
       t_star[has_w] <- (keep_hi_iter - alpha_boost_iter * w_dist[has_w]) / den[has_w]
       
-      # --- rescate debil (usa cache)
+      # --- weak rescue (uses the cache)
       weak_ok <- rep(FALSE, nrow(p0))
       weak_is_pct <- NA_integer_
       if (!is.null(weak_cache)) {
@@ -839,7 +839,7 @@ run_scenarios <- function(
       decision <- ifelse(keep_p == 1L, "keep",
                          ifelse(S_patch <= drop_lo_iter, "drop", "review"))
       
-      # ========= construir outputs SOLO si se escriben (menos copias)
+      # ========= build outputs ONLY when they get written (fewer copies)
       build_out <- function(sel_idx){
         x <- p0[sel_idx, , drop = FALSE]
         x$area_ha   <- area_ha[sel_idx]
@@ -864,7 +864,7 @@ run_scenarios <- function(
           x$CVPCT <- as.integer(cv_is_pct)
           x$WKPCT <- weak_is_pct
         } else {
-          # si no quieres auxiliares, tambien puedes borrar dist/boost/etc aqui
+          # if the auxiliary columns are not wanted, dist/boost/etc can also be dropped here
         }
         
         if (!keep_all_attrs) {

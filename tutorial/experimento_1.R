@@ -1,5 +1,5 @@
 # ============================================================
-# E1 — Hotspots fuera (las 13 features G6)
+# E1 - Hotspots removed (the 13 G6 features)
 # Reusa pools/folds/features de Baseline en Min_Min
 # Sobreescribe 04_MATRIX/ → 09_FINAL_MAP/ con resultados E1
 # ============================================================
@@ -35,7 +35,7 @@ stopifnot(all(HOTSPOT_BLOCK %in% canonical))
 E1_whitelist <- setdiff(canonical, HOTSPOT_BLOCK)
 cat("E1 whitelist size:", length(E1_whitelist), "(expected 38)\n")
 
-# ---- Reconstruir config (mismo que Baseline) ----
+# ---- Rebuild the config (same as Baseline) ----
 YEAR <- 2005L
 SCENARIO <- "balanced"
 ROOT <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING"
@@ -103,7 +103,7 @@ result_e1 <- OtsuFire::run_oneyear_supervised_pipeline(
 elapsed_min <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
 cat(sprintf("\nE1 finished in %.1f min.\n", elapsed_min))
 
-# ---- Verificación rápida ----
+# ---- Quick verification ----
 final_map_path <- result_e1$final_map_gpkg
 cat("\nfinal_map_path:", final_map_path, "\n")
 fm <- sf::read_sf(final_map_path, layer = "final_map_full")
@@ -122,9 +122,9 @@ cat(sprintf("Mediana: %.4f\n\n", median(keeps, na.rm = TRUE)))
 cat("=== REVIEW ===\n"); print(summary(review))
 cat(sprintf("Mediana: %.4f\n", median(review, na.rm = TRUE)))
 
-# ¿Cuántos reviews rescata E1?
+# How many reviews does E1 rescue?
 n_rescued_e1 <- sum(review > 0.5, na.rm = TRUE)
-cat(sprintf("\nReviews rescatados por E1 (p>0.5): %d / %d\n",
+cat(sprintf("\nReviews rescued by E1 (p>0.5): %d / %d\n",
             n_rescued_e1, length(review)))
 cat("(Comparar con Baseline: 30 / 1114)\n")
 
@@ -133,7 +133,7 @@ meta_e1_path <- file.path(dirname(dirname(final_map_path)),
                           "07_FINAL_MODEL_V2",
                           "2005_balanced_patch_certified_meta.txt")
 meta_e1 <- readLines(meta_e1_path)
-cat("\n=== Verificación E1 meta ===\n")
+cat("\n=== E1 meta verification ===\n")
 print(grep("whitelist_override|n_x_cols|n_feature|best_iteration|n_training",
            meta_e1, value = TRUE))
 
@@ -167,7 +167,7 @@ fi_e1 <- read.csv(fi_path_e1, stringsAsFactors = FALSE)
 cat("\n\n=== E1 Top 15 features ===\n")
 print(head(fi_e1[, c("Feature", "Gain")], 15))
 
-cat("\n=== E1 ¿alguna hotspot aparece? (no debería) ===\n")
+cat("\n=== E1: does any hotspot show up? (it should not) ===\n")
 hs_in_e1 <- fi_e1[grepl("^(hs_|hotspot_)", fi_e1$Feature), ]
 if (nrow(hs_in_e1) > 0) {
   cat("ERROR: Hotspot features in E1!\n")
@@ -176,7 +176,7 @@ if (nrow(hs_in_e1) > 0) {
   cat("OK: ninguna hotspot en E1.\n")
 }
 
-cat("\n=== E1 número total de features con Gain > 0 ===\n")
+cat("\n=== E1 total number of features with Gain > 0 ===\n")
 cat(nrow(fi_e1), "/ 38 disponibles\n")
 
 
@@ -185,7 +185,7 @@ cat(nrow(fi_e1), "/ 38 disponibles\n")
 # Cargar E1 final_map_full
 fm_e1 <- sf::read_sf(final_map_path, layer = "final_map_full")
 
-# Cargar Baseline final_map_full (del snapshot)
+# Load the Baseline final_map_full (from the snapshot)
 baseline_fm_path <- file.path(
   "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/1_DATA/Results",
   "_PHASE_B_RESULTS/2005_balanced/Baseline/09_FINAL_MAP",
@@ -197,42 +197,42 @@ fm_baseline <- sf::read_sf(baseline_fm_path, layer = "final_map_full")
 reviews_baseline <- fm_baseline[fm_baseline$class_final == "review", ]
 reviews_e1 <- fm_e1[fm_e1$class_final == "review", ]
 
-# Identificar rescatados (p > 0.5) en cada uno
+# Identify the rescued ones (p > 0.5) in each
 rescued_b_ids <- reviews_baseline$poly_id[reviews_baseline$p_burned_model > 0.5]
 rescued_e1_ids <- reviews_e1$poly_id[reviews_e1$p_burned_model > 0.5]
 
-cat("Rescatados Baseline:", length(rescued_b_ids), "\n")
-cat("Rescatados E1:", length(rescued_e1_ids), "\n")
+cat("Baseline rescued:", length(rescued_b_ids), "\n")
+cat("E1 rescued:", length(rescued_e1_ids), "\n")
 
-# Intersección
+# Intersection
 common <- intersect(rescued_b_ids, rescued_e1_ids)
 only_baseline <- setdiff(rescued_b_ids, rescued_e1_ids)
 only_e1 <- setdiff(rescued_e1_ids, rescued_b_ids)
 
-cat("\n=== Comparación de rescatados ===\n")
-cat("En AMBOS (sólidos):", length(common), "\n")
-cat("Solo Baseline (perdidos por E1):", length(only_baseline), "\n")
-cat("Solo E1 (nuevos sin hotspot):", length(only_e1), "\n")
+cat("\n=== Comparison of rescued polygons ===\n")
+cat("In BOTH (solid):", length(common), "\n")
+cat("Baseline only (lost by E1):", length(only_baseline), "\n")
+cat("E1 only (new, no hotspot):", length(only_e1), "\n")
 
-# Para los "nuevos solo E1": tienen hotspot dentro?
+# For the "E1-only new" ones: do they have a hotspot inside?
 new_e1 <- reviews_baseline[reviews_baseline$poly_id %in% only_e1, ]
-cat("\n=== De los", length(only_e1), "nuevos rescatados solo E1 ===\n")
-cat("Tienen hotspot dentro (hs_in_poly > 0)?:\n")
+cat("\n=== Of the", length(only_e1), "newly rescued by E1 only ===\n")
+cat("Do they have a hotspot inside (hs_in_poly > 0)?:\n")
 print(table(new_e1$hs_in_poly > 0, useNA = "always"))
 
-cat("\nDistribución de RBR med:\n")
+cat("\nDistribution of RBR med:\n")
 print(summary(new_e1$rbr_med))
 
-cat("\nDistribución de área:\n")
+cat("\nDistribution of area:\n")
 print(summary(new_e1$area_ha))
 
 
 
 
 
-# Ver perfil de los 14 perdidos
+# Look at the profile of the 14 lost ones
 lost_baseline <- reviews_baseline[reviews_baseline$poly_id %in% only_baseline, ]
-cat("=== 14 burned perdidos por E1 ===\n")
+cat("=== 14 burned lost by E1 ===\n")
 cat("\np_burned_model en Baseline:\n")
 print(summary(lost_baseline$p_burned_model))
 
@@ -247,16 +247,16 @@ print(summary(lost_baseline$area_ha))
 
 # Y su p_burned_model en E1
 lost_e1 <- reviews_e1[reviews_e1$poly_id %in% only_baseline, ]
-cat("\np_burned_model en E1 (los mismos polígonos):\n")
+cat("\np_burned_model in E1 (the same polygons):\n")
 print(summary(lost_e1$p_burned_model))
 
-# Y los 16 sólidos: ¿qué probabilidad les da E1?
+# And the 16 solid ones: what probability does E1 give them?
 common_e1 <- reviews_e1[reviews_e1$poly_id %in% common, ]
-cat("\n=== 16 sólidos (en ambos) ===\n")
+cat("\n=== 16 solid (in both) ===\n")
 cat("p_burned_model en E1:\n")
 print(summary(common_e1$p_burned_model))
 
-cat("\nhs_in_poly de los 16 sólidos (de Baseline):\n")
+cat("\nhs_in_poly of the 16 solid ones (from Baseline):\n")
 common_baseline <- reviews_baseline[reviews_baseline$poly_id %in% common, ]
 print(summary(common_baseline$hs_in_poly))
 

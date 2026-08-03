@@ -11,13 +11,13 @@ phase_b_root <- file.path(RESULTS_BASE, "_PHASE_B_RESULTS", "2005_balanced")
 production_dir <- file.path(RESULTS_BASE, as.character(YEAR), "Min_Min",
                             "SUPERVISED", SCENARIO)
 
-# Crear directorio raíz si no existe
+# Create the root directory if it does not exist
 if (!dir.exists(phase_b_root)) dir.create(phase_b_root, recursive = TRUE)
 
 # Snapshot Baseline
 baseline_snap <- file.path(phase_b_root, "Baseline")
 if (dir.exists(baseline_snap)) {
-  cat("Baseline snapshot ya existe, lo borramos para overwrite limpio.\n")
+  cat("Baseline snapshot already exists; removing it for a clean overwrite.\n")
   unlink(baseline_snap, recursive = TRUE, force = TRUE)
 }
 

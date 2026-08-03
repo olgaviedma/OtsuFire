@@ -439,13 +439,13 @@ run_supervised_pipeline <- function(target_year, scenario,
   # NOT to locate the deterministic decisions input.
   deterministic_decisions_dir <- file.path(deterministic_dir, "05_DECISIONS")
 
-  # Carpeta comon por a+/-o para reutilizar OTSU + polygonize
+  # Shared folder per year, so OTSU + polygonize can be reused
   deterministic_common_unb_dir <- file.path(
     data_base, "Results", target_year, result_name, "DETERMINISTIC", "_COMMON_UNBURNED"
   )
   otsu_negative_root_dir <- file.path(result_dir, "_OTSU_NEGATIVE")
 
-  # Salida final unburned por escenario
+  # Final unburned output per scenario
   unb_out_gpkg <- file.path(
     deterministic_dir, "UNBURNED",
     sprintf("%d_%s_unburned.gpkg", target_year, scenario)
@@ -482,7 +482,7 @@ run_supervised_pipeline <- function(target_year, scenario,
     target_year = target_year
   )
   
-  # helpers del kit
+  # kit helpers
   msg                  <- sfkit$msg
   `%||%`               <- sfkit$`%||%`
   announce_start       <- sfkit$announce_start
@@ -704,10 +704,10 @@ run_supervised_pipeline <- function(target_year, scenario,
   rbr_summer <- rbr_stack[[1]]
   doy_post   <- rbr_stack[[2]]
   
-  # template maestro del a+/-o
+  # master template for the year
   template_r <- rbr_summer
   
-  # Alinear doy_post al propio template por seguridad
+  # Align doy_post onto the template itself, for safety
   doy_post <- align_to_template(
     r = doy_post,
     template = template_r,
@@ -756,7 +756,7 @@ run_supervised_pipeline <- function(target_year, scenario,
   hotspots_sf_base <- if (!is.null(hotspots_path) && file.exists(hotspots_path)) {
     sf::read_sf(hotspots_path)
   } else {
-    msg("WARNING: no existe hotspots: %s (se desactiva use_hotspots)",
+    msg("WARNING: hotspots not found: %s (use_hotspots is disabled)",
         hotspots_path %||% "<none: cfg$inputs$hotspots = NULL>")
     sf::st_sf(
       frp = numeric(),
@@ -888,7 +888,7 @@ run_supervised_pipeline <- function(target_year, scenario,
   
   if (isTRUE(DO_FEATURES) || isTRUE(need_features_for_model)) {
     if (!isTRUE(DO_FEATURES) && isTRUE(need_features_for_model)) {
-      msg("STEP B3 - features_geometry.gpkg no existe pero DO_MODEL=TRUE. Se fuerzan features.")
+      msg("STEP B3 - features_geometry.gpkg does not exist but DO_MODEL=TRUE. Features are forced.")
     }
 
     if (is.null(train_with_folds_gpkg) || !file.exists(train_with_folds_gpkg)) {
@@ -999,7 +999,7 @@ run_supervised_pipeline <- function(target_year, scenario,
     # if make_spatial_folds ever produces more.
     if (!("block_id" %in% names(train_features)) ||
         length(.of_fold_rep_cols(train_features)) == 0L) {
-      msg("STEP C0c - train_features no tiene folds; haciendo join desde train_with_folds")
+      msg("STEP C0c - train_features has no folds; joining them from train_with_folds")
 
       stopifnot(!is.null(train_with_folds_gpkg) && file.exists(train_with_folds_gpkg))
       train_with_folds <- time_step("C0c Read train_with_folds", {

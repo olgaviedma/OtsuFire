@@ -3,44 +3,44 @@
 # =============================================================================
 #
 # OBJETIVO
-#   Reproducir paso a paso el pipeline supervisado de OtsuFire 0.5.0 para el
-#   ano 2005 escenario balanced en configuracion CANONICAL BASELINE,
-#   llamando a las funciones internas (OtsuFire:::funcion_interna) en lugar
+#   Reproduce, step by step, the OtsuFire 0.5.0 supervised pipeline for
+#   year 2005, scenario balanced, in the CANONICAL BASELINE configuration,
+#   calling the internal functions (OtsuFire:::internal_function) instead
 #   de a la unica funcion publica `run_oneyear_supervised_pipeline()`.
 #
-# CONFIGURACION CANONICAL BASELINE (confirmada por Natalia, ver HANDOFF
+# CANONICAL BASELINE CONFIGURATION (confirmed by Natalia, see HANDOFF
 # §N+23):
-#   - feature_weights              = NULL  (peso uniforme = 1.0)
-#   - feature_whitelist_override   = NULL  (canon natural del paquete: 51)
+#   - feature_weights              = NULL  (uniform weight = 1.0)
+#   - feature_whitelist_override   = NULL  (the package's natural canon: 51)
 #   - contextual_exclusion_to_burned_ratio   = 0.25
 #   - spectral_hard_negative_to_burned_ratio = 1.0
 #   - random_to_burned_ratio                 = 1.0
 #   - otsu_unburned_to_burned_ratio          = 1.0
 #   - reuse_upstream                         = FALSE
-#   En 2005 (post-MODIS) el modelo usara las 51 features nominales
-#   (incluyendo las 13 hs_*).
+#   In 2005 (post-MODIS) the model uses the 51 nominal features
+#   (including the 13 hs_* ones).
 #
-# ESTRATEGIA DE ESTE TUTORIAL (VERSION B - pragmatica)
-#   1) Construir cfg con la funcion publica build_supervised_burned_config().
-#      Esto rellena automaticamente los ~30 parametros internos de Otsu
+# STRATEGY OF THIS TUTORIAL (VERSION B - pragmatic)
+#   1) Build cfg with the public function build_supervised_burned_config().
+#      This fills in the ~30 internal Otsu parameters automatically
 #      legacy y unburned, evitando reproducir el dispatcher a mano.
 #   2) Asignar tool_paths a cfg.
-#   3) Llamar manualmente a las funciones internas (OtsuFire:::xxx) en el
-#      orden exacto que sigue internal-sup-orchestrator.R, deteniendonos
-#      tras cada STEP para inspeccionar los outputs.
+#   3) Call the internal functions (OtsuFire:::xxx) by hand, in the
+#      exact order internal-sup-orchestrator.R follows, stopping
+#      after each STEP to inspect the outputs.
 #
-# DIRECTORIO DE SALIDA
-#   Para no machacar el run del agente nocturno, este tutorial escribe en:
+# OUTPUT DIRECTORY
+#   So as not to trample the nightly agent's run, this tutorial writes to:
 #     Results/2005/Min_Min/SUPERVISED_TUTORIAL/balanced/
 #   en vez de en Results/2005/Min_Min/SUPERVISED/balanced/.
 #
-# COMO USAR
-#   - Restart R limpio (Ctrl+Shift+F10).
-#   - Ejecutar bloque a bloque (seleccionar y Ctrl+Enter).
-#   - Inspeccionar las variables que cada bloque deja en memoria.
-#   - Comparar al final con el output del wrapper.
+# HOW TO USE
+#   - Clean restart of R (Ctrl+Shift+F10).
+#   - Run it block by block (select and Ctrl+Enter).
+#   - Inspect the variables each block leaves in memory.
+#   - Compare against the wrapper's output at the end.
 #
-# REFERENCIAS EN EL CODIGO DEL PAQUETE
+# REFERENCES INTO THE PACKAGE CODE
 #   - Wrapper publico:           R/supervised-run.R
 #   - Orchestrator (corazon):    R/internal-sup-orchestrator.R
 #                                run_supervised_pipeline() linea 719
@@ -56,17 +56,17 @@ suppressPackageStartupMessages({
 })
 
 # =============================================================================
-# BLOQUE 0 - SETUP: CARGA DEL PAQUETE Y PATHS
+# BLOCK 0 - SETUP: LOADING THE PACKAGE AND PATHS
 # =============================================================================
 #
-# QUE HACE
-#   Carga el paquete OtsuFire desde el directorio de fuentes (sin instalarlo)
-#   con pkgload::load_all(). Define los paths globales del proyecto.
+# WHAT IT DOES
+#   Loads the OtsuFire package from the source directory (without installing
+#   it) via pkgload::load_all(). Defines the global project paths.
 #
-# POR QUE
-#   load_all() es la forma estandar de trabajar con un paquete en desarrollo:
-#   ve los exports del NAMESPACE pero tambien permite acceso a funciones
-#   internas con OtsuFire:::xxx.
+# WHY
+#   load_all() is the standard way to work on a package under development:
+#   it sees the NAMESPACE exports but also allows access to internal
+#   functions via OtsuFire:::xxx.
 #
 # OUTPUTS EN MEMORIA
 #   - PKG_ROOT, DATA_BASE, COMPOSITE, RESULTS, etc. (paths)
@@ -75,61 +75,61 @@ suppressPackageStartupMessages({
 #
 # =============================================================================
 # =============================================================================
-# BLOQUE 0 - SETUP: CARGA DEL PAQUETE Y PATHS
+# BLOCK 0 - SETUP: LOADING THE PACKAGE AND PATHS
 # =============================================================================
 #
-# QUE HACE
-#   Carga el paquete OtsuFire desde el directorio de fuentes (sin instalarlo)
-#   con pkgload::load_all(). Define los paths globales del proyecto y los
-#   4 paths de inputs criticos del experimento (Y/E = year/scenario):
+# WHAT IT DOES
+#   Loads the OtsuFire package from the source directory (without installing
+#   it) via pkgload::load_all(). Defines the global project paths and the
+#   4 critical input paths of the experiment (Y/E = year/scenario):
 #     - internal_decisions.gpkg          (deterministic stage)
 #     - mosaico summer (RBR + DOY)       (composite ano)
 #     - mosaico autumn-winter            (composite delayed)
 #     - hotspots geojson                 (post-MODIS, NULL en pre-MODIS)
 #
-# POR QUE
-#   load_all() es la forma estandar de trabajar con un paquete en desarrollo:
-#   ve los exports del NAMESPACE pero tambien permite acceso a funciones
-#   internas con OtsuFire:::xxx.
+# WHY
+#   load_all() is the standard way to work on a package under development:
+#   it sees the NAMESPACE exports but also allows access to internal
+#   functions via OtsuFire:::xxx.
 #
 # OUTPUTS EN MEMORIA
 #   - PKG_ROOT, DATA_BASE, COMPOSITE, RESULTS, TUTORIAL_RESULT_DIR (paths)
 #   - YEAR=2005L, SCENARIO="balanced", RESULT_NAME="Min_Min"
 #   - INTERNAL_DECISIONS, CHANGE_INDEX, RBR_AUTUMN, HOTSPOTS
-#     (paths a los 4 inputs criticos del combo)
+#     (paths to the 4 critical inputs of the combo)
 #
 # =============================================================================
 
 # =============================================================================
-# BLOQUE 0 - SETUP: PAQUETE Y LOS 14 INPUTS DEL PIPELINE SUPERVISED
+# BLOCK 0 - SETUP: PACKAGE AND THE 14 SUPERVISED PIPELINE INPUTS
 # =============================================================================
 #
-# QUE HACE
-#   Carga el paquete OtsuFire desde fuentes (sin instalarlo) con
-#   pkgload::load_all() y declara los 14 paths de inputs criticos del
-#   modulo supervised, organizados por categoria.
+# WHAT IT DOES
+#   Loads the OtsuFire package from source (without installing it) via
+#   pkgload::load_all() and declares the 14 critical input paths of the
+#   supervised module, organised by category.
 #
-# POR QUE 14 INPUTS Y NO 4
+# WHY 14 INPUTS Y NO 4
 # ------------------------
-# El config builder build_supervised_burned_config() solo acepta 4 paths
-# de inputs (internal_decisions, change_index, hotspots, y el cosmetico
-# delayed_change_index). Pero el pipeline real lee 14 ficheros distintos:
+# The config builder build_supervised_burned_config() accepts only 4 paths
+# of inputs (internal_decisions, change_index, hotspots, and the cosmetic
+# delayed_change_index). But the real pipeline reads 14 different files:
 #
-#   - 4 los pasamos al config builder (year/scenario-dependent + delayed)
-#   - 10 los construye el orchestrator por convencion desde data_base,
+#   - 4 are passed to the config builder (year/scenario-dependent + delayed)
+#   - 10 are built by the orchestrator by convention from data_base,
 #     composite_base, target_year y corine_year
 #
-# Esta inconsistencia esta documentada en HANDOFF §N+25 como deuda tecnica
-# del paquete. El refactor post-paper la cableara: todos los 14 entraran
-# por el config builder.
+# This inconsistency is documented in HANDOFF §N+25 as technical debt
+# in the package. The post-paper refactor will wire it up: all 14 will
+# come in through the config builder.
 #
-# Para el tutorial, declaramos LOS 14 explicitamente al inicio. Asi:
-#   1. Vemos de un vistazo todos los datos que el pipeline va a tocar.
-#   2. Validamos al inicio (en <1 segundo) en lugar de fallar 5-10 min
-#      despues si algun fichero falta.
-#   3. Cuando el refactor cablee los 10 implicitos al cfg, este tutorial
-#      seguira funcionando: solo cambiara la llamada al config builder
-#      en BLOQUE 1.
+# For the tutorial, ALL 14 are declared explicitly up front. That way:
+#   1. Every dataset the pipeline will touch is visible at a glance.
+#   2. Validation happens up front (in <1 second) instead of failing 5-10
+#      min later if some file is missing.
+#   3. When the refactor wires the 10 implicit ones into cfg, this tutorial
+#      will keep working: only the config builder call changes,
+#      back in BLOCK 1.
 #
 #
 # OUTPUTS EN MEMORIA
@@ -160,9 +160,9 @@ suppressPackageStartupMessages({
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 0: SETUP ==========\n")
+cat("\n========== BLOCK 0: SETUP ==========\n")
 
-# --- Carga del paquete -------------------------------------------------------
+# --- Loading the package -------------------------------------------------------
 PKG_ROOT  <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS/OtsuFire_v02_rebuild"
 
 if ("OtsuFire" %in% loadedNamespaces()) {
@@ -173,7 +173,7 @@ suppressMessages(pkgload::load_all(PKG_ROOT, quiet = TRUE))
 cat("OtsuFire version:", as.character(utils::packageVersion("OtsuFire")), "\n")
 stopifnot(utils::packageVersion("OtsuFire") >= "0.5.0")
 
-# --- Paths del proyecto ------------------------------------------------------
+# --- Project paths ------------------------------------------------------
 DATA_BASE <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/1_DATA"
 COMPOSITE <- file.path(DATA_BASE, "Imagery", "Composites_90m")
 RESULTS   <- file.path(DATA_BASE, "Results")
@@ -183,29 +183,29 @@ YEAR        <- 2005L
 SCENARIO    <- "balanced"
 RESULT_NAME <- "Min_Min"
 
-# Resolucion del ano Corine quinquenal usando la funcion interna del paquete.
+# Resolution of the five-yearly Corine year via the package's internal function.
 # Mapeo (segun el codigo de OtsuFire):
 #   1985-2002 -> CLC2000 ; 2003-2008 -> CLC2006 ; 2009-2014 -> CLC2012 ;
 #   2015+    -> CLC2018
-# Para 2005, CORINE_YEAR resuelve a 2006.
+# For 2005, CORINE_YEAR resolves to 2006.
 CORINE_YEAR <- OtsuFire:::get_corine_year(YEAR)
 cat(sprintf("Combo: year=%d, scenario=%s, corine=%s\n",
             YEAR, SCENARIO, CORINE_YEAR))
 
 # === A. INPUTS YEAR/SCENARIO-DEPENDENT (4) ===================================
 
-# A1. Salida del modulo deterministic, principal entrada del supervised.
+# A1. Output of the deterministic module, main input of the supervised one.
 INTERNAL_DECISIONS <- file.path(
   RESULTS, as.character(YEAR), RESULT_NAME, "DETERMINISTIC", SCENARIO,
   "05_DECISIONS", "internal_decisions.gpkg"
 )
 
-# A2. Mosaico summer (RBR + DOY del verano del fuego).
+# A2. Summer mosaic (RBR + DOY of the fire summer).
 CHANGE_INDEX <- file.path(COMPOSITE, RESULT_NAME,
                           sprintf("MinMin_%d_mosaic_res90m.tif", YEAR))
 
 # A3. Mosaico autumn-winter (delayed change index, fuente de features G2_RBR_AW).
-#     Cosmetico en cfg en 0.5.0 (HANDOFF §N+25), pero lo declaramos aqui.
+#     Cosmetic in cfg under 0.5.0 (HANDOFF §N+25), but declared here anyway.
 RBR_AUTUMN <- file.path(COMPOSITE, "Autumn",
                         sprintf("mean_mean_%d_mosaic.tif", YEAR))
 
@@ -216,13 +216,13 @@ HOTSPOTS <- file.path(DATA_BASE, "Hotspots",
 
 # === B. VALIDACION EXTERNA YEAR-DEPENDENT (2) =================================
 
-# B1. Effis-CA fuegos verano filtrados por mascara quemable (raster).
+# B1. Effis-CA summer fires filtered by the burnable mask (raster).
 EFFIS_CA_TIF <- file.path(
   DATA_BASE, "Fires", "Validation_fires_burneable_verano",
   sprintf("Effis_CA_%d_maskKeep_summer.tif", YEAR)
 )
 
-# B2. Lo mismo en formato shp.
+# B2. The same thing in shp format.
 EFFIS_CA_SHP <- file.path(
   DATA_BASE, "Fires", "Validation_fires_burneable_verano",
   sprintf("Effis_CA_%d_maskKeep_summer.shp", YEAR)
@@ -238,15 +238,15 @@ CORINE_STRATA <- file.path(DATA_BASE, "Corine_Masks", "STRATA",
                            sprintf("strata_CLC_%s_res30.tif", CORINE_YEAR))
 
 
-# C3. Look-up table de los strata.
+# C3. Look-up table for the strata.
 CORINE_LUT <- file.path(DATA_BASE, "Corine_Masks", "LUT",
                         "lut_full_strata8_v1.csv")
 
 # C4. Mascara binaria de superficie quemable derivada de Corine.
-#     OJO: este input NO esta validado por el orchestrator al inicio.
-#     Se valida solo dentro de internal-sup-unburned-deterministic.R linea 170
-#     (cuando STEP A4 ejecuta). Si falta, el pipeline falla 5-10 min despues
-#     de iniciado. Documentado en HANDOFF §N+25.
+#     NOTE: this input is NOT validated by the orchestrator up front.
+#     It is only validated inside internal-sup-unburned-deterministic.R line 170
+#     (when STEP A4 runs). If it is missing, the pipeline fails 5-10 min later
+#     after starting. Documented in HANDOFF §N+25.
 BURNEABLE_MASK <- file.path(
   DATA_BASE, "Corine_Masks",
   sprintf("burneable_mask_binary_corine_%s_ETRS89.tif", CORINE_YEAR)
@@ -258,17 +258,17 @@ BURNEABLE_MASK <- file.path(
 # D1. Frontera de la Peninsula Iberica (polygon shapefile).
 PENINSULA_SHP <- file.path(DATA_BASE, "Borders", "Iberian_peninsula.shp")
 
-# D2. Topografia: stack con DEM y slope.
+# D2. Topography: stack with DEM and slope.
 TOPO <- file.path(DATA_BASE, "Topography", "elevation_slope.tif")
 
-# D3. Mascara del area de estudio en EPSG:3035 (raster).
+# D3. Study-area mask in EPSG:3035 (raster).
 MASK_TIF <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.tif")
 
 # D4. Idem en shp.
 MASK_SHP <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.shp")
 
 
-# === VERIFICACION GLOBAL (los 14 ficheros deben existir) ======================
+# === GLOBAL VERIFICATION (all 14 files must exist) ===========================
 
 stopifnot(
   # A) Year-dependent
@@ -315,125 +315,125 @@ cat("    Mask studyarea tif   :", basename(MASK_TIF), "\n")
 cat("    Mask studyarea shp   :", basename(MASK_SHP), "\n")
 
 
-# === DIRECTORIO DE SALIDA DEL TUTORIAL =======================================
+# === TUTORIAL OUTPUT DIRECTORY ===============================================
 
-# Para no machacar el run real, redirigimos los outputs del tutorial a
-# una carpeta paralela SUPERVISED_TUTORIAL/.
+# So as not to trample the real run, the tutorial outputs are redirected to
+# a parallel folder, SUPERVISED_TUTORIAL/.
 TUTORIAL_RESULT_DIR <- file.path(
   RESULTS, as.character(YEAR), RESULT_NAME, "SUPERVISED_TUTORIAL", SCENARIO
 )
 dir.create(TUTORIAL_RESULT_DIR, recursive = TRUE, showWarnings = FALSE)
-cat("\nDirectorio de outputs del tutorial:\n  ", TUTORIAL_RESULT_DIR, "\n")
+cat("\nTutorial output directory:\n  ", TUTORIAL_RESULT_DIR, "\n")
 
 # =============================================================================
-# BLOQUE 1 - CONFIG: build_supervised_burned_config()
+# BLOCK 1 - CONFIG: build_supervised_burned_config()
 # =============================================================================
 #
-# QUE HACE
-#   Construye un objeto cfg de clase 'otsufire_supervised_burned_config' que
-#   contiene TODOS los paths, parametros y opciones que el pipeline necesita.
-#   La funcion NO ejecuta nada: solo configura. La ejecucion la hace
+# WHAT IT DOES
+#   Builds a cfg object of class 'otsufire_supervised_burned_config' holding
+#   ALL the paths, parameters and options the pipeline needs.
+#   The function runs NOTHING: it only configures. Execution is done by
 #   run_oneyear_supervised_pipeline(cfg).
 #
 #
-# DISENO DEL PAQUETE: PATRON CONFIG + RUN
+# PACKAGE DESIGN: THE CONFIG + RUN PATTERN
 # ---------------------------------------
 # OtsuFire sigue el patron clasico de software cientifico (sklearn, MLflow,
-# targets...): SEPARAR la configuracion de la ejecucion. Hay dos funciones
+# targets...): SEPARATE configuration from execution. There are two functions
 # publicas centrales en el modulo supervised:
 #
-#   1) build_supervised_burned_config()  -> "que quiero hacer"
+#   1) build_supervised_burned_config()  -> "what I want to do"
 #   2) run_oneyear_supervised_pipeline() -> "hazlo"
 #
-# Ventajas de este patron:
-#   - VALIDACION TEMPRANA. El builder comprueba paths y tipos. Si algo falla,
-#     el error sale en <1s en vez de a las 2 horas de pipeline.
-#   - REPRODUCIBILIDAD. cfg es un objeto R inmutable que se puede serializar
-#     con saveRDS(cfg, "experimento_baseline.rds"). Cualquier persona con
-#     ese rds + los datos reproduce el experimento exacto.
+# Advantages of this pattern:
+#   - EARLY VALIDATION. The builder checks paths and types. If something is
+#     wrong the error appears in <1s rather than 2 hours into the pipeline.
+#   - REPRODUCIBILITY. cfg is an immutable R object that can be serialised
+#     with saveRDS(cfg, "baseline_experiment.rds"). Anyone holding that
+#     rds plus the data reproduces the exact experiment.
 #   - PROGRAMACION DE EXPERIMENTOS. configs <- list(baseline=..., e1=...);
-#     lapply(configs, run_oneyear_supervised_pipeline). Limpio.
+#     lapply(configs, run_oneyear_supervised_pipeline). Clean.
 #
 #
-# ANATOMIA DEL OBJETO cfg (14 componentes en este caso)
+# ANATOMY OF THE cfg OBJECT (14 components in this case)
 # -----------------------------------------------------
 # str(cfg, max.level = 1) revela:
 #
-#   $ scenario                  - chr "balanced"     (escenario operacional)
+#   $ scenario                  - chr "balanced"     (operational scenario)
 #   $ target_year               - int 2005           (ano objetivo)
 #   $ inputs                    - List of 5          (paths a inputs)
-#   $ run_name                  - chr "Min_Min"      (nombre del run)
+#   $ run_name                  - chr "Min_Min"      (name of the run)
 #   $ output_dir                - chr ".../Results"  (raiz de outputs)
 #   $ output_routes             - List of 19         (paths derivados)
 #   (NOTA: burned_like_registry_path y negative_pool_policy fueron
-#    eliminados del paquete el 2026-06-05; el registro burned-like ya no
-#    existe y la policy de negativos es siempre all_sources, implicita.)
+#    removed from the package on 2026-06-05; the burned-like registry no
+#    longer exists and the negatives policy is always all_sources, implicit.)
 #   $ min_burned_pool_n         - int 5              (guard minimo positivos)
-#   $ engine_root               - NULL               (legacy, no usado)
-#   $ supervised_engine_root    - NULL               (legacy, no usado)
-#   $ scripts_root              - NULL               (legacy, no usado)
+#   $ engine_root               - NULL               (legacy, unused)
+#   $ supervised_engine_root    - NULL               (legacy, unused)
+#   $ scripts_root              - NULL               (legacy, unused)
 #   $ tool_paths                - List of 4          (Anaconda3 binaries)
 #   $ options                   - List of 11         (resto de opciones)
 #
 #
-# LOS 5 CAMPOS DE cfg$inputs Y SU ESTADO EN 0.5.0
+# THE 5 FIELDS OF cfg$inputs AND THEIR STATUS IN 0.5.0
 # ------------------------------------------------
-# El cfg almacena 5 paths a inputs, pero NO todos son consumidos por el
+# cfg stores 5 input paths, but NOT all of them are consumed by the
 # pipeline en la version actual (0.5.0). Conviene saberlo:
 #
-#   $ internal_decisions   -> SI consumido (STEP A1)
-#   $ change_index         -> SI consumido (STEP A4 + features extraction)
-#   $ delayed_change_index -> COSMETICO en 0.5.0; el orchestrator construye
-#                             el path por convencion desde composite_base
-#                             ver HANDOFF §N+25 para detalles
-#   $ hotspots             -> SI consumido (STEP B3)
-#   $ reference_burned_map -> RESERVADO para futura validacion externa,
-#                             todavia no cableado en 0.5.0
+#   $ internal_decisions   -> IS consumed (STEP A1)
+#   $ change_index         -> IS consumed (STEP A4 + feature extraction)
+#   $ delayed_change_index -> COSMETIC in 0.5.0; el orchestrator construye
+#                             the path by convention from composite_base
+#                             see HANDOFF §N+25 for details
+#   $ hotspots             -> IS consumed (STEP B3)
+#   $ reference_burned_map -> RESERVED for future external validation,
+#                             not wired up yet in 0.5.0
 #
-# IMPORTANTE: el config builder solo acepta 4 paths de inputs; el pipeline
-# en realidad lee 14 (HANDOFF §N+25). Los otros 10 los construye el
-# orchestrator por convencion. En BLOQUE 0 declaramos los 14 explicitamente
-# para validar al inicio. Aqui en BLOQUE 1 solo pasamos al builder los 4
-# que la API publica acepta.
+# IMPORTANT: the config builder accepts only 4 input paths; the pipeline
+# actually reads 14 (HANDOFF §N+25). The other 10 are built by the
+# orchestrator by convention. BLOCK 0 declares all 14 explicitly so they
+# can be validated up front. Here in BLOCK 1 only the 4 the public API
+# accepts are passed to the builder.
 #
-# Para el tutorial pasamos delayed_change_index al builder aunque sea
-# cosmetico, por dos razones:
-#   1. Cuando inspecciones cfg$inputs, veras todos los inputs reales del
-#      experimento. Si alguien serializa el cfg con saveRDS() para
+# The tutorial passes delayed_change_index to the builder even though it is
+# cosmetic, for two reasons:
+#   1. When you inspect cfg$inputs you see every real input of the
+#      experiment. If someone serialises cfg with saveRDS() to
 #      reproducibilidad, el path autumn quedara documentado.
-#   2. Cuando se aborde el refactor post-paper (HANDOFF §N+25), el campo
-#      sera consumido. Pasar el path ahora hace que el script sea
-#      forward-compatible: misma llamada, distinto comportamiento del
-#      paquete sin cambios en el script del usuario.
+#   2. When the post-paper refactor happens (HANDOFF §N+25) the field
+#      will be consumed. Passing the path now makes the script
+#      forward-compatible: same call, different package behaviour,
+#      with no change in the user's script.
 #
 #
 # CLASE S3
 # --------
-# El cfg tiene class = c("otsufire_supervised_burned_config", "list").
-# Es una clase S3 ligera: una lista con etiqueta. Cuando
-# run_oneyear_supervised_pipeline() recibe el cfg, lo primero que hace es
-# verificar inherits(config, "otsufire_supervised_burned_config"). Si pasas
-# una lista normal, falla con un mensaje claro. Es un contrato de tipos.
+# cfg has class = c("otsufire_supervised_burned_config", "list").
+# It is a lightweight S3 class: a labelled list. When
+# run_oneyear_supervised_pipeline() receives cfg, the first thing it does is
+# check inherits(config, "otsufire_supervised_burned_config"). Passing a
+# plain list fails with a clear message. It is a type contract.
 #
 #
-# DECISIONES METODOLOGICAS PARA BASELINE
+# METHODOLOGICAL DECISIONS FOR THE BASELINE
 # --------------------------------------
-#   - Pool de negativos (siempre all_sources, implicito; ya no es opcion)
-#       Usa los 4 sub-pools: internal_keep_qc (burned), deterministic_drop_hard,
+#   - Negative pool (always all_sources, implicit; no longer an option)
+#       Uses the 4 sub-pools: internal_keep_qc (burned), deterministic_drop_hard,
 #       random_burnable_background, otsu_patch_residual. (La antigua
 #       alternativa "deterministic_direct" fue eliminada el 2026-06-05.)
 #
 #   - legacy_otsu_mode = "burnable_only"
-#       El Otsu solo se aplica sobre pixeles que la mascara Corine considera
-#       quemables. Sin esto, el Otsu veria agua, urbano, etc. y los umbrales
+#       Otsu is applied only over the pixels the Corine mask deems
+#       burnable. Without this, Otsu would see water, urban, etc. and the
 #       saldrian distorsionados.
 #
 #   - legacy_sample_n = 2000L
-#       Cap del pool otsu_patch_residual. Sin esto, los ~13.000 parches
+#       Cap on the otsu_patch_residual pool. Without it the ~13,000 candidate
 #       candidatos saturarian el training.
 #
 #   - legacy_otsu_threshold = 0
-#       Descarta candidatos Otsu con RBR < 0. Guard minimo contra ruido.
+#       Discards Otsu candidates with RBR < 0. A minimal guard against noise.
 #
 #
 # REFERENCIA EN EL PAQUETE
@@ -444,10 +444,10 @@ cat("\nDirectorio de outputs del tutorial:\n  ", TUTORIAL_RESULT_DIR, "\n")
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 1: CONFIG ==========\n")
+cat("\n========== BLOCK 1: CONFIG ==========\n")
 
-# RBR_AUTUMN, INTERNAL_DECISIONS, CHANGE_INDEX, HOTSPOTS ya estan definidos
-# y verificados en el BLOQUE 0. Los usamos directamente aqui.
+# RBR_AUTUMN, INTERNAL_DECISIONS, CHANGE_INDEX, HOTSPOTS are already defined
+# and verified back in BLOCK 0. They are used directly here.
 
 
 # --- Construir el cfg -------------------------------------------------------
@@ -456,7 +456,7 @@ cfg <- build_supervised_burned_config(
   run_label                 = SCENARIO,
   internal_decisions        = INTERNAL_DECISIONS,
   change_index              = CHANGE_INDEX,        # mosaico summer (RBR + DOY)
-  delayed_change_index      = RBR_AUTUMN,          # autumn-winter (cosmetico, §N+25)
+  delayed_change_index      = RBR_AUTUMN,          # autumn-winter (cosmetic, §N+25)
   hotspots                  = HOTSPOTS,
   target_year               = YEAR,
   output_dir                = RESULTS,
@@ -476,10 +476,10 @@ cfg <- build_supervised_burned_config(
   )
 )
 
-# Tool paths (Anaconda en este equipo). Se asignan DESPUES del builder
-# porque son especificos del equipo y no parte de la configuracion del
-# experimento. Asi el cfg sigue siendo portable: un colaborador en otro
-# equipo solo cambia tool_paths.
+# Tool paths (Anaconda on this machine). They are assigned AFTER the builder
+# because they are machine-specific and not part of the experiment
+# configuration. That keeps cfg portable: for a collaborator on another
+# machine only tool_paths change.
 cfg$tool_paths$python_exe              <- "C:/Users/Olga.Viedma/AppData/Local/Anaconda3/python.exe"
 cfg$tool_paths$gdal_polygonize_script  <- "C:/Users/Olga.Viedma/AppData/Local/Anaconda3/Scripts/gdal_polygonize.py"
 cfg$tool_paths$gdalwarp_path           <- "C:/Users/Olga.Viedma/AppData/Local/Anaconda3/Library/bin/gdalwarp.exe"
@@ -489,64 +489,64 @@ stopifnot(all(sapply(cfg$tool_paths, file.exists)))
 cat("Tool paths OK.\n")
 
 
-# --- INSPECCION DEL cfg -----------------------------------------------------
+# --- INSPECTING cfg -----------------------------------------------------
 
-cat("\nClase del cfg:\n")
+cat("\ncfg class:\n")
 print(class(cfg))
 # Resultado esperado:
 #   [1] "otsufire_supervised_burned_config" "list"
 #
-# La clase S3 ("otsufire_supervised_burned_config") es la primera. Permite
-# que run_oneyear_supervised_pipeline() valide que es un cfg legitimo. La
-# segunda ("list") es la clase base de R, que permite que cfg se comporte
-# como una lista: cfg$inputs, cfg$options$legacy_sample_n, etc.
+# The S3 class ("otsufire_supervised_burned_config") comes first. It lets
+# run_oneyear_supervised_pipeline() validate that this is a legitimate cfg.
+# The second ("list") is R's base class, which lets cfg behave like a
+# list: cfg$inputs, cfg$options$legacy_sample_n, etc.
 
-cat("\nEstructura de primer nivel del cfg:\n")
+cat("\nTop-level structure of cfg:\n")
 str(cfg, max.level = 1)
 
 # --- cfg$inputs: paths a INPUTS criticos -----------------------------------
 #
-# Son las rutas a los ficheros que el pipeline lee. Tu las pasaste como
-# argumentos al builder; aqui estan almacenadas.
+# These are the paths to the files the pipeline reads. You passed them as
+# arguments to the builder; here is where they are stored.
 #
-# Recordatorio (HANDOFF §N+25): el config builder solo acepta 4 paths,
-# pero el pipeline lee 14 ficheros distintos. Los otros 10 (Corine, topo,
-# mask, peninsula, EFFIS validacion, burneable mask) los construye el
-# orchestrator por convencion. Esos NO aparecen aqui.
+# Reminder (HANDOFF §N+25): the config builder accepts only 4 paths,
+# but the pipeline reads 14 different files. The other 10 (Corine, topo,
+# mask, peninsula, EFFIS validation, burnable mask) are built by the
+# orchestrator by convention. Those do NOT appear here.
 
 cat("\ncfg$inputs:\n")
 str(cfg$inputs, max.level = 1)
 # Resultado:
-#   $ internal_decisions  : List of 3   <- internal_decisions.gpkg + metadatos
+#   $ internal_decisions  : List of 3   <- internal_decisions.gpkg + metadata
 #                                          CONSUMIDO en STEP A1
-#   $ change_index        : List of 3   <- mosaico summer + metadatos
+#   $ change_index        : List of 3   <- mosaico summer + metadata
 #                                          CONSUMIDO en STEP A4 + extraction
-#   $ delayed_change_index: List of 3   <- mosaico autumn-winter + metadatos
-#                                          COSMETICO en 0.5.0 (HANDOFF §N+25)
-#                                          el path autumn lo construye el
-#                                          orchestrator por convencion en
+#   $ delayed_change_index: List of 3   <- autumn-winter mosaic + metadata
+#                                          COSMETIC in 0.5.0 (HANDOFF §N+25)
+#                                          the autumn path is built by the
+#                                          orchestrator by convention in
 #                                          composite_base/Autumn/
-#   $ hotspots            : List of 3   <- hotspots.geojson + metadatos
-#                                          CONSUMIDO en STEP B3
-#   $ reference_burned_map: NULL        <- reservado para futuro, no cableado
+#   $ hotspots            : List of 3   <- hotspots.geojson + metadata
+#                                          CONSUMED in STEP B3
+#   $ reference_burned_map: NULL        <- reserved for the future, not wired up
 
 
-# --- cfg$options: las perillas operacionales -------------------------------
+# --- cfg$options: the operational knobs -------------------------------
 #
-# Aqui estan los parametros que tu controlas para definir Baseline vs
-# experimentos. Pasamos 11 al builder; el resto los rellena con defaults.
+# These are the parameters you control to define Baseline versus
+# experiments. 11 are passed to the builder; the rest get defaults.
 
-cat("\ncfg$options (11 que pasamos explicitos; el resto defaults):\n")
+cat("\ncfg$options (11 passed explicitly; the rest are defaults):\n")
 str(cfg$options, max.level = 1)
 # Resultado:
 #   $ data_base                      : "C:/.../1_DATA"
-#                                       USADO por el orchestrator para
-#                                       construir 9 paths implicitos (§N+25)
+#                                       USED by the orchestrator to
+#                                       build 9 implicit paths (§N+25)
 #   $ composite_base                 : "C:/.../Composites_90m"
-#                                       USADO para construir el path autumn
-#                                       y el mosaico summer (§N+25)
+#                                       USED to build the autumn path
+#                                       and the summer mosaic (§N+25)
 #   $ result_name                    : "Min_Min"
-#   (negative_pool_policy fue eliminado; all_sources es siempre implicito)
+#   (negative_pool_policy was removed; all_sources is always implicit)
 #   $ legacy_otsu_mode               : "burnable_only"
 #   $ legacy_otsu_threshold          : 0
 #   $ legacy_reference_otsu_threshold: 100
@@ -559,9 +559,9 @@ str(cfg$options, max.level = 1)
 # --- cfg$output_routes: paths DERIVADOS ------------------------------------
 #
 # El builder calcula estos solos a partir de output_dir + target_year +
-# result_name + scenario. Por eso son 19 paths sin que tu hayas pasado
-# ninguno. La estructura SUPERVISED/<scenario>/<NN_FOLDER>/ es canonica
-# del paquete.
+# result_name + scenario. That is why there are 19 paths without you having
+# passed any. The SUPERVISED/<scenario>/<NN_FOLDER>/ layout is canonical
+# to the package.
 
 cat("\ncfg$output_routes (19 paths derivados automaticamente):\n")
 str(cfg$output_routes, max.level = 1)
@@ -569,23 +569,23 @@ str(cfg$output_routes, max.level = 1)
 # 07_FINAL_MODEL_V2, 08_SCORED, 09_FINAL_MAP, 11_CONSISTENCY_CHECKS, 99_LOGS.
 
 
-# --- REDIRECCION DE OUTPUTS PARA EL TUTORIAL --------------------------------
+# --- REDIRECTING OUTPUTS FOR THE TUTORIAL --------------------------------
 #
-# IMPORTANTE: el orchestrator escribe TODOS los outputs bajo
-# cfg$output_routes$base. Si lo dejasemos como esta, machacariamos el run
-# real de SUPERVISED/balanced/. Para el tutorial redirigimos a una carpeta
+# IMPORTANT: the orchestrator writes ALL outputs under
+# cfg$output_routes$base. Left as it is, it would trample the real
+# SUPERVISED/balanced/ run. For the tutorial it is redirected to a folder
 # alternativa SUPERVISED_TUTORIAL/.
 
 cfg$output_routes$base       <- TUTORIAL_RESULT_DIR
 cfg$output_routes$result_dir <- TUTORIAL_RESULT_DIR
 
-cat("\nBLOQUE 1 completado. cfg listo para alimentar el pipeline.\n")
+cat("\nBLOCK 1 complete. cfg is ready to feed the pipeline.\n")
 
 
 
-cat("\n========== BLOQUE 2: DIRECTORIOS Y RASTERS ==========\n")
+cat("\n========== BLOCK 2: DIRECTORIES AND RASTERS ==========\n")
 
-# Estructura de directorios (igual que el orchestrator linea 779)
+# Directory structure (same as the orchestrator, line 779)
 dirs <- list(
   `01_POOLS`          = file.path(TUTORIAL_RESULT_DIR, "01_POOLS"),
   `02_FOLDS`          = file.path(TUTORIAL_RESULT_DIR, "02_FOLDS"),
@@ -619,7 +619,7 @@ stopifnot(file.exists(peninsula_shp), file.exists(topo_path),
 cat("Inputs auxiliares verificados.\n")
 cat("  Corine year:", corine_year, "\n")
 
-# --- Cargar rasters y alinearlos al template (orchestrator linea 952) -------
+# --- Load rasters and align them to the template (orchestrator line 952) ---
 cat("\nCargando y alineando rasters...\n")
 
 topo       <- terra::rast(topo_path)
@@ -669,31 +669,31 @@ cat(sprintf("  corine:     %d x %d\n", nrow(corine_r), ncol(corine_r)))
 cat(sprintf("  rbr_aw:     %d x %d\n", nrow(rbr_aw), ncol(rbr_aw)))
 
 # =============================================================================
-# BLOQUE 3 - STEP A1: LEER internal_decisions.gpkg
+# BLOCK 3 - STEP A1: READ internal_decisions.gpkg
 # =============================================================================
 #
-# QUE HACE
-#   Lee el GPKG producido por la fase deterministic con la clasificacion
-#   por poligono: keep / drop / review.
+# WHAT IT DOES
+#   Reads the GPKG produced by the deterministic phase, carrying the
+#   per-polygon classification: keep / drop / review.
 #
 # INPUTS  (de disco)
 #   internal_decisions.gpkg, layer "internal_decisions"
 #
 # OUTPUTS (en memoria)
-#   internal_sf - sf con todos los poligonos del ano clasificados
+#   internal_sf - sf with every classified polygon of the year
 #
 # REFERENCIA EN EL PAQUETE
 #   internal-sup-orchestrator.R linea 1026 (STEP A1)
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 3: STEP A1 - LEER internal_decisions ==========\n")
+cat("\n========== BLOCK 3: STEP A1 - READ internal_decisions ==========\n")
 
 internal_sf <- sf::read_sf(INTERNAL_DECISIONS, layer = "internal_decisions") |>
   dplyr::mutate(class = as.character(class_final))
 
-# Las funciones del paquete sanitize_polygons y ensure_area_ha estan en el
-# safety kit interno. Las llamamos desde alli.
+# The package functions sanitize_polygons and ensure_area_ha live in the
+# internal safety kit. They are called from there.
 sfkit <- OtsuFire:::make_sf_safety_kit(
   dirs = dirs, result_dir = TUTORIAL_RESULT_DIR, target_year = YEAR
 )
@@ -721,16 +721,16 @@ cat("Distribucion de clases:\n")
 print(table(internal_sf$class))
 
 # =============================================================================
-# BLOQUE 4 - STEP A2 + A3: AUDIT y POOLS
+# BLOCK 4 - STEP A2 + A3: AUDIT and POOLS
 # =============================================================================
 #
-# QUE HACE
-#   A2: marca todos los poligonos con source = "internal".
-#   A3: aplica audit_deterministic_pools() que valida y reclasifica
+# WHAT IT DOES
+#   A2: marks every polygon with source = "internal".
+#   A3: applies audit_deterministic_pools(), which validates and reclassifies
 #       polygones marginales, y construye 3 pools:
 #         burned_pool   (class == "keep")    -> positivos
-#         review_pool   (class == "review")  -> dudosos, no se usan en train
-#         scoring_pool  (todos)              -> universo a puntuar al final
+#         review_pool   (class == "review")  -> doubtful, not used in training
+#         scoring_pool  (all)                -> the universe to score at the end
 #
 # INPUTS  (memoria)
 #   internal_clean (= internal_sf con source="internal")
@@ -745,7 +745,7 @@ print(table(internal_sf$class))
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 4: STEP A2 + A3 - AUDIT + POOLS ==========\n")
+cat("\n========== BLOCK 4: STEP A2 + A3 - AUDIT + POOLS ==========\n")
 
 # A2: marcar source
 internal_clean <- internal_sf |>
@@ -799,7 +799,7 @@ review_pool <- internal_qc |>
 review_pool <- drop_empty_sf(review_pool, tag = "review_pool",
                              dump_dir = dirs$`99_LOGS_EMPTY`)
 
-# Construir scoring_pool (todos los poligonos para puntuar al final)
+# Build scoring_pool (every polygon to be scored at the end)
 scoring_pool <- internal_qc |>
   dplyr::mutate(
     class    = as.character(raw_class),
@@ -819,7 +819,7 @@ cat(sprintf("burned_pool:   %d (positivos)\n", nrow(burned_pool)))
 cat(sprintf("review_pool:   %d (dudosos)\n", nrow(review_pool)))
 cat(sprintf("scoring_pool:  %d (universo)\n", nrow(scoring_pool)))
 
-# Sanity check: burned_pool no puede ser muy pequeno
+# Sanity check: burned_pool cannot be too small
 n_burned <- nrow(burned_pool)
 if (n_burned < 5L) {
   stop(sprintf("burned_pool insuficiente (n=%d, requerido>=5)", n_burned))
@@ -827,25 +827,25 @@ if (n_burned < 5L) {
 cat(sprintf("Sanity check: n_burned=%d >= 5 OK\n", n_burned))
 
 # =============================================================================
-# BLOQUE 5 - STEP A4: GENERAR UNBURNED (3 sub-pools)
+# BLOCK 5 - STEP A4: GENERATE UNBURNED (3 sub-pools)
 # =============================================================================
 #
-# QUE HACE
-#   Construye los pools de negativos en dos pasos:
+# WHAT IT DOES
+#   Builds the negative pools in two steps:
 #     Parte 1 (build_unburned_from_deterministic_decisions):
-#       - unburned_hard:   poligonos clasificados drop por la deterministic
+#       - unburned_hard:   polygons classified as drop by the deterministic stage
 #       - unburned_random: celdas de fondo quemable fuera de buffers
 #     Parte 2 (build_unburned_from_legacy_pipeline):
 #       - otsu_sampled:    parches Otsu unburned residual (cap 2000)
-#   Luego combina las dos partes en unburned_final_raw.
+#   Then it combines both parts into unburned_final_raw.
 #
 # DECISIONES METODOLOGICAS
-#   pool de negativos: siempre all_sources, implicito (los sub-pools combinados)
+#   negative pool: always all_sources, implicit (the combined sub-pools)
 #   exclude_buffer_m: separa negativos de positivos
 #   n_random_cells: cuantos puntos random extraer
-#   random_rbr_q: percentil maximo de RBR para considerar "fondo"
-#   legacy_otsu_mode: "burnable_only" -> Otsu solo donde la mascara permite
-#   legacy_sample_n: 2000L (cap del pool otsu_patch_residual)
+#   random_rbr_q: maximum RBR percentile for something to count as "background"
+#   legacy_otsu_mode: "burnable_only" -> Otsu only where the mask allows
+#   legacy_sample_n: 2000L (cap on the otsu_patch_residual pool)
 #
 # INPUTS
 #   internal_decisions.gpkg, RBR raster, mascara, hotspots (informativo)
@@ -853,7 +853,7 @@ cat(sprintf("Sanity check: n_burned=%d >= 5 OK\n", n_burned))
 # OUTPUTS (memoria + disco GPKG)
 #   unb$unburned_hard
 #   unb$unburned_random
-#   unb$unburned_final_raw  (todos los negativos combinados, sin sampleo)
+#   unb$unburned_final_raw  (all negatives combined, before sampling)
 #
 # REFERENCIA EN EL PAQUETE
 #   build_unburned_from_deterministic_decisions() en R/internal-sup-unburned-deterministic.R
@@ -861,25 +861,25 @@ cat(sprintf("Sanity check: n_burned=%d >= 5 OK\n", n_burned))
 #   internal-sup-orchestrator.R lineas 1180-1372 (STEP A4)
 #
 # IMPORTANTE - DURACION
-#   Esta etapa es la mas lenta del pipeline si reuse_existing=FALSE porque
-#   tiene que correr Otsu + polygonize en Python (~10-20 min).
-#   En 2005/balanced ya hay una corrida vieja con outputs en disco; con
-#   legacy_reuse_existing = TRUE reutilizamos el polygonize y solo se
+#   This is the slowest stage of the pipeline when reuse_existing=FALSE, as
+#   it has to run Otsu + polygonize in Python (~10-20 min).
+#   For 2005/balanced an older run already left outputs on disk; with
+#   legacy_reuse_existing = TRUE the polygonize step is reused and only
 #   recalculan unburned_hard + unburned_random (1-2 min).
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 5: STEP A4 - GENERAR UNBURNED ==========\n")
-cat("(esta etapa puede tardar 1-20 min segun caches)\n")
+cat("\n========== BLOCK 5: STEP A4 - GENERATE UNBURNED ==========\n")
+cat("(this stage can take 1-20 min depending on caches)\n")
 
-# Output del unburned-deterministic
+# Output of the unburned-deterministic step
 unb_out_gpkg <- file.path(
   RESULTS, as.character(YEAR), RESULT_NAME, "DETERMINISTIC", SCENARIO,
   "UNBURNED", sprintf("%d_%s_unburned.gpkg", YEAR, SCENARIO)
 )
 dir.create(dirname(unb_out_gpkg), recursive = TRUE, showWarnings = FALSE)
 
-# Carpeta de outputs Otsu legacy (compartida entre escenarios)
+# Folder for legacy Otsu outputs (shared across scenarios)
 legacy_unb_root_dir <- file.path(TUTORIAL_RESULT_DIR, "_LEGACY_UNBURNED")
 dir.create(legacy_unb_root_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -935,8 +935,8 @@ res_otsu <- OtsuFire:::build_unburned_from_legacy_pipeline(
   out_root_dir             = legacy_unb_root_dir,
   verbose                  = TRUE
   # Nota: el resto de argumentos (min_pixels, buffers_m, core_thr, alpha_boost,
-  # etc.) toman defaults internos. Si quisieras controlarlos todos, ver
-  # version A del tutorial.
+  # etc.) take internal defaults. To control them all, see
+  # version A of the tutorial.
 )
 
 otsu_pool    <- to_crs_safe(res_otsu$unburned$legacy_unburned_pool,    crs_master)
@@ -968,7 +968,7 @@ cat(sprintf("A4-Parte2 OK: otsu_pool=%d, otsu_sampled=%d\n",
 }
 unburned_final_raw <- .bind_sf_safe(det_final_raw, otsu_raw)
 
-# unburned_pool con etiquetas finales
+# unburned_pool with its final labels
 unburned_pool <- unburned_final_raw |>
   sanitize_polygons() |>
   ensure_area_ha() |>
@@ -983,22 +983,22 @@ unburned_pool <- drop_empty_sf(unburned_pool, tag = "unburned_pool",
 elapsed_a4 <- as.numeric(difftime(Sys.time(), t0_a4, units = "mins"))
 cat(sprintf("\nSTEP A4 completo en %.1f min\n", elapsed_a4))
 cat(sprintf("unburned_pool total: %d\n", nrow(unburned_pool)))
-cat("Composicion por source:\n")
+cat("Composition by source:\n")
 print(table(unburned_pool$source))
 
 # =============================================================================
-# BLOQUE 6 - STEP A5 + A6: train_labeled y escritura de pools
+# BLOCK 6 - STEP A5 + A6: train_labeled and writing the pools
 # =============================================================================
 #
-# QUE HACE
+# WHAT IT DOES
 #   A5: Concatena burned_pool + unburned_pool en train_labeled (positivos +
-#       todos los negativos, sin aplicar caps todavia).
-#   A6: Escribe todos los pools al GPKG 01_POOLS/<year>_<scenario>_pools.gpkg
-#       como capas separadas para inspeccion visual posterior.
+#       all negatives, with no caps applied yet).
+#   A6: Writes every pool to the GPKG 01_POOLS/<year>_<scenario>_pools.gpkg
+#       as separate layers, for later visual inspection.
 #
 # OUTPUTS
 #   train_labeled (memoria)
-#   gpkg_pools_out (disco) con capas: burned_pool, unburned_pool, review_pool,
+#   gpkg_pools_out (on disk) with layers: burned_pool, unburned_pool, review_pool,
 #                                     scoring_pool, train_labeled,
 #                                     unburned_hard, unburned_random,
 #                                     unburned_final_raw, exclusion_buffer
@@ -1008,7 +1008,7 @@ print(table(unburned_pool$source))
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 6: STEP A5 + A6 - train_labeled + escritura ==========\n")
+cat("\n========== BLOCK 6: STEP A5 + A6 - train_labeled + writing ==========\n")
 
 # A5: train_labeled
 train_labeled <- dplyr::bind_rows(burned_pool, unburned_pool) |>
@@ -1043,30 +1043,30 @@ if (nrow(exclusion_buffer) > 0)
   safe_write_gpkg(exclusion_buffer, gpkg_pools_out, layer = "exclusion_buffer", tag = "exclusion_buffer_w")
 
 cat(sprintf("Pools escritos en: %s\n", gpkg_pools_out))
-cat("Capas escritas:\n")
+cat("Layers written:\n")
 print(sf::st_layers(gpkg_pools_out)$name)
 
 # =============================================================================
-# BLOQUE 7 - STEP B2: SPATIAL FOLDS (make_block_folds)
+# BLOCK 7 - STEP B2: SPATIAL FOLDS (make_block_folds)
 # =============================================================================
 #
-# QUE HACE
-#   Construye folds espaciales por bloques contiguos para evitar leakage
-#   entre train/test. Hace 2 repeticiones (fold_rep1, fold_rep2) con seed
-#   distinta para promediar la varianza de OOF.
+# WHAT IT DOES
+#   Builds spatial folds from contiguous blocks to avoid leakage
+#   between train and test. It does 2 repetitions (fold_rep1, fold_rep2) with
+#   different seeds, to average out the OOF variance.
 #
 # DECISIONES METODOLOGICAS
 #   block_sizes_m = c(5000, 3000, 2000) - prueba 3 tamanos, elige el mejor
 #   k_candidates  = c(5, 4, 3)          - prueba 3 numeros de folds
-#   min_burned_units_per_fold = 3       - cada fold debe tener >=3 burned
-#   min_pos_blocks_per_fold   = 10      - cada fold debe tener >=10 bloques
-#                                         con al menos 1 burned
+#   min_burned_units_per_fold = 3       - each fold must hold >=3 burned
+#   min_pos_blocks_per_fold   = 10      - each fold must hold >=10 blocks
+#                                         with at least 1 burned
 #   n_repeats = 2                        - dos repeticiones
 #   seed_base = 42                       - reproducibilidad
 #
 # OUTPUTS (memoria + disco)
-#   res_folds$selected            - cual block_size se eligio
-#   res_folds$saved$train_gpkg    - GPKG con poligonos + columnas
+#   res_folds$selected            - which block_size was chosen
+#   res_folds$saved$train_gpkg    - GPKG with polygons + columns
 #                                   block_id, fold_rep1, fold_rep2
 #
 # REFERENCIA EN EL PAQUETE
@@ -1075,7 +1075,7 @@ print(sf::st_layers(gpkg_pools_out)$name)
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 7: STEP B2 - SPATIAL FOLDS ==========\n")
+cat("\n========== BLOCK 7: STEP B2 - SPATIAL FOLDS ==========\n")
 
 train_labeled_sf <- safe_read_gpkg(gpkg_pools_out, "train_labeled", "train_labeled")
 
@@ -1113,12 +1113,12 @@ cat("\nDistribucion fold_rep2 x class:\n")
 print(table(twf$fold_rep2, twf$class))
 
 # =============================================================================
-# BLOQUE 8 - STEP B3: EXTRACT FEATURES
+# BLOCK 8 - STEP B3: EXTRACT FEATURES
 # =============================================================================
 #
-# QUE HACE
-#   Para cada poligono (train + scoring), extrae las 51 features canonicas
-#   del whitelist por familia:
+# WHAT IT DOES
+#   For each polygon (train + scoring), extracts the 51 canonical features
+#   of the whitelist, by family:
 #     RBR summer:   rbr_p10, rbr_med, rbr_p90, rbr_iqr (4)
 #     RBR autumn:   rbr_aw_p10, rbr_aw_med, rbr_aw_p90, rbr_aw_iqr,
 #                   rbr_aw_valid_frac (5)
@@ -1135,15 +1135,15 @@ print(table(twf$fold_rep2, twf$class))
 #
 # DECISIONES METODOLOGICAS
 #   use_hotspots = TRUE en 2005 (post-MODIS)
-#   hs_buffer_m = 1000   - radio para hotspots cercanos
+#   hs_buffer_m = 1000   - radius for nearby hotspots
 #   hs_start_month/end_month = 6,10  - estacion fuego
-#   hi_conf_thr = 0.8    - umbral para hs_hiConf_n
-#   cor_groups = grupos Corine ya en cfg$options$cor_groups
+#   hi_conf_thr = 0.8    - threshold for hs_hiConf_n
+#   cor_groups = Corine groups, already in cfg$options$cor_groups
 #
 # OUTPUTS (disco)
-#   features_geometry.gpkg con dos capas:
-#     train_features    - poligonos de train con todas las features
-#     scoring_features  - poligonos del universo a puntuar con features
+#   features_geometry.gpkg with two layers:
+#     train_features    - training polygons with all the features
+#     scoring_features  - polygons of the scoring universe, with features
 #
 # REFERENCIA EN EL PAQUETE
 #   extract_features() en R/internal-sup-extract-features.R
@@ -1151,15 +1151,15 @@ print(table(twf$fold_rep2, twf$class))
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 8: STEP B3 - EXTRACT FEATURES ==========\n")
-cat("(esta etapa tarda 5-15 min segun tamano del area)\n")
+cat("\n========== BLOCK 8: STEP B3 - EXTRACT FEATURES ==========\n")
+cat("(this stage takes 5-15 min depending on the size of the area)\n")
 
-# Re-leer del disco para asegurarnos de que extract_features ve los datos
-# tal como los vera el orchestrator real
+# Re-read from disk to make sure extract_features sees the data exactly
+# as the real orchestrator will see it
 train_folds        <- safe_read_gpkg(train_with_folds_gpkg, "train_with_folds", "tf")
 scoring_candidates <- safe_read_gpkg(gpkg_pools_out, "scoring_pool", "sp")
 
-# Reproyectar hotspots si CRS no coincide
+# Reproject hotspots if the CRS does not match
 hotspots_sf <- hotspots_sf_base
 if (nrow(hotspots_sf) > 0) {
   if (sf::st_crs(hotspots_sf) != sf::st_crs(train_folds)) {
@@ -1169,7 +1169,7 @@ if (nrow(hotspots_sf) > 0) {
 use_hotspots_flag <- nrow(hotspots_sf) > 0
 cat(sprintf("use_hotspots_flag: %s (n=%d)\n", use_hotspots_flag, nrow(hotspots_sf)))
 
-# Grupos Corine - tomados del cfg
+# Corine groups - taken from cfg
 cor_groups <- cfg$options$cor_groups
 
 t0_b3 <- Sys.time()
@@ -1234,7 +1234,7 @@ elapsed_b3 <- as.numeric(difftime(Sys.time(), t0_b3, units = "mins"))
 cat(sprintf("\nSTEP B3 completo en %.1f min\n", elapsed_b3))
 
 features_gpkg <- file.path(dirs$`03_FEATURES`, "features_geometry.gpkg")
-cat("Capas generadas:\n")
+cat("Layers generated:\n")
 print(sf::st_layers(features_gpkg)$name)
 
 # Inspeccion de columnas
@@ -1257,26 +1257,26 @@ print(fam_counts)
 cat(sprintf("Total checksum: %d\n", sum(unlist(fam_counts))))
 
 # =============================================================================
-# BLOQUE 9 - STEP C0 + C1: LEER FEATURES + PARAMS XGBOOST
+# BLOCK 9 - STEP C0 + C1: READ FEATURES + XGBOOST PARAMS
 # =============================================================================
 #
-# QUE HACE
-#   C0: lee train_features y scoring_features del GPKG, hace join con folds
-#       si hace falta.
-#   C1: construye los hyperparametros de XGBoost. Calcula scale_pos_weight
-#       como n_neg/n_pos para balancear clases en el loss.
+# WHAT IT DOES
+#   C0: reads train_features and scoring_features from the GPKG, joining the
+#       folds if needed.
+#   C1: builds the XGBoost hyperparameters. It computes scale_pos_weight
+#       as n_neg/n_pos to balance the classes in the loss.
 #
 # DECISIONES METODOLOGICAS (XGBOOST)
 #   booster          = "gbtree"
 #   objective        = "binary:logistic"
-#   eval_metric      = c("logloss", "aucpr")  - logloss primero porque es
+#   eval_metric      = c("logloss", "aucpr")  - logloss first because it is
 #                                              quien drivea early stopping
 #   eta              = 0.06   (learning rate moderado)
-#   max_depth        = 5      (arboles poco profundos para regularizar)
-#   subsample        = 0.85   (sub-muestreo de filas por arbol)
-#   colsample_bytree = 0.75   (sub-muestreo de cols por arbol)
+#   max_depth        = 5      (shallow trees, for regularisation)
+#   subsample        = 0.85   (row sub-sampling per tree)
+#   colsample_bytree = 0.75   (column sub-sampling per tree)
 #   min_child_weight = 5      (regularizacion)
-#   gamma            = 0      (split sin penalizacion adicional)
+#   gamma            = 0      (splits with no extra penalty)
 #   scale_pos_weight = n_neg/n_pos  (balanceo automatico de clases)
 #
 # REFERENCIA EN EL PAQUETE
@@ -1284,12 +1284,12 @@ cat(sprintf("Total checksum: %d\n", sum(unlist(fam_counts))))
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 9: STEP C0 + C1 - FEATURES + XGB PARAMS ==========\n")
+cat("\n========== BLOCK 9: STEP C0 + C1 - FEATURES + XGB PARAMS ==========\n")
 
 train_features   <- safe_read_gpkg(features_gpkg, "train_features",   "tf2")
 scoring_features <- safe_read_gpkg(features_gpkg, "scoring_features", "sf2")
 
-# Asegurar que train_features tiene los folds
+# Make sure train_features carries the folds
 needed_folds <- c("block_id", "fold_rep1", "fold_rep2")
 if (!all(needed_folds %in% names(train_features))) {
   cat("Joining folds into train_features...\n")
@@ -1299,7 +1299,7 @@ if (!all(needed_folds %in% names(train_features))) {
   train_features <- train_features |> dplyr::left_join(folds_df, by = "fire_uid")
 }
 
-# Drop geometry para modelado
+# Drop geometry for modelling
 labelled    <- sf::st_drop_geometry(train_features)
 burned_like <- sf::st_drop_geometry(scoring_features)
 labelled_df <- labelled
@@ -1327,12 +1327,12 @@ cat("XGB params:\n")
 print(params)
 
 # =============================================================================
-# BLOQUE 10 - STEP C2: OOF PIPELINE (entrenamiento por folds + diagnostico)
+# BLOCK 10 - STEP C2: OOF PIPELINE (per-fold training + diagnostics)
 # =============================================================================
 #
-# QUE HACE
-#   Para cada repeticion (fold_rep1, fold_rep2) y para cada fold k=1..5:
-#     1. Marca fold k como test, resto como train.
+# WHAT IT DOES
+#   For each repetition (fold_rep1, fold_rep2) and each fold k=1..5:
+#     1. Marks fold k as test and the rest as train.
 #     2. Aplica caps de sampling:
 #          contextual_exclusion (deterministic_drop_hard, neg_type != spectral) cap 0.25 x n_burned
 #          spectral_hard_negative (deterministic_drop_hard con neg_type == "spectral_reject_medium") cap 1.0
@@ -1340,19 +1340,19 @@ print(params)
 #          otsu_patch_residual cap 1.0
 #     3. Entrena XGBoost en train, predice en test.
 #     4. Acumula predicciones.
-#   Al final, cada fila tiene n_preds=2 predicciones (una por cada rep).
+#   In the end each row has n_preds=2 predictions (one per repetition).
 #   Calcula metricas (accuracy, precision, recall, etc.) en multiples
 #   thresholds, identifica el threshold optimo segun varios criterios.
 #
 # DECISIONES METODOLOGICAS
 #   feature_whitelist_override = NULL  (canon 51)
 #   feature_weights            = NULL  (uniforme 1.0)
-#   median_from = "labelled"   - imputacion de NA por mediana de cada feature
+#   median_from = "labelled"   - NA imputation by each feature's median
 #                                en el set labelled
 #
 # OUTPUTS (disco)
 #   05_OOF/<prefix>_oof_metrics_summary.txt
-#   05_OOF/<prefix>_labeled_oof_summary.gpkg     - cada poligono con p_oof_mean
+#   05_OOF/<prefix>_labeled_oof_summary.gpkg     - each polygon with p_oof_mean
 #   05_OOF/<prefix>_oof_agg.csv
 #   05_OOF/<prefix>_oof_long.csv
 #   05_OOF/<prefix>_oof_metrics_by_threshold.csv
@@ -1364,12 +1364,12 @@ print(params)
 #   internal-sup-orchestrator.R lineas 1834-1870 (STEP C2)
 #
 # IMPORTANTE
-#   Este bloque tarda 10-20 min en 2005 (es la etapa mas lenta del modelado).
+#   This block takes 10-20 min for 2005 (the slowest modelling stage).
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 10: STEP C2 - OOF PIPELINE ==========\n")
-cat("(esta etapa tarda 10-20 min)\n")
+cat("\n========== BLOCK 10: STEP C2 - OOF PIPELINE ==========\n")
+cat("(this stage takes 10-20 min)\n")
 
 prefix_oof <- sprintf("%d_%s_patch", YEAR, SCENARIO)
 prefix     <- sprintf("%d_%s_patch_certified", YEAR, SCENARIO)
@@ -1408,25 +1408,25 @@ pipe1 <- OtsuFire:::run_dm_oof_pipeline(
 elapsed_c2 <- as.numeric(difftime(Sys.time(), t0_c2, units = "mins"))
 cat(sprintf("\nSTEP C2 completo en %.1f min\n", elapsed_c2))
 
-cat("Files generados por OOF pipeline:\n")
+cat("Files generated by the OOF pipeline:\n")
 print(pipe1$files)
 
-# Inspeccion del summary
+# Inspecting the summary
 oof_summary_path <- file.path(dirs$`05_OOF`,
                               paste0(prefix_oof, "_oof_metrics_summary.txt"))
 cat("\n--- oof_metrics_summary.txt ---\n")
 cat(readLines(oof_summary_path), sep = "\n")
 
 # =============================================================================
-# BLOQUE 11 - STEP C3: FINAL MODEL + SCORING + FINAL MAP
+# BLOCK 11 - STEP C3: FINAL MODEL + SCORING + FINAL MAP
 # =============================================================================
 #
-# QUE HACE
-#   1. Entrena el modelo FINAL con TODOS los datos labelled (sin OOF).
-#   2. Aplica el modelo al universo scoring_features para puntuar.
-#   3. Construye el mapa final con clase asignada por threshold optimo
-#      heredado del OOF.
-#   4. Identifica burned_like (poligonos no etiquetados que el modelo
+# WHAT IT DOES
+#   1. Trains the FINAL model on ALL the labelled data (no OOF).
+#   2. Applies the model to the scoring_features universe to score it.
+#   3. Builds the final map, with the class assigned by the optimal threshold
+#      inherited from the OOF stage.
+#   4. Identifies burned_like (unlabelled polygons that the model
 #      considera quemados).
 #
 # DECISIONES METODOLOGICAS
@@ -1462,8 +1462,8 @@ cat(readLines(oof_summary_path), sep = "\n")
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 11: STEP C3 - FINAL MODEL + SCORING ==========\n")
-cat("(esta etapa tarda 5-15 min)\n")
+cat("\n========== BLOCK 11: STEP C3 - FINAL MODEL + SCORING ==========\n")
+cat("(this stage takes 5-15 min)\n")
 
 oof_agg_csv      <- file.path(dirs$`05_OOF`, paste0(prefix_oof, "_oof_agg.csv"))
 oof_summary_gpkg <- file.path(dirs$`05_OOF`, paste0(prefix_oof, "_labeled_oof_summary.gpkg"))
@@ -1503,7 +1503,7 @@ pipe2 <- OtsuFire:::run_train_final_model_and_export_final_map(
   hotspot_density_threshold = cfg$options$currentyear_hotspot_density_thr %||% 1.0,
   temporal_penalty_floor    = cfg$options$currentyear_temporal_penalty_floor %||% 0.1,
 
-  # ----- BASELINE: caps canonicos + sin overrides + sin weights -----
+  # ----- BASELINE: canonical caps + no overrides + no weights -----
   contextual_exclusion_to_burned_ratio   = 0.25,
   spectral_hard_negative_to_burned_ratio = 1.0,
   random_to_burned_ratio                 = 1.0,
@@ -1515,27 +1515,27 @@ pipe2 <- OtsuFire:::run_train_final_model_and_export_final_map(
 elapsed_c3 <- as.numeric(difftime(Sys.time(), t0_c3, units = "mins"))
 cat(sprintf("\nSTEP C3 completo en %.1f min\n", elapsed_c3))
 
-# Inspeccion del meta del modelo final
+# Inspecting the final model's meta
 meta_path <- file.path(dirs$`07_FINAL_MODEL_V2`,
                        paste0(prefix, "_meta.txt"))
 if (file.exists(meta_path)) {
-  cat("\n--- meta.txt del modelo final ---\n")
+  cat("\n--- meta.txt of the final model ---\n")
   cat(readLines(meta_path), sep = "\n")
 }
 
 # =============================================================================
-# BLOQUE 12 - VERIFICACION FINAL: Baseline canonico
+# BLOCK 12 - FINAL VERIFICATION: canonical Baseline
 # =============================================================================
 #
-# QUE HACE
-#   Verifica que el meta.txt confirme la configuracion Baseline canonical:
+# WHAT IT DOES
+#   Checks that meta.txt confirms the canonical Baseline configuration:
 #     feature_whitelist_override_applied = FALSE
 #     feature_weights_applied            = FALSE
-#   Y que las metricas tengan sentido (drops baja probabilidad, keeps alta).
+#   And that the metrics make sense (drops low probability, keeps high).
 #
 # =============================================================================
 
-cat("\n========== BLOQUE 12: VERIFICACION BASELINE ==========\n")
+cat("\n========== BLOCK 12: BASELINE VERIFICATION ==========\n")
 
 if (file.exists(meta_path)) {
   meta_lines <- readLines(meta_path)
@@ -1544,7 +1544,7 @@ if (file.exists(meta_path)) {
   n_x_line      <- grep("^n_x_cols:", meta_lines, value = TRUE)
   n_feat_line   <- grep("^n_feature_cols:", meta_lines, value = TRUE)
 
-  cat("Lineas relevantes del meta.txt:\n")
+  cat("Relevant lines of meta.txt:\n")
   cat(" ", override_line, "\n")
   cat(" ", weights_line, "\n")
   cat(" ", n_x_line, "\n")
@@ -1554,11 +1554,11 @@ if (file.exists(meta_path)) {
   if (is_baseline) {
     cat("\nBaseline canonical CONFIRMADO.\n")
   } else {
-    cat("\nATENCION: el meta.txt NO refleja Baseline canonical.\n")
+    cat("\nWARNING: meta.txt does NOT reflect the canonical Baseline.\n")
   }
 }
 
-# Verificacion del mapa final
+# Verifying the final map
 final_map_path <- file.path(dirs$`09_FINAL_MAP`,
                             paste0(prefix, "_final_map.gpkg"))
 if (file.exists(final_map_path)) {
@@ -1576,7 +1576,7 @@ if (file.exists(final_map_path)) {
   if (drops_med < 0.1 && keeps_med > 0.9) {
     cat("\nBASELINE 0.5.0 PASSED.\n")
   } else {
-    cat("\nBaseline NO pasa los umbrales esperados.\n")
+    cat("\nBaseline does NOT meet the expected thresholds.\n")
   }
 }
 

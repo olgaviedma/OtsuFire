@@ -3,10 +3,10 @@
 # Create spatial blocks (grid) + assign k-folds by block (repeated) for OOF / block-CV
 #
 # Mini “for dummies”
-# - fold: una partición (1..k) usada como VALIDACIÓN; el resto es ENTRENAMIENTO
-# - CV: repetir train/validación rotando folds (k rondas)
-# - OOF: predicción de cada fila hecha SOLO cuando esa fila estuvo en validación (no vista al entrenar)
-# - block-CV: folds asignados por BLOQUES espaciales para evitar fuga espacial (leakage)
+# - fold: one partition (1..k) used as VALIDATION; the rest is TRAINING
+# - CV: repeat train/validation rotating the folds (k rounds)
+# - OOF: a row's prediction made ONLY while that row sat in validation (unseen during training)
+# - block-CV: folds assigned by spatial BLOCKS to avoid spatial leakage
 # ==============================================================================
 
 make_block_folds <- function(

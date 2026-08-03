@@ -1,66 +1,66 @@
 # =============================================================================
-# BLOQUE 0 - SETUP COMPLETO: TODA LA CONFIGURACION DEL USUARIO
+# BLOCK 0 - COMPLETE SETUP: THE WHOLE USER CONFIGURATION
 # =============================================================================
 #
-# QUE HACE
-#   Carga el paquete OtsuFire en modo desarrollo y declara EXPLICITAMENTE
-#   todas las variables del experimento que el usuario debe configurar:
-#     - 2 parametros del combo (year + scenario)
-#     - 13 paths de inputs (lo que el pipeline lee de disco)
-#     - 18 constantes metodologicas (politicas + thresholds + toggles)
+# WHAT IT DOES
+#   Loads the OtsuFire package in development mode and declares EXPLICITLY
+#   every experiment variable the user has to configure:
+#     - 2 combo parameters (year + scenario)
+#     - 13 input paths (what the pipeline reads from disk)
+#     - 18 methodological constants (policies + thresholds + toggles)
 #
-#   Este bloque es el UNICO que el usuario tiene que entender y modificar
-#   para correr el pipeline. Todo lo que viene despues (BLOQUE 1+) es
-#   consumo de estas variables.
-#
-#
-# DOS NIVELES DE LECTURA
-# ----------------------
-# Cada seccion del bloque incluye comentarios narrativos (que se hace y
-# por que) + bloques de DEBUG (cross-references al handoff con detalles
-# tecnicos para diagnosticar problemas del paquete).
+#   This block is the ONLY one the user has to understand and edit in
+#   order to run the pipeline. Everything that follows (BLOCK 1+) simply
+#   consumes these variables.
 #
 #
-# ESTADO DE LA API EN 0.5.0 (resumen para contextualizar)
-# -------------------------------------------------------
-# El paquete OtsuFire 0.5.0 tiene una API de configuracion incompleta:
-# de las 33 variables que conceptualmente forman el experimento, solo
-# parte se aceptan via el config builder publico. El resto las construye
-# el orchestrator por convencion (paths) o las lee de constantes globales
-# hardcoded (parametros). Esto se resolvera en el refactor post-paper.
+# TWO READING LEVELS
+# ------------------
+# Every section of the block carries narrative comments (what is done and
+# why) plus DEBUG blocks (cross-references to the handoff with technical
+# detail for diagnosing package problems).
+#
+#
+# STATE OF THE API IN 0.5.0 (summary, for context)
+# ------------------------------------------------
+# OtsuFire 0.5.0 has an incomplete configuration API: of the 33 variables
+# that conceptually make up the experiment, only some are accepted by the
+# public config builder. The rest are built by the orchestrator by
+# convention (paths) or read from hardcoded global constants (parameters).
+# This is to be resolved in the post-paper refactor.
 #
 # Cross-references:
-#   §N+25: 13 paths de inputs - solo 4 entran via cfg$inputs en 0.5.0.
-#   §N+26: politica negative_pool_policy - ELIMINADA del paquete el
-#          2026-06-05; all_sources es ahora el unico modo (implicito).
-#   §N+27: campo burned_like_registry_path - linea de investigacion
-#          abortada, ELIMINADA del paquete el 2026-06-05.
-#   §N+28: 21 constantes hardcoded en orchestrator - decidir cuales
-#          exponer post-refactor.
+#   §N+25: 13 input paths - only 4 arrive via cfg$inputs in 0.5.0.
+#   §N+26: negative_pool_policy - REMOVED from the package on
+#          2026-06-05; all_sources is now the only (implicit) mode.
+#   §N+27: burned_like_registry_path field - abandoned line of
+#          investigation, REMOVED from the package on 2026-06-05.
+#   §N+28: 21 constants hardcoded in the orchestrator - decide which
+#          ones to expose after the refactor.
 #
-# Para que este tutorial sea forward-compatible y sirva como spec del
-# refactor, declaramos AQUI las 33 variables explicitamente. Despues
-# en BLOQUE 1 las separamos en:
-#   - Capa B (comentada): API ideal post-refactor donde el usuario pasa
-#                          las 33 variables al config builder.
-#   - Capa C (ejecutable): API actual 0.5.0 donde solo se pueden pasar
-#                          algunas; el resto se usan en bloques posteriores
-#                          o quedan documentadas.
+# So that this tutorial stays forward-compatible and doubles as a spec for
+# the refactor, all 33 variables are declared explicitly HERE. Later, in
+# BLOCK 1, they are split into:
+#   - Layer B (commented out): the ideal post-refactor API, where the user
+#                          passes all 33 variables to the config builder.
+#   - Layer C (executable): the current 0.5.0 API, where only some can be
+#                          passed; the rest are used in later blocks
+#                          or simply documented.
 #
 # =============================================================================
 
 
 # =============================================================================
-# 1) CARGA DEL PAQUETE
+# 1) LOADING THE PACKAGE
 # =============================================================================
 
-cat("\n========== BLOQUE 0: SETUP ==========\n")
+cat("\n========== BLOCK 0: SETUP ==========\n")
 
 PKG_ROOT <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/2_SCRIPTS/OtsuFire_v02_rebuild"
 
-# Carga limpia: si ya estaba cargado, descargar primero para asegurar
-# que tomamos la version actual del codigo en disco (importante en
-# desarrollo activo donde el codigo del paquete cambia).
+# Clean load: if it was already loaded, unload it first to make sure we
+# pick up the current version of the code on disk (this matters during
+# active development, where the package code keeps changing).
 if ("OtsuFire" %in% loadedNamespaces()) {
   try(unloadNamespace("OtsuFire"), silent = TRUE)
 }
@@ -69,264 +69,264 @@ suppressMessages(pkgload::load_all(PKG_ROOT, quiet = TRUE))
 cat("OtsuFire version:", as.character(utils::packageVersion("OtsuFire")), "\n")
 stopifnot(utils::packageVersion("OtsuFire") >= "0.5.0")
 
-# DEBUG: pkgload::load_all expone tanto los exports del NAMESPACE como
-# las funciones internas. Esto permite usar OtsuFire:::xxx para acceder
-# a internas, lo que el tutorial necesita en bloques posteriores para
-# "abrir la nevera" del paquete y llamar a funciones step-by-step en
-# vez de pasar por el wrapper run_oneyear_supervised_pipeline().
+# DEBUG: pkgload::load_all exposes both the NAMESPACE exports and the
+# internal functions. That is what allows OtsuFire:::xxx to be used to
+# reach internals, which later blocks of the tutorial need in order to
+# "open up the package" and call functions step by step instead of going
+# through the run_oneyear_supervised_pipeline() wrapper.
 
 
 # =============================================================================
-# 2) PARAMETROS DEL COMBO (year + scenario)
+# 2) COMBO PARAMETERS (year + scenario)
 # =============================================================================
 #
-# Para correr el tutorial con otro combo, cambiar SOLO estas dos lineas.
-# Todo el resto del BLOQUE 0 (paths, constantes) se adapta automaticamente.
+# To run the tutorial on a different combo, change ONLY these two lines.
+# All the rest of BLOCK 0 (paths, constants) adapts automatically.
 
 YEAR     <- 2005L
 SCENARIO <- "balanced"
 
-# DEBUG: YEAR debe ser integer (sufijo L). Si pasas un double (2005 sin L),
-# las funciones del paquete que esperan target_year integer pueden fallar
-# con coercion warnings. SCENARIO debe ser uno de: "balanced", "lax",
-# "original" (los tres soportados por el deterministic stage).
+# DEBUG: YEAR must be an integer (L suffix). Passing a double (2005 with
+# no L) can make the package functions that expect an integer target_year
+# fail with coercion warnings. SCENARIO must be one of: "balanced", "lax",
+# "original" (the three supported by the deterministic stage).
 
-# Resolucion del año Corine quinquenal usando funcion interna.
-# Mapeo (ver R/utils-corine.R::get_corine_year):
+# Resolution of the five-yearly Corine year via an internal function.
+# Mapping (see R/utils-corine.R::get_corine_year):
 #   1985-2002 -> 2000 ; 2003-2008 -> 2006 ; 2009-2014 -> 2012 ;
 #   2015+    -> 2018
-# Para YEAR=2005, CORINE_YEAR resuelve a "2006" (devuelto como character).
+# For YEAR=2005, CORINE_YEAR resolves to "2006" (returned as character).
 CORINE_YEAR <- OtsuFire:::get_corine_year(YEAR)
 
 cat(sprintf("\nCombo: year=%d, scenario=%s, corine=%s\n",
             YEAR, SCENARIO, CORINE_YEAR))
 
-# DEBUG: get_corine_year devuelve character, no integer. Por eso los
-# sprintf de paths Corine usan %s en lugar de %d. Si en el futuro
-# se cambia a integer, actualizar los sprintf.
+# DEBUG: get_corine_year returns character, not integer. That is why the
+# sprintf calls for Corine paths use %s rather than %d. Should it ever be
+# changed to integer, update those sprintf calls.
 
 
 # =============================================================================
-# 3) PATHS DEL PROYECTO
+# 3) PROJECT PATHS
 # =============================================================================
 
 DATA_BASE <- "C:/00_NATALIA_DOCTORADO/00_FIRE_MAPPING/1_DATA"
 COMPOSITE <- file.path(DATA_BASE, "Imagery", "Composites_90m")
 RESULTS   <- file.path(DATA_BASE, "Results")
 
-# RESULT_NAME identifica el "run" del pipeline. Min_Min hace referencia
-# al metodo de composicion temporal de los mosaicos RBR (Min de Min).
-# El paquete soporta otros (Mean_Mean, Min_Mean, etc.) pero el Baseline
-# canonico usa Min_Min.
+# RESULT_NAME identifies the pipeline "run". Min_Min refers to the
+# temporal compositing method behind the RBR mosaics (Min of Min).
+# The package supports others (Mean_Mean, Min_Mean, etc.) but the
+# canonical Baseline uses Min_Min.
 RESULT_NAME <- "Min_Min"
 
 
 # =============================================================================
-# 4) LOS 13 INPUTS DEL PIPELINE
+# 4) THE 13 PIPELINE INPUTS
 # =============================================================================
 #
-# Estos son los 13 ficheros que el orchestrator del modulo supervised lee
-# para procesar un combo. Estan organizados en 4 grupos por tipo de
-# dependencia:
+# These are the 13 files the supervised module orchestrator reads in order
+# to process one combo. They are organised into 4 groups by the kind of
+# dependency:
 #
-#   A) Year/scenario-dependent (4)  - cambian con (year, scenario)
-#   B) Validacion externa year-dep  (1) - cambia solo con year
-#   C) Corine quinquenal           (4) - cambian con CORINE_YEAR
-#   D) Estaticos                   (4) - no cambian nunca
+#   A) Year/scenario-dependent (4)  - change with (year, scenario)
+#   B) External validation, year-dep (1) - changes with year only
+#   C) Five-yearly Corine          (4) - change with CORINE_YEAR
+#   D) Static                      (4) - never change
 #
-# DEBUG: HANDOFF §N+25. En 0.5.0, solo 4 de estos 13 entran al config
+# DEBUG: HANDOFF §N+25. In 0.5.0 only 4 of these 13 reach the config
 # builder via cfg$inputs (internal_decisions, change_index,
-# delayed_change_index, hotspots). Los otros 9 los construye el
-# orchestrator por convencion en lineas 906-934 de internal-sup-
-# orchestrator.R + el burneable mask en helpers internos.
-# El refactor post-paper hara que TODOS entren via cfg$inputs.
+# delayed_change_index, hotspots). The other 9 are built by the
+# orchestrator by convention at lines 906-934 of internal-sup-
+# orchestrator.R, plus the burnable mask in internal helpers.
+# The post-paper refactor will route ALL of them through cfg$inputs.
 
 
 # --- A) Year/scenario-dependent (4) -----------------------------------------
 
-# A1. Salida del modulo deterministic (entrada principal del supervised).
+# A1. Output of the deterministic module (main input of the supervised one).
 INTERNAL_DECISIONS <- file.path(
   RESULTS, as.character(YEAR), RESULT_NAME, "DETERMINISTIC", SCENARIO,
   "05_DECISIONS", "internal_decisions.gpkg"
 )
 
-# A2. Mosaico summer (RBR + DOY del verano del fuego).
+# A2. Summer mosaic (RBR + DOY of the fire summer).
 CHANGE_INDEX <- file.path(COMPOSITE, RESULT_NAME,
                           sprintf("MinMin_%d_mosaic_res90m.tif", YEAR))
 
-# A3. Mosaico autumn-winter (delayed change index, fuente G2_RBR_AW).
+# A3. Autumn-winter mosaic (delayed change index, source G2_RBR_AW).
 RBR_AUTUMN <- file.path(COMPOSITE, "Autumn",
                         sprintf("mean_mean_%d_mosaic.tif", YEAR))
 
-# A4. Hotspots MODIS. Para anos pre-MODIS (<2000), HOTSPOTS no existira
-# en disco; el pipeline detecta y procesa sin features de hotspots.
+# A4. MODIS hotspots. For pre-MODIS years (<2000) HOTSPOTS will not exist
+# on disk; the pipeline detects this and proceeds without hotspot features.
 HOTSPOTS <- file.path(DATA_BASE, "Hotspots",
                       sprintf("hotspots_iberia_%d.geojson", YEAR))
 
 
-# --- B) Validacion externa year-dependent (1) -------------------------------
+# --- B) Year-dependent external validation (1) ------------------------------
 
-# B1. Effis-CA fuegos verano filtrados por mascara quemable.
-# Es el ground truth EXTERNO para validar las predicciones del modelo.
-# DEBUG: HANDOFF §N+25. En 0.5.0 corresponde al campo
-# cfg$inputs$reference_burned_map (cosmetico) + ref_tif_path/ref_shp_path
-# (construidos por convencion). El refactor consolidara ambos bajo el
-# campo publico reference_burned_map.
+# B1. Effis-CA summer fires filtered by the burnable mask.
+# This is the EXTERNAL ground truth used to validate the model predictions.
+# DEBUG: HANDOFF §N+25. In 0.5.0 it corresponds to the field
+# cfg$inputs$reference_burned_map (cosmetic) plus ref_tif_path/ref_shp_path
+# (built by convention). The refactor will consolidate both under the
+# public reference_burned_map field.
 EFFIS_CA_TIF <- file.path(
   DATA_BASE, "Fires", "Validation_fires_burneable_verano",
   sprintf("Effis_CA_%d_maskKeep_summer.tif", YEAR)
 )
 
-# El shp companion es derivable desde el tif (cambia .tif por .shp).
-# Lo declaramos explicitamente porque el orchestrator 0.5.0 los lee como
-# rutas separadas. Post-refactor sera derivable internamente desde
+# The companion shp is derivable from the tif (swap .tif for .shp).
+# It is declared explicitly because the 0.5.0 orchestrator reads them as
+# separate paths. After the refactor it will be derivable internally from
 # reference_burned_map.
 EFFIS_CA_SHP <- sub("\\.tif$", ".shp", EFFIS_CA_TIF)
 
 
-# --- C) Corine quinquenal (4) -----------------------------------------------
+# --- C) Five-yearly Corine (4) ----------------------------------------------
 
-# C1. Raster Corine Land Cover (cobertura del suelo).
-# Fuente de features G3_CORINE.
+# C1. Corine Land Cover raster (land cover).
+# Source of the G3_CORINE features.
 CORINE_RASTER <- file.path(DATA_BASE, "Corine_Masks",
                            sprintf("CLC_%s_peninsula.tif", CORINE_YEAR))
 
-# C2. Strata raster (estratificacion derivada de Corine para el muestreo
-# espacial estratificado en STEP B1 - block folds).
+# C2. Strata raster (stratification derived from Corine for the stratified
+# spatial sampling in STEP B1 - block folds).
 CORINE_STRATA <- file.path(DATA_BASE, "Corine_Masks", "STRATA",
                            sprintf("strata_CLC_%s_res30.tif", CORINE_YEAR))
 
-# C3. Look-up table de los strata (no depende del año).
+# C3. Look-up table for the strata (does not depend on the year).
 CORINE_LUT <- file.path(DATA_BASE, "Corine_Masks", "LUT",
                         "lut_full_strata8_v1.csv")
 
-# C4. Mascara binaria de superficie quemable derivada de Corine.
-# DEBUG: HANDOFF §N+25 §1.3. Este input es el unico que el orchestrator
-# NO valida en su bloque inicial de stopifnot. Lo lee dentro de
-# internal-sup-unburned-deterministic.R linea 170. Si falta, el pipeline
-# falla 5-10 min despues de iniciado, no al inicio. Por eso lo
-# verificamos manualmente en BLOQUE 0.
+# C4. Binary burnable-surface mask derived from Corine.
+# DEBUG: HANDOFF §N+25 §1.3. This is the only input the orchestrator does
+# NOT validate in its initial stopifnot block. It is read inside
+# internal-sup-unburned-deterministic.R at line 170. If it is missing, the
+# pipeline fails 5-10 min after starting rather than up front. That is why
+# it is verified by hand here in BLOCK 0.
 BURNEABLE_MASK <- file.path(
   DATA_BASE, "Corine_Masks",
   sprintf("burneable_mask_binary_corine_%s_ETRS89.tif", CORINE_YEAR)
 )
 
 
-# --- D) Estaticos (4) -------------------------------------------------------
+# --- D) Static (4) ----------------------------------------------------------
 
-# D1. Frontera de la Peninsula Iberica.
+# D1. Border of the Iberian Peninsula.
 PENINSULA_SHP <- file.path(DATA_BASE, "Borders", "Iberian_peninsula.shp")
 
-# D2. Topografia: stack con DEM (banda 1) y slope (banda 2).
-# Fuente de features G4_TOPO.
+# D2. Topography: stack with DEM (band 1) and slope (band 2).
+# Source of the G4_TOPO features.
 TOPO <- file.path(DATA_BASE, "Topography", "elevation_slope.tif")
 
-# D3, D4. Mascara del area de estudio en EPSG:3035 (raster + shp).
+# D3, D4. Study-area mask in EPSG:3035 (raster + shp).
 MASK_TIF <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.tif")
 MASK_SHP <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.shp")
 
 
 # =============================================================================
-# 5) CONSTANTES METODOLOGICAS (18 variables)
+# 5) METHODOLOGICAL CONSTANTS (18 variables)
 # =============================================================================
 #
-# Estas son las decisiones metodologicas del Baseline canonico. Estan
-# agrupadas por funcion. La mayoria de usuarios NO necesita cambiarlas:
-# los valores aqui son los del Baseline publicado.
+# These are the methodological decisions of the canonical Baseline, grouped
+# by function. Most users do NOT need to change them: the values here are
+# the ones from the published Baseline.
 #
-# DEBUG: HANDOFF §N+28. En 0.5.0:
-#   - 8 de estas se aceptan via cfg$options + 1 via cfg top-level.
-#   - 9 estan hardcoded en internal-sup-orchestrator.R y NO son
-#     configurables sin modificar el codigo del paquete.
-# El tutorial las declara TODAS aqui para que la Capa B del BLOQUE 1
-# muestre la API ideal post-refactor.
+# DEBUG: HANDOFF §N+28. In 0.5.0:
+#   - 8 of these are accepted via cfg$options, plus 1 at cfg top level.
+#   - 9 are hardcoded in internal-sup-orchestrator.R and are NOT
+#     configurable without editing the package code.
+# The tutorial declares them ALL here so that Layer B of BLOCK 1 can show
+# the ideal post-refactor API.
 
 
-# --- 5.1) Politica de muestreo de negativos (1) -----------------------------
+# --- 5.1) Negative sampling policy (1) --------------------------------------
 
-# Fuentes de negativos que entran al training pool.
-# NOTA (2026-06-05): la policy de negativos ya NO es configurable; el
-# paquete usa SIEMPRE all_sources (el unico modo, implicito). El antiguo
-# "deterministic_direct" fue eliminado. Esta constante local se conserva
-# solo como documentacion; no se pasa al config builder.
-#   all_sources - 4 fuentes: internal_keep_qc (burned) + deterministic
+# Sources of negatives that enter the training pool.
+# NOTE (2026-06-05): the negatives policy is no longer configurable; the
+# package ALWAYS uses all_sources (the only mode, implicit). The old
+# "deterministic_direct" was removed. This local constant is kept purely
+# as documentation; it is not passed to the config builder.
+#   all_sources - 4 sources: internal_keep_qc (burned) + deterministic
 #                 drops + random background + Otsu unburned patches.
 NEGATIVE_POOL_POLICY <- "all_sources"
 
 
-# --- 5.2) Guard de tamaño minimo del pool burned (1) ------------------------
+# --- 5.2) Minimum-size guard for the burned pool (1) ------------------------
 
-# Si el deterministic stage produce menos de N polygonos burned para el
-# combo, el supervised aborta limpiamente con error informativo (no se
-# puede entrenar un modelo con tan pocos positivos).
-# Este guard fue el que aborto los 3 combos de 1997 (n=0/1, ver §N+24).
+# If the deterministic stage yields fewer than N burned polygons for the
+# combo, the supervised stage aborts cleanly with an informative error (a
+# model cannot be trained on so few positives).
+# This is the guard that aborted the three 1997 combos (n=0/1, see §N+24).
 MIN_BURNED_POOL_N <- 5L
 
 
-# --- 5.3) Reproducibilidad: seeds aleatorios (2) ----------------------------
+# --- 5.3) Reproducibility: random seeds (2) ---------------------------------
 
-# Seed del muestreo random_burnable_background (all_sources Part 1).
+# Seed of the random_burnable_background sampling (all_sources Part 1).
 RANDOM_SEED <- 42L
 
-# Seed del muestreo Otsu unburned (rama all_sources Part 2).
-# DEBUG: HANDOFF §N+28. El paquete tiene DOS seeds independientes,
-# ambos hardcoded a 42. El refactor podria unificarlos a uno solo si
-# se decide que la independencia no aporta valor.
+# Seed of the Otsu unburned sampling (all_sources branch, Part 2).
+# DEBUG: HANDOFF §N+28. The package has TWO independent seeds, both
+# hardcoded to 42. The refactor could unify them into one if the
+# independence turns out not to be worth keeping.
 LEGACY_RANDOM_SEED <- 42L
 
 
-# --- 5.4) Filtro temporal entre años (3) ------------------------------------
+# --- 5.4) Between-year temporal filter (3) ----------------------------------
 #
-# Penalizan polygonos del año actual que solapan demasiado con polygonos
-# del año anterior (proxy: "fuegos persistentes probablemente no son
-# fuegos reales"). DEBUG: HANDOFF §N+28 - actualmente hardcoded.
+# These penalise polygons of the current year that overlap too much with
+# polygons of the previous year (proxy: "persistent fires are probably not
+# real fires"). DEBUG: HANDOFF §N+28 - currently hardcoded.
 
-# Umbral de overlap espacial para considerar conflicto temporal.
+# Spatial-overlap threshold for declaring a temporal conflict.
 CURRENTYEAR_PREYEAR_OVERLAP_THR <- 0.70
 
-# Densidad minima de hotspots/ha para que un polygono pase el filtro.
+# Minimum hotspot density (per ha) for a polygon to pass the filter.
 CURRENTYEAR_HOTSPOT_DENSITY_THR <- 0.001
 
-# Floor de la penalty score (no baja de este valor).
+# Floor of the penalty score (it never drops below this value).
 CURRENTYEAR_TEMPORAL_PENALTY_FLOOR <- 0.10
 
 
-# --- 5.5) Otsu pipeline - parametros principales (4) ------------------------
+# --- 5.5) Otsu pipeline - main parameters (4) -------------------------------
 #
-# Controlan la rama Otsu del all_sources mode (legacy_otsu_*).
+# These control the Otsu branch of the all_sources mode (legacy_otsu_*).
 
-# Modo de aplicacion del Otsu. "burnable_only" = solo sobre pixeles
-# que la mascara Corine considera quemables (evita que el Otsu vea
-# agua, urbano, etc. y distorsione los umbrales).
+# How Otsu is applied. "burnable_only" = only over the pixels the Corine
+# mask considers burnable (this keeps Otsu from seeing water, urban, etc.
+# and distorting the thresholds).
 LEGACY_OTSU_MODE <- "burnable_only"
 
-# Umbral minimo de RBR para que un parche Otsu sea considerado.
-# Guard contra ruido espectral negativo.
+# Minimum RBR threshold for an Otsu patch to be considered at all.
+# A guard against negative spectral noise.
 LEGACY_OTSU_THRESHOLD <- 0
 
-# Umbral de referencia para escalar otros umbrales relativos del Otsu.
+# Reference threshold used to scale the other relative Otsu thresholds.
 LEGACY_REFERENCE_OTSU_THRESHOLD <- 100
 
-# Cap del pool otsu_patch_residual. Sin esto, los ~13.000 parches
-# candidatos saturarian el training set.
+# Cap on the otsu_patch_residual pool. Without it, the ~13,000 candidate
+# patches would swamp the training set.
 LEGACY_SAMPLE_N <- 2000L
 
 
-# --- 5.6) Otsu pipeline - thresholds de confianza (2) -----------------------
+# --- 5.6) Otsu pipeline - confidence thresholds (2) -------------------------
 #
-# DEBUG: HANDOFF §N+28 Tier 1. Hardcoded en 0.5.0, expuesto post-refactor.
+# DEBUG: HANDOFF §N+28 Tier 1. Hardcoded in 0.5.0, exposed after the refactor.
 
-# Threshold para considerar un parche Otsu como "alta confianza".
+# Threshold above which an Otsu patch counts as "high confidence".
 OTSU_KEEP_HI <- 0.45
 
-# Threshold para considerar un parche Otsu como "baja confianza" (drop).
+# Threshold below which an Otsu patch counts as "low confidence" (drop).
 OTSU_DROP_LO <- 0.15
 
 
-# --- 5.7) Toggles del pipeline (4) ------------------------------------------
+# --- 5.7) Pipeline toggles (4) ----------------------------------------------
 #
-# Permiten saltar etapas del pipeline (util para reruns parciales).
-# DEBUG: HANDOFF §N+28 Tier 2. Hardcoded a TRUE en 0.5.0.
+# These allow pipeline stages to be skipped (handy for partial reruns).
+# DEBUG: HANDOFF §N+28 Tier 2. Hardcoded to TRUE in 0.5.0.
 
 DO_POOLS    <- TRUE  # STEP A: pools (burned + unburned)
 DO_FOLDS    <- TRUE  # STEP B1-B2: spatial block folds
@@ -334,25 +334,25 @@ DO_FEATURES <- TRUE  # STEP B3: extract features per polygon
 DO_MODEL    <- TRUE  # STEP C: OOF + final model + scoring + map
 
 
-# --- 5.8) Control de I/O (3) ------------------------------------------------
+# --- 5.8) I/O control (3) ---------------------------------------------------
 
-# Si TRUE y existen outputs Otsu de un run previo, los reutiliza en
-# lugar de regenerarlos. Solo afecta a la rama Otsu del all_sources.
+# If TRUE and Otsu outputs from a previous run exist, they are reused
+# instead of regenerated. Only affects the Otsu branch of all_sources.
 LEGACY_REUSE_EXISTING <- TRUE
 
-# Si TRUE, escribe outputs intermedios del Otsu a disco.
+# If TRUE, intermediate Otsu outputs are written to disk.
 LEGACY_WRITE_OUTPUT <- TRUE
 
-# Si TRUE, activa el log detallado del STEP A4 (mensajes "[unb] ...").
+# If TRUE, enables the detailed STEP A4 log (the "[unb] ..." messages).
 UNB_VERBOSE <- TRUE
 
 
 # =============================================================================
-# 6) DIRECTORIO DE SALIDA DEL TUTORIAL
+# 6) TUTORIAL OUTPUT DIRECTORY
 # =============================================================================
 #
-# Para no machacar el run real, redirigimos los outputs del tutorial a
-# una carpeta paralela SUPERVISED_TUTORIAL/ (no SUPERVISED/).
+# So as not to trample the real run, the tutorial outputs are redirected to
+# a parallel folder, SUPERVISED_TUTORIAL/ (not SUPERVISED/).
 
 TUTORIAL_RESULT_DIR <- file.path(
   RESULTS, as.character(YEAR), RESULT_NAME, "SUPERVISED_TUTORIAL", SCENARIO
@@ -361,11 +361,11 @@ dir.create(TUTORIAL_RESULT_DIR, recursive = TRUE, showWarnings = FALSE)
 
 
 # =============================================================================
-# 7) VERIFICACION GLOBAL
+# 7) GLOBAL VERIFICATION
 # =============================================================================
 #
-# Validamos que los 13 inputs existen ANTES de empezar el pipeline.
-# Si algo falta, fallamos en <1 segundo en lugar de 5-10 minutos despues.
+# The 13 inputs are validated BEFORE the pipeline starts. If something is
+# missing we fail in under a second instead of 5-10 minutes later.
 
 stopifnot(
   # A) Year-dependent
@@ -373,7 +373,7 @@ stopifnot(
   file.exists(CHANGE_INDEX),
   file.exists(RBR_AUTUMN),
   file.exists(HOTSPOTS),
-  # B) Validacion externa
+  # B) External validation
   file.exists(EFFIS_CA_TIF),
   file.exists(EFFIS_CA_SHP),
   # C) Corine
@@ -381,7 +381,7 @@ stopifnot(
   file.exists(CORINE_STRATA),
   file.exists(CORINE_LUT),
   file.exists(BURNEABLE_MASK),
-  # D) Estaticos
+  # D) Static
   file.exists(PENINSULA_SHP),
   file.exists(TOPO),
   file.exists(MASK_TIF),
@@ -390,17 +390,17 @@ stopifnot(
 
 
 # =============================================================================
-# 8) RESUMEN VISUAL DE LA CONFIGURACION
+# 8) VISUAL SUMMARY OF THE CONFIGURATION
 # =============================================================================
 
-cat("\n========== CONFIGURACION DEL EXPERIMENTO ==========\n")
-cat("\n[1] PARAMETROS DEL COMBO\n")
+cat("\n========== EXPERIMENT CONFIGURATION ==========\n")
+cat("\n[1] COMBO PARAMETERS\n")
 cat("  YEAR          :", YEAR, "\n")
 cat("  SCENARIO      :", SCENARIO, "\n")
 cat("  CORINE_YEAR   :", CORINE_YEAR, "\n")
 cat("  RESULT_NAME   :", RESULT_NAME, "\n")
 
-cat("\n[2] LOS 13 INPUTS (verificados)\n")
+cat("\n[2] THE 13 INPUTS (verified)\n")
 
 cat("\n  A) Year/scenario-dependent (4):\n")
 cat("    INTERNAL_DECISIONS :", basename(INTERNAL_DECISIONS), "\n")
@@ -408,102 +408,102 @@ cat("    CHANGE_INDEX       :", basename(CHANGE_INDEX), "\n")
 cat("    RBR_AUTUMN         :", basename(RBR_AUTUMN), "\n")
 cat("    HOTSPOTS           :", basename(HOTSPOTS), "\n")
 
-cat("\n  B) Validacion externa (1, +shp):\n")
+cat("\n  B) External validation (1, +shp):\n")
 cat("    EFFIS_CA_TIF       :", basename(EFFIS_CA_TIF), "\n")
 cat("    EFFIS_CA_SHP       :", basename(EFFIS_CA_SHP), "\n")
 
-cat("\n  C) Corine quinquenal (4):\n")
+cat("\n  C) Five-yearly Corine (4):\n")
 cat("    CORINE_RASTER      :", basename(CORINE_RASTER), "\n")
 cat("    CORINE_STRATA      :", basename(CORINE_STRATA), "\n")
 cat("    CORINE_LUT         :", basename(CORINE_LUT), "\n")
 cat("    BURNEABLE_MASK     :", basename(BURNEABLE_MASK), "\n")
 
-cat("\n  D) Estaticos (4):\n")
+cat("\n  D) Static (4):\n")
 cat("    PENINSULA_SHP      :", basename(PENINSULA_SHP), "\n")
 cat("    TOPO               :", basename(TOPO), "\n")
 cat("    MASK_TIF           :", basename(MASK_TIF), "\n")
 cat("    MASK_SHP           :", basename(MASK_SHP), "\n")
 
-cat("\n[3] CONSTANTES METODOLOGICAS\n")
+cat("\n[3] METHODOLOGICAL CONSTANTS\n")
 
-cat("\n  3.1 Politica de muestreo de negativos\n")
+cat("\n  3.1 Negative sampling policy\n")
 cat("    NEGATIVE_POOL_POLICY              :", NEGATIVE_POOL_POLICY, "\n")
-cat("    : siempre all_sources (unico modo, implicito desde 2026-06-05).\n")
-cat("      Combina 4 fuentes: internal_keep_qc (burned) + deterministic\n")
+cat("    : always all_sources (the only mode, implicit since 2026-06-05).\n")
+cat("      Combines 4 sources: internal_keep_qc (burned) + deterministic\n")
 cat("      drops + random_background + Otsu_patches.\n")
 
-cat("\n  3.2 Guard de tamaño minimo del pool burned\n")
+cat("\n  3.2 Minimum-size guard for the burned pool\n")
 cat("    MIN_BURNED_POOL_N                 :", MIN_BURNED_POOL_N, "\n")
-cat("    : combos con menos de N polygonos burned abortan limpiamente.\n")
-cat("      Bajar a 3 admite anos con muy pocos fuegos (riesgo de\n")
-cat("      modelo poco fiable). Subir a 10 descarta mas anos pre-MODIS.\n")
+cat("    : combos with fewer than N burned polygons abort cleanly.\n")
+cat("      Lowering it to 3 admits years with very few fires (risk of an\n")
+cat("      unreliable model). Raising it to 10 discards more pre-MODIS years.\n")
 
-cat("\n  3.3 Reproducibilidad: seeds aleatorios\n")
+cat("\n  3.3 Reproducibility: random seeds\n")
 cat("    RANDOM_SEED / LEGACY_RANDOM_SEED  :", RANDOM_SEED, "/", LEGACY_RANDOM_SEED, "\n")
-cat("    : seeds del muestreo random (background + Otsu).\n")
-cat("      Cambiar genera training pools distintos. Las metricas finales\n")
-cat("      varian poco (~ +/- 0.01 en F1). Util para tests de robustez.\n")
+cat("    : seeds of the random sampling (background + Otsu).\n")
+cat("      Changing them produces different training pools. The final\n")
+cat("      metrics vary little (~ +/- 0.01 in F1). Useful for robustness tests.\n")
 
-cat("\n  3.4 Filtro temporal entre anos\n")
+cat("\n  3.4 Between-year temporal filter\n")
 cat("    CURRENTYEAR_PREYEAR_OVERLAP_THR   :", CURRENTYEAR_PREYEAR_OVERLAP_THR, "\n")
-cat("    : umbral de solape espacial con polygonos del ano anterior.\n")
-cat("      Si supera 70%, se considera 'fuego persistente' (sospechoso).\n")
-cat("      Subir a 0.85 = filtro mas estricto, mas drops.\n")
+cat("    : spatial-overlap threshold against previous-year polygons.\n")
+cat("      Above 70% the polygon is treated as a 'persistent fire' (suspicious).\n")
+cat("      Raising it to 0.85 = stricter filter, more drops.\n")
 
 cat("    CURRENTYEAR_HOTSPOT_DENSITY_THR   :", CURRENTYEAR_HOTSPOT_DENSITY_THR, "\n")
-cat("    : densidad minima de hotspots/ha para validar un polygono.\n")
-cat("      Subir = exigir mas evidencia termica. Solo aplica >= 1995.\n")
+cat("    : minimum hotspot density (per ha) to validate a polygon.\n")
+cat("      Raising it demands more thermal evidence. Only applies from 1995.\n")
 
 cat("    CURRENTYEAR_TEMPORAL_PENALTY_FLOOR:", CURRENTYEAR_TEMPORAL_PENALTY_FLOOR, "\n")
-cat("    : floor de la penalty score temporal (no baja de aqui).\n")
-cat("      Evita que penalty=0 elimine completamente al polygono.\n")
+cat("    : floor of the temporal penalty score (it never goes below this).\n")
+cat("      Prevents penalty=0 from wiping the polygon out entirely.\n")
 
-cat("\n  3.5 Otsu pipeline: parametros principales\n")
+cat("\n  3.5 Otsu pipeline: main parameters\n")
 cat("    LEGACY_OTSU_MODE                  :", LEGACY_OTSU_MODE, "\n")
-cat("    : aplica Otsu solo sobre pixeles quemables segun Corine.\n")
-cat("      Sin esto el Otsu veria agua/urbano y los umbrales saldrian\n")
-cat("      distorsionados.\n")
+cat("    : applies Otsu only over the pixels Corine deems burnable.\n")
+cat("      Without this, Otsu would see water/urban and the thresholds\n")
+cat("      would come out distorted.\n")
 
 cat("    LEGACY_OTSU_THRESHOLD             :", LEGACY_OTSU_THRESHOLD, "\n")
-cat("    : umbral minimo de RBR para que un parche Otsu se considere.\n")
-cat("      Guard contra ruido espectral negativo.\n")
+cat("    : minimum RBR threshold for an Otsu patch to be considered.\n")
+cat("      A guard against negative spectral noise.\n")
 
 cat("    LEGACY_REFERENCE_OTSU_THRESHOLD   :", LEGACY_REFERENCE_OTSU_THRESHOLD, "\n")
-cat("    : umbral de referencia para escalar otros umbrales del Otsu.\n")
+cat("    : reference threshold used to scale the other Otsu thresholds.\n")
 
 cat("    LEGACY_SAMPLE_N                   :", LEGACY_SAMPLE_N, "\n")
-cat("    : cap del pool otsu_patch_residual. Sin esto, los ~13.000\n")
-cat("      parches candidatos saturarian el training set.\n")
+cat("    : cap on the otsu_patch_residual pool. Without it, the ~13,000\n")
+cat("      candidate patches would swamp the training set.\n")
 
-cat("\n  3.6 Otsu pipeline: thresholds de confianza\n")
+cat("\n  3.6 Otsu pipeline: confidence thresholds\n")
 cat("    OTSU_KEEP_HI / OTSU_DROP_LO       :", OTSU_KEEP_HI, "/", OTSU_DROP_LO, "\n")
-cat("    : umbrales de probabilidad para clasificar parches Otsu.\n")
-cat("      KEEP_HI=0.45 -> alta confianza burned. DROP_LO=0.15 -> baja.\n")
-cat("      Subir KEEP_HI = mas estricto en aceptar como burned.\n")
+cat("    : probability thresholds for classifying Otsu patches.\n")
+cat("      KEEP_HI=0.45 -> high-confidence burned. DROP_LO=0.15 -> low.\n")
+cat("      Raising KEEP_HI = stricter about accepting something as burned.\n")
 
-cat("\n  3.7 Toggles del pipeline\n")
+cat("\n  3.7 Pipeline toggles\n")
 cat("    DO_POOLS / FOLDS / FEATURES / MODEL:",
     DO_POOLS, "/", DO_FOLDS, "/", DO_FEATURES, "/", DO_MODEL, "\n")
-cat("    : ejecutar STEP A (pools) / B1-B2 (folds) / B3 (features) /\n")
-cat("      C-D (modelo). En 0.5.0 todos hardcoded a TRUE; el refactor\n")
-cat("      permitira reruns parciales (ej: solo regenerar el modelo).\n")
+cat("    : run STEP A (pools) / B1-B2 (folds) / B3 (features) /\n")
+cat("      C-D (model). In 0.5.0 all hardcoded to TRUE; the refactor\n")
+cat("      will allow partial reruns (e.g. regenerate the model only).\n")
 
-cat("\n  3.8 Control de I/O\n")
+cat("\n  3.8 I/O control\n")
 cat("    LEGACY_REUSE_EXISTING             :", LEGACY_REUSE_EXISTING, "\n")
-cat("    : reutiliza outputs Otsu de runs previos si existen.\n")
-cat("      FALSE = regenerar siempre desde cero (mas lento, mas robusto).\n")
+cat("    : reuses Otsu outputs from previous runs when they exist.\n")
+cat("      FALSE = always regenerate from scratch (slower, more robust).\n")
 
 cat("    LEGACY_WRITE_OUTPUT               :", LEGACY_WRITE_OUTPUT, "\n")
-cat("    : escribe outputs intermedios del Otsu a disco. FALSE = solo\n")
-cat("      en memoria (no inspeccionable post-hoc).\n")
+cat("    : writes intermediate Otsu outputs to disk. FALSE = in memory\n")
+cat("      only (not inspectable after the fact).\n")
 
 cat("    UNB_VERBOSE                       :", UNB_VERBOSE, "\n")
-cat("    : log detallado del STEP A4 (mensajes '[unb] ...').\n")
+cat("    : detailed STEP A4 log (the '[unb] ...' messages).\n")
 
 
-cat("\n[4] DIRECTORIO DE OUTPUTS DEL TUTORIAL\n")
+cat("\n[4] TUTORIAL OUTPUT DIRECTORY\n")
 cat("    ", TUTORIAL_RESULT_DIR, "\n")
 
-cat("\nBLOQUE 0 completado. ",
-    "13 inputs + 18 constantes metodologicas declaradas y verificadas.\n")
+cat("\nBLOCK 0 complete. ",
+    "13 inputs + 18 methodological constants declared and verified.\n")
 

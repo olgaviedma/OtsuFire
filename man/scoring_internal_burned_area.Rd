@@ -47,7 +47,7 @@ scoring_internal_burned_area(
 \item{burnable_corine}{Burnable mask. Either a terra::SpatRaster (CORINE-like) or an sf layer.}
 
 \item{burnable_classes}{Numeric/integer vector of burnable classes when `burnable_corine` is categorical.
-If `NULL`, the raster must be binary-like (values in {0,1}).}
+If `NULL`, the raster must be binary-like (values in \{0,1\}).}
 
 \item{rbr_rast}{Optional terra::SpatRaster. If provided and `compute_median=TRUE`, median RBR is computed.}
 

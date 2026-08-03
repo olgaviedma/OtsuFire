@@ -98,7 +98,13 @@ test_that("FRENTE 1: OOF and FINAL params=NULL resolve to the SAME canonical blo
   expect_identical(drop_spw(p_oof), drop_spw(p_final))
   # Canonical field values.
   expect_equal(p_oof$objective, "binary:logistic")
-  expect_identical(p_oof$eval_metric, c("logloss", "aucpr")) # logloss FIRST
+  # On xgboost < 2.0 the vector is collapsed to its first entry; from 2.0.0 the
+  # LAST entry drives early stopping, so the canonical block asks for logloss
+  # alone. Either way logloss is what drives early stopping.
+  expect_identical(
+    p_oof$eval_metric,
+    if (utils::packageVersion("xgboost") >= "2.0.0") "logloss" else c("logloss", "aucpr")
+  )
   expect_equal(p_oof$eval_metric[1], "logloss")              # drives early stop
   expect_equal(p_oof$eta, 0.05)
   expect_equal(p_oof$max_depth, 5)

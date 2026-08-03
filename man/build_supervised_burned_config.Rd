@@ -190,7 +190,7 @@ negative-bucket caps. Recognized keys (unknown keys anywhere error):
   \item `otsu = list(candidate_threshold, reference_threshold)` --- the two
     Otsu-residual severity thresholds (numeric). Defaults `0` / `100`.
   \item `caps = c(random, otsu)` --- a NAMED numeric over exactly
-    `{random, otsu}`, each `>= 0` (`Inf` disables the cap), expressed as a
+    `\{random, otsu\}`, each `>= 0` (`Inf` disables the cap), expressed as a
     multiple of the number of burned labels (`n_burned`). Defaults
     `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
     `cfg$train_control$caps` and consumed end-to-end by the pool builder,

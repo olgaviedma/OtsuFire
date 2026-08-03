@@ -452,9 +452,13 @@ train_final_model_direct <- function(
   split_mode <- paste0("nested_refit_", fit$inner_split$mode)
   spw <- fit$spw_refit
   params <- .params_from_cfg(scale_pos_weight = spw)
-  # best_iteration is carried via the audit + recipe$training below; mimic the
-  # xgboost field so model$best_iteration reads consistently downstream.
-  if (is.null(model$best_iteration)) model$best_iteration <- fit$best_iteration
+  # best_iteration is carried via the audit + recipe$training below. It used to
+  # be written back onto the booster so that model$best_iteration read
+  # consistently downstream, but from xgboost 2.0.0 the booster is an ALTLIST
+  # and rejects `$<-` ("ALTLIST classes must provide a Set_elt method"). The
+  # value is resolved here instead and handed to recipe$training directly;
+  # reading from the booster still works on every version.
+  best_iteration_out <- model$best_iteration %||% fit$best_iteration %||% NA_integer_
   feature_weights_applied <- if (!is.null(feature_weights)) {
     fw_vector <- rep(1.0, length(fit$x_cols))
     names(fw_vector) <- fit$x_cols
@@ -616,7 +620,7 @@ train_final_model_direct <- function(
         seed = seed,
         nrounds_max = nrounds_max,
         early_stopping_rounds = early_stopping_rounds,
-        best_iteration = model$best_iteration %||% NA_integer_,
+        best_iteration = best_iteration_out,
         # Fixed internal constant (traceability only; never user-settable):
         # OtsuFire always uses inner-early-stopping selection + full-data refit.
         # spw_selection / spw_refit record both scale_pos_weight values

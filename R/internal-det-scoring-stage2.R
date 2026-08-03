@@ -291,7 +291,7 @@ erase_overlap_with_preyear <- function(
 #' @param polys_stage1 sf. Stage-1 polygons used as support.
 #' @param burnable_corine Burnable mask. Either a terra::SpatRaster (CORINE-like) or an sf layer.
 #' @param burnable_classes Numeric/integer vector of burnable classes when `burnable_corine` is categorical.
-#'   If `NULL`, the raster must be binary-like (values in {0,1}).
+#'   If `NULL`, the raster must be binary-like (values in \{0,1\}).
 #' @param rbr_rast Optional terra::SpatRaster. If provided and `compute_median=TRUE`, median RBR is computed.
 #' @param support_buffer_m Numeric. Buffer (meters) applied to Stage-1 support before intersects.
 #' @param max_corine_na_frac Numeric or `NULL`. If set, polygons with NA fraction greater than this

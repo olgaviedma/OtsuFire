@@ -274,7 +274,13 @@ test_that("Gate 1B: current defaults equal the documented legacy recipe (params 
   # (b) the documented legacy NUMBERS (FRENTE 1 / D1 unification + B1 defaults).
   expect_identical(legacy_block$booster, "gbtree")
   expect_identical(legacy_block$objective, "binary:logistic")
-  expect_identical(legacy_block$eval_metric, c("logloss", "aucpr"))
+  # xgboost >= 2.0.0 evaluates every entry and lets the LAST one drive early
+  # stopping, so the canonical block requests logloss alone there; on 1.7 the
+  # vector is collapsed to its first entry, which is logloss either way.
+  expect_identical(
+    legacy_block$eval_metric,
+    if (utils::packageVersion("xgboost") >= "2.0.0") "logloss" else c("logloss", "aucpr")
+  )
   expect_equal(legacy_block$eta, 0.05)
   expect_equal(legacy_block$max_depth, 5)
   expect_equal(legacy_block$min_child_weight, 5)

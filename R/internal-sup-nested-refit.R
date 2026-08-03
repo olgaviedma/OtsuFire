@@ -39,6 +39,33 @@
 #
 # @keywords internal
 # @noRd
+# xgboost 2.0.0 renamed the early-stopping evaluation set from `watchlist` to
+# `evals`; the old name still works but warns, and upstream states it will
+# become an error. Passing it under the wrong name leaves the evaluation set
+# unregistered, after which the early-stopping callback compares an NA score
+# and fails. Build the call dynamically so the package behaves identically on
+# both API generations.
+.of_xgb_train_evals <- function(params, data, nrounds, evals, ...) {
+  args <- list(params = params, data = data, nrounds = nrounds, ...)
+  evals_arg <- if (utils::packageVersion("xgboost") >= "2.0.0") "evals" else "watchlist"
+  args[[evals_arg]] <- evals
+  do.call(xgboost::xgb.train, args)
+}
+
+# Read the early-stopping iteration off a fitted booster.
+#
+# Up to xgboost 1.7 the booster was a plain list carrying `best_iteration`.
+# From 2.0.0 it is an ALTLIST whose only element is `ptr`, so `model$best_iteration`
+# returns NULL and the selected iteration lives in the `early_stop` attribute.
+# Reading it through this helper matters: the previous `m$best_iteration %||%
+# nrounds_max` fallback would silently resolve to nrounds_max on xgboost >= 2.0,
+# i.e. early stopping would be disabled without any error being raised.
+.of_xgb_best_iteration <- function(model) {
+  bi <- model$best_iteration
+  if (is.null(bi)) bi <- attributes(model)$early_stop$best_iteration
+  bi
+}
+
 .of_nested_group_split <- function(n, group_vec, block_col, val_frac) {
   if (!is.null(block_col) && !is.null(group_vec)) {
     g <- as.character(group_vec)
@@ -545,15 +572,15 @@ apply_supervised_recipe <- function(df, recipe) {
 
   # (e) train with inner_val as the ONLY early-stopping set.
   set.seed(fold_seed)
-  m_sel <- xgboost::xgb.train(
+  m_sel <- .of_xgb_train_evals(
     params = params_sel,
     data = d_inner_tr,
     nrounds = nrounds_max,
-    watchlist = list(train = d_inner_tr, val = d_inner_val),
+    evals = list(train = d_inner_tr, val = d_inner_val),
     early_stopping_rounds = early_stopping_rounds,
     verbose = if (isTRUE(verbose)) 1 else 0
   )
-  best_iteration <- m_sel$best_iteration %||% nrounds_max
+  best_iteration <- .of_xgb_best_iteration(m_sel) %||% nrounds_max
   if (!is.finite(best_iteration) || best_iteration < 1L) best_iteration <- 1L
   best_iteration <- as.integer(best_iteration)
 

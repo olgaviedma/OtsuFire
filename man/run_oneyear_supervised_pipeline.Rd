@@ -243,8 +243,8 @@ from its own training labels.
 \section{Phase B sampling caps and feature space}{
 
 The pass-through hooks above support the Phase B experiment matrix
-(`random_to_burned_ratio`  in  {0.25, 1.0, Inf} x
-hotspot-feature variants {All, L1, L2, None}) and the eventual mass
+(`random_to_burned_ratio`  in  \{0.25, 1.0, Inf\} x
+hotspot-feature variants \{All, L1, L2, None\}) and the eventual mass
 re-training (10 years x 3 scenarios). All defaults reproduce the
 historical behaviour byte-for-byte; a caller that does not pass
 them obtains exactly the same final model as before.

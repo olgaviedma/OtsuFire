@@ -63,7 +63,20 @@
     # vector. NOTE (handoff): an earlier aucpr-FIRST ordering made AUCPR drive
     # early stopping and collapsed best_iter to 1 (AUCPR saturates instantly on
     # this imbalanced set); logloss-first restores a calibrated best_iter ~137.
-    eval_metric      = c("logloss", "aucpr"),
+    #
+    # 2026-08-03: that reasoning holds only up to xgboost 1.7, where a vector
+    # in `params` is collapsed to its FIRST entry -- the evaluation log of a
+    # 1.7.9.1 fit contains logloss only, so aucpr was never actually computed
+    # and logloss drove early stopping. From xgboost 2.0.0 every entry is
+    # evaluated and the LAST one drives early stopping, which would hand the
+    # decision to aucpr: exactly the failure mode the note above warns about.
+    # Requesting logloss alone on >= 2.0.0 therefore preserves the intended
+    # (and, on 1.7, the actual) behaviour rather than changing it.
+    eval_metric      = if (utils::packageVersion("xgboost") >= "2.0.0") {
+      "logloss"
+    } else {
+      c("logloss", "aucpr")
+    },
     eta              = 0.05,
     max_depth        = 5,
     min_child_weight = 5,

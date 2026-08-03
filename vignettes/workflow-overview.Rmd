@@ -36,12 +36,19 @@ supervised configs.
 ```{r mosaic, purl = FALSE}
 library(OtsuFire)
 
-mosaic_path <- change_index_mosaic(
-  input_dir   = "/path/to/yearly/tiles",
-  output_dir  = "/path/to/Composites_90m/Min_Min",
-  target_year = 2020L,
-  index_type  = "RBR"
+mosaic_res <- change_index_mosaic(
+  folder_path    = "/path/to/yearly/tiles",
+  mask           = "/path/to/mask_Peninsula_3035.shp",
+  year           = 2020L,
+  raster_pattern = "MinMin_2020_tile*.tif",
+  output_dir     = "/path/to/Composites_90m/Min_Min",
+  nodata_value   = -9999,
+  cap_below      = TRUE,
+  lower_cap      = -1000,
+  method         = "merge"
 )
+
+mosaic_path <- mosaic_res$mosaic_path
 ```
 
 ## 2. Deterministic stage
@@ -79,7 +86,7 @@ det_cfg <- build_burned_mapping_config(
 )
 
 det_run <- run_deterministic_pipeline(det_cfg)
-det_run$internal_decisions_gpkg
+det_run$result_paths$internal_decisions
 ```
 
 The deterministic builder no longer selects closed scenario presets.
@@ -94,8 +101,8 @@ into three modular helpers:
 
 ```{r det-modular, purl = FALSE}
 patches  <- detect_burned_patches(det_cfg)
-scored   <- score_burned_patches(det_cfg, patches)
-# scored is an sf with class_final, filter_1..3, etc.
+scored   <- score_burned_patches(patches, det_cfg)
+# scored$internal_decisions is an sf with class_final, filter_1..3, etc.
 ```
 
 ## 3. Supervised one-year stage
@@ -108,7 +115,7 @@ per-patch burned **model score**.
 ```{r sup, purl = FALSE}
 sup_cfg <- build_supervised_burned_config(
   run_label          = "balanced",
-  internal_decisions = det_run$internal_decisions_gpkg,
+  internal_decisions = det_run$result_paths$internal_decisions,
   change_index       = mosaic_path,
   hotspots           = "/path/to/Hotspots/hotspots_iberia_2020.geojson",
   target_year        = 2020L,
@@ -206,12 +213,29 @@ workflow-independent: threshold `p_burned` (or `p_burned_current_year`)
 into a burned-area prediction layer and compare it against an external
 reference (EFFIS). It reports omission, commission, F1, and IoU.
 
+`validate_fire_maps()` compares an already-thresholded layer, so the
+scored map is cut first. The operating threshold is a per-year decision
+(`p_burned` is a score, not a calibrated probability); 0.5 below is only
+a placeholder.
+
 ```{r validate, purl = FALSE}
+fm <- sf::st_read(sup_run$final_map_gpkg, layer = "final_map_full", quiet = TRUE)
+burned <- fm[is.finite(fm$p_burned_model) & fm$p_burned_model >= 0.5, ]
+
+thresholded_gpkg <- "/path/to/Results/VALIDATION/thresholded_burned.gpkg"
+sf::st_write(burned, thresholded_gpkg, layer = "thresholded_burned", quiet = TRUE)
+
 val <- validate_fire_maps(
-  predicted = sup_run$final_map_gpkg,
-  reference = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
-  threshold = 0.5
+  input_shapefile = thresholded_gpkg,
+  ref_shapefile   = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
+  mask_shapefile  = "/path/to/Mask_StudyArea/mask_Peninsula_3035.shp",
+  burnable_raster = "/path/to/Corine_Masks/burnable_mask_binary.tif",
+  year_target     = 2020L,
+  validation_dir  = "/path/to/Results/VALIDATION",
+  metrics_type    = "all"
 )
+
+val$metrics
 ```
 
 External metrics are computed against a *different reference* (EFFIS)

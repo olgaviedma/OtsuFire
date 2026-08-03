@@ -8,7 +8,7 @@
 # geometry:
 # process_otsu_rasters_(), build_otsu_negative_pipeline(),
 # build_otsu_negative_from_decisions(), build_otsu_negative_from_patches()
-# (run_scenarios() already did so at internal-sup-unburned-bloques.R).
+# (run_scenarios() already did so at internal-sup-unburned-blocks.R).
 
 sanitize_otsu_negative <- function(x) {
   x <- sf::st_make_valid(x)
@@ -140,7 +140,7 @@ verify_otsu_negative_helpers <- function(
   # Block 5: the four required helpers (process_otsu_rasters_,
   # polygonize_Otsu, coverage_by_patch_raster, run_scenarios) are now
   # package-internal — see R/internal-sup-process-otsu-unburned.R and
-  # R/internal-sup-unburned-bloques.R. The package namespace already
+  # R/internal-sup-unburned-blocks.R. The package namespace already
   # exposes them via lexical scoping, so the historical runtime sys.source()
   # of external 2_SCRIPTS/para_unburned files is no longer needed and
   # has been removed entirely.

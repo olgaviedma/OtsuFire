@@ -1,8 +1,8 @@
 # ============================================================
 # VALIDATION SUMMARY HELPERS
-# - Lee los Excel de validacion por escenario
+# - Reads the per-scenario validation Excel files
 # - Extrae hojas globales de pixel y polygon
-# - Construye un Excel resumen anual por escenarios
+# - Builds a yearly summary Excel, per scenario
 # ============================================================
 
 find_sheet_by_patterns <- function(xlsx_path, patterns) {
@@ -32,7 +32,7 @@ read_global_sheet <- function(xlsx_path,
   
   if (is.null(sheet_name)) {
     warning(sprintf(
-      "No se encontro hoja global de tipo '%s' en: %s",
+      "No global sheet of type '%s' was found in: %s",
       type, xlsx_path
     ))
     return(NULL)
@@ -42,7 +42,7 @@ read_global_sheet <- function(xlsx_path,
   
   if (is.null(df) || nrow(df) == 0) {
     warning(sprintf(
-      "La hoja '%s' esta vacia en: %s",
+      "Sheet '%s' is empty in: %s",
       sheet_name, xlsx_path
     ))
     return(NULL)
@@ -72,7 +72,7 @@ make_yearly_validation_summary <- function(target_year,
   )
   
   if (!dir.exists(det_dir)) {
-    stop("No existe el directorio DETERMINISTIC del ano: ", det_dir, call. = FALSE)
+    stop("There is no DETERMINISTIC directory for the year: ", det_dir, call. = FALSE)
   }
   
   if (is.null(output_filename)) {
@@ -122,7 +122,7 @@ make_yearly_validation_summary <- function(target_year,
       scenario = NA_character_,
       source_excel = NA_character_,
       source_sheet = NA_character_,
-      note = "No se encontraron resultados pixel_global",
+      note = "No pixel_global results were found",
       stringsAsFactors = FALSE
     )
   }
@@ -135,7 +135,7 @@ make_yearly_validation_summary <- function(target_year,
       scenario = NA_character_,
       source_excel = NA_character_,
       source_sheet = NA_character_,
-      note = "No se encontraron resultados polygon_global",
+      note = "No polygon_global results were found",
       stringsAsFactors = FALSE
     )
   }

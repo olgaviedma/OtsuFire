@@ -439,33 +439,33 @@ score_burnedlike_and_export_final_map <- function(
     out
   }
 
-  if (!file.exists(model_rds)) stop("No existe model_rds: ", model_rds)
-  if (!file.exists(recipe_rds)) stop("No existe recipe_rds: ", recipe_rds)
-  if (!file.exists(labelled_features_gpkg)) stop("No existe labelled_features_gpkg: ", labelled_features_gpkg)
-  if (!file.exists(qa_labelled_gpkg)) stop("No existe qa_labelled_gpkg: ", qa_labelled_gpkg)
-  if (!file.exists(unlabeled_gpkg)) stop("No existe unlabeled_gpkg: ", unlabeled_gpkg)
+  if (!file.exists(model_rds)) stop("model_rds does not exist: ", model_rds)
+  if (!file.exists(recipe_rds)) stop("recipe_rds does not exist: ", recipe_rds)
+  if (!file.exists(labelled_features_gpkg)) stop("labelled_features_gpkg does not exist: ", labelled_features_gpkg)
+  if (!file.exists(qa_labelled_gpkg)) stop("qa_labelled_gpkg does not exist: ", qa_labelled_gpkg)
+  if (!file.exists(unlabeled_gpkg)) stop("unlabeled_gpkg does not exist: ", unlabeled_gpkg)
 
   model <- readRDS(model_rds)
   recipe <- readRDS(recipe_rds)
   S <- sf::read_sf(unlabeled_gpkg, unlabeled_layer, quiet = TRUE)
   S <- normalize_geom_name(S, "geom")
-  if (!id_col %in% names(S)) stop("Scoring layer NO tiene id_col=", id_col)
+  if (!id_col %in% names(S)) stop("Scoring layer has no id_col=", id_col)
   S[[id_col]] <- as.character(S[[id_col]])
 
   L_feat <- sf::read_sf(labelled_features_gpkg, labelled_features_layer, quiet = TRUE)
   L_feat <- normalize_geom_name(L_feat, "geom")
-  if (!id_col %in% names(L_feat)) stop("train_features NO tiene id_col=", id_col)
+  if (!id_col %in% names(L_feat)) stop("train_features has no id_col=", id_col)
   L_feat[[id_col]] <- as.character(L_feat[[id_col]])
 
   L_qa <- sf::read_sf(qa_labelled_gpkg, qa_labelled_layer, quiet = TRUE) |>
     sf::st_drop_geometry() |>
     as.data.frame()
-  if (!id_col %in% names(L_qa)) stop("QA labeled NO tiene id_col=", id_col)
+  if (!id_col %in% names(L_qa)) stop("QA labeled has no id_col=", id_col)
   L_qa[[id_col]] <- as.character(L_qa[[id_col]])
 
   qa_cols_candidate <- c(id_col, "p_oof_mean", "p_oof_med", "p_oof_sd", "n_preds")
   qa_keep_cols <- intersect(qa_cols_candidate, names(L_qa))
-  if (!"p_oof_mean" %in% qa_keep_cols) stop("QA labeled no tiene p_oof_mean (necesario).")
+  if (!"p_oof_mean" %in% qa_keep_cols) stop("QA labeled has no p_oof_mean (required).")
   L_qa2 <- L_qa[, qa_keep_cols, drop = FALSE]
   L_oof <- dplyr::left_join(L_feat, L_qa2, by = id_col) |>
     sf::st_drop_geometry() |>

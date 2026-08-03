@@ -357,7 +357,7 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
     hotspots_sf_base <- if (!is.null(hotspots_path) && file.exists(hotspots_path)) {
       sf::read_sf(hotspots_path)
     } else {
-      msg("WARNING: no existe hotspots: %s (se desactiva use_hotspots)",
+      msg("WARNING: hotspots not found: %s (use_hotspots is disabled)",
           hotspots_path %||% "<none: cfg$inputs$hotspots = NULL>")
       sf::st_sf(
         frp = numeric(),
@@ -417,12 +417,12 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
     if (isTRUE(feat_time < pools_time)) {
       should_rebuild_features <- TRUE
       rebuild_reasons <- c(rebuild_reasons,
-                           "features_geometry.gpkg es mas antiguo que 01_POOLS")
+                           "features_geometry.gpkg is older than 01_POOLS")
     }
     if (isTRUE(feat_time < folds_time)) {
       should_rebuild_features <- TRUE
       rebuild_reasons <- c(rebuild_reasons,
-                           "features_geometry.gpkg es mas antiguo que 02_FOLDS")
+                           "features_geometry.gpkg is older than 02_FOLDS")
     }
 
     n_train_expected <- tryCatch(
@@ -443,7 +443,7 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
       rebuild_reasons <- c(
         rebuild_reasons,
         sprintf(
-          "features_geometry.gpkg no contiene todas las capas requeridas (layers actuales: %s)",
+          "features_geometry.gpkg does not contain every required layer (current layers: %s)",
           paste(feat_layers, collapse = ", ")
         )
       )
@@ -453,19 +453,19 @@ extract_supervised_features <- function(train_with_folds, scoring_pool, config,
         n_train_expected != n_train_feat) {
       should_rebuild_features <- TRUE
       rebuild_reasons <- c(rebuild_reasons,
-        sprintf("train_features tiene %d filas y train_with_folds %d",
+        sprintf("train_features has %d rows and train_with_folds %d",
                 n_train_feat, n_train_expected))
     }
     if (!is.na(n_unl_expected) && !is.na(n_unl_feat) &&
         n_unl_expected != n_unl_feat) {
       should_rebuild_features <- TRUE
       rebuild_reasons <- c(rebuild_reasons,
-        sprintf("scoring_features tiene %d filas y scoring_pool %d",
+        sprintf("scoring_features has %d rows and scoring_pool %d",
                 n_unl_feat, n_unl_expected))
     }
 
     if (isTRUE(should_rebuild_features)) {
-      msg("STEP B3 - features_geometry.gpkg existe pero esta obsoleto. Se reconstruye.")
+      msg("STEP B3 - features_geometry.gpkg exists but is stale. Rebuilding it.")
       for (rr in unique(rebuild_reasons)) msg("  * %s", rr)
       safe_remove_features_gpkg(features_gpkg)
     } else {

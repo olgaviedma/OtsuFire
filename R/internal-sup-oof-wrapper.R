@@ -163,8 +163,8 @@ run_dm_oof_pipeline <- function(
     total_weight_ratio = 0.10,
     ...
 ) {
-  if (!exists("build_design_matrix_patches")) stop("No encuentro build_design_matrix_patches() cargada en el entorno.")
-  if (!exists("run_oof_xgb")) stop("No encuentro run_oof_xgb() cargada en el entorno.")
+  if (!exists("build_design_matrix_patches")) stop("build_design_matrix_patches() is not loaded in the environment.")
+  if (!exists("run_oof_xgb")) stop("run_oof_xgb() is not loaded in the environment.")
 
   # 0.5.0 hard removal: `additional_drop_cols` / `extra_drop_cols`
   # were removed in favour of `feature_whitelist_override`. Catch

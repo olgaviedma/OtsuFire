@@ -111,7 +111,7 @@ process_otsu_rasters_ <- function(
     vectorize = FALSE,
     write_raster = TRUE,
     output_format = c("shp", "geojson"),
-    dissolve = FALSE,          # ignorado al escribir (siempre NO dissolve)
+    dissolve = FALSE,          # ignored when writing (never dissolves)
     burnable_mask = NULL       # terra::SpatRaster 0/1
 ) {
   
@@ -299,7 +299,7 @@ process_otsu_rasters_ <- function(
       r_filtered <- terra::trim(r_filtered)
     }
     
-    # --------- Validate & normalize (SIN values(): por bloques) ----------
+    # --------- Validate & normalize (no values(): block-wise) ----------
     terra::minmax(r_filtered)
     mm <- terra::minmax(r_filtered)
     
@@ -313,7 +313,7 @@ process_otsu_rasters_ <- function(
     
     r_rescaled <- (r_filtered - min_val) / range_val * 255
     
-    # --------- Otsu (histograma por bloques con terra::hist) ----------
+    # --------- Otsu (block-wise histogram via terra::hist) ----------
     # Block 9b: OtsuSeg moved to Suggests; resolved at call time.
     if (!requireNamespace("OtsuSeg", quietly = TRUE)) {
       stop("Package 'OtsuSeg' is required for the Otsu-smoothed-histogram ",

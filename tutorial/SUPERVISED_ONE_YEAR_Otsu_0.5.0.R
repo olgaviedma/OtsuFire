@@ -1,5 +1,5 @@
 # ============================================================
-# Baseline 2005/balanced — OtsuFire 0.5.0 — desde cero
+# Baseline 2005/balanced - OtsuFire 0.5.0 - from scratch
 # ============================================================
 
 suppressPackageStartupMessages({
@@ -74,7 +74,7 @@ cfg$tool_paths$ogr2ogr_exe             <- "C:/Users/Olga.Viedma/AppData/Local/An
 stopifnot(all(sapply(cfg$tool_paths, file.exists)))
 cat("✓ Tool paths OK.\n\n")
 
-# Lanzar pipeline (Baseline = todos defaults, sin override, sin pesos)
+# Launch the pipeline (Baseline = all defaults, no override, no weights)
 cat("=== LANZANDO BASELINE 0.5.0 (esperar ~60-70 min) ===\n")
 t0 <- Sys.time()
 
@@ -87,7 +87,7 @@ result <- OtsuFire::run_oneyear_supervised_pipeline(
   random_to_burned_ratio = 1.0,
   otsu_unburned_to_burned_ratio = 1.0,
   feature_whitelist_override = NULL,    # Baseline = canonical 51
-  feature_weights = NULL,                # Baseline = todo peso 1.0
+  feature_weights = NULL,                # Baseline = every weight 1.0
   reuse_upstream = FALSE
 )
 
@@ -107,7 +107,7 @@ cat(sprintf("Mediana: %.4f\n", median(drops, na.rm = TRUE)))
 cat("\n=== KEEPS ===\n"); print(summary(keeps))
 cat(sprintf("Mediana: %.4f\n", keeps_median <- median(keeps, na.rm = TRUE)))
 
-# Verificar que NO se aplicó override ni weights
+# Check that NO override and no weights were applied
 meta_path <- file.path(dirname(dirname(final_map_path)),
                        "07_FINAL_MODEL_V2",
                        "2005_balanced_patch_certified_meta.txt")
@@ -115,14 +115,14 @@ meta_lines <- readLines(meta_path)
 override_line <- grep("feature_whitelist_override_applied", meta_lines, value = TRUE)
 weights_line <- grep("feature_weights_applied", meta_lines, value = TRUE)
 n_x_line <- grep("^n_x_cols:", meta_lines, value = TRUE)
-cat("\n=== Verificación API 0.5.0 ===\n")
+cat("\n=== API 0.5.0 verification ===\n")
 cat(override_line, "\n")
 cat(weights_line, "\n")
 cat(n_x_line, "\n")
 # Esperado:
 # feature_whitelist_override_applied: FALSE
 # feature_weights_applied: FALSE
-# n_x_cols: 50 o 51 (según dónde quede el conteo en 0.5.0)
+# n_x_cols: 50 or 51 (depending on where the count lands in 0.5.0)
 
 # Veredicto
 drops_median <- median(drops, na.rm = TRUE)

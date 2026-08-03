@@ -184,10 +184,10 @@ train_final_model_direct <- function(
     p
   }
 
-  if (!file.exists(labelled_gpkg)) stop("No existe labelled_gpkg: ", labelled_gpkg)
+  if (!file.exists(labelled_gpkg)) stop("labelled_gpkg does not exist: ", labelled_gpkg)
   L <- sf::read_sf(labelled_gpkg, layer = labelled_layer, quiet = TRUE)
-  if (!id_col %in% names(L)) stop("labelled no tiene id_col=", id_col)
-  if (!class_col %in% names(L)) stop("labelled no tiene class_col=", class_col)
+  if (!id_col %in% names(L)) stop("labelled has no id_col=", id_col)
+  if (!class_col %in% names(L)) stop("labelled has no class_col=", class_col)
 
   L[[id_col]] <- as.character(L[[id_col]])
   L[[class_col]] <- as.character(L[[class_col]])
@@ -347,7 +347,7 @@ train_final_model_direct <- function(
   }
   msg("  training_ok total=%d", nrow(L_ok))
 
-  if (nrow(L_ok) < 20) stop("La seleccion directa dejo muy pocos rows para entrenar.")
+  if (nrow(L_ok) < 20) stop("Direct selection left too few rows to train on.")
 
   y <- as.integer(L_ok[[class_col]] == "burned")
   L_df <- sf::st_drop_geometry(L_ok)

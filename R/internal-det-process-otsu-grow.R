@@ -449,14 +449,14 @@ process_otsu_rasters_grow <- function(
     x <- suppressWarnings(as.numeric(x)[1])
     if (!is.finite(x)) return("NA")
 
-    # string sin notación científica, sin espacios
+    # string with no scientific notation and no spaces
     s <- formatC(x, format = "fg", digits = 12, flag = "#")
     s <- gsub("\\s+", "", s)
 
     # quita ceros finales si es decimal (300.000 -> 300)
     s <- sub("\\.?0+$", "", s)
 
-    # seguro para filename: "-" y "." no dan problemas, pero lo estandarizamos:
+    # safe for a filename: "-" and "." are harmless, but we standardise them anyway:
     s <- gsub("-", "m", s)     # -50 -> m50
     s <- gsub("\\.", "p", s)   # 12.5 -> 12p5
     s
@@ -689,7 +689,7 @@ process_otsu_rasters_grow <- function(
     sm <- smooth_histogram_fun(h$counts)
     sm[is.na(sm)] <- 0
 
-    # ROBUSTNESS GUARD (AOI_001 "valor ausente donde TRUE/FALSE es necesario" fix):
+    # ROBUSTNESS GUARD (AOI_001 "missing value where TRUE/FALSE needed" fix):
     # OtsuSeg::otsu_threshold_smoothed() loops over histogram bins and evaluates
     # `if (between_class_variance > max_variance)`. If ANY bin centre (mids) or
     # smoothed count is non-finite (Inf/NaN) at a non-empty bin, the intermediate

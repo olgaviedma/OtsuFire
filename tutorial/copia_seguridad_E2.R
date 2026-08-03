@@ -13,7 +13,7 @@ production_dir <- file.path(RESULTS_BASE, as.character(YEAR), "Min_Min",
 
 e2_snap <- file.path(phase_b_root, "E2_no_hotspots_persist5x")
 if (dir.exists(e2_snap)) {
-  cat("E2 snapshot ya existe, lo borramos para overwrite limpio.\n")
+  cat("E2 snapshot already exists; removing it for a clean overwrite.\n")
   unlink(e2_snap, recursive = TRUE, force = TRUE)
 }
 
@@ -23,7 +23,7 @@ R.utils::copyDirectory(production_dir, e2_snap,
                        recursive = TRUE, overwrite = TRUE,
                        private = TRUE, copy.mode = TRUE, copy.date = TRUE)
 
-cat("\n¿Meta confirma E2?:\n")
+cat("\nDoes meta confirm E2?:\n")
 print(grep("whitelist_override|weights_applied|weights_nondefault|n_x_cols|best_iteration",
            readLines(file.path(e2_snap, "07_FINAL_MODEL_V2",
                                "2005_balanced_patch_certified_meta.txt")),

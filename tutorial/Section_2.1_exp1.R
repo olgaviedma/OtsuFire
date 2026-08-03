@@ -179,8 +179,8 @@ rescued_e1 <- reviews_e1$poly_id[reviews_e1$p_burned_model > 0.5]
 
 # Expected output (2005 / balanced):
 #
-#   Rescatados Baseline:  30
-#   Rescatados E1:       928
+#   Baseline rescued:      30
+#   E1 rescued:           928
 #
 #   In both (consensus):   16
 #   Only Baseline (lost):  14
@@ -240,10 +240,10 @@ rescued_e1 <- reviews_e1$poly_id[reviews_e1$p_burned_model > 0.5]
 #   p>0.995 |   608 |     30 |        8 |    22 |   600
 #
 #   Fraction of E1 rescues that have hotspot in Baseline data:
-#     p > 0.50:  928 rescatados |  16 con hotspot (1.7%)
-#     p > 0.90:  830 rescatados |  15 con hotspot (1.8%)
-#     p > 0.95:  790 rescatados |  13 con hotspot (1.6%)
-#     p > 0.99:  669 rescatados |   8 con hotspot (1.2%)
+#     p > 0.50:  928 rescued |  16 with hotspot (1.7%)
+#     p > 0.90:  830 rescued |  15 with hotspot (1.8%)
+#     p > 0.95:  790 rescued |  13 with hotspot (1.6%)
+#     p > 0.99:  669 rescued |   8 with hotspot (1.2%)
 #
 # Reading the output
 # ---------------------------------------------------------------------

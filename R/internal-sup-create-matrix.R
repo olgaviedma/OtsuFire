@@ -1,28 +1,28 @@
 build_design_matrix_patches <- function(
     labelled, burned_like,
     
-    # columnas clave (para guardar y, ids)
+    # key columns (kept so that y and the ids can be saved)
     id_col    = "fire_uid",
     class_col = "class",
     pos_lab   = "burned",
     
-    # 1) columnas que NO son features
+    # 1) columns that are NOT features
     id_cols = c("fire_uid","class","source","poly_id","block_id","fold_rep1","fold_rep2"),
     
-    # 2) filtros por patrón (regex)
+    # 2) pattern filters (regex)
     drop_regex = c("^fold_rep", "^block_id$", "^source$", "^class$", "^fire_uid$", "^poly_id$"),
     
-    # 3) categóricas a factor + "(missing)"
+    # 3) categoricals to factor + "(missing)"
     # 2026-06-05: ecoregions removed from supervised phase; no
     # categorical predictors remain by default.
     cat_cols = character(0),
     
-    # 4) lógica hotspots (pon NA para desactivarla)
+    # 4) hotspot logic (set to NA to disable it)
     hs_n_col    = "hs_used_n",
     hs_conf_col = "hs_conf_mean",
     hs_frp_col  = "hs_frp_max",
     
-    # 5) imputación
+    # 5) imputation
     median_from = c("labelled", "all"),
     
     # 6) debug
@@ -39,34 +39,34 @@ build_design_matrix_patches <- function(
     defer_impute = FALSE,
 
     # 7) SAVE (nuevo)
-    save_dir = NULL,                 # si no es NULL -> guarda bundle
+    save_dir = NULL,                 # if not NULL -> saves the bundle
     save_prefix = "patch_dm",         # prefijo de archivos
     overwrite = TRUE,
-    save_matrix_market = FALSE,       # opcional: también guarda .mtx
+    save_matrix_market = FALSE,       # optional: also saves .mtx
     verbose = TRUE
 ) {
   median_from <- match.arg(median_from)
   
-  if (!requireNamespace("Matrix", quietly = TRUE)) stop("Falta paquete 'Matrix'.")
-  if (!requireNamespace("dplyr", quietly = TRUE))  stop("Falta paquete 'dplyr'.")
+  if (!requireNamespace("Matrix", quietly = TRUE)) stop("Package 'Matrix' is missing.")
+  if (!requireNamespace("dplyr", quietly = TRUE))  stop("Package 'dplyr' is missing.")
   
   stopifnot(is.data.frame(labelled), is.data.frame(burned_like))
-  if (!id_col %in% names(labelled)) stop("labelled no tiene id_col: ", id_col)
-  if (!id_col %in% names(burned_like)) stop("burned_like no tiene id_col: ", id_col)
-  if (!class_col %in% names(labelled)) stop("labelled no tiene class_col: ", class_col)
+  if (!id_col %in% names(labelled)) stop("labelled has no id_col: ", id_col)
+  if (!id_col %in% names(burned_like)) stop("burned_like has no id_col: ", id_col)
+  if (!class_col %in% names(labelled)) stop("labelled has no class_col: ", class_col)
   
   msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
   
-  # ---- 0) elegir columnas que entran al modelo ----
+  # ---- 0) choose the columns that enter the model ----
   feat_cols <- setdiff(intersect(names(labelled), names(burned_like)), id_cols)
-  if (length(feat_cols) < 3) stop("Muy pocas features tras quitar id_cols.")
+  if (length(feat_cols) < 3) stop("Too few features left after dropping id_cols.")
   
   if (length(drop_regex) > 0) {
     keep <- rep(TRUE, length(feat_cols))
     for (rgx in drop_regex) keep <- keep & !grepl(rgx, feat_cols)
     feat_cols <- feat_cols[keep]
   }
-  if (length(feat_cols) < 3) stop("Muy pocas features tras drop_regex. Revisa id_cols/drop_regex.")
+  if (length(feat_cols) < 3) stop("Too few features left after drop_regex. Check id_cols/drop_regex.")
   
   XL_feat  <- labelled[,    feat_cols, drop = FALSE]
   XBL_feat <- burned_like[, feat_cols, drop = FALSE]
@@ -99,7 +99,7 @@ build_design_matrix_patches <- function(
   # not "unknown"), and we do it AFTER the shared `_isNA` synthesis captures the
   # ORIGINAL missingness (so the flag reflects the raw NA, not the zeroed value).
 
-  # ---- 2) categóricas ----
+  # ---- 2) categoricals ----
   to_factor_with_missing <- function(x) {
     x <- as.factor(x)
     x <- addNA(x)
@@ -131,7 +131,7 @@ build_design_matrix_patches <- function(
     fac_names <- setdiff(fac_names, single_level_factors)
   }
   
-  # ---- 3) numéricas: flag NA + imputación ----
+  # ---- 3) numerics: NA flag + imputation ----
   logical_cols <- names(X_all)[vapply(X_all, is.logical, logical(1))]
   if (length(logical_cols) > 0) {
     msg(
@@ -223,7 +223,7 @@ build_design_matrix_patches <- function(
     n_labelled      = nL
   )
   
-  # target + ids (para guardar)
+  # target + ids (kept for saving)
   y <- ifelse(labelled[[class_col]] == pos_lab, 1L, 0L)
   id_labelled    <- labelled[[id_col]]
   id_burned_like <- burned_like[[id_col]]

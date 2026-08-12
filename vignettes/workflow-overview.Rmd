@@ -1,0 +1,309 @@
+---
+title: "OtsuFire workflow overview"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{OtsuFire workflow overview}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+# eval = FALSE silences knitting. purl = FALSE is set per-chunk below
+# instead of globally — opts_chunk$set(purl=FALSE) is not honoured by
+# knitr::purl() because the setup chunk is extracted as text, not
+# evaluated, during the R CMD check "running R code from vignettes"
+# stage.
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", eval = FALSE
+)
+```
+
+This vignette describes the four-layer OtsuFire workflow at the API
+level. Code chunks are shown but **not evaluated** because the
+deterministic and supervised workflows operate on full-scale annual
+mosaics (~Iberian Peninsula, 90 m resolution) that are too large to
+ship with a CRAN package. The toy examples in
+`vignette("OtsuFire", package = "OtsuFire")` cover the API surface
+without external data.
+
+## 1. Mosaic stage
+
+`change_index_mosaic()` builds an annual change-index raster (RBR
+or dNBR) from per-tile inputs. Output is a single GeoTIFF per year
+that becomes the `change_index` argument to the deterministic /
+supervised configs.
+
+```{r mosaic, purl = FALSE}
+library(OtsuFire)
+
+mosaic_res <- change_index_mosaic(
+  folder_path    = "/path/to/yearly/tiles",
+  mask           = "/path/to/mask_Peninsula_3035.shp",
+  year           = 2020L,
+  raster_pattern = "MinMin_2020_tile*.tif",
+  output_dir     = "/path/to/Composites_90m/Min_Min",
+  nodata_value   = -9999,
+  cap_below      = TRUE,
+  lower_cap      = -1000,
+  method         = "merge"
+)
+
+mosaic_path <- mosaic_res$mosaic_path
+```
+
+## 2. Deterministic stage
+
+The deterministic workflow runs Otsu segmentation per CORINE x
+ecoregion unit, grows seed-supported components, applies multi-stage
+filtering, and emits an `internal_decisions.gpkg` layer.
+
+```{r det, purl = FALSE}
+det_cfg <- build_burned_mapping_config(
+  change_index   = mosaic_path,
+  vegetation_map = "/path/to/Corine_Masks/CLC_2018_peninsula.tif",
+  burnable_mask  = "/path/to/Corine_Masks/burnable_mask_binary.tif",
+  target_year    = 2020L,
+  output_dir     = "/path/to/Results",
+  run_name       = "rbr_2020_custom",
+  detect_params = list(
+    seed_threshold = 310,
+    growth_delta = 90,
+    minimum_growth_threshold = 240,
+    minimum_seed_pixels = 30L
+  ),
+  refine_params = list(
+    aoi_buffer_m = 5000,
+    minimum_detected_area_m2 = 10,
+    merge_overlaps = TRUE
+  ),
+  scoring_params = list(
+    support_buffer_m = 0,
+    previous_fire_exclusion_buffer_m = 90,
+    previous_fire_cleanup_buffer_m = 90,
+    minimum_remaining_area_m2 = 20000,
+    reference_buffer_m = 90
+  )
+)
+
+det_run <- run_deterministic_pipeline(det_cfg)
+det_run$result_paths$internal_decisions
+```
+
+The deterministic builder no longer selects closed scenario presets.
+Instead, users pass explicit ecological controls through
+`detect_params`, `refine_params`, and `scoring_params`. Use the
+`*_by_vegetation` keys when seed or growth behaviour must differ by
+land-cover class; see `?build_burned_mapping_config` for the
+vegetation-class mapping and the interpretation of each parameter.
+
+If you need step-by-step access, the deterministic stage decomposes
+into three modular helpers:
+
+```{r det-modular, purl = FALSE}
+patches  <- detect_burned_patches(det_cfg)
+scored   <- score_burned_patches(patches, det_cfg)
+# scored$internal_decisions is an sf with class_final, filter_1..3, etc.
+```
+
+## 3. Supervised one-year stage
+
+The supervised stage trains an XGBoost model on the deterministic
+decisions plus a burnable-only unburned negative pool, runs OOF
+diagnostics, and emits a `final_map.gpkg` whose `p_burned` field is the
+per-patch burned **model score**.
+
+```{r sup, purl = FALSE}
+sup_cfg <- build_supervised_burned_config(
+  run_label          = "balanced",
+  internal_decisions = det_run$result_paths$internal_decisions,
+  change_index       = mosaic_path,
+  hotspots           = "/path/to/Hotspots/hotspots_iberia_2020.geojson",
+  target_year        = 2020L,
+  output_dir         = "/path/to/Results",
+  options = list(
+    data_base      = "/path/to/Data",
+    composite_base = "/path/to/Imagery/Composites_90m",
+    result_name    = "Min_Min"
+  )
+)
+
+sup_run <- run_oneyear_supervised_pipeline(
+  config           = sup_cfg,
+  run_consistency  = TRUE,
+  overwrite        = FALSE
+)
+```
+
+The supervised model uses **two explicit negative sources: random
+background and Otsu residuals.** The negative-pool strategy is no longer
+configurable. Every run uses `all_sources` implicitly: a burnable-only
+unburned pool assembled from exactly two buckets — random burnable
+background and Otsu current-year residual patches — each with its own
+cap relative to the burned count. The two caps are the typed PUBLIC
+block `negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` (the
+single source of truth; an `Inf` cap disables that bucket's cap),
+mirrored into `cfg$train_control$caps`. The random-background RNG seed
+lives in `cfg$train_control$seeds$random_seed` (builder argument
+`random_seed`); the technical toggles live in `runtime_options =
+list(reuse_existing = TRUE, write_outputs = TRUE, verbose = TRUE)` and do
+not change which negatives are selected. The random background bucket
+draws its sample (and computes its percentile) only within the burnable
+domain, after the burnable mask and all exclusions/buffers; a location
+that is both a random cell and an Otsu patch is kept once (Otsu has
+priority). CORINE × ecoregion stratification is used only in the
+deterministic delineation stage, not in the supervised negative pool.
+The former user-selectable `negative_pool_policy` knob and its
+`"deterministic_direct"` baseline were removed on 2026-06-05;
+`negative_pool_policy = "all_sources"` is accepted as a no-op, and any
+other value errors. The pipeline is entirely package-internal: no
+external `sys.source()` of legacy scripts and no namespace mutation.
+
+Training eligibility is defined by **explicit class, never by negation**.
+A row with `class == "burned"` is a positive (always kept). A row with
+`class == "unburned"` is a negative **only** when it resolves to exactly
+one of the two valid buckets above (random, otsu); Otsu review / keep
+patches are excluded and logged. Any other
+case — `class` missing or unknown, or an unburned row with no valid
+bucket — is a hard error. Review / keep / `NA` / unknown rows can never
+silently become negatives (the old "negatives = everything that is not
+burned" rule has been removed). The OOF folds and the FINAL model route
+through ONE shared internal eligibility resolver and ONE shared capping
+helper (`cap = ceiling(n_burned * ratio)`, take-all when available is at
+or below the cap, all positives kept, negatives sampled without
+replacement in a deterministic bucket order), so the two stages cannot
+diverge on which rows are eligible or on how negatives are capped. The
+only differences are the retained outer-test fold (OOF) and the seed.
+
+The OOF diagnostics, the FINAL refit, and scoring share ONE feature
+recipe (50 base features plus the matching `<feature>_isNA` indicators
+created before imputation = 100 columns). A runtime feature-schema
+parity guard aborts the run if the three feature spaces diverge.
+OtsuFire uses a single training procedure: the number of boosting
+rounds is selected with an inner validation split and early stopping,
+then the recipe and model are refitted on all available training data
+before prediction. There is no training-protocol choice.
+
+`p_burned` (and the temporally adjusted `p_burned_current_year`) is a
+model score under the training distribution — it must not be treated as
+a calibrated probability without an explicit calibration step.
+
+If you want explicit access to the supervised sub-stages,
+`build_supervised_training_pools()`, `make_spatial_folds()`,
+`extract_supervised_features()`, `run_oof_diagnostics()`,
+`train_final_burned_model()`, and `score_supervised_burned_map()`
+each cover one stage of the pipeline.
+
+## 4. Validation and consistency
+
+There are two distinct validations, against two different references.
+
+**Internal validation (OOF).** The out-of-fold diagnostics
+(`05_OOF`) measure how well the model reproduces the *deterministic
+decision* labels, using spatial block folds. Under `nested_refit`, the
+outer test fold is held out entirely (never used for the watchlist,
+imputation fitting, selection, or the inner early-stopping split); the
+model is fit on the outer-train rows, early-stopped on an inner
+validation split, refit on all outer-train rows at the selected
+`best_iteration`, and then predicts the untouched outer-test fold. OOF
+AUC / PR-AUC are **not ground truth**: the labels are deterministic
+decisions, not field observations.
+
+**External validation.** `validate_fire_maps()` is
+workflow-independent: threshold `p_burned` (or `p_burned_current_year`)
+into a burned-area prediction layer and compare it against an external
+reference (EFFIS). It reports omission, commission, F1, and IoU.
+
+`validate_fire_maps()` compares an already-thresholded layer, so the
+scored map is cut first. The operating threshold is a per-year decision
+(`p_burned` is a score, not a calibrated probability); 0.5 below is only
+a placeholder.
+
+```{r validate, purl = FALSE}
+fm <- sf::st_read(sup_run$final_map_gpkg, layer = "final_map_full", quiet = TRUE)
+burned <- fm[is.finite(fm$p_burned_model) & fm$p_burned_model >= 0.5, ]
+
+thresholded_gpkg <- "/path/to/Results/VALIDATION/thresholded_burned.gpkg"
+sf::st_write(burned, thresholded_gpkg, layer = "thresholded_burned", quiet = TRUE)
+
+val <- validate_fire_maps(
+  input_shapefile = thresholded_gpkg,
+  ref_shapefile   = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
+  mask_shapefile  = "/path/to/Mask_StudyArea/mask_Peninsula_3035.shp",
+  burnable_raster = "/path/to/Corine_Masks/burnable_mask_binary.tif",
+  year_target     = 2020L,
+  validation_dir  = "/path/to/Results/VALIDATION",
+  metrics_type    = "all"
+)
+
+val$metrics
+```
+
+External metrics are computed against a *different reference* (EFFIS)
+than the OOF metrics (deterministic-decision labels). They are **not
+comparable** to OOF AUC / PR-AUC — keep the two evaluations distinct.
+
+**Temporal observability.** When an `observability_raster` (a day-of-year
+raster) is supplied, observability is assessed **temporally at the
+reference-fire level**: a reference fire whose date falls after the last
+observation, or that has no valid observable DOY, is excluded from the
+reference *before* rasterization, so it contributes 0 TP / 0 FN / 0
+evaluated area and never enters omission, recall, F1 or IoU. This is **not**
+a pixel-level cloud mask — partially observed fires are kept whole. Residual
+per-pixel non-observability inside kept fires is reported for audit
+(`observability_audit`, `OBSERVABILITY_*` CSVs) but never changes any
+metric. The reference cache is content-aware: it rebuilds automatically when
+the observability raster, burnable mask, resolution, CRS, grid, study-area
+mask, reference content or the observability rule changes
+(`force_reprocess_ref = TRUE` forces a rebuild).
+
+### Corrected defect: OOF / FINAL `_isNA` divergence
+
+A defect was found and corrected during Gate 1D.8, before the smoke run
+and before the definitive run. Previously, **OOF generated the `_isNA`
+missing-indicator companions, but the FINAL refit and scoring did
+NOT** — so OOF evaluated a 102-column feature space while the deployed
+model and scoring ran on a different (51-column) space. Consequently
+the **prior OOF diagnostics did not exactly represent the deployed
+model**, and the **prior FINAL was a different model** than the one OOF
+evaluated (the prior FINAL was not necessarily invalid, just different).
+The correction unified OOF, FINAL and scoring on the **same recipe**.
+**Definitive results require retraining both models** under the
+corrected recipe. Any comparison baseline produced under the current
+code must be named the **"legacy training protocol under the corrected
+common feature recipe"** — it is not an exact reproduction of the old
+51-feature FINAL.
+
+`check_supervised_consistency()` compares the deterministic and
+supervised outputs of the same run and writes per-issue diagnostic
+GPKG/CSV/TXT artefacts:
+
+```{r consistency, purl = FALSE}
+cons <- check_supervised_consistency(
+  deterministic_decisions = det_run$internal_decisions_gpkg,
+  final_map               = sup_run$final_map_gpkg,
+  config                  = sup_cfg
+)
+```
+
+The consistency check is also invoked automatically when
+`run_oneyear_supervised_pipeline(..., run_consistency = TRUE)` is
+called and `options$data_base` is supplied.
+
+## Outputs
+
+A single supervised one-year run for one (year, scenario) tuple
+produces, under
+`<output_dir>/<target_year>/<run_name>/SUPERVISED/<scenario>/`:
+
+* `01_POOLS/...gpkg` — burned + unburned training pools.
+* `02_FOLDS/...gpkg` — spatial folds for OOF.
+* `03_FEATURES/features_geometry.gpkg` — full feature matrix.
+* `04_MATRIX/...rds` — XGBoost design matrix snapshot.
+* `05_OOF/..._oof_agg.csv` — out-of-fold diagnostics.
+* `07_FINAL_MODEL_V2/..._final_model.rds` — trained model.
+* `09_FINAL_MAP/..._final_map.gpkg` — final per-patch
+  `p_burned` map.
+* `11_CONSISTENCY_CHECKS/...` — consistency artefacts when enabled.
+
+The deterministic stage writes its outputs under the parallel
+`DETERMINISTIC/<run_name>/` tree.

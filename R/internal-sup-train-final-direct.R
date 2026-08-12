@@ -1,0 +1,847 @@
+
+train_final_model_direct <- function(
+    qa = NULL,
+    labelled_gpkg,
+    labelled_layer = "train_features",
+    id_col = "fire_uid",
+    class_col = "class",
+    # GATE 6.5 (2026-06-12): the contextual (deterministic-drop) negative bucket
+    # was REMOVED. `deterministic_drop_source` and
+    # `contextual_exclusion_to_burned_ratio` are gone; the negative architecture
+    # is TWO sources only (random background + Otsu residual). Deterministic-drop
+    # rows are never written as unburned negatives upstream, so they cannot reach
+    # this engine as training rows.
+    # Gate 1B (2026-06-07): the negative-bucket caps, seeds, val_frac, group_col,
+    # nrounds/early-stop and imputation rules are now REQUIRED resolved args with
+    # NO methodological defaults. The single source of truth is cfg$train_control
+    # (resolved by build_supervised_burned_config()); the public wrapper
+    # train_final_burned_model() forwards the resolved values. A dropped argument
+    # ERRORS here (see the missing()-guard block below) rather than silently
+    # reverting to a hardcoded default.
+    # --- Random-background cells (low-RBR cell-scale, easy cold) ---
+    random_background_source = c("random_burnable_background"),
+    random_to_burned_ratio,
+    # --- Otsu current-year unburned patches (patch-scale, easy cold; separate for traceability) ---
+    # Kept separate from background_cell so counts, caps, and model diagnostics can
+    # be evaluated independently. Both are easy-cold negatives but differ in geometry
+    # scale (0.81 ha cells vs ~9.72 ha patches) and derivation.
+    otsu_unburned_source = c("otsu_patch_residual"),
+    otsu_unburned_to_burned_ratio,
+    # Exclude otsu_patch_review (ambiguous; S_PATCH_PA 0.15-0.45) and
+    # otsu_patch_keep (S_PATCH_PA 0.45-0.70, substantial burned-pixel coverage).
+    # Only otsu_patch_drop (S_PATCH_PA <= 0.15, easy cold) is eligible for training.
+    otsu_unburned_exclude_neg_types = c("otsu_patch_review", "otsu_patch_keep"),
+    sampling_seed,
+    group_col,
+    val_frac,
+    seed,
+    params = NULL,
+    nrounds_max,
+    early_stopping_rounds,
+    feature_whitelist_override = NULL,
+    feature_weights = NULL,
+    # OPTIONAL shape/size block (OtsuFire 0.12.0, OFF by default). When TRUE the
+    # admissible feature universe becomes the canonical 50 + the 6 shape names
+    # (.supervised_feature_universe), so a feature_whitelist_override may name a
+    # shape column AND the shape columns survive the whitelist filter. FALSE ->
+    # byte-identical to today. Threaded from train_final_burned_model().
+    include_shape_features = FALSE,
+    # PHASE 2 (artifact_hard): optional per-source weights (NAMED numeric,
+    # source -> weight) and the source value(s) marking artifact_hard rows. NULL
+    # / default => NO per-row weighting => byte-identical to today.
+    source_weights = NULL,
+    artifact_hard_source = "artifact_hard",
+    # PHASE 2 (artifact_hard): pool-level weight balance (artifact_hard total
+    # weight / burned total weight). Forwarded to .of_resolve_sample_weights().
+    total_weight_ratio = 0.10,
+    impute_numeric,
+    impute_factor_missing,
+    # Gate 1B (2026-06-07): cfg$model_params (canonical xgb block WITHOUT
+    # scale_pos_weight) is a REQUIRED arg. The engine merges the site-specific
+    # spw it computes from its own training split. The engine no longer holds
+    # its own methodological xgb defaults.
+    model_params_base,
+    out_dir = NULL,
+    prefix = "2022_patch_certified_v2",
+    overwrite = TRUE,
+    # Gate 1E (2026-06-09): the CANONICAL OOF structural feature-schema
+    # fingerprint (a feature_schema_fingerprint() result, or its bare hash
+    # string), threaded from the OOF stage by the orchestrator. When supplied,
+    # the FINAL refit ASSERTS its OWN structural fingerprint == this canonical
+    # OOF contract BEFORE training/saving the FINAL model; a mismatch is an ERROR
+    # (stop). NULL means FINAL runs standalone (no OOF in the run): it still
+    # computes and persists its own fingerprint into the recipe.
+    canonical_oof_fingerprint = NULL,
+    verbose = TRUE,
+    ...
+) {
+  # 0.5.0 hard removal: `extra_drop_cols` / `additional_drop_cols`
+  # are no longer accepted. Catch them via `...` so old callers get
+  # a clear migration message instead of an "unused argument" error.
+  .dots <- list(...)
+  if ("training_protocol" %in% names(.dots)) {
+    stop("training_protocol is no longer an argument; OtsuFire always uses ",
+         "inner-early-stopping selection + full-data refit.", call. = FALSE)
+  }
+  if ("extra_drop_cols" %in% names(.dots) ||
+      "additional_drop_cols" %in% names(.dots)) {
+    stop(
+      "`extra_drop_cols` / `additional_drop_cols` were removed in ",
+      "OtsuFire 0.5.0. Use `feature_whitelist_override` instead. ",
+      "Pass a subset of `.supervised_feature_cols` (e.g., the ",
+      "current whitelist minus the columns you want to drop). ",
+      "See NEWS.md and the migration note in HANDOFF Section N+20.",
+      call. = FALSE
+    )
+  }
+  if (length(.dots) > 0L) {
+    stop("Unused arguments passed to train_final_model_direct(): ",
+         paste(names(.dots), collapse = ", "), call. = FALSE)
+  }
+
+  stopifnot(requireNamespace("sf", quietly = TRUE))
+  stopifnot(requireNamespace("dplyr", quietly = TRUE))
+  stopifnot(requireNamespace("Matrix", quietly = TRUE))
+  stopifnot(requireNamespace("xgboost", quietly = TRUE))
+
+  msg <- function(...) if (isTRUE(verbose)) message(sprintf(...))
+
+  # OPTIONAL shape/size block (OtsuFire 0.12.0): THE admissible feature
+  # universe. With include_shape_features = FALSE this is exactly the frozen
+  # 50-name `.supervised_feature_cols`; with TRUE it additionally admits the 6
+  # `.supervised_shape_feature_cols`. Routing validation, the active-whitelist
+  # default, and the allowed-column invariant through this ONE helper keeps
+  # FINAL admissible columns identical to OOF (no "in OOF but not FINAL" drift).
+  feature_universe <- .supervised_feature_universe(include_shape = include_shape_features)
+
+  # 0.5.0: validate `feature_whitelist_override` (strict).
+  if (!is.null(feature_whitelist_override)) {
+    if (!is.character(feature_whitelist_override) ||
+        length(feature_whitelist_override) == 0) {
+      stop("`feature_whitelist_override` must be a non-empty character vector.",
+           call. = FALSE)
+    }
+    unknown <- setdiff(feature_whitelist_override, feature_universe)
+    if (length(unknown) > 0) {
+      stop(
+        "`feature_whitelist_override` contains names not in the active ",
+        "feature universe (`.supervised_feature_universe(include_shape = ",
+        as.character(isTRUE(include_shape_features)), ")`): ",
+        paste(unknown, collapse = ", "), ". Allowed names: see ",
+        "OtsuFire:::.supervised_feature_cols (+ ",
+        "OtsuFire:::.supervised_shape_feature_cols when ",
+        "include_shape_features = TRUE). The canonical list is ",
+        "fixed; this argument can only restrict the active universe, not ",
+        "extend it.",
+        call. = FALSE
+      )
+    }
+    feature_whitelist_override <- unique(feature_whitelist_override)
+  }
+  active_whitelist <- if (is.null(feature_whitelist_override)) {
+    feature_universe
+  } else {
+    feature_whitelist_override
+  }
+
+  # 0.5.0: validate `feature_weights` (named numeric, finite, >= 0).
+  if (!is.null(feature_weights)) {
+    if (!is.numeric(feature_weights) || is.null(names(feature_weights))) {
+      stop("`feature_weights` must be a named numeric vector.",
+           call. = FALSE)
+    }
+    if (any(is.na(feature_weights)) || any(feature_weights < 0)) {
+      stop("`feature_weights` values must be finite and >= 0.",
+           call. = FALSE)
+    }
+  }
+
+  # Gate 1B (2026-06-07): the resolved methodological args are REQUIRED. A
+  # dropped argument ERRORS here so an internal caller can never silently revert
+  # a parameter to a hardcoded default. (The pre-Gate-1B defaults are gone; the
+  # single source of truth is cfg$train_control / cfg$model_params, threaded by
+  # train_final_burned_model().) Placed AFTER the cheap input-shape validation
+  # so genuinely-malformed feature_weights still report their own error first.
+  .req <- c("random_to_burned_ratio", "otsu_unburned_to_burned_ratio",
+            "sampling_seed", "group_col", "val_frac", "seed",
+            "nrounds_max", "early_stopping_rounds",
+            "impute_numeric", "impute_factor_missing", "model_params_base")
+  for (.nm in .req) {
+    if (eval(call("missing", as.name(.nm)))) {
+      stop("train_final_model_direct(): required resolved arg '", .nm,
+           "' is missing (no methodological default; pass it from ",
+           "cfg$train_control / cfg$model_params).", call. = FALSE)
+    }
+  }
+  impute_numeric <- match.arg(impute_numeric, c("median", "zero"))
+  # Gate 1B: one closure over cfg$model_params so every xgb-params build site in
+  # this engine (legacy + nested_refit) sources the methodological block from
+  # cfg, merging the site-specific scale_pos_weight. model_params_base never
+  # contains scale_pos_weight.
+  .params_from_cfg <- function(scale_pos_weight) {
+    p <- model_params_base
+    p[["scale_pos_weight"]] <- scale_pos_weight
+    p
+  }
+
+  if (!file.exists(labelled_gpkg)) stop("labelled_gpkg does not exist: ", labelled_gpkg)
+  L <- sf::read_sf(labelled_gpkg, layer = labelled_layer, quiet = TRUE)
+  if (!id_col %in% names(L)) stop("labelled has no id_col=", id_col)
+  if (!class_col %in% names(L)) stop("labelled has no class_col=", class_col)
+
+  L[[id_col]] <- as.character(L[[id_col]])
+  L[[class_col]] <- as.character(L[[class_col]])
+  random_background_source         <- unique(as.character(stats::na.omit(random_background_source)))
+  otsu_unburned_source             <- unique(as.character(stats::na.omit(otsu_unburned_source)))
+  otsu_unburned_exclude_neg_types  <- unique(as.character(stats::na.omit(otsu_unburned_exclude_neg_types)))
+
+  burned_pool <- L |>
+    dplyr::filter(.data[[class_col]] == "burned")
+
+  # random_background_sampled: low-RBR cell-scale polygons (background_cell neg_type).
+  # Spectrally cold and unambiguous. No exclusions needed -- this source never
+  # produces otsu_patch_keep neg_types.
+  random_background_pool <- L |>
+    dplyr::filter(
+      .data[[class_col]] == "unburned",
+      .data[["source"]] %in% random_background_source
+    )
+
+  # otsu_unburned_sampled: Otsu current-year patch-scale unburned objects.
+  # Kept separate from background_cell for independent counting, capping, and
+  # model diagnostics. Both are easy-cold but differ in geometry scale and source.
+  # Only otsu_patch_drop (S_PATCH_PA <= 0.15) is eligible for training.
+  # otsu_patch_review (S_PATCH_PA 0.15-0.45, ambiguous) excluded by default.
+  # otsu_patch_keep (S_PATCH_PA 0.45-0.70) excluded by default.
+  # In deterministic_direct mode this pool is always empty (no otsu_patch_residual
+  # rows in that pool) -- no behavioral change for Mode A runs.
+  otsu_unburned_pool <- L |>
+    dplyr::filter(
+      .data[[class_col]] == "unburned",
+      .data[["source"]] %in% otsu_unburned_source,
+      !(.data[["neg_type"]] %in% otsu_unburned_exclude_neg_types)
+    )
+
+  n_burned          <- nrow(burned_pool)
+  target_random_bg  <- ceiling(n_burned * random_to_burned_ratio)
+  target_otsu       <- ceiling(n_burned * otsu_unburned_to_burned_ratio)
+
+  # 2026-06-11 (structural dedup + eligibility fix): the FINAL negative selection
+  # now flows through the SAME two SHARED PURE helpers the OOF per-fold trainer
+  # uses, so the two paths cannot diverge. `.of_resolve_supervised_eligibility()`
+  # classifies EVERY row of L by EXPLICIT class + (source, neg_type) into
+  # positive / one-of-three-valid-buckets / excluded(otsu review/keep) / ERROR
+  # (unburned with no bucket, NA/unknown class). `.of_cap_negative_buckets()`
+  # then applies the SAME canonical capping (one set.seed(sampling_seed); bucket
+  # order random -> otsu). The previous per-pool
+  # `sample.int()` blocks (one per bucket) are removed; the `sampled_*` frames
+  # are now derived by sub-setting L to the helper's selected row indices.
+  L_class    <- as.character(L[[class_col]])
+  L_source   <- if ("source"   %in% names(L)) as.character(L[["source"]])   else rep(NA_character_, nrow(L))
+  L_neg_type <- if ("neg_type" %in% names(L)) as.character(L[["neg_type"]]) else rep(NA_character_, nrow(L))
+  L_id       <- as.character(L[[id_col]])
+
+  # PHASE 2 (artifact_hard): thread artifact_hard_source into the eligibility
+  # resolver so a promoted artifact_hard row (class="unburned",
+  # source="artifact_hard") resolves to the optional "artifact_hard" bucket
+  # instead of hitting the GATE-6.5 "unburned with no valid bucket" ERROR. The
+  # default (character(0) / no artifact_hard row present) keeps the canonical
+  # two-bucket behaviour, byte-identical to today.
+  .ah_source_final <- unique(as.character(stats::na.omit(artifact_hard_source)))
+  final_elig <- .of_resolve_supervised_eligibility(
+    id = L_id, class = L_class, source = L_source, neg_type = L_neg_type,
+    random_background_source         = random_background_source,
+    otsu_unburned_source             = otsu_unburned_source,
+    otsu_unburned_exclude_neg_types  = otsu_unburned_exclude_neg_types,
+    origin_stage = "FINAL",
+    artifact_hard_source = .ah_source_final
+  )
+  final_caps <- c(
+    random     = random_to_burned_ratio,
+    otsu       = otsu_unburned_to_burned_ratio
+  )
+  # PHASE 2: when the artifact_hard bucket is present (the feature is ON and
+  # promoted rows exist) it enters UNCAPPED -- all eligible promoted rows train;
+  # its influence is controlled by the per-row sample weights, not by a cap. With
+  # no artifact_hard rows (default) this branch is inert -> byte-identical.
+  if ("artifact_hard" %in% names(final_elig$negatives_by_bucket)) {
+    final_caps["artifact_hard"] <- Inf
+  }
+  final_cap <- .of_cap_negative_buckets(
+    positive_idx        = final_elig$positive_idx,
+    negatives_by_bucket = final_elig$negatives_by_bucket,
+    n_burned            = length(final_elig$positive_idx),
+    caps                = final_caps,
+    seed                = sampling_seed,
+    id                  = L_id,
+    context             = "FINAL"
+  )
+
+  # Per-bucket selected row indices (intersection of the helper's selected set
+  # with each bucket's eligible rows), used to rebuild the `sampled_*` frames.
+  .sel_set <- final_cap$selected_indices
+  .bucket_sel <- function(b) {
+    idx <- intersect(final_elig$negatives_by_bucket[[b]], .sel_set)
+    L[idx, , drop = FALSE]
+  }
+  sampled_random_bg  <- .bucket_sel("random")
+  sampled_otsu       <- .bucket_sel("otsu")
+  # PHASE 2: the promoted artifact_hard rows selected by the capping helper
+  # (uncapped -> all eligible). Empty 0-row frame when the feature is OFF.
+  sampled_artifact_hard <- if ("artifact_hard" %in% names(final_elig$negatives_by_bucket)) {
+    .bucket_sel("artifact_hard")
+  } else {
+    L[integer(0), , drop = FALSE]
+  }
+
+  if (nrow(burned_pool)) {
+    burned_pool <- dplyr::mutate(
+      burned_pool,
+      training_selected = 1L,
+      training_group = "burned_all",
+      training_reason = "all_burned_pool"
+    )
+  }
+  if (nrow(sampled_random_bg)) {
+    sampled_random_bg <- dplyr::mutate(
+      sampled_random_bg,
+      training_selected = 1L,
+      training_group = "random_background_sampled",
+      training_reason = "sampled_random_background"
+    )
+  }
+  if (nrow(sampled_otsu)) {
+    sampled_otsu <- dplyr::mutate(
+      sampled_otsu,
+      training_selected = 1L,
+      training_group = "otsu_unburned_sampled",
+      training_reason = "sampled_otsu_unburned"
+    )
+  }
+  # PHASE 2: stamp the promoted artifact_hard rows the same way (additive; the
+  # frame is empty -> no-op when the feature is OFF).
+  if (nrow(sampled_artifact_hard)) {
+    sampled_artifact_hard <- dplyr::mutate(
+      sampled_artifact_hard,
+      training_selected = 1L,
+      training_group = "artifact_hard_sampled",
+      training_reason = "promoted_artifact_hard"
+    )
+  }
+
+  L_ok <- dplyr::bind_rows(
+    burned_pool, sampled_random_bg, sampled_otsu, sampled_artifact_hard
+  ) |>
+    dplyr::distinct(.data[[id_col]], .keep_all = TRUE)
+
+  msg("Direct training selection:")
+  msg("  burned selected=%d", nrow(burned_pool))
+  msg("  random_background_sampled selected=%d (cap=%.2fx, available=%d)",
+      nrow(sampled_random_bg), random_to_burned_ratio, nrow(random_background_pool))
+  msg("  otsu_unburned_sampled selected=%d (cap=%.2fx, available=%d)",
+      nrow(sampled_otsu), otsu_unburned_to_burned_ratio, nrow(otsu_unburned_pool))
+  # PHASE 2: report the promoted artifact_hard rows only when present (no line
+  # when the feature is OFF -> verbose output byte-identical to today).
+  if (nrow(sampled_artifact_hard)) {
+    msg("  artifact_hard_sampled selected=%d (uncapped)", nrow(sampled_artifact_hard))
+  }
+  msg("  training_ok total=%d", nrow(L_ok))
+
+  if (nrow(L_ok) < 20) stop("Direct selection left too few rows to train on.")
+
+  y <- as.integer(L_ok[[class_col]] == "burned")
+  L_df <- sf::st_drop_geometry(L_ok)
+  geom_col <- attr(L_ok, "sf_column") %||% "geometry"
+
+  # 0.4.0 architectural refactor (Agent H): the supervised model
+  # sees ONLY the columns in `.supervised_feature_cols` (plus their
+  # `_isNA` companions when present). 0.5.0: when the caller passes
+  # `feature_whitelist_override`, the active whitelist becomes that
+  # subset (validated above), narrowing the canonical list. Filter
+  # the polygon-level frame to the active whitelist intersected with
+  # what is actually available.
+  feat_cols <- .filter_to_supervised_whitelist(names(L_df),
+                                                whitelist = active_whitelist)
+
+  is_listcol <- vapply(L_df[, feat_cols, drop = FALSE], is.list, logical(1))
+  if (any(is_listcol)) feat_cols <- feat_cols[!is_listcol]
+  if (length(feat_cols) == 0) {
+    stop("No supervised feature columns survived whitelist filter. ",
+         "Expected at least some of the active whitelist in the ",
+         "input GPKG layer '", labelled_layer, "'.")
+  }
+
+  # Whitelist assertion: every kept column must be either a member of
+  # the active whitelist or a recognised `_isNA` companion. If
+  # anything else slipped through, abort loud -- that means
+  # `.filter_to_supervised_whitelist()` and the constant fell out of
+  # sync.
+  .allowed_supervised_cols <- c(
+    active_whitelist,
+    paste0(active_whitelist, "_isNA")
+  )
+  forbidden <- setdiff(feat_cols, .allowed_supervised_cols)
+  if (length(forbidden) > 0L) {
+    stop("Whitelist invariant broken in train_final_model_direct(): ",
+         "feat_cols contains columns outside the active whitelist: ",
+         paste(forbidden, collapse = ", "))
+  }
+
+  # ---- Canonical FINAL training: inner-ES selection + full-data refit -------
+  # OtsuFire's single training protocol. L_ok is already CAPPED above (the
+  # bucket caps applied to the negative pool). Hand the un-imputed training
+  # frame to the SHARED core (.of_nested_refit_fit) so FINAL and OOF cannot
+  # diverge. The core:
+  #   - inner-splits L_ok (group split by group_col, val_frac) under `seed`,
+  #   - fits medians ONLY on the inner-train, early-stops on the inner-val only,
+  #   - REFITS a fresh model on ALL of L_ok at best_iteration (no watchlist),
+  #   - returns the refit model + refit medians (the deployed recipe).
+  L_df_nested <- L_df
+  # PHASE 2: resolve per-row sample weights aligned to L_df_nested rows. NULL
+  # (the default) when there is no source_weights override AND no artifact_hard
+  # row present -> byte-identical to today.
+  .sw_src <- if ("source" %in% names(L_df_nested)) as.character(L_df_nested[["source"]]) else rep(NA_character_, nrow(L_df_nested))
+  .sw_res <- .of_resolve_sample_weights(
+    class = as.character(L_df_nested[[class_col]]), source = .sw_src,
+    source_weights = source_weights, artifact_hard_source = artifact_hard_source,
+    total_weight_ratio = total_weight_ratio)
+  sample_weights_vec <- .sw_res$weights
+  if (!is.null(sample_weights_vec) && isTRUE(verbose)) {
+    msg("PHASE 2 sample-weight log (FINAL):")
+    for (.i in seq_len(nrow(.sw_res$log))) {
+      msg("  source=%s n=%d per_row_w=%s total_w=%.4f",
+          .sw_res$log$source[.i], .sw_res$log$n[.i],
+          format(.sw_res$log$per_row_weight[.i]), .sw_res$log$total_weight[.i])
+    }
+  }
+  fit <- .of_nested_refit_fit(
+    train_df              = L_df_nested,
+    feature_cols          = feat_cols,
+    label_col             = class_col,
+    group_col             = group_col,
+    block_col             = group_col,
+    val_frac              = val_frac,
+    params_fn             = .params_from_cfg,
+    sampling_seed         = sampling_seed,
+    fold_seed             = seed,
+    feature_weights       = feature_weights,
+    sample_weights        = sample_weights_vec,
+    nrounds_max           = nrounds_max,
+    early_stopping_rounds = early_stopping_rounds,
+    impute_numeric        = impute_numeric,
+    impute_factor_missing = impute_factor_missing,
+    verbose               = verbose
+  )
+  model <- fit$model
+  # Gate 1D.8: the recipe feature space is the FULL post-synthesis set (base +
+  # `_isNA`) the shared core derived -- identical to the legacy / OOF / scoring
+  # feature space. Record it as recipe$cols$feature_cols below.
+  feat_cols <- fit$feature_cols
+  # Deploy the REFIT recipe. `numeric_medians` excludes degenerate (all-NA in
+  # train) columns -> the scoring path leaves those cells NA (xgboost missing),
+  # exactly matching how the refit model was trained.
+  numeric_medians <- fit$medians[!vapply(fit$medians,
+                                          function(z) is.null(z) || is.na(z),
+                                          logical(1))]
+  # `X` exists only so colnames(X) (-> recipe$cols$x_cols) and ncol(X) (-> meta)
+  # reflect the DEPLOYED refit design matrix. y is unchanged (defined above).
+  X <- matrix(0, nrow = nrow(L_ok), ncol = length(fit$x_cols),
+              dimnames = list(NULL, fit$x_cols))
+  tr_idx     <- fit$inner_split$tr_idx
+  val_idx    <- fit$inner_split$val_idx
+  split_mode <- paste0("nested_refit_", fit$inner_split$mode)
+  spw <- fit$spw_refit
+  params <- .params_from_cfg(scale_pos_weight = spw)
+  # best_iteration is carried via the audit + recipe$training below. It used to
+  # be written back onto the booster so that model$best_iteration read
+  # consistently downstream, but from xgboost 2.0.0 the booster is an ALTLIST
+  # and rejects `$<-` ("ALTLIST classes must provide a Set_elt method"). The
+  # value is resolved here instead and handed to recipe$training directly;
+  # reading from the booster still works on every version.
+  best_iteration_out <- model$best_iteration %||% fit$best_iteration %||% NA_integer_
+  feature_weights_applied <- if (!is.null(feature_weights)) {
+    fw_vector <- rep(1.0, length(fit$x_cols))
+    names(fw_vector) <- fit$x_cols
+    in_both <- intersect(names(feature_weights), fit$x_cols)
+    if (length(in_both) > 0L) fw_vector[in_both] <- as.numeric(feature_weights[in_both])
+    # 0.5.0: names not in the active feature space are silently dropped, with a
+    # warning (parity with the OOF stage feedback).
+    unknown_weighted <- setdiff(names(feature_weights), fit$x_cols)
+    if (length(unknown_weighted) > 0L) {
+      warning(
+        "Names in `feature_weights` not present in the active feature ",
+        "space (silently dropped): ",
+        paste(unknown_weighted, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    list(
+      requested = as.list(feature_weights),
+      applied = as.list(fw_vector[fw_vector != 1.0]),
+      unknown_dropped = unknown_weighted
+    )
+  } else {
+    list()
+  }
+  nested_audit <- fit$audit
+  nested_audit$stage  <- "FINAL"
+  nested_audit$prefix <- prefix
+  # Per-bucket available / cap / selected (caps applied upstream to L_ok).
+  nested_audit$n_burned                   <- nrow(burned_pool)
+  nested_audit$random_bg_available        <- nrow(random_background_pool)
+  nested_audit$random_bg_cap              <- target_random_bg
+  nested_audit$random_bg_selected         <- nrow(sampled_random_bg)
+  nested_audit$otsu_available             <- nrow(otsu_unburned_pool)
+  nested_audit$otsu_cap                   <- target_otsu
+  nested_audit$otsu_selected              <- nrow(sampled_otsu)
+  nested_audit$outer_test_capped          <- FALSE  # no outer test in FINAL
+  nested_audit$outer_test_used_for_fit    <- FALSE
+
+  # Gate 1D.8: the recipe records the base / `_isNA` partition + canonical order
+  # of the SHARED feature space. The partition comes from the shared core.
+  base_features              <- fit$base_features
+  missing_indicator_features <- fit$missing_indicator_features
+  final_feature_order        <- fit$final_feature_order
+
+  # Gate 1E (2026-06-09): runtime feature-schema parity guard, FINAL leg. Compute
+  # the STRUCTURAL fingerprint of the FINAL refit recipe and, BEFORE saving the
+  # FINAL model / recipe (the model object is built above but nothing is
+  # persisted yet), ASSERT it equals the CANONICAL OOF contract when the run
+  # supplied one. Mismatch = ERROR (stop). When FINAL runs standalone (no OOF in
+  # the run, canonical_oof_fingerprint = NULL) it still computes + persists its
+  # own fingerprint so scoring can round-trip it. The fingerprint is STRUCTURAL
+  # only (names/order/counts/encoding/weights-policy/contract-version); it
+  # excludes the FINAL medians / spw / best_iteration that legitimately differ
+  # from any OOF fold.
+  final_schema_fp <- feature_schema_fingerprint(list(
+    base_features              = base_features,
+    missing_indicator_features = missing_indicator_features,
+    final_feature_order        = final_feature_order,
+    feature_cols               = feat_cols,
+    x_cols                     = if (exists("fit")) fit$x_cols else colnames(X)
+  ))
+  if (!is.null(canonical_oof_fingerprint)) {
+    .of_assert_schema_fingerprints_equal(
+      where    = "FINAL refit vs canonical OOF contract (pre-train/save)",
+      expected = canonical_oof_fingerprint,
+      produced = final_schema_fp
+    )
+  }
+
+  files <- list()
+  if (!is.null(out_dir)) {
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+    # 2026-06-06 (partial-write overwrite fix): the GPKG already honored
+    # `overwrite` (the file.remove below is gated on isTRUE(overwrite)); the
+    # CSV/RDS/TXT sidecars used to clobber unconditionally, so with
+    # overwrite=FALSE the GPKG was protected but the sidecars were not. The
+    # `.write_if_allowed()` helper makes every sidecar honor `overwrite` the
+    # SAME way: when overwrite=TRUE it writes exactly as before
+    # (byte-identical); when overwrite=FALSE and the target already exists the
+    # write is skipped instead of clobbering. The expr is only forced when the
+    # write is actually performed.
+    .write_if_allowed <- function(path, expr) {
+      if (isTRUE(overwrite) || !file.exists(path)) {
+        force(expr)
+      } else {
+        msg("overwrite=FALSE and file exists; skipping write: %s", path)
+      }
+      invisible(NULL)
+    }
+    gpkg_ok <- file.path(out_dir, paste0(prefix, "_training_ok.gpkg"))
+    csv_ok <- file.path(out_dir, paste0(prefix, "_training_ok.csv"))
+    rds_mod <- file.path(out_dir, paste0(prefix, "_final_model.rds"))
+    rds_rec <- file.path(out_dir, paste0(prefix, "_recipe.rds"))
+    rds_spl <- file.path(out_dir, paste0(prefix, "_split_idx.rds"))
+    txt_meta <- file.path(out_dir, paste0(prefix, "_meta.txt"))
+    csv_imp <- file.path(out_dir, paste0(prefix, "_feature_importance.csv"))
+    txt_summary <- file.path(out_dir, paste0(prefix, "_model_summary.txt"))
+
+    if (isTRUE(overwrite) && file.exists(gpkg_ok)) file.remove(gpkg_ok)
+    .write_if_allowed(gpkg_ok,
+      sf::st_write(L_ok, gpkg_ok, layer = "training_ok", quiet = TRUE))
+    .write_if_allowed(csv_ok,
+      utils::write.csv(sf::st_drop_geometry(L_ok), csv_ok, row.names = FALSE))
+    .write_if_allowed(rds_mod, saveRDS(model, rds_mod))
+    .write_if_allowed(rds_spl,
+      saveRDS(list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode), rds_spl))
+
+    # Emit the per-model refit audit CSV (always present on the canonical path).
+    if (!is.null(nested_audit)) {
+      csv_audit <- file.path(out_dir, paste0(prefix, "_nested_refit_audit.csv"))
+      .write_if_allowed(csv_audit,
+        utils::write.csv(nested_audit, csv_audit, row.names = FALSE))
+    }
+
+    # B6 (2026-06-06): the `created_at = Sys.time()` field was dropped from the
+    # recipe so the persisted `_recipe.rds`, `_meta.txt` and
+    # `_model_summary.txt` artifacts are byte-reproducible across re-runs. It
+    # was metadata only -- nothing in the scoring path reads recipe$created_at
+    # (scoring uses recipe$impute / recipe$training); the only former readers
+    # were the two TXT lines below, also removed.
+    recipe <- list(
+      inputs = list(labelled_gpkg = labelled_gpkg, labelled_layer = labelled_layer),
+      selection = list(
+        selection_mode = "direct_pool_sampling",
+        random_background_source = random_background_source,
+        random_to_burned_ratio = random_to_burned_ratio,
+        otsu_unburned_source = otsu_unburned_source,
+        otsu_unburned_to_burned_ratio = otsu_unburned_to_burned_ratio,
+        otsu_unburned_exclude_neg_types = otsu_unburned_exclude_neg_types,
+        burned_selected = nrow(burned_pool),
+        random_background_available = nrow(random_background_pool),
+        random_background_selected = nrow(sampled_random_bg),
+        otsu_unburned_available = nrow(otsu_unburned_pool),
+        otsu_unburned_selected = nrow(sampled_otsu)
+      ),
+      impute = list(
+        impute_numeric = impute_numeric,
+        numeric_medians = numeric_medians,
+        impute_factor_missing = impute_factor_missing
+      ),
+      cols = list(
+        id_col = id_col,
+        class_col = class_col,
+        group_col = group_col,
+        # Gate 1D.8: feature_cols is the FULL SHARED feature space (base +
+        # `_isNA`) in canonical order; base_features / missing_indicator_features
+        # record the partition; final_feature_order is the canonical
+        # pre-one-hot order. x_cols is the deployed design-matrix column order
+        # (post one-hot; for the all-numeric supervised schema x_cols ==
+        # final_feature_order). The scoring path aligns to feature_cols + x_cols.
+        feature_cols = feat_cols,
+        base_features = base_features,
+        missing_indicator_features = missing_indicator_features,
+        final_feature_order = final_feature_order,
+        x_cols = colnames(X)
+      ),
+      training = list(
+        val_frac = val_frac,
+        seed = seed,
+        nrounds_max = nrounds_max,
+        early_stopping_rounds = early_stopping_rounds,
+        best_iteration = best_iteration_out,
+        # Fixed internal constant (traceability only; never user-settable):
+        # OtsuFire always uses inner-early-stopping selection + full-data refit.
+        # spw_selection / spw_refit record both scale_pos_weight values
+        # (selection vs refit) so a downstream audit can confirm the refit model
+        # was deployed.
+        training_method = "inner_early_stopping_full_refit",
+        spw_selection = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_selection,
+        spw_refit = if (is.null(nested_audit)) NA_real_ else nested_audit$spw_refit
+      ),
+      params = params,
+      # 0.5.0: record what was applied so reproducibility audits can
+      # tell whether a non-default feature space or weight vector was
+      # used for this final-model fit.
+      feature_whitelist_override = feature_whitelist_override,
+      feature_weights = feature_weights_applied,
+      # Gate 1E (2026-06-09): persist the STRUCTURAL feature-schema fingerprint
+      # WITH the recipe so the scoring path can assert the schema it PRODUCES
+      # round-trips to the schema the FINAL model expects. `payload` lets a
+      # manifest / audit show the structure; `hash` is the load-bearing identity;
+      # `canonical_oof_fingerprint` records the OOF contract this FINAL was
+      # checked against (NA when FINAL ran standalone).
+      schema_fingerprint = list(
+        hash    = final_schema_fp$hash,
+        payload = final_schema_fp$payload,
+        contract_version = final_schema_fp$payload$contract_version,
+        canonical_oof_fingerprint =
+          if (is.null(canonical_oof_fingerprint)) NA_character_
+          else if (is.list(canonical_oof_fingerprint)) canonical_oof_fingerprint$hash
+          else as.character(canonical_oof_fingerprint)
+      )
+    )
+    .write_if_allowed(rds_rec, saveRDS(recipe, rds_rec))
+
+    imp_tbl <- tryCatch(
+      xgboost::xgb.importance(model = model, feature_names = recipe$cols$x_cols),
+      error = function(e) NULL
+    )
+    if (is.data.frame(imp_tbl) && nrow(imp_tbl)) {
+      .write_if_allowed(csv_imp,
+        utils::write.csv(imp_tbl, csv_imp, row.names = FALSE))
+    }
+
+    oof_summary_path <- NULL
+    oof_best_thresholds_path <- NULL
+    oof_best <- NULL
+    if (!is.null(qa) && is.character(qa) && length(qa) == 1L && file.exists(qa)) {
+      oof_summary_path <- sub("_oof_agg\\.csv$", "_oof_metrics_summary.txt", qa)
+      oof_best_thresholds_path <- sub("_oof_agg\\.csv$", "_oof_best_thresholds.csv", qa)
+      if (!identical(oof_best_thresholds_path, qa) && file.exists(oof_best_thresholds_path)) {
+        oof_best <- tryCatch(utils::read.csv(oof_best_thresholds_path, stringsAsFactors = FALSE), error = function(e) NULL)
+      }
+    }
+
+    # 0.5.0: persist whether `feature_whitelist_override` was applied
+    # (and which canonical names were dropped relative to the
+    # canonical whitelist) and whether `feature_weights` was applied
+    # (with the names whose weight differs from 1.0). Required for
+    # reproducibility audits.
+    if (is.null(feature_whitelist_override)) {
+      whitelist_override_lines <- c(
+        "feature_whitelist_override_applied: FALSE",
+        paste0("feature_whitelist_n: ", length(.supervised_feature_cols))
+      )
+    } else {
+      dropped_relative <- setdiff(.supervised_feature_cols,
+                                   feature_whitelist_override)
+      whitelist_override_lines <- c(
+        "feature_whitelist_override_applied: TRUE",
+        paste0("feature_whitelist_override_n: ", length(feature_whitelist_override)),
+        paste0("feature_whitelist_dropped_n: ", length(dropped_relative)),
+        paste0("feature_whitelist_dropped: ",
+               paste(dropped_relative, collapse = ","))
+      )
+    }
+    if (is.null(feature_weights)) {
+      feature_weights_lines <- c(
+        "feature_weights_applied: FALSE"
+      )
+    } else {
+      applied_names <- names(feature_weights_applied$applied %||% list())
+      applied_pairs <- if (length(applied_names) > 0L) {
+        vapply(applied_names, function(nm) {
+          paste0(nm, "=", feature_weights_applied$applied[[nm]])
+        }, character(1))
+      } else {
+        character(0)
+      }
+      feature_weights_lines <- c(
+        "feature_weights_applied: TRUE",
+        paste0("feature_weights_n_nondefault: ", length(applied_names)),
+        paste0("feature_weights_nondefault: ",
+               paste(applied_pairs, collapse = ",")),
+        paste0("feature_weights_unknown_dropped: ",
+               paste(feature_weights_applied$unknown_dropped %||% character(0),
+                     collapse = ","))
+      )
+    }
+
+    .write_if_allowed(txt_meta, writeLines(c(
+      paste0("prefix: ", prefix),
+      paste0("labelled_gpkg: ", labelled_gpkg),
+      paste0("labelled_layer: ", labelled_layer),
+      paste0("selection_mode: direct_pool_sampling"),
+      paste0("burned_selected: ", nrow(burned_pool)),
+      paste0("random_background_available: ", nrow(random_background_pool)),
+      paste0("random_background_selected: ", nrow(sampled_random_bg)),
+      paste0("random_to_burned_ratio: ", random_to_burned_ratio),
+      paste0("otsu_unburned_available: ", nrow(otsu_unburned_pool)),
+      paste0("otsu_unburned_selected: ", nrow(sampled_otsu)),
+      paste0("otsu_unburned_to_burned_ratio: ", otsu_unburned_to_burned_ratio),
+      paste0("split_mode: ", split_mode),
+      paste0("n_training_ok_used: ", nrow(L_ok)),
+      paste0("n_feature_cols: ", length(feat_cols)),
+      paste0("n_x_cols: ", ncol(X)),
+      paste0("best_iteration: ", recipe$training$best_iteration),
+      whitelist_override_lines,
+      feature_weights_lines
+    ), txt_meta))
+
+    summary_lines <- c(
+      paste0("prefix: ", prefix),
+      paste0("labelled_gpkg: ", labelled_gpkg),
+      paste0("labelled_layer: ", labelled_layer),
+      "",
+      "[training_selection]",
+      paste0("burned_selected: ", nrow(burned_pool)),
+      paste0("random_background_available: ", nrow(random_background_pool)),
+      paste0("random_background_selected: ", nrow(sampled_random_bg)),
+      paste0("random_to_burned_ratio: ", random_to_burned_ratio),
+      paste0("otsu_unburned_available: ", nrow(otsu_unburned_pool)),
+      paste0("otsu_unburned_selected: ", nrow(sampled_otsu)),
+      paste0("otsu_unburned_to_burned_ratio: ", otsu_unburned_to_burned_ratio),
+      paste0("n_training_ok_used: ", nrow(L_ok)),
+      paste0("split_mode: ", split_mode),
+      paste0("best_iteration: ", recipe$training$best_iteration),
+      paste0("n_feature_cols: ", length(feat_cols)),
+      paste0("n_x_cols: ", ncol(X)),
+      "",
+      "[feature_space_overrides]",
+      whitelist_override_lines,
+      feature_weights_lines
+    )
+
+    if (is.data.frame(oof_best) && nrow(oof_best)) {
+      summary_lines <- c(
+        summary_lines,
+        "",
+        "[oof_recommended_threshold]",
+        paste0("metric: ", oof_best$recommended_metric[1]),
+        paste0("threshold: ", oof_best$recommended_threshold[1]),
+        paste0("accuracy: ", oof_best$recommended_accuracy[1]),
+        paste0("precision: ", oof_best$recommended_precision[1]),
+        paste0("recall: ", oof_best$recommended_recall[1]),
+        paste0("specificity: ", oof_best$recommended_specificity[1]),
+        paste0("balanced_accuracy: ", oof_best$recommended_balanced_accuracy[1]),
+        paste0("f1: ", oof_best$recommended_f1[1])
+      )
+    }
+
+    if (is.data.frame(imp_tbl) && nrow(imp_tbl)) {
+      top_imp <- utils::head(imp_tbl, 15)
+      summary_lines <- c(
+        summary_lines,
+        "",
+        "[top_feature_importance]",
+        vapply(seq_len(nrow(top_imp)), function(i) {
+          paste0(
+            top_imp$Feature[i],
+            " | Gain=", signif(top_imp$Gain[i], 6),
+            " | Cover=", signif(top_imp$Cover[i], 6),
+            " | Frequency=", signif(top_imp$Frequency[i], 6)
+          )
+        }, character(1))
+      )
+    }
+
+    summary_lines <- c(
+      summary_lines,
+      "",
+      "[files]",
+      paste0("meta_txt: ", txt_meta),
+      paste0("feature_importance_csv: ", csv_imp),
+      paste0("oof_summary_txt: ", oof_summary_path %||% NA_character_),
+      paste0("oof_best_thresholds_csv: ", oof_best_thresholds_path %||% NA_character_)
+    )
+    .write_if_allowed(txt_summary, writeLines(summary_lines, txt_summary))
+
+    files <- list(
+      training_ok_gpkg = gpkg_ok,
+      training_ok_csv = csv_ok,
+      model_rds = rds_mod,
+      recipe_rds = rds_rec,
+      split_rds = rds_spl,
+      meta_txt = txt_meta,
+      feature_importance_csv = csv_imp,
+      model_summary_txt = txt_summary
+    )
+    if (!is.null(nested_audit)) {
+      files$nested_refit_audit_csv <-
+        file.path(out_dir, paste0(prefix, "_nested_refit_audit.csv"))
+    }
+  }
+
+  invisible(list(
+    model = model,
+    training_ok_sf = L_ok,
+    feature_cols = feat_cols,
+    x_cols = colnames(X),
+    split = list(train_idx = tr_idx, val_idx = val_idx, mode = split_mode),
+    params = params,
+    # One-row data.frame audit of the refit (selection vs refit spw, caps).
+    nested_refit_audit = nested_audit,
+    # Gate 1E (2026-06-09): the FINAL structural feature-schema fingerprint
+    # (asserted == canonical OOF when one was supplied; persisted in the recipe).
+    schema_fingerprint = final_schema_fp,
+    # PHASE 2 (artifact_hard): the per-source sample-weight log (n / per-row /
+    # total weight per source). Empty 0-row frame on the OFF path (NULL weights),
+    # so a caller can always read it for traceability without an OFF/ON branch.
+    sample_weight_log = .sw_res$log,
+    files = files
+  ))
+}
+
+train_final_model_from_qa <- train_final_model_direct

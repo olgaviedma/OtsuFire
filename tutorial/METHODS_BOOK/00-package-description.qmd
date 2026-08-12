@@ -1,0 +1,72 @@
+# Package And Project Overview
+
+OtsuFire is an R-based burned-area mapping framework organized around a two-stage design. The paper draft describes the scientific rationale: a deterministic Otsu-based seed-and-grow stage produces candidate burned polygons without requiring externally compiled training labels, and an optional supervised stage uses those deterministic outputs to reduce residual commission and omission in spectrally ambiguous settings.
+
+## What The Project Currently Contains
+
+The deterministic and supervised workflows are implemented **entirely inside the package** (`R/`). The exported functions are the runtime, not a bridge to external scripts: there is no `sys.source()` of legacy scripts and no namespace mutation at run time. The usage scripts under `2_SCRIPTS/.../00_USAGE` are thin drivers that build a configuration object and call the package functions.
+
+| Layer | Location | Current role |
+|---|---|---|
+| Package implementation | `OtsuFire/R` | Active runtime for the mosaic, deterministic, and supervised stages |
+| Usage drivers | `2_SCRIPTS/.../00_USAGE` | Example scripts that build a config and call the package functions |
+
+This book documents both the methodological design and the current operational architecture. The canonical entry points are the package functions (`build_*_config()` plus the `run_*()` / modular stage functions).
+
+## Why The Workflow Is Split Into Two Stages
+
+The paper draft and the active code agree on the methodological split.
+
+1. The deterministic stage converts an annual change-index mosaic into candidate polygons and applies explicit rule-based filters. Its job is to be transparent, conservative, and auditable.
+2. The supervised stage starts from the deterministic output rather than replacing it. It builds burned and unburned training pools from that annual deterministic universe, performs spatially structured learning, and assigns probability scores to the same polygon universe.
+
+This separation is central to OtsuFire. The deterministic stage is both an operational product and the structural input to supervised refinement. The supervised stage is a second decision layer, not an independent alternative workflow.
+
+## Current Architecture And Validation State
+
+The handoff and current code support the following status summary.
+
+| Component | Current state |
+|---|---|
+| `change_index_mosaic()` | Active package-facing mosaic function |
+| Deterministic runtime | `build_burned_mapping_config()` + `run_deterministic_pipeline()` (package-internal) |
+| Supervised runtime | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` (package-internal) |
+| `validate_fire_maps()` | Public workflow-independent validation utility shared by deterministic validation and compatible post-threshold supervised outputs |
+
+`validate_fire_maps()` is a workflow-independent validation utility. It may be called inside the deterministic pipeline, but it is also intended for direct use on any compatible burned-area prediction layer, including supervised outputs after thresholding `p_burned`. The metrics it reports (omission, commission, F1, IoU) are computed against an external reference (e.g. EFFIS) and are not comparable to the supervised OOF AUC / PR-AUC, which are computed against the deterministic-decision labels.
+
+Two project-state details are especially important for interpretation.
+
+- The deterministic RBR keep-pool registry lives under `Results/<SCENARIO_UPPER>/RBR_TRAINING_REGISTRY.gpkg`. This is a deterministic feature; the **supervised** pipeline no longer writes any registry (the supervised burned-like registry and its `historical_registry_augment` augmentation design were removed on 2026-06-05; Mode B had been formally rejected on 2026-04-17).
+- The supervised runtime uses a single unburned-pool strategy. `all_sources` is now the only mode and is applied implicitly. The supervised model uses **two explicit negative sources: random background and Otsu residuals**, each with its own capacity cap (the GATE 6 contextual + spectral buckets were removed). The user-selectable `negative_pool_policy` option and the alternative `deterministic_direct` baseline strategy were removed on 2026-06-05.
+
+## Canonical Inputs And Outputs
+
+The main stages, inputs, and outputs supported by the current sources are summarized below.
+
+| Stage | Main inputs | Main outputs | Main downstream role |
+|---|---|---|---|
+| Change-index mosaic | Annual raster tiles, AOI mask, naming pattern, output directory | Annual masked mosaic GeoTIFF plus run diagnostics | Common raster base for deterministic and supervised stages |
+| Deterministic stage | Annual mosaic, CORINE and burnable support, ecoregions, hotspots when available, previous-year burned reference when available, optional RBR keep-pool registry | `internal_decisions.gpkg`, optional `reference_decisions.gpkg`, validation workbook, timing log | Canonical annual polygon universe and first decision layer |
+| One-year supervised stage | `internal_decisions`, main change index, delayed change index when available, terrain and land-cover support layers, hotspots when available | Pools, folds, features, OOF diagnostics, final model, `final_map_full`, `final_map` | Probability-based annual refinement |
+
+## Reproducibility Conventions
+
+The current workflow relies on a few repeatability conventions that should be preserved in documentation and in practice.
+
+- Results are organized by year, `result_name`, stage, and scenario.
+- Deterministic reproducibility depends on both fixed code and fixed RBR keep-pool registry state, achieved by freezing the registry snapshot and exposing `deterministic_seed`.
+- Supervised reproducibility additionally depends on the content-aware negative-pool fingerprint (`neg_pool_fingerprint`), which invalidates stale cached pools, and on the canonical seeds in `cfg$train_control`.
+- The supervised workflow writes intermediate objects to disk rather than hiding them in memory. Pools, folds, feature layers, OOF diagnostics, and final outputs are therefore part of the documented workflow, not incidental side effects.
+- Scenario names matter beyond reporting: they determine output folders and (for the deterministic stage) registry locations. The supervised negative-pool strategy is no longer scenario-dependent — it is always `all_sources`.
+
+## What This Book Does Not Yet Claim
+
+Two topics remain deliberately conservative in this pass.
+
+1. LOYO is described only conceptually; a new dedicated multiyear runtime is still needed.
+2. Historical application is documented only at the level supported by the paper draft. There is no current package entry point, and the supervised registry that would have supported temporal transfer was removed on 2026-06-05.
+
+::: {.callout-note}
+This book follows the active package function signatures and runtime behaviour. Where any older design table is more forward-looking than the current package, the package is authoritative.
+:::

@@ -1,0 +1,32 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "FIRE_MAPPING Methods Book"
+  subtitle: "Deterministic and supervised annual burned-area mapping"
+  author: "Project Team"
+  date: today
+  search: true
+  page-navigation: true
+  chapters:
+    - index.qmd
+    - 00-package-description.qmd
+    - 01-change-index-mosaic.qmd
+    - 02-deterministic-stage.qmd
+    - 03-supervised-stage.qmd
+    - 04-one-year-workflows.qmd
+    - 05-troubleshooting.qmd
+
+format:
+  html:
+    theme: litera
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+
+execute:
+  echo: false
+  warning: false
+  message: false

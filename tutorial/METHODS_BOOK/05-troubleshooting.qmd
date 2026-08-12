@@ -1,0 +1,63 @@
+# Troubleshooting
+
+This chapter collects the failure modes and interpretation problems that are already visible in the current code and handoff. The goal is to direct users toward the first file or layer they should inspect, not to speculate beyond the available sources.
+
+## Quick Orientation
+
+Before debugging a specific stage, confirm five basics.
+
+1. The same `target_year`, `scenario`, and `result_name` are being used across all annual stages.
+2. The deterministic and supervised stages are reading the same annual mosaic family.
+3. The deterministic RBR keep-pool registry path (when used) corresponds to the intended scenario folder under `Results/<SCENARIO_UPPER>/`. (Note: the supervised pipeline no longer writes any registry; the supervised burned-like registry was removed on 2026-06-05.)
+4. The unburned-pool strategy is no longer configurable in the package: every run uses `all_sources` implicitly (the former `deterministic_direct` mode was removed on 2026-06-05).
+5. Support rasters used by supervised feature extraction match the geometry of the main annual change-index raster.
+
+## Symptom Matrix
+
+| Symptom | Likely cause | First place to inspect |
+|---|---|---|
+| Mosaic stage reports no rasters found | `folder_path` or `raster_pattern` does not match the intended annual tiles, or candidate files were already filtered as mosaic-like outputs | Tile names in the source folder and the `raster_pattern` passed to `change_index_mosaic()` |
+| Mosaic stage stops on CRS, resolution, origin, or band mismatch | Annual tiles are not geometrically compatible enough to be merged safely | The candidate tile set itself; compare each tile to the first selected reference tile |
+| Deterministic outputs differ across repeated runs | RBR keep-pool registry state changed between runs or the deterministic seed was not controlled | Scenario-specific RBR keep-pool registry path and the `deterministic_seed` value |
+| `filter_2` is `not_applied` throughout `internal_decisions` | No hotspot file was available for that year | `1_DATA/Hotspots/hotspots_iberia_<year>.geojson` and the `filter_2` / `reason_2` columns |
+| Deterministic run fails before validation even when final validation was expected to be off | The current deterministic workflow still requires some reference inputs upstream of the final validation workbook | `Effis_CA_<year>.shp` and the deterministic input checks near the start of the runtime |
+| Supervised run aborts because the burned pool is empty | The deterministic stage did not leave enough `keep` polygons after QA | `05_DECISIONS/internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
+| Supervised run aborts because the review pool is empty | The deterministic stage did not leave an ambiguous annual set for supervised scoring | `internal_decisions.gpkg` and `01_POOLS/*deterministic_pool_qa*` |
+| Feature extraction stops on raster geometry mismatch | DEM, slope, delayed change, or CORINE layers are not aligned to the main annual mosaic | The raster-geometry checks that run before `extract_features()` and the main annual mosaic used as template |
+| Supervised run aborts with a feature-schema parity error | The OOF, FINAL, and scoring feature spaces diverged — the runtime parity guard (Gate 1E) refuses to deploy a model whose schema differs from the one OOF evaluated | The `_feature_schema_parity.txt` manifest in the run output and the per-fold fingerprint sidecar |
+| Supervised run aborts on an empty Otsu legacy negative pool | The Otsu current-year residual pool is empty after sanitisation; degrading to deterministic-direct semantics would change the negative pool, so the default errors (D4a) | Set `options$allow_empty_otsu_pool = TRUE` only if the degraded pool is acceptable; otherwise check the Otsu inputs |
+| A stale `negative_pool_policy` / `otsu_unburned_generation` option errors at config build | These knobs were removed on 2026-06-05; the pipeline is always `all_sources` | Remove the option from the `build_supervised_burned_config(options = ...)` call (`negative_pool_policy = "all_sources"` is accepted as a no-op) |
+| A cached negative pool is rebuilt unexpectedly | The content-aware `neg_pool_fingerprint` changed (e.g. the B4 burnable-domain restriction, mask, percentile, seed, or inputs differ), so the stale pool is invalidated rather than reused | `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt` |
+
+## Files Worth Checking First
+
+When a run looks wrong, these files are usually the highest-value first checks.
+
+| Workflow stage | First file or layer to inspect | Why |
+|---|---|---|
+| Mosaic | Annual mosaic GeoTIFF and returned diagnostics | Confirms the common raster base for all later stages |
+| Deterministic | `05_DECISIONS/internal_decisions.gpkg` | Canonical annual deterministic state |
+| Supervised pools | `01_POOLS/<year>_<scenario>_pools.gpkg` | Shows the actual burned, unburned, review, and scoring pools |
+| Supervised folds | `02_FOLDS/<year>_train_with_folds_<blocksize>m.gpkg` | Confirms fold assignment and training geometry |
+| Features | `03_FEATURES/features_geometry.gpkg` | Confirms feature extraction completed on the intended polygons |
+| OOF | `05_OOF/*_oof_agg.csv` and `*_oof_best_thresholds.csv` | Confirms same-year diagnostic behavior |
+| Final map | `09_FINAL_MAP/*_final_map.gpkg` | Distinguishes `final_map_full` from the public `final_map` |
+| Feature-schema parity | `*_feature_schema_parity.txt` | Confirms OOF / FINAL / scoring share one feature-space contract (Gate 1E guard) |
+| Consistency checks | `11_CONSISTENCY_CHECKS/*_consistency_summary.txt` | Summarizes supervised-vs-deterministic coherence issues |
+
+## Current Pending Gaps
+
+Some issues are known and should be treated as documentation boundaries rather than user mistakes.
+
+1. LOYO needs a new dedicated multiyear runtime and tutorial. The replacement is still pending.
+2. Historical application is supported conceptually by the paper draft but has no current package entry point. The supervised burned-like registry that would have supported temporal transfer was removed on 2026-06-05.
+3. ~~Five exported package functions are missing Rd documentation pages~~ **RESOLVED (2026-04-22, F6/F9)** — the 4 bridge exports (`build_burned_mapping_config`, `build_supervised_burned_config`, `run_deterministic_pipeline`, `run_oneyear_supervised_pipeline`) plus the workflow-independent validation utility `validate_fire_maps()` now have roxygen2-generated Rd pages. `build_supervised_burned_config` was missing from NAMESPACE (fixed). `%||%` removed from public API. 15 exports total. See HANDOFF Sections 53, 58, 58b.
+4. ~~`validate_fire_maps.Rd` documents a v1 signature; run `devtools::document()` to regenerate from current source~~ **RESOLVED (2026-04-22, F6)** — `devtools::document()` was run; all Rd pages regenerated from current source. No further action needed unless new exports are added.
+
+::: {.callout-note}
+The supervised burned-like registry products and the positive-pool augmentation design (Mode B / `historical_registry_augment`) are removed. Mode B was formally rejected on 2026-04-17; the registry outputs and the `append_supervised_registry()` step were removed from the runtime on 2026-06-05 (§N+27). The supervised pipeline no longer writes any registry. If old documentation or config files reference a supervised registry as a current output or as planned work, treat those references as stale. (The deterministic RBR keep-pool / keep-reference registry is a separate, still-supported feature.)
+:::
+
+::: {.callout-warning}
+Definitive supervised results require RETRAINING both the OOF and FINAL models under the corrected common feature recipe (the `_isNA` indicators are now shared across OOF, FINAL and scoring — see the supervised stage chapter, "Corrected Defect"). Results carried over from before that fix do not apply, because OOF then evaluated a different feature space than the one the FINAL model deployed.
+:::

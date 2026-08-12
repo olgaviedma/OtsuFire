@@ -1,0 +1,134 @@
+---
+title: "Getting started with OtsuFire"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with OtsuFire}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = requireNamespace("sf", quietly = TRUE) &&
+             requireNamespace("terra", quietly = TRUE)
+)
+```
+
+`OtsuFire` provides a reproducible burned-area mapping pipeline with
+four composable layers:
+
+1. A **mosaic** stage that builds an annual change-index raster.
+2. A **deterministic** Otsu / seed-and-grow segmentation workflow.
+3. A **supervised** one-year probabilistic workflow that learns
+   `p_burned` from XGBoost models trained on deterministic decisions.
+4. A workflow-independent **validation** utility.
+
+This vignette walks through the API surface using synthetic toy data
+that runs in seconds. Operational, full-scale examples live in the
+companion vignette `workflow-overview`.
+
+## Public API
+
+```{r api}
+library(OtsuFire)
+
+# Public exports (see the package NAMESPACE for the authoritative list).
+public_api <- sort(getNamespaceExports("OtsuFire"))
+length(public_api)
+public_api
+```
+
+The exports cover the mosaic stage (`change_index_mosaic`,
+`mosaic_from_tiles`, `clean_raster_file`), the deterministic stage
+(`build_burned_mapping_config`, `detect_burned_patches`,
+`score_burned_patches`, `run_deterministic_pipeline`,
+`collect_keep_reference_samples`, `build_keep_pool_from_samples`), the
+supervised stage (`build_supervised_burned_config`,
+`build_supervised_training_pools`, `make_spatial_folds`,
+`extract_supervised_features`, `run_oof_diagnostics`,
+`train_final_burned_model`, `score_supervised_burned_map`,
+`check_supervised_consistency`, `validate_supervised_execution`,
+`run_oneyear_supervised_pipeline`), and the shared validation utility
+(`validate_fire_maps`).
+
+## A toy supervised configuration
+
+The `build_*_config()` builders are pure validators: they normalise
+the inputs into S3 objects without reading rasters or training
+models. They are the safest entry points for exploring the API.
+
+```{r cfg, eval = requireNamespace("sf", quietly = TRUE) && requireNamespace("terra", quietly = TRUE)}
+suppressPackageStartupMessages({
+  library(sf)
+  library(terra)
+})
+
+# Synthetic 8x8 change-index raster + matching burnable mask.
+ci  <- tempfile(fileext = ".tif")
+terra::writeRaster(
+  terra::rast(ncol = 8, nrow = 8, vals = 1:64), ci, overwrite = TRUE
+)
+mask <- tempfile(fileext = ".tif")
+terra::writeRaster(
+  terra::rast(ncol = 8, nrow = 8, vals = rep(1, 64)),
+  mask, overwrite = TRUE
+)
+
+# Synthetic single-polygon "internal_decisions" GPKG.
+decisions <- tempfile(fileext = ".gpkg")
+sf::st_write(
+  sf::st_sf(
+    id = 1L,
+    geometry = sf::st_sfc(
+      sf::st_polygon(list(rbind(c(0,0), c(1,0), c(1,1), c(0,1), c(0,0)))),
+      crs = 3035
+    )
+  ),
+  decisions, quiet = TRUE
+)
+
+cfg_sup <- build_supervised_burned_config(
+  run_label          = "balanced",
+  internal_decisions = decisions,
+  change_index       = ci,
+  target_year        = 2020L,
+  output_dir         = tempdir()
+)
+print(cfg_sup)
+```
+
+## Modular building blocks
+
+The supervised workflow is decomposed into modular helpers that each
+take a config (or relevant subset) and return either an `sf` object
+or a path to an output file. They share the same validator pattern:
+calling them with no arguments returns an informative error rather
+than a low-level traceback.
+
+```{r modular, error = TRUE}
+build_supervised_training_pools()
+make_spatial_folds()
+extract_supervised_features()
+run_oof_diagnostics()
+train_final_burned_model()
+score_supervised_burned_map()
+check_supervised_consistency()
+```
+
+These messages document what each function expects without
+triggering any heavy computation.
+
+## Where to go next
+
+* `vignette("workflow-overview", package = "OtsuFire")` — explains
+  how the four layers compose into a full one-year run, including the
+  internal (OOF) vs external (`validate_fire_maps()`) validation
+  distinction, the shared feature recipe / `_isNA` indicators, and the
+  scientific defaults.
+* The function reference (run `?OtsuFire::run_oneyear_supervised_pipeline`)
+  documents every exported function with parameter-level detail.
+* `NEWS.md` records the design decisions, the corrected OOF/FINAL
+  `_isNA` defect, and the validated baselines behind the current
+  defaults.

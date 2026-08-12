@@ -1,0 +1,13 @@
+"check","status","message","evidence","severity","verifiable"
+"empty_raster","PASS","No raster input is empty (>0 rows/cols).","change_index, delayed_change_index, topo, corine_raster, burnable_mask","blocking",TRUE
+"crs_rasters","PASS","Every on-disk raster input carries a valid CRS.","change_index, delayed_change_index, topo, corine_raster, burnable_mask","blocking",TRUE
+"crs_vectors","PASS","internal_decisions carries a valid CRS.","CRS=ETRS89-extended / LAEA Europe","blocking",TRUE
+"overlap","PASS","All spatial inputs overlap the change-index template.","change_index template footprint","blocking",TRUE
+"zero_burnable_mask","PASS","Burnable mask aligns to the template with >0 burnable cells.","burneable_mask_binary_corine12_3035_alignedMinMin2017.tif","blocking",TRUE
+"wrong_year","PASS","Every year-specific input agrees with cfg$target_year = 2017.","change_index[filename]; delayed_change_index[filename]; hotspots[column:year]; internal_decisions[column:year]; reference_burned_map[column:year]","blocking",TRUE
+"required_columns","PASS","internal_decisions has the required 'class_final' column.","poly_id, source_poly_id, year, scenario, filter_1, reason_1, filter_2, reason_2, filter_3, reason_3, preyear_action, preyear_reason, preyear_overlap_frac, class_final, area_ha, n_pix, median_rbr, p_above_keep_q25, p_above_keep_ref, percentile_in_keep, conf_area, conf_pix","blocking",TRUE
+"incompatible_types","PASS","'class_final' is character/factor (valid class label type).","class=character","blocking",TRUE
+"sanitize_decisions","PASS_WITH_SANITIZATION","internal_decisions sanitises cleanly: 1278 input feature(s) -> 1274 usable polygon(s) (4 dropped as empty/non-polygonal). Empty geometries are the official drop policy; not a blocking condition.","n_input=1278 -> n_output=1274; empty_before=4, empty_after_make_valid=0, gc=0, gc_without_polygon=0","warning",TRUE
+"feature_schema","SKIPPED","No model/recipe + scoring feature names supplied.","no model","blocking",FALSE
+"contradictory_config","PASS","No contradictory cfg setting detected.","protocol=legacy; oof=capped; reuse=FALSE","blocking",TRUE
+"foreign_cache","SKIPPED","No persisted negative-pool fingerprint cache on disk.","no cache","info",FALSE

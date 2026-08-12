@@ -1,0 +1,190 @@
+# Supervised Stage
+
+The supervised stage is the second methodological block of the workflow. It is a one-year probabilistic classifier that learns a burned-area score from the deterministic decisions of the same year and scenario. The operational entry point is the package function `run_oneyear_supervised_pipeline()`, which orchestrates the modular stages (pools, folds, features, OOF diagnostics, final model, scoring). Each stage is also exported as a standalone function so the workflow can be driven step by step; calling a stage directly produces byte-identical outputs to a full orchestrated run.
+
+LOYO (leave-one-year-out) remains a separate temporal-validation concept and is not represented by an active current runtime.
+
+## Current Status
+
+- The supervised one-year pipeline is the current operational patch-level runtime, implemented entirely inside the package (`R/supervised-*.R` and the internal engines `R/internal-sup-*.R`). There is no `sys.source()` of external legacy scripts and no namespace mutation.
+- The unburned-pool strategy is fixed: `all_sources` is the only mode and is applied implicitly in every run. The user-selectable knob was removed on 2026-06-05, and the former `deterministic_direct` baseline strategy no longer exists. A stale `negative_pool_policy` / `otsu_unburned_generation` option errors rather than being silently ignored (passing `negative_pool_policy = "all_sources"` is accepted as an informational no-op).
+
+## Inputs And Support Layers
+
+The supervised stage starts from the deterministic outputs of the same year and scenario.
+
+| Input group | Current role |
+|---|---|
+| `internal_decisions` | Defines the polygon universe to relabel, train, score, and filter |
+| Main `change_index` mosaic | Main burned-sensitive predictor surface |
+| `delayed_change_index` | Optional persistence-style (autumn-winter) support layer used in feature extraction |
+| DEM and slope | Topographic predictors |
+| CORINE land-cover support | Polygon-level land-cover composition features |
+| Hotspots when available | Optional feature support and current-year temporal filtering support |
+| Burnable mask | Restricts the negative-pool burnable domain (B4) and supports raster alignment |
+
+All input paths are resolved from the configuration object built by `build_supervised_burned_config()` (`config$inputs`, `config$options`). The config is the single source of truth: there are no hidden path conventions for the run inputs.
+
+## Pool Construction
+
+The supervised stage does not bypass the deterministic stage. It begins by reading `internal_decisions` and auditing the deterministic labels (`audit_deterministic_pools()`, a conservative QA relabelling) before building pools.
+
+- deterministic `keep` polygons become the `burned_pool`,
+- deterministic `review` polygons become the `review_pool`,
+- the full audited deterministic universe becomes the `scoring_pool`.
+
+The workflow then constructs an `unburned_pool` and merges it with the burned pool to form `train_labeled` (`burned + unburned`).
+
+## Negative Pool
+
+The supervised model uses **two explicit negative sources: random background and Otsu residuals.** There are no other negative buckets.
+
+The negative (unburned) pool follows the historical / canonical method of the supervised Otsu workflow: **burnable-only**. The Otsu residual negative builder runs in `burnable_only` mode, and the random background bucket (B4) is computed **within the burnable domain**. CORINE × ecoregion stratification is used **only** in the deterministic delineation stage (Otsu per CORINE × ecoregion unit); it is **not** used to build the supervised negative pool. Ecoregions are not a feature of the supervised model.
+
+Two builders are combined, in a fixed order so the RNG stream is reproducible:
+
+1. `build_unburned_from_deterministic_decisions()` — provides the **random burnable-background** sample (B4). (The deterministic-drop polygons it reads are *not* training negatives; they remain scoreable but unlabelled.)
+2. `build_otsu_negative_pipeline()` — current-year **Otsu residual** patches (drop-only patches, `S_PATCH_PA ≤ 0.15`).
+
+### Random burnable background (B4)
+
+The B4 random-background bucket computes its change-index percentile **and** draws its sample **only within the (aligned) burnable domain**. The burnable mask is applied first; all exclusions and buffers are applied; and only then is the percentile computed over the surviving burnable cells. This is a deliberate methodological correction (Gate 1C.2): earlier code took the percentile over the whole change-index raster, so a run on the current code produces a different — and more correct — negative pool than older runs.
+
+### Content-aware pool fingerprint
+
+Every negative pool is summarised by a deterministic, content-aware fingerprint (`neg_pool_fingerprint`, written as `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`). It folds in the B4 burnable-domain decision, the aligned burnable-mask hash, the percentile configuration and its computed value, the RNG seeds, the exclusions/buffers, and the relevant inputs. Any cache or pool whose fingerprint predates the burnable-domain restriction is **invalidated** rather than silently reused.
+
+### Otsu > random spatial dedup
+
+A location must not enter the negative pool as **both** a random background cell and an Otsu residual patch. After both builders run — and *before* capping and `train_labeled` assembly — every random background row whose polygon intersects any Otsu patch is removed; Otsu rows always have priority and are never touched. The dedup is recorded in `otsu_random_dedup_audit` (`random_before`, `random_removed_by_otsu`, `random_final`, `area_removed`, `removed_ids_hash`) and is folded into the `neg_pool_fingerprint`.
+
+### Unburned pool taxonomy (two sources)
+
+The negative pool routes candidate unburned polygons through **two** independent source buckets, each with its own capacity cap relative to the number of burned training polygons.
+
+| Bucket | Source tag | Cap (× burned) | Notes |
+|---|---|---|---|
+| `random` | random burnable background | 1.0 | Primary, unambiguous negatives (B4, burnable domain) |
+| `otsu` | Otsu drop-only patches (`S_PATCH_PA ≤ 0.15`) | 1.0 | Otsu residual patches that were dropped; review/keep excluded |
+
+The two caps are the typed PUBLIC block `negative_pool_params$caps = c(random = 1.0, otsu = 1.0)`, the **single source of truth**; they are mirrored into `cfg$train_control$caps` and forwarded identically to OOF and FINAL. An `Inf` cap disables capping for that bucket.
+
+## Training Eligibility And The Shared Capping Helper
+
+Training eligibility is defined by **explicit class, never by negation**. Every candidate training row is classified by its explicit `class` plus its `(source, neg_type)` metadata:
+
+- `class == "burned"` → **positive** (always kept, never subsampled);
+- `class == "unburned"` **and** it resolves to exactly one of the two valid negative buckets above (random, otsu) → **negative**, eligible for capping;
+- `class == "unburned"` but a known otsu-excluded type (otsu review / keep patches) → **excluded and logged**, never trained, never an error;
+- anything else — `class` `NA` or unknown, or an unburned row with no valid bucket and not a known-excluded type → **hard error** (strict), surfaced with id / class / source / neg_type / origin-stage (OOF or FINAL).
+
+Review / keep / `NA` / unknown / "other" rows can therefore **never** silently become negatives. This replaces the earlier rule that treated negatives as "everything that is not burned" (the OOF `!is_burned` predicate with its `sel_other` / `other_kept` 5th "other" negative category, both removed).
+
+Eligibility resolution and capping live in **two pure internal helpers shared literally by both OOF and FINAL**: an eligibility resolver (`.of_resolve_supervised_eligibility()`, upstream of capping: it assigns buckets, builds the audit table, and logs the excluded ids) and a single canonical capping helper (`.of_cap_negative_buckets()`). The capping helper is the **only** implementation of the cap: `cap = ceiling(n_burned × ratio)`; it takes all available negatives when availability is at or below the cap, keeps every positive, and samples negatives without replacement in a deterministic bucket order, with a per-bucket audit (`bucket, n_burned, n_available, cap_ratio, n_cap_max, n_selected, effective_ratio, seed, context, reason`). The **only** differences between OOF and FINAL are the retained outer-test fold (OOF) and the seed (OOF uses a per-fold fold seed; FINAL uses `cfg$train_control$seeds`). The two stages can no longer diverge on eligibility or capping. This unification is behaviour-preserving for the default 2017 balanced run, where the review/keep/unknown set is empty.
+
+## Spatial Folds And Feature Extraction
+
+After pool construction the workflow builds spatial block folds (`02_FOLDS`), evaluating candidate block sizes and writing a `train_with_folds` layer for spatially structured resampling.
+
+Feature extraction (`03_FEATURES/features_geometry.gpkg`) aligns every support raster to the main annual change-index template before extracting polygon-level summaries from: the main annual change index, post-fire day-of-year support, delayed (autumn-winter) change when available, DEM and slope, grouped CORINE composition, and hotspot density/intensity metrics when hotspot data are available. The mosaic stage remains methodologically central here: every support raster is checked against the same annual template before feature extraction is allowed to proceed.
+
+## Shared Feature Recipe And `_isNA` Indicators
+
+The supervised stage uses ONE feature recipe / builder, shared across the three places a feature space is constructed: the OOF diagnostics, the FINAL refit, and scoring. The recipe defines the **50 base features**, and — critically — **before imputation** it creates a `<feature>_isNA` missing-indicator companion for each base feature (the B5 indicators). The result is **50 base + 50 indicators = 100 columns**, identical across OOF, FINAL and scoring.
+
+This shared recipe is the source of the scoring feature schema: feature names and order, types, the `_isNA` companions, the imputation medians, and the categorical levels all come from the saved FINAL recipe. The scoring matrix is **never** reconstructed from the scoring-year data. The reconciliation policy is recipe-driven and recorded (no silent corrections): a missing feature is created as `NA_real_` (xgboost-missing) plus its `_isNA`; an extra column is dropped; a column-order change is realigned to recipe order; a new categorical level maps to the recipe sentinel.
+
+## Runtime Feature-Schema Parity Guard
+
+A runtime feature-schema parity guard (Gate 1E) enforces the shared-recipe contract on **every run**. It computes a reproducible, wall-clock-free **structural** fingerprint of the feature-space contract — the base-feature names and order, the `_isNA` indicator names and order, `final_feature_order`, the design-matrix column names/order, the `n_base` / `n_indicators` / `n_total` counts, the numeric-vs-factor encoding contract, the feature-weights policy (`_isNA` indicators carry the canonical weight 1.0), and the contract version — while deliberately excluding fit-dependent quantities (imputation medians, learned level values, `scale_pos_weight`, `best_iteration`, seeds, timestamps).
+
+The guard asserts that all OOF outer folds share one canonical contract, that the FINAL refit equals that canonical contract before training/saving, and that the scoring matrix equals the saved FINAL schema before predicting. A structural divergence is an **error** (the run aborts), never a silent warning. The fingerprints and the guard result are written to a `_feature_schema_parity.txt` manifest and returned in the run result.
+
+## Training Procedure
+
+OtsuFire uses a **single** supervised training procedure; there is no protocol choice and no `training_protocol` argument. The number of boosting rounds is selected using an inner validation split and early stopping, and the recipe and model are then refitted on all available training observations before prediction.
+
+Both OOF and the FINAL model go through the same leakage-free core: per-fold/per-final imputation medians and `scale_pos_weight` are fit on training rows only, an inner-validation split is used solely for early stopping, the recipe and model are refit on all training rows at the selected `best_iteration`, and — for OOF — the untouched outer-test fold is then predicted. In the OOF stage the outer-test fold never enters imputation, feature selection, factor levels, weights, round selection or the refit, so the cross-validated diagnostics are leakage-free.
+
+The XGBoost hyperparameters come from `cfg$model_params` and the training controls (caps, seeds, `nrounds_max`, `early_stop`, `val_frac`, imputation rules, `group_col`) from `cfg$train_control` — a single canonical source shared by OOF and FINAL, so the two can never diverge. `scale_pos_weight` is computed per the effective training rows (`n_unburned / n_burned`). OOF always uses the same capped negative-sampling policy as the FINAL model, applied independently within each training fold; there is no `oof_sampling` argument and no "capped vs full" choice. The policy survives only as a fixed, non-settable provenance constant (`cfg$train_control$oof_sampling = "capped"`).
+
+The methodological arguments that still appear on the individual stage functions (`nrounds_max`, `early_stop`, the four `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`, `group_col`, seeds) are **deprecated compatibility shims**: the canonical path is to set them in `build_supervised_burned_config()`. A non-`NULL` override of a canonical default warns (`otsufire_deprecated_param`); an override that conflicts with an explicit builder value errors. They will be removed in a future minor version.
+
+## Internal Validation (OOF)
+
+The one-year workflow writes out-of-fold (OOF) diagnostics to `05_OOF` (aggregate metrics, long-form predictions, labelled OOF summary, recommended thresholds).
+
+What OOF measures and how to read it:
+
+- OOF is an **internal, same-year** diagnostic. Under the nested-refit protocol it holds out an **outer test fold** that is never used for the watchlist, imputation fitting, hyperparameter/threshold selection, or the inner early-stopping split of that fold. The model is fit on the outer-train rows, early-stopped on an **inner validation split**, refit on all outer-train rows at the selected `best_iteration`, and only then predicts the untouched outer-test fold.
+- It helps assess model behaviour under spatial autocorrelation (block folds) and supports threshold review.
+- **Limit:** the OOF labels are the deterministic-decision labels (the internal `keep`/`drop` audit), not field ground truth. OOF AUC / PR-AUC therefore measure how well the model reproduces the *deterministic decision*, not how well it maps *real fire*. OOF is **not** ground truth, and the supervised stage exports probabilities and diagnostic thresholds rather than forcing a binary burned/unburned classification inside the annual stage.
+
+## External Validation
+
+External validation is a **separate** exercise, performed against an independent reference (EFFIS) with `validate_fire_maps()`. To validate a supervised map, first threshold `p_burned` (or `p_burned_current_year`) into a compatible burned-area prediction layer, then call the shared utility. It reports omission, commission, F1, IoU (plus precision/recall, specificity, balanced accuracy, and area-based coverage metrics).
+
+These external metrics are computed against a **different reference** (EFFIS perimeters) than the OOF metrics (deterministic-decision labels). They are **not comparable** to the OOF AUC / PR-AUC: a model can reproduce the deterministic decision well (high OOF AUC) and still omit or over-detect against EFFIS, or vice versa. Keep the two evaluations distinct.
+
+## Scores: `p_burned` Is A Model Score
+
+`p_burned` (and the temporally adjusted `p_burned_current_year`) is a **model score under the training distribution** produced by `binary:logistic`. It is on the (0, 1) scale but it must **not** be described as a calibrated probability without an explicit calibration step (e.g. Platt/isotonic against a held-out reference), which the pipeline does not currently perform. Treat the score as a ranking / relative-confidence signal and select an operating threshold from the OOF diagnostics or external validation.
+
+## Final Model, Public Map, And Outputs
+
+After OOF, the runtime trains the FINAL model (`07_FINAL_MODEL_V2`), scores the full deterministic universe (`08_SCORED`), and writes the annual supervised maps (`09_FINAL_MAP`).
+
+| Output | Current role |
+|---|---|
+| `final_map_full` | Complete scored deterministic universe (auditability) |
+| `final_map` | Current-year public map after temporal adjustment and column selection |
+| `burned_like_scored` | Scored burned-like subset (exported when `export_burned_like = TRUE`) |
+
+The final scorer applies a current-year temporal adjustment before producing the public map, combining previous-year overlap and hotspot-density support to compute `p_burned_model`, `temporal_penalty`, `p_burned_current_year`, and `temporal_conflict_flag`. The public `final_map` is derived from that adjusted annual view; `final_map_full` preserves the complete scored universe.
+
+## Post-Threshold Validation
+
+To validate a supervised map externally, threshold `p_burned` / `p_burned_current_year` into a burned-area prediction layer and call `validate_fire_maps()` against the EFFIS reference (see **External Validation** above). This keeps validation workflow-independent and does not turn the supervised stage into a forced binary classifier.
+
+`check_supervised_consistency()` separately compares the deterministic and supervised outputs of the same run and writes per-issue diagnostic artefacts; it is invoked automatically when `run_oneyear_supervised_pipeline(..., run_consistency = TRUE)`.
+
+## Removed: Supervised Burned-Like Registry (Closed Branch)
+
+Earlier designs of this stage maintained a scenario-specific *supervised burned-like registry* (`burned_high_conf_registry_candidates` / `burned_high_conf_registry` under `Results/<SCENARIO_UPPER>/`) and an associated positive-pool augmentation path (Mode B / `historical_registry_augment`). Both are **removed from the current package**:
+
+- The Mode B registry-based positive-pool augmentation was formally rejected on 2026-04-17 (a closed rejected branch, not a pending feature).
+- The supervised registry *products* and the `append_supervised_registry()` step were removed from the runtime on 2026-06-05 (§N+27). The supervised pipeline no longer writes a scenario registry.
+
+The scored burned-like subset is still available as the ordinary `burned_like_scored` output, but it is no longer routed into any registry. This is distinct from the deterministic stage's RBR keep-pool / keep-reference registry (`collect_keep_reference_samples()`, `build_keep_pool_from_samples()`, `RBR_TRAINING_REGISTRY.gpkg`), which is a separate, still-supported deterministic feature.
+
+## Corrected Defect: OOF / FINAL `_isNA` Divergence (Gate 1D.8)
+
+A defect was found and corrected during Gate 1D.8, before the smoke run and before the definitive run:
+
+- Previously, **OOF generated the `_isNA` missing-indicator companions, but the FINAL refit and scoring did NOT use them**. OOF therefore evaluated a model trained on a 102-column feature space (51 base + 51 indicators) while the deployed FINAL model and scoring ran on a different (51-column) space.
+- Consequently, the **prior OOF diagnostics did not exactly represent the deployed model**: they characterised a different feature space than the one actually scored.
+- The **prior FINAL was not necessarily invalid**, but it was a **different model** than the one OOF evaluated.
+- The correction unified all three paths (OOF, FINAL, scoring) on the **same recipe** and was made **before the smoke and before the definitive 2017 run**.
+- **Definitive results require RETRAINING both models** (OOF and FINAL) under the corrected common recipe; results carried over from before the fix do not apply.
+
+Any baseline produced under the current code uses the single canonical training procedure (inner-early-stopping selection + full-data refit) over the corrected common feature recipe. It is **not** an exact reproduction of the old 51-feature FINAL model, because the feature recipe (and therefore the feature space) changed when the `_isNA` indicators were unified across the three paths.
+
+## LOYO And Historical Application: Current Documented Status
+
+::: {.callout-warning}
+The current sources do not yet support a full operational tutorial for LOYO or historical application.
+
+- LOYO is a separate temporal-validation concept; the replacement multiyear runtime is still pending.
+- Historical application is supported conceptually by the paper draft but lacks a stable, current step-by-step entry point in the package.
+:::
+
+For now, the safe interpretation is:
+
+- one-year supervised plus OOF is the documented operational annual workflow,
+- LOYO is a separate validation concept still pending redesign,
+- historical transfer is a concept in the paper draft but is not backed by a current package runtime (the former supervised registry that would have supported it has been removed).
+
+TODO:
+
+- Add a dedicated LOYO chapter when the new multiyear validation script and its outputs are available.
+- Add a dedicated historical-application tutorial when the repository exposes a stable, current entry point.

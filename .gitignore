@@ -1,53 +1,54 @@
-# === R y RStudio ===
-.Rproj.user/
+# R / RStudio
+.Rproj.user
 .Rhistory
 .RData
 .Ruserdata
 *.Rproj
+.Rapp.history
 
-# === Archivos temporales / binarios ===
-*.log
-*.bak
-*.swp
-*.zip
+# R package build artifacts
+*.Rcheck/
 *.tar.gz
-*.pdf
+src/*.o
+src/*.so
+src/*.dll
+build_area/
 
-# === Datos intermedios o pesados ===
-*.RData
-*.rds
-*.rda
-*.csv
-*.tsv
-*.xlsx
-
-# === Archivos geoespaciales ===
-*.tif
-*.vrt
-*.img
-*.aux.xml
-*.shp
-*.dbf
-*.shx
-*.prj
-*.cpg
-
-# === Python / VSCode ===
-*.pyc
-__pycache__/
-.vscode/
-
-# === Datos y salidas del análisis ===
-/data/
-/output/
-/ZENODO/
-
-# === Otros archivos de sistema ===
+# OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# === Build de R Packages ===
-.Rbuildignore
-.Rcheck/
-*.tar.gz
-.positai
+# Editor / IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Backups (manuales)
+*.manual_backup
+NAMESPACE.manual_backup
+
+# pkgdown output
+docs/
+
+# Python (por si acaso)
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+
+# Quarto cache and outputs
+.quarto/
+_book/
+_freeze/
+*_files/
+*_cache/
+
+# Generated docs
+docs/

@@ -1,0 +1,45 @@
+project:
+  type: book
+  output-dir: _book
+
+book:
+  title: "OtsuFire: an R tutorial"
+  subtitle: "Annual burned-area mapping with an interpretable two-stage framework"
+  author: "Natalia Quintero, Olga Viedma, Jose Manuel Moreno"
+  date: today
+  chapters:
+    - index.qmd
+    - 01-otsufire.qmd
+    - 02-how-to-use.qmd
+  search: true
+  page-footer: "OtsuFire tutorial"
+
+format:
+  html:
+    theme: cosmo
+    code-copy: true
+    code-link: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+  pdf:
+    documentclass: scrbook
+    papersize: a4
+    geometry:
+      - margin=1in
+    toc: true
+    toc-depth: 3
+    number-sections: true
+
+execute:
+  echo: true
+  eval: false
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+    collapse: true
+
+lang: en-GB

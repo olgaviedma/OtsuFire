@@ -1,0 +1,17 @@
+canonical_script,git_blob_sha1,md5_lf,purpose,role
+01_supervised_oneyear_otsu_negative.R,5bd575b622d5388b49e408d78de6f4b3fa0f6ad2,98611cfa969c5451c550a89780a70f9b,One-year supervised pipeline (full 6-stage modular chain),source-of-truth
+02_supervised_phaseB_config.R,e31adf17942a7101a186292a09fa65d5723745f2,e4056f3941123585bac0e9e362978ef5,Phase B config (two-source caps random+otsu + cap-mismatch guard + schema parity guard),source-of-truth
+05_supervised_effis_validation.R,5c1197ccc060d99896384890cf8b617aae1e40a1,5ac1100ffbf1065dff8efa61341efe49,EFFIS validation via validate_fire_maps() on a thresholded map,source-of-truth
+06_supervised_no_hotspots_reduced_historical.R,3ab5921d64bb43bc452a9e118aed28a7cf57db0c,eaec031410c2e0e8c760b78f892e51e5,No-hotspots / reduced-historical (pre-MODIS) run (hotspots=NULL),source-of-truth
+#
+# SYNC CONTRACT
+#   Direction: inst/scripts/ (canonical, source-of-truth) -> external WORKING
+#     COPIES under 00_USAGE/02_SUPERVISED_USAGE/. NEVER the reverse.
+#   git_blob_sha1: `git hash-object <file>` of the in-repo canonical bytes
+#     (stable identity; survives CRLF normalization). Recompute and compare to
+#     detect divergence:  git hash-object inst/scripts/<file>
+#   md5_lf: md5 of the LF-authored bytes (informational; tools::md5sum on a
+#     freshly-written LF checkout). May differ from a CRLF working-tree md5;
+#     prefer git_blob_sha1 for divergence checks.
+#   To refresh after an intentional edit: rerun the two hashes above and update
+#     this row. The external working copies must then be re-synced FROM here.

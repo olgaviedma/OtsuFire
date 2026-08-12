@@ -1,0 +1,81 @@
+# Change-Index Mosaic
+
+The change-index mosaic is the common raster foundation for the annual workflow. It is not just a preprocessing artifact. In the current implementation it is the annual raster against which deterministic patches are detected and from which supervised polygon-level features are later derived.
+
+## Methodological Role
+
+The paper draft frames OtsuFire around a burned-sensitive annual change variable derived from pre- and post-fire composites. The package-facing code generalizes that idea as a `change_index`, while the current annual runtime commonly consumes a `MinMin_<year>_mosaic_res90m.tif` mosaic. The book therefore uses `change_index` as the generic term and refers to the MinMin mosaic as the current operational realization of that input.
+
+Because both deterministic and supervised stages depend on the same annual raster reference, errors at the mosaic stage propagate directly into candidate detection, feature extraction, and any downstream validation.
+
+## Current Public Entry Point
+
+The package-facing mosaic function is `change_index_mosaic()`. The current signature supports the following main arguments.
+
+| Argument                    | Current role                                      |
+|-----------------------------|---------------------------------------------------|
+| `folder_path`               | Folder containing the annual raster tiles         |
+| `mask`                      | AOI mask as `sf`, `SpatVector`, or vector path    |
+| `year`                      | Optional explicit year label for output naming    |
+| `raster_pattern`            | Pattern used to discover candidate tiles          |
+| `output_dir`                | Output location for the final mosaic              |
+| `mosaic_name`               | Optional stable name override                     |
+| `nodata_value`              | Explicit NoData value for reading and writing     |
+| `cap_below` and `lower_cap` | Optional lower-value stabilization before writing |
+| `method`                    | Mosaic strategy: `merge` or `vrt`                 |
+
+Legacy manual usage also still exists under `00_USAGE/00_MOSAIC_USAGE`, but the book uses `change_index_mosaic()` as the current package-facing reference.
+
+## What The Function Verifies Before Mosaicking
+
+The active code performs several checks before writing the annual mosaic.
+
+1.  It discovers candidate tiles from `folder_path` using `raster_pattern`, then excludes files whose basenames already look like mosaics, resampled outputs, or projected outputs.
+2.  It checks that all selected tiles have the same band count, CRS, resolution, and grid origin.
+3.  It loads the AOI mask and reprojects it to the raster CRS when needed.
+4.  It refuses to proceed when any tile is geometrically incompatible with the reference tile.
+
+These checks are important methodologically, not only technically. The supervised pipeline later aligns DOY, delayed-change, topography, slope, and CORINE rasters to the annual change-index template. A weak mosaic stage would therefore destabilize every later polygon-level comparison.
+
+## Assembly Logic
+
+After compatibility checks, the current function either merges the tiles directly or builds a temporary VRT. The assembled raster is then cropped to the AOI extent, masked to the AOI geometry, and optionally stabilized by capping extreme low values below `lower_cap`. The current default is to apply that lower cap when `cap_below = TRUE`.
+
+The final raster is written as a tiled, LZW-compressed GeoTIFF with an explicit NoData flag. Band names are preserved when possible.
+
+## Main Outputs
+
+`change_index_mosaic()` returns a structured summary as well as writing the final raster.
+
+| Output               | Meaning                                                                           |
+|----------------------|-----------------------------------------------------------------------------------|
+| `mosaic_path`        | Path to the final masked annual GeoTIFF                                           |
+| `tile_inventory`     | List of the tiles used to build the mosaic                                        |
+| `method_used`        | Whether `merge` or `vrt` was used                                                 |
+| `mask_summary`       | Mask source, CRS handling, and reprojection note                                  |
+| `mosaic_diagnostics` | Tile count, year label, NoData handling, lower-cap settings, and output directory |
+| `temporary_vrt`      | Path to the temporary VRT when that option is retained                            |
+
+## Downstream Use In The Annual Workflow
+
+The deterministic runtime resolves the annual mosaic as `one_year_tif` and uses it as the raster input to Otsu thresholding, growth, refinement, and later RBR-based support scoring. The supervised runtime uses the same annual raster as its main `change_index`, and then aligns delayed-change, DOY, DEM, slope, and CORINE layers to that same raster geometry before feature extraction.
+
+In practice, this means the mosaic is not merely an input file. It is the spatial reference system for the full annual workflow.
+
+## Minimal Package-Facing Example
+
+``` r
+res <- change_index_mosaic(
+  folder_path = "C:/path/to/annual_tiles",
+  mask = "C:/path/to/aoi_mask.shp",
+  year = 2025,
+  raster_pattern = "S2_sev_AUTUMN_mean_mean_2025_tile*.tif",
+  output_dir = "C:/path/to/output",
+  lower_cap = -1000,
+  method = "merge"
+)
+```
+
+::: callout-note
+The paper draft describes the annual burned-sensitive raster mainly in RBR terms, whereas the current package-facing API uses the more general term `change_index`. That wording difference is intentional in this book: the methodology is burned-sensitive spectral change, and the active annual runtime currently instantiates it with the MinMin mosaic.
+:::

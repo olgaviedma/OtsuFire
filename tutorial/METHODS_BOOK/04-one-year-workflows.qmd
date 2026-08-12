@@ -1,0 +1,184 @@
+# One-Year Workflows
+
+This chapter is the practical tutorial layer of the book. It summarizes how the currently documented annual pieces fit together and which entry point is most appropriate for each use case.
+
+## Choose An Entry Point
+
+| Need | Recommended entry point | Why |
+|---|---|---|
+| Build the annual mosaic | `change_index_mosaic()` | Current package-facing mosaic function |
+| Run annual deterministic mapping | `build_burned_mapping_config()` + `run_deterministic_pipeline()` | Canonical package runtime |
+| Run annual supervised mapping | `build_supervised_burned_config()` + `run_oneyear_supervised_pipeline()` | Canonical package runtime (fully package-internal) |
+| Validate a compatible burned-area prediction layer | `validate_fire_maps()` | Shared workflow-independent validation utility |
+
+The usage scripts under `00_USAGE/` are thin drivers that build the config and call the package functions above; they are examples, not a separate runtime.
+
+## Recommended Annual Sequence
+
+The current annual workflow should be read in the following order.
+
+1. Prepare the annual change-index mosaic for the target year.
+2. Run the deterministic stage for the same year and the chosen deterministic parameterization.
+3. Inspect `05_DECISIONS/internal_decisions.gpkg` before moving on.
+4. Run the one-year supervised workflow on the same year and scenario.
+5. Review the annual public map (`final_map`) and the full scored universe (`final_map_full`).
+
+That sequence reflects the active runtime design: the supervised stage consumes the deterministic annual output rather than replacing it.
+
+## Package-Facing Annual Example
+
+The bridge layer is useful when a package-style entry point is preferred and the standard project layout is available.
+
+### Deterministic bridge
+
+```r
+det_cfg <- build_burned_mapping_config(
+  change_index = "C:/.../Imagery/Composites_90m/Min_Min/MinMin_2025_mosaic_res90m.tif",
+  vegetation_map = "C:/.../Corine_Masks/CLC_2018_peninsula.tif",
+  burnable_mask = "C:/.../Corine_Masks/burneable_mask_binary_corine90_wgs84.tif",
+  target_year = 2025L,
+  output_dir = "C:/.../Results",
+  run_name = "Min_Min_2025_det",
+  detect_params = list(
+    seed_threshold = 310,
+    growth_delta = 90,
+    minimum_growth_threshold = 240,
+    minimum_seed_pixels = 30L
+  ),
+  refine_params = list(
+    aoi_buffer_m = 5000,
+    minimum_detected_area_m2 = 10,
+    merge_overlaps = TRUE
+  ),
+  scoring_params = list(
+    support_buffer_m = 0,
+    previous_fire_exclusion_buffer_m = 90,
+    previous_fire_cleanup_buffer_m = 90,
+    minimum_remaining_area_m2 = 20000,
+    reference_buffer_m = 90
+  ),
+  options = list(
+    deterministic_seed = 12345L,
+    ecoregion_shapefile_path = "C:/.../Ecoregion/ecoregiones_olson.shp",
+    peninsula_shapefile_path = "C:/.../Borders/Iberian_Peninsula.shp"
+  )
+)
+
+det_run <- run_deterministic_pipeline(det_cfg)
+```
+
+The most important object to inspect after this run is `internal_decisions.gpkg`. The deterministic bridge now exposes explicit ecological controls through `detect_params`, `refine_params`, and `scoring_params` rather than closed scenario presets.
+
+### Supervised bridge
+
+```r
+sup_cfg <- build_supervised_burned_config(
+  target_year = 2025,
+  run_label = "balanced",
+  result_name = "Min_Min"
+)
+
+sup_run <- run_oneyear_supervised_pipeline(
+  sup_cfg,
+  run_consistency = FALSE
+)
+```
+
+The unburned-pool strategy is no longer configurable. `all_sources` is the only mode and is applied implicitly. The supervised model uses **two explicit negative sources: random background and Otsu residuals** (see the supervised stage chapter). The two per-bucket caps live in the typed PUBLIC block `negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` (the single source of truth), and the technical toggles live in `runtime_options = list(reuse_existing = TRUE, write_outputs = TRUE, verbose = TRUE)`. The former `negative_pool_policy` option and its `deterministic_direct` baseline strategy were removed on 2026-06-05; passing `negative_pool_policy = "all_sources"` is accepted as a no-op, but any other value now errors.
+
+Within the supervised stage, training eligibility is defined by **explicit class, never by negation**: only explicit burned rows (positives) and explicit unburned rows that resolve to one of the two valid negative buckets (random, otsu) enter training. Otsu review / keep patches are excluded and logged; `class` `NA` / unknown rows, or unburned rows with no valid bucket, are hard errors. Review / keep / `NA` / unknown rows can never silently become negatives (the old "negatives = everything not burned" rule was removed). The OOF folds and the FINAL model use ONE shared internal eligibility resolver and ONE shared capping helper, so the two stages cannot diverge on which rows are eligible or on how negatives are capped — they differ only in the retained outer-test fold (OOF) and the seed. See the supervised-stage chapter, "Training Eligibility And The Shared Capping Helper".
+
+::: {.callout-note}
+The supervised configuration object is the single source of truth for the run inputs and output routes; the run inputs are resolved from `config$inputs` / `config$options` with no hidden path conventions. The pipeline is fully package-internal (no `sys.source()` of external scripts).
+:::
+
+## What To Inspect After Each Stage
+
+### After mosaic
+
+- Confirm that the annual GeoTIFF exists and has the expected year and run naming.
+- Check whether the returned diagnostics show the expected number of tiles and the intended lower-cap behavior.
+
+### After deterministic
+
+- Inspect `05_DECISIONS/internal_decisions.gpkg`.
+- Confirm that `filter_1`, `filter_2`, `filter_3`, `preyear_action`, and `class_final` are populated as expected for the year.
+- If validation is enabled, inspect the validation workbook and aligned validation layers.
+
+### After supervised
+
+- Inspect `01_POOLS` to confirm burned, unburned, review, and scoring pools.
+- Inspect `02_FOLDS` and `03_FEATURES` before interpreting OOF or final-map results.
+- Inspect `05_OOF` as a diagnostic block, not as the final annual classification.
+- Inspect `09_FINAL_MAP` for `final_map_full`, `final_map`, and `burned_like_scored`.
+- For external validation, threshold `p_burned` or `p_burned_current_year` first, then validate the resulting prediction layer with `validate_fire_maps()` against the EFFIS reference. Remember that these external metrics (omission, commission, F1, IoU) are computed against a different reference than the OOF metrics and are not comparable to OOF AUC / PR-AUC.
+
+### Observability in external validation (temporal, whole-fire)
+
+`validate_fire_maps()` accepts an optional `observability_raster` (a
+day-of-year raster). Observability is assessed **temporally at the
+reference-fire level**: a reference fire whose date is after the last
+observation, or that has no valid observable DOY, is excluded from the
+reference **before** rasterization, so it contributes 0 TP / 0 FN / 0
+evaluated area and never enters omission, recall, F1, IoU or per-fire
+detection. It is **not** a pixel-level cloud or valid-data mask — partially
+observed fires are kept whole and no per-pixel denominator is introduced.
+Residual per-pixel non-observability inside kept fires is reported only for
+audit (`observability_audit`, the `02_OBSERVABILITY/OBSERVABILITY_*` CSVs)
+and never changes any metric. The reference cache is **content-aware**: it
+rebuilds automatically when the observability raster content/band/rule, the
+burnable mask, resolution, CRS, grid, study-area mask, reference content or
+burnable thresholding changes (`force_reprocess_ref = TRUE` forces a
+rebuild).
+
+::: {.callout-note}
+## What the 2017 observability diagnostic established
+Observability is **not** the cause of the high omission. For 2017, of 677
+reference fires entering the validator, 14 were temporally non-observable
+(excluded; 3676.59 ha) and 663 were evaluated. Within the kept fires only
+18 pixels / 14.58 ha were partially non-observable (~0.01% of FN). The
+omission is dominated by reference fires with **no deterministic candidate**
+(232 of 236 omitted observable fires; 98.3% of omitted fires and 94.3% of
+omitted area). The next gate is therefore the **deterministic
+candidate-generation ceiling**, not observability.
+:::
+
+## Annual Output Layout
+
+The current folder conventions are part of the workflow and should be understood as stable interpretive units.
+
+### Deterministic annual folders
+
+| Folder | Current role |
+|---|---|
+| `01_GROW` | Initial Otsu plus grow polygon outputs |
+| `02_REFINE` | Refined and merged candidate polygons |
+| `03_SCORE_PHASE1` and `04_SCORE_PHASE2` | Intermediate scoring outputs |
+| `05_DECISIONS` | Canonical deterministic decision layers |
+| `06_VALIDATION` | Validation rasters, prediction layers, and workbook |
+
+### Supervised annual folders
+
+| Folder | Current role |
+|---|---|
+| `01_POOLS` | Deterministic pool QA plus burned, unburned, review, and scoring pools |
+| `02_FOLDS` | Spatial blocks, fold tables, and `train_with_folds` |
+| `03_FEATURES` | Train and scoring feature layers |
+| `04_MATRIX` | Design matrices and model-input bundles |
+| `05_OOF` | OOF diagnostics and threshold summaries |
+| `07_FINAL_MODEL_V2` | Final model objects and model summary files |
+| `08_SCORED` | Full scored deterministic universe |
+| `09_FINAL_MAP` | `final_map_full`, `final_map`, counts, and burned-like export |
+| `11_CONSISTENCY_CHECKS` | Optional deterministic-versus-supervised consistency diagnostics |
+
+## Benchmarking And Comparisons
+
+The handoff provides clear guidance for fair comparisons.
+
+- Deterministic comparisons must use the same frozen RBR keep-pool registry snapshot and the same explicit `deterministic_seed`.
+- Supervised comparisons should freeze the deterministic input layer. The unburned-pool strategy is no longer a comparison variable: every run uses `all_sources` implicitly (the former `deterministic_direct` baseline strategy was removed on 2026-06-05).
+- Any supervised baseline produced under the current code uses the single canonical training procedure (inner-early-stopping selection + full-data refit) over the corrected common feature recipe — it is not an exact reproduction of the old 51-feature FINAL model, because the `_isNA` indicators are now shared across OOF, FINAL and scoring (see the supervised stage chapter, "Corrected Defect").
+
+::: {.callout-warning}
+LOYO is not part of the current one-year workflow tutorial. A replacement multiyear workflow still needs dedicated documentation.
+:::

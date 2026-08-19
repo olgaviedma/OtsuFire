@@ -243,18 +243,74 @@ than the OOF metrics (deterministic-decision labels). They are **not
 comparable** to OOF AUC / PR-AUC — keep the two evaluations distinct.
 
 **Temporal observability.** When an `observability_raster` (a day-of-year
-raster) is supplied, observability is assessed **temporally at the
-reference-fire level**: a reference fire whose date falls after the last
-observation, or that has no valid observable DOY, is excluded from the
-reference *before* rasterization, so it contributes 0 TP / 0 FN / 0
-evaluated area and never enters omission, recall, F1 or IoU. This is **not**
-a pixel-level cloud mask — partially observed fires are kept whole. Residual
-per-pixel non-observability inside kept fires is reported for audit
+raster) is supplied, observability is assessed **at the reference-fire
+level**: a fire is either evaluated in full or excluded in full, and it is
+never trimmed at pixel level. Two rules are available through
+`observability_mode`.
+
+`"legacy_any"` (the default, kept for reproducibility) excludes a fire whose
+date falls after the last observation inside it, or that has no valid
+observable DOY. Because the rule compares the fire date with the *maximum*
+DOY in the perimeter, it is equivalent to requiring a single observable
+pixel: a fire observed on 1 % of its area is kept whole. Excluded fires are
+dropped from the reference *before* rasterization, so they contribute 0 TP /
+0 FN, but their territory stays in the evaluation domain as reference = 0 —
+a correct detection over such a fire is therefore scored as commission.
+
+`"wholefire_fraction"` requires `temporal_observable_fraction >=
+observability_min_fraction` (default `0.75`), the share of the fire's
+burnable-domain pixels whose composite DOY is at or after the fire's
+required DOY. The required DOY is taken from `ref_obs_doy_col` when that
+argument is supplied and from `ref_end_doy_col` otherwise, with **no** silent
+fallback to the start DOY: a fire with no usable date is reported as
+`UNDETERMINED_OBS_DATE`.
+
+`ref_obs_doy_col` is **authoritative**: when supplied it is the only date
+column consulted, so an `NA` there means the reference is deliberately saying
+"undetermined" and cannot be overridden by a stale `end_doy`. Source-specific
+date semantics belong in the reference — the validator holds no per-source
+rules. `ref_obs_doy_fallback = "end_doy"` opts back into a fallback and exists
+only for reference layers whose observability column is populated for some
+sources and not others. `undetermined_cause` records which situation produced
+each `UNDETERMINED` fire, and a warning reports how many fires it affects.
+
+**Evidence and domain membership are separate (2.3.0).** `observable_flag` is
+the EVIDENCE flag and means only `observability_status == "OBSERVABLE"`; the
+new `in_evaluation_domain` is the DOMAIN flag and is what drives the reference
+subset and the masking. Missing authoritative observability metadata is
+treated separately from evidence of temporal non-observability: under the
+default `observability_undetermined_policy = "evaluate"`, fires with
+`UNDETERMINED_OBS_DATE` remain positive reference features in the evaluation
+domain and are flagged for subsequent audit. They contribute TP/FN like any
+other reference fire and can never become background nor generate commission
+through a missing date; no date is imputed. `"exclude"` removes them like a
+non-observable fire and exists only for sensitivity runs.
+
+Fires that DO carry evidence leave the domain entirely (reference, prediction
+and strata set to `NA` over their geometry): `NOT_OBSERVABLE`, measured below
+the threshold, and `NO_OBSERVABILITY_DATA`, with evaluable surface and a date
+but no observation anywhere inside. `OUTSIDE_BURNABLE_DOMAIN` marks fires with
+no burnable-domain cell at all — a domain fact, not a temporal failure.
+Territory outside all of these is evaluated exactly as before, so false
+positives away from reference fires are unaffected.
+`observability_summary` and `OBSERVABILITY_SUMMARY_<year>.csv` report the
+counts, the areas by status and the resulting `Evaluable_Area_ha`.
+
+Two CSVs in `02_OBSERVABILITY/` carry the per-fire audit trail:
+`REFERENCE_FIRES_DETECTION_<year>_<input>.csv` and, filtered to the
+undetermined ones, `UNDETERMINED_FIRES_DETECTION_<year>_<input>.csv`. Each row
+puts the observability verdict next to what the prediction actually did on that
+fire (reference / detected / omitted cells and area, TP and FN, fire-level
+recall), so an individual fire can be revisited later without recomputing the
+validation.
+
+Residual per-pixel non-observability inside kept fires is reported for audit
 (`observability_audit`, `OBSERVABILITY_*` CSVs) but never changes any
 metric. The reference cache is content-aware: it rebuilds automatically when
 the observability raster, burnable mask, resolution, CRS, grid, study-area
-mask, reference content or the observability rule changes
-(`force_reprocess_ref = TRUE` forces a rebuild).
+mask, reference content or the observability rule — including the mode, the
+threshold and `ref_obs_doy_col` — changes (`force_reprocess_ref = TRUE`
+forces a rebuild).
 
 ### Corrected defect: OOF / FINAL `_isNA` divergence
 

@@ -52,5 +52,17 @@ utils::globalVariables(c(
   "CLUMP_ID", "ECO_ID_INTERNAL", "UNIT_ID",
   # data.table NSE symbols used inside validate_fire_maps
   # (build_reference_observability / warn_reference_observability).
-  ".N", "N", "observable_flag", "observable_reason", "reference_row"
+  ".N", "N", "observable_flag", "observable_reason", "reference_row",
+  # §N+25 whole-fire observability v2 columns assigned by reference in
+  # build_reference_observability().
+  "ref_area_domain_ha", "fire_required_doy", "required_doy_source",
+  "obs_ref_doy", "obs_ref_doy_source", "obs_doy_max", "obs_doy_margin",
+  "observability_mode", "observability_min_fraction", "observability_status",
+  "observability_undetermined_policy", "in_evaluation_domain",
+  "undetermined_cause",
+  "observable_flag_legacy_any", "total_pixels", "observable_pixels",
+  "non_observable_pixels", "observable_fraction", "data_coverage_fraction",
+  "n_temporally_observable", "temporal_observable_fraction",
+  "no_data_fraction", "pre_fire_or_too_early_fraction",
+  "post_fire_observable_fraction"
 ))

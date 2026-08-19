@@ -23,6 +23,11 @@ validate_fire_maps(
   observability_raster = NULL,
   ref_end_doy_col = "end_doy",
   ref_start_doy_col = "start_doy",
+  ref_obs_doy_col = NULL,
+  ref_obs_doy_fallback = c("none", "end_doy"),
+  observability_undetermined_policy = c("evaluate", "exclude"),
+  observability_mode = c("legacy_any", "wholefire_fraction"),
+  observability_min_fraction = 0.75,
   force_reprocess_ref = FALSE,
   force_reprocess_pred = FALSE,
   metrics_type = c("all", "pixel", "area"),
@@ -104,7 +109,60 @@ end day of year. Used first to derive `obs_ref_doy`. Default
 
 \item{ref_start_doy_col}{Character. Reference attribute storing the
 fire start day of year. Used as fallback when `ref_end_doy_col` is
-missing for a polygon. Default `"start_doy"`.}
+missing for a polygon **only under `observability_mode =
+"legacy_any"`**. Default `"start_doy"`.}
+
+\item{ref_obs_doy_col}{Character or `NULL`. Reference attribute holding the
+per-fire day of year from which it is reasonable to require the fire to
+have been mapped. **When supplied it is authoritative**: it is the only
+date column consulted, and a fire with `NA` there is reported as
+`UNDETERMINED_OBS_DATE` rather than falling back to another column (see
+`ref_obs_doy_fallback`). This keeps source-specific date semantics in the
+reference, where they belong, instead of hard-coding them in the
+validator. Used only under `observability_mode = "wholefire_fraction"`.
+Default `NULL`, which leaves the required DOY on `ref_end_doy_col`.}
+
+\item{ref_obs_doy_fallback}{Character. What to do when `ref_obs_doy_col` is
+supplied but `NA` for a fire. `"none"` (default) treats the column as
+authoritative and reports the fire as `UNDETERMINED_OBS_DATE`.
+`"end_doy"` falls back to `ref_end_doy_col`, which is appropriate only for
+reference layers whose observability column is deliberately populated for
+some sources and not others — for instance Reference v2's `DOY`, which
+exists for the Portuguese Neves atlas (where `end_doy` carries the
+estimated `meanDOY`) and is `NA` for EFFIS (where `end_doy` is a reported
+event date). Never falls back to `ref_start_doy_col` under either setting.
+Ignored when `ref_obs_doy_col` is `NULL`.}
+
+\item{observability_undetermined_policy}{Character. What to do with fires
+whose observability cannot be verified because the reference carries no
+valid authoritative date (`observability_status ==
+"UNDETERMINED_OBS_DATE"`). **Missing authoritative observability metadata
+is treated separately from evidence of temporal non-observability.** Under
+the default `"evaluate"` policy, fires with `UNDETERMINED_OBS_DATE` remain
+positive reference features in the evaluation domain and are flagged for
+subsequent audit; they contribute TP/FN like any other reference fire and
+can never turn into background or generate commission through a missing
+date. `"exclude"` removes them from the reference and from the evaluation
+domain exactly like a `NOT_OBSERVABLE` fire, and exists only so the two
+treatments can be compared in a sensitivity run. No intermediate policy is
+offered: leaving the territory evaluable while dropping the fire from the
+reference would turn a correct detection into a false positive. No date is
+ever imputed under either policy. Applies only under
+`observability_mode = "wholefire_fraction"`.}
+
+\item{observability_mode}{Character. Whole-fire observability rule.
+`"legacy_any"` (default) reproduces earlier releases exactly: a fire is
+observable when the maximum finite DOY inside it is at or after its
+required DOY, which is equivalent to requiring at least one observable
+pixel. `"wholefire_fraction"` requires
+`temporal_observable_fraction >= observability_min_fraction` and removes
+the whole geometry of non-observable fires from the evaluation domain.
+Both rules decide per FIRE; neither trims a fire at pixel level.}
+
+\item{observability_min_fraction}{Numeric in `[0, 1]`. Minimum share of the
+burnable-domain pixels of a fire that must carry a composite DOY at or
+after the fire's required DOY for the fire to be evaluated. Default
+`0.75`. Inert under `observability_mode = "legacy_any"`.}
 
 \item{force_reprocess_ref}{Logical. If `TRUE`, rebuild the cached
 reference products even if they already exist.}
@@ -160,6 +218,14 @@ A named list containing the available validation outputs:
   \item{`observability_audit`}{Informative partial-observability audit
     (`summary`, `excluded`, `partial`), or `NULL` when
     `observability_raster = NULL`. Never affects the metrics.}
+  \item{`observability_summary`}{One-row annual summary (counts and areas by
+    `observability_status`, plus `Evaluable_Area_ha`), also written to
+    `02_OBSERVABILITY/OBSERVABILITY_SUMMARY_<year>.csv`. Fires flagged
+    `UNDETERMINED_OBS_DATE` are additionally broken down by source in
+    `OBSERVABILITY_UNDETERMINED_<year>.csv`.}
+  \item{`observability_settings`}{The observability configuration actually
+    used (`mode`, `min_fraction`, `ref_obs_doy_col`, `domain_masked`,
+    `evaluable_area_ha`, `domain_removed_ha`, `cache_tag`).}
   \item{`pixel_by_stratum`}{Per-stratum pixel metrics, or `NULL` when
     `strata_raster` is not supplied.}
   \item{`stratum_global`}{Aggregate metrics over the stratified
@@ -307,7 +373,90 @@ detected. This is stricter than the earlier legacy behaviour, which
 counted any non-zero overlap as detection. To recover that older
 behaviour, set `threshold_min_detected = 0`.
 
-\strong{Temporal observability filter}
+\strong{Whole-fire observability rules (0.11.1)}
+
+Two whole-fire rules are available through `observability_mode`. In both the
+unit of decision is the fire: a fire is either evaluated in full or excluded
+in full, and neither rule trims a partially observed fire at pixel level.
+
+\code{"legacy_any"} (default) is the historical rule described in the next
+section, kept bit-for-bit so that previous runs can be reproduced.
+
+\code{"wholefire_fraction"} replaces the `max()` statistic by a share.
+For every reference fire the function counts the burnable-domain pixels
+whose composite DOY is at or after the fire's required DOY and divides by
+the burnable-domain pixels of the fire, giving
+`temporal_observable_fraction`; the fire is observable when that fraction
+reaches `observability_min_fraction`. The required DOY comes from
+`ref_obs_doy_col` when that argument is supplied and from `ref_end_doy_col`
+otherwise, with \emph{no} silent fallback to the start DOY: a fire without a
+usable date is reported as `UNDETERMINED_OBS_DATE` and excluded, because
+there is no date from which it would be reasonable to require it to be
+mapped.
+
+`ref_obs_doy_col` is \strong{authoritative} by default: when supplied, no
+other date column is consulted, so a deliberate `NA` in the reference means
+`UNDETERMINED` and cannot be silently overridden by a stale `end_doy`. The
+intended use is a reference that has already resolved the source-specific
+date semantics upstream and exposes one resolved column; the validator
+contains no per-source rules of its own.
+`ref_obs_doy_fallback = "end_doy"` relaxes this and exists only for
+reference layers whose observability column is deliberately populated for
+some sources and not others. `undetermined_cause` records which situation
+produced each `UNDETERMINED` fire, and a warning reports how many fires the
+authoritative rule excluded.
+
+Under this mode the excluded fires (`NOT_OBSERVABLE`,
+`UNDETERMINED_OBS_DATE`, `NO_OBSERVABILITY_DATA`) additionally have their
+whole geometry removed from the evaluation domain: reference, prediction and
+strata are all set to `NA` there, so those fires can produce neither false
+positives nor false negatives nor true negatives. Territory outside those
+geometries is untouched, so commission outside reference fires keeps being
+measured exactly as before. The exclusion applies to the rasters used for
+the metrics; the reference and prediction layers on disk are never modified.
+
+\strong{Evidence and domain membership are separate.} `observable_flag` is
+the EVIDENCE flag and means only `observability_status == "OBSERVABLE"`; it
+no longer decides who is evaluated. `in_evaluation_domain` is the DOMAIN
+flag and is what drives the reference subset and the masking. Under
+`wholefire_fraction` it is `TRUE` for `OBSERVABLE` and, with the default
+`observability_undetermined_policy = "evaluate"`, also for
+`UNDETERMINED_OBS_DATE`. Under `legacy_any` the two coincide, as before.
+
+`observability_status` takes one of, in precedence order:
+\describe{
+  \item{`OUTSIDE_BURNABLE_DOMAIN`}{the fire has no burnable-domain cell at
+    all. A domain fact, not an observability one; it contributes nothing
+    whatever the dates say, and it is not a temporal failure.}
+  \item{`UNDETERMINED_OBS_DATE`}{there is evaluable surface but no valid
+    authoritative date, so observability cannot be verified. \emph{Not}
+    evidence of non-observability.}
+  \item{`NO_OBSERVABILITY_DATA`}{there is evaluable surface and a date, but
+    the composite carries no observation anywhere in the fire. This \emph{is}
+    evidence: nothing was seen.}
+  \item{`NOT_OBSERVABLE`}{date and observations exist and the measured
+    fraction falls below `observability_min_fraction`. Evidence.}
+  \item{`OBSERVABLE`}{the fraction reaches the threshold.}
+}
+`observable_flag_legacy_any` always carries the legacy verdict alongside so
+the two rules can be compared from a single run.
+
+\strong{`UNDETERMINED_OBS_DATE` means that the reference fire lacks a valid
+authoritative date against which temporal observability can be assessed. It
+does not necessarily imply that an end date is missing}: under an
+authoritative `ref_obs_doy_col` a fire is undetermined whenever that column
+is `NA`, however complete `ref_end_doy_col` or `ref_start_doy_col` may be.
+`undetermined_cause` records which of the possible situations applied
+(`na_in_authoritative_<col>`, `no_obs_doy_and_no_end_doy`, `no_end_doy`, or
+`no_end_or_start_doy` under `legacy_any`).
+
+The state was called `UNDETERMINED_END_DATE` in 2.1.x. It was renamed in
+2.2.0 because, once the reference resolves source-specific date semantics
+into a single `obs_required_doy` column, "missing end date" stopped
+describing what the state means. The set of fires it selects, and every
+metric, are unchanged by the rename.
+
+\strong{Temporal observability filter (legacy_any)}
 
 Observability in `validate_fire_maps()` is defined \emph{temporally} at
 the reference-fire level. It assesses whether the available observation

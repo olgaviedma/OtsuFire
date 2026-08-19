@@ -1,3 +1,219 @@
+# OtsuFire 2.3.0 (2026-08-19)
+
+## Missing observability metadata is no longer treated as evidence
+
+**Missing authoritative observability metadata is treated separately from
+evidence of temporal non-observability. Under the default `evaluate` policy,
+fires with `UNDETERMINED_OBS_DATE` remain positive reference features in the
+evaluation domain and are flagged for subsequent audit.**
+
+Until 2.2.0 every non-`OBSERVABLE` state was excluded from the evaluation
+domain, so a fire whose observability simply could not be verified was treated
+exactly like one measured to be non-observable. It is not the same thing: the
+absence of a date is not a negative result.
+
+* **New `observability_undetermined_policy = c("evaluate", "exclude")`,
+  default `"evaluate"`.** Under `"evaluate"` an `UNDETERMINED_OBS_DATE` fire
+  stays a positive reference feature inside the evaluation domain and
+  contributes TP/FN like any other; it can never become background nor generate
+  commission through a missing date. `"exclude"` reproduces the 2.2.0
+  treatment and exists only for sensitivity runs. No intermediate policy is
+  offered: leaving the territory evaluable while dropping the fire from the
+  reference would turn a correct detection into a false positive. No date is
+  ever imputed under either policy, and `start_doy` is never used to fill an
+  absent authoritative date.
+* **Evidence and domain membership are now separate.** `observable_flag` means
+  only `observability_status == "OBSERVABLE"` and no longer decides who is
+  evaluated. The new **`in_evaluation_domain`** drives the reference subset and
+  the masking. Under `legacy_any` the two coincide, exactly as before.
+* **New state `OUTSIDE_BURNABLE_DOMAIN`.** `NO_OBSERVABILITY_DATA` was
+  conflating two situations. A fire with no burnable-domain cell at all is a
+  domain fact, not a temporal failure, and now gets its own state.
+  `NO_OBSERVABILITY_DATA` is reserved for fires that DO have evaluable surface
+  and a date but for which the composite carries no observation anywhere --
+  which is evidence, so they stay out of the domain.
+* **`temporal_observable_fraction` is `NA`, not 0, when there is no required
+  DOY.** A 0 there read as "observed nowhere", i.e. as evidence of
+  non-observability, which is exactly what an undetermined date is not. Same
+  for `post_fire_observable_fraction`, `pre_fire_or_too_early_fraction` and
+  `n_temporally_observable`. `data_coverage_fraction` does not depend on the
+  fire date and stays valid.
+* **Per-fire audit trail.** Two new CSVs in `02_OBSERVABILITY/`:
+  `REFERENCE_FIRES_DETECTION_<year>_<input>.csv` (one row per evaluated
+  reference fire: its observability verdict next to reference / detected /
+  omitted cells and area, TP and FN cells and area, and fire-level recall) and
+  `UNDETERMINED_FIRES_DETECTION_<year>_<input>.csv` (the same, filtered to
+  `observability_status == "UNDETERMINED_OBS_DATE"`). They make it possible to
+  revisit an individual fire without recomputing the validation. Written only
+  when the fires are still individually traceable; a `dissolve_ref_by` merges
+  originals and legitimately skips them.
+* `observability_summary` gains `Undetermined_Policy`, `N_Evaluated`,
+  `Area_Evaluated_ha`, `N_Outside_Burnable_Domain` and
+  `Area_Outside_Burnable_Domain_ha`; `Area_Excluded_ha` now means "not in the
+  evaluation domain", which under `"evaluate"` no longer includes the
+  undetermined fires.
+* A warning now states how many fires are being evaluated despite an
+  undetermined date, so the assumption is never silent.
+* Cache: `.VFM_OBS_RULE_VERSION` bumped to `obsrule-3` and
+  `.VFM_REF_CACHE_SCHEMA` to `refschema-5`; the policy is folded into the
+  observability fingerprint (inert under `legacy_any`), so `evaluate` and
+  `exclude` can never share a cached reference.
+
+`observability_mode = "legacy_any"` is unaffected and still reproduces
+pre-2.1.0 releases bit-for-bit (re-verified: 31 of 31 reported quantities
+identical).
+
+**Migration note.** Code written against 2.2.0 that filtered on
+`observable_flag` to know which fires were evaluated must switch to
+`in_evaluation_domain`. Under the default policy the two differ exactly on the
+undetermined fires.
+
+# OtsuFire 2.2.0 (2026-08-19)
+
+## Terminology: `UNDETERMINED_END_DATE` -> `UNDETERMINED_OBS_DATE`
+
+Semantic rename only. **No methodological change**: the same fires are selected,
+the same geometries leave the evaluation domain, and every metric is
+bit-identical before and after (verified on a fixture: TP/FP/FN/TN,
+Precision/Recall/F1/IoU and all 31 reported quantities unchanged).
+
+Motivation: since 2.1.1 `ref_obs_doy_col` is authoritative, and the rebuilt
+Reference V2 resolves source-specific date semantics upstream into a single
+`obs_required_doy` column. Under that architecture "missing end date" no longer
+describes the state. A fire can have a perfectly good `end_doy` and still be
+undetermined, because the authoritative column says there is no valid
+observability date for it.
+
+* `observability_status` value `UNDETERMINED_END_DATE` is now
+  **`UNDETERMINED_OBS_DATE`**. Documented meaning: *the reference fire lacks a
+  valid authoritative date against which temporal observability can be
+  assessed; it does not necessarily imply that an end date is missing.*
+* `observability_summary` column `N_Undetermined_End_Date` is now
+  **`N_Undetermined_Obs_Date`**, and the summary gains the matching areas
+  `Area_Not_Observable_ha`, `Area_Undetermined_Obs_Date_ha` and
+  `Area_No_Observability_Data_ha` (per-fire sums; the spatial union that
+  governs the metrics stays in `Domain_Removed_By_Observability_ha`).
+* `undetermined_cause` gains `no_end_doy`, used when no observability column
+  was supplied at all, so that no cause mentions an end date when an
+  authoritative column was in charge. Values are now
+  `na_in_authoritative_<col>`, `no_obs_doy_and_no_end_doy`, `no_end_doy` and
+  `no_end_or_start_doy` (the last one only under `legacy_any`, the only mode
+  that consults the start DOY).
+* `OBSERVABILITY_UNDETERMINED_<year>.csv` keeps its name, which was already
+  generic. Inside, it now carries an explicit `observability_status` column and
+  its area column is named `area_domain_ha`, which is what it always held.
+* `.VFM_REF_CACHE_SCHEMA` bumped to `refschema-4`, so a reference table written
+  with the 2.1.x vocabulary can never be read back by this version and the two
+  vocabularies cannot mix on any code path.
+
+**Compatibility.** This is a clean rename with no legacy alias. `observability_status`
+was introduced in 2.1.0 and is consumed by nothing outside this package; a legacy
+alias column would not have helped anyway, since code written against 2.1.x
+compares the *value* inside that same column. The stable contract for downstream
+readers is `observable_flag` (unchanged) plus `undetermined_cause`. Code that
+tested `observability_status == "UNDETERMINED_END_DATE"` must be updated to
+`"UNDETERMINED_OBS_DATE"`; the schema bump makes the change fail loudly rather
+than silently, because no pre-rename cache is reused.
+
+`observability_mode = "legacy_any"` is unaffected and still reproduces pre-2.1.0
+releases bit-for-bit.
+
+# OtsuFire 2.1.1 (2026-08-19)
+
+## `ref_obs_doy_col` is now authoritative
+
+Follow-up to 2.1.0, after the audit of the Spanish sources' date semantics
+established that the reference — not the validator — is the right place to
+resolve which date makes a fire mappable.
+
+* **Behaviour change.** When `ref_obs_doy_col` is supplied it is now the ONLY
+  date column consulted. A fire with `NA` there is reported as
+  `UNDETERMINED_END_DATE` instead of silently falling back to
+  `ref_end_doy_col`. A deliberate `NA` in the reference now means what it says
+  and can no longer be masked by a stale `end_doy`.
+* New `ref_obs_doy_fallback = c("none", "end_doy")`, default `"none"`. Set it
+  to `"end_doy"` only for reference layers whose observability column is
+  deliberately populated for some sources and not others — for example
+  Reference v2's `DOY`, which exists for the Neves atlas and is `NA` for
+  EFFIS. Neither setting ever falls back to `ref_start_doy_col`.
+* New diagnostic column `undetermined_cause` on `reference_observability`
+  (`na_in_authoritative_<col>`, `no_obs_doy_and_no_end_doy`,
+  `no_end_or_start_doy`), so the reference maintainers can tell a deliberate
+  `NA` from a missing end date.
+* A warning now reports how many fires the authoritative rule excluded, and
+  what percentage of the reference that is, so a mis-specified or
+  half-populated column cannot pass unnoticed.
+* `observability_summary` gains `Ref_Obs_Doy_Col`, `Ref_Obs_Doy_Authoritative`
+  and `Undetermined_Causes`; `observability_settings` gains
+  `ref_obs_doy_fallback` and `ref_obs_doy_authoritative`.
+* The fallback policy is folded into the observability cache fingerprint (inert
+  when no observability column is supplied), so the two policies cannot share a
+  cached reference.
+* No per-source or per-region rule was added to `validate_fire_maps()`. The
+  source-specific semantics are expected to arrive resolved in a single
+  reference column.
+
+`observability_mode = "legacy_any"` is unaffected and still reproduces earlier
+releases bit-for-bit (re-verified against the pre-change code: 31 of 31
+reported quantities identical).
+
+**Migration note.** Calls written against 2.1.0 that passed
+`ref_obs_doy_col = "DOY"` against Reference v2 relied on the old fallback and
+must now pass `ref_obs_doy_fallback = "end_doy"` to behave the same.
+
+# OtsuFire 2.1.0 (2026-08-19)
+
+## Whole-fire observability v2 in `validate_fire_maps()`
+
+`validate_fire_maps()` gains a selectable whole-fire observability rule. The
+unit of decision stays the FIRE in both rules: a fire is either evaluated in
+full or excluded in full, and no pixel-level trimming of the reference is
+introduced.
+
+* New `observability_mode`, defaulting to `"legacy_any"`, which reproduces
+  earlier releases bit-for-bit (verified against the pre-change code on a
+  synthetic fixture: all 31 reported quantities identical, TP/FP/FN/TN and
+  Precision/Recall/F1/IoU included).
+* New `observability_mode = "wholefire_fraction"`: a fire is observable when
+  `temporal_observable_fraction >= observability_min_fraction` (default
+  `0.75`), the fraction being the share of the fire's burnable-domain pixels
+  whose composite DOY is at or after the fire's required DOY. The threshold was
+  chosen from a 38-year, 22,516-fire diagnostic and fixed before any accuracy
+  metric was computed.
+* Under `"wholefire_fraction"` the required DOY comes from the new optional
+  `ref_obs_doy_col` when finite and from `ref_end_doy_col` otherwise. There is
+  **no** silent fallback to the start DOY: a fire without a usable end date is
+  reported as `UNDETERMINED_END_DATE` and excluded, because there is no date
+  from which it would be reasonable to require it to be mapped. The legacy mode
+  keeps its historical end -> start cascade.
+* Under `"wholefire_fraction"` the excluded fires additionally have their whole
+  geometry removed from the evaluation domain: reference, prediction and strata
+  are set to `NA` there, so they can produce neither false positives nor false
+  negatives nor true negatives. Previously an excluded fire stayed in the
+  domain as reference = 0, which turned a correct detection over it into
+  commission. Territory outside those geometries is untouched, so commission
+  outside reference fires is measured exactly as before. The reference and
+  prediction layers on disk are never modified.
+* `reference_observability` now separates the two quantities that were
+  conflated under the single name `observable_fraction`: the historical column
+  (data coverage) is aliased to `data_coverage_fraction`, and the new
+  `temporal_observable_fraction` measures temporal adequacy. It also gains
+  `fire_required_doy`, `required_doy_source`, `observability_status`
+  (`OBSERVABLE` / `NOT_OBSERVABLE` / `UNDETERMINED_END_DATE` /
+  `NO_OBSERVABILITY_DATA`), `observable_flag_legacy_any`, `no_data_fraction`,
+  `pre_fire_or_too_early_fraction` and `post_fire_observable_fraction`.
+* New outputs `observability_summary` and `observability_settings` on the
+  result, plus `02_OBSERVABILITY/OBSERVABILITY_SUMMARY_<year>.csv` and
+  `OBSERVABILITY_UNDETERMINED_<year>.csv`.
+* Cache: `.VFM_OBS_RULE_VERSION` bumped to `obsrule-2` and
+  `.VFM_REF_CACHE_SCHEMA` to `refschema-3`, so every reference cache is
+  rebuilt once. `.vfm_observability_fingerprint()` now folds the mode, the
+  threshold (only where it is not inert) and `ref_obs_doy_col`. The prediction
+  cache key folds the observability fingerprint **only** under
+  `"wholefire_fraction"`, where the cached raster genuinely depends on it;
+  under `"legacy_any"` the key is byte-identical to previous releases and
+  existing prediction caches keep being reused.
+
 # OtsuFire 2.0.0 (2026-08-02)
 
 ## BREAKING CHANGE — complete rebuild of the package

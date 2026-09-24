@@ -222,8 +222,7 @@ introduced.
 **not** an update of the 0.1.x line and is not backward compatible with it:
 code written against 0.1.x will not run unchanged.
 
-* **The public API is 43 exports** (36 functions and 7 `OF_*` plotting
-  and threshold constants). The functions are organised as four stages:
+* **The public API is 30 exported functions**, organised as four stages:
   a mosaic stage (`change_index_mosaic()`, `mosaic_from_tiles()`), a
   deterministic Otsu/grow segmentation workflow
   (`build_burned_mapping_config()`, `run_deterministic_pipeline()`), a

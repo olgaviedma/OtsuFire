@@ -17,3 +17,4 @@ A logical vector (TRUE = burnable) aligned to \code{polys}.
 \description{
 Per-polygon burnability from a CORINE-coded raster
 }
+\keyword{internal}

@@ -1,7 +1,7 @@
 # OtsuFire 2.0.0 — step-by-step tutorial
 
 A short, runnable tour of the whole workflow, one stage per file. Written
-against the **2.0.0 API** (43 exports: 36 functions and 7 constants, config + run pattern).
+against the **2.0.0 API** (30 exported functions, config + run pattern).
 
 All paths in these files are placeholders (`/path/to/...`). Edit
 `00_SETUP.R` once, and the other four files pick everything up from there.

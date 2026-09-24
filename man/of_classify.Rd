@@ -33,3 +33,4 @@ keep/review/drop footprints. Every no-candidate class depends only on
 \seealso{
 \code{\link{of_classify_commission}}, \code{\link{of_decompose}}
 }
+\keyword{internal}

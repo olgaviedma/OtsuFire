@@ -26,3 +26,4 @@ omission layer). Toggles s2 off locally and restores it on exit.
 \seealso{
 \code{\link{of_classify}}
 }
+\keyword{internal}

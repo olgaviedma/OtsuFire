@@ -22,9 +22,8 @@ Peninsula), not to a requirement of the package.
 ## ⚠️ Version 2.0.0 is a complete new release
 
 **2.0.0 is a complete new release, not an update of the 0.1.x line.** The
-package has been rebuilt from scratch: its public API is 43 exports (36
-functions and 7 constants), and runs are driven by configuration objects rather
-than long argument lists.
+package has been rebuilt from scratch: its public API is 30 exported functions,
+and runs are driven by configuration objects rather than long argument lists.
 
 Code written against 0.1.x will not run unchanged. 0.1.4 is currently the
 release on CRAN, for anyone who needs it.
@@ -254,10 +253,6 @@ short alias `apply_chain()`)
 
 **Validation and consistency** — `validate_fire_maps()`,
 `check_supervised_consistency()`
-
-**Omission / commission diagnostics** — `of_classify()`,
-`of_classify_commission()`, `of_decompose()`, `of_burnable()`, `of_rbr_stats()`,
-`of_g3()`, plus the `OF_*` taxonomy constants
 
 ## Documentation
 

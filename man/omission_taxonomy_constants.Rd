@@ -58,4 +58,4 @@ treated as having NO final candidate.}
 colours.}
 }
 }
-\keyword{datasets}
+\keyword{internal}

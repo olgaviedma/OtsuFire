@@ -329,19 +329,45 @@
 #'   the same configuration object.
 #' }
 #'
-#' \subsection{Negative pools}{
-#'   The negative (unburned) training pool is assembled from two buckets
-#'   (a deterministic drop is not a training negative, so there is no
-#'   deterministic-drop "contextual" bucket):
+#' \subsection{Training pools}{
+#'   The burned pool comprises the deterministic \strong{keep} patches
+#'   (hereafter \emph{burned}). The unburned labels come from up to three
+#'   differentiated pools, which separate generic burnable-background
+#'   conditions from moderately and strongly burned-like confounding surfaces
+#'   (the internal bucket name is given in brackets):
 #'   \itemize{
-#'     \item \strong{random} --- random burnable-background cells;
-#'     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
+#'     \item \strong{Burnable background} (`random`) --- low-ambiguity
+#'       unburned cells drawn from the burnable domain with a weak immediate
+#'       change-index response (values at or below the
+#'       `negative_pool_params$random$rbr_quantile` percentile, default the
+#'       50th, computed within the sampling domain) and located outside a
+#'       500-m exclusion zone around all deterministic candidate patches
+#'       (keep, review and drop).
+#'     \item \strong{Moderately burned-like} (`otsu`) --- candidate patches
+#'       segmented by Otsu as potentially burned but assigned to the
+#'       \strong{drop} class by the rule-based filters, with
+#'       `S_PATCH_PA <= 0.15`: the lower end of the burned-like confounder
+#'       spectrum.
+#'     \item \strong{Strongly burned-like} (`artifact_hard`) --- drop patches
+#'       with a stronger burned-like response (high `rbr_med`, low
+#'       persistence; see `negative_pool_params$artifact_hard`), and therefore
+#'       greater potential to generate commission errors. \strong{Off by
+#'       default}. When a visual validation is applied with
+#'       [apply_visual_validation()] only the visually confirmed patches
+#'       (`VISUAL = 1`) enter training; this is the configuration used in the
+#'       paper.
 #'   }
-#'   Each bucket is capped by `negative_pool_params$caps[["random"]]` /
-#'   `negative_pool_params$caps[["otsu"]]`, expressed as a multiple of the number
-#'   of burned labels; an `Inf` cap disables capping for that bucket. The general
-#'   package defaults are `1.0` / `1.0`. The caps are the single caps source and
-#'   are mirrored into `cfg$train_control$caps`.
+#'   \strong{Review} patches are withheld from training and remain in the
+#'   complete candidate-patch universe for subsequent scoring.
+#'
+#'   To control class imbalance, the burnable-background and moderately
+#'   burned-like pools are capped relative to the size of the burned pool by
+#'   `negative_pool_params$caps[["random"]]` / `negative_pool_params$caps[["otsu"]]`
+#'   (multiples of the number of burned labels, default `1.0` / `1.0`; `Inf`
+#'   disables a cap). The caps are the single caps source and are mirrored into
+#'   `cfg$train_control$caps`. All eligible strongly burned-like patches are
+#'   retained; instead of a cap, their total weight is balanced against the
+#'   burned pool through `negative_pool_params$artifact_hard$total_weight_ratio`.
 #' }
 #'
 #' \subsection{OOF and FINAL}{

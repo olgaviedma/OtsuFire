@@ -284,9 +284,10 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
     stop(
       "`cap_contextual` / `contextual_exclusion_to_burned_ratio` were removed in ",
       "OtsuFire (GATE 6.5): the contextual (deterministic-drop) negative bucket ",
-      "no longer exists. A deterministic drop is NOT a training negative. The ",
-      "negative architecture is two sources only (random background + Otsu ",
-      "residual); use cap_random / cap_otsu.",
+      "no longer exists: drop patches enter training only through the ",
+      "moderately burned-like (`otsu`) and strongly burned-like ",
+      "(`artifact_hard`) pools. Set the caps with ",
+      "negative_pool_params$caps = c(random = , otsu = ).",
       call. = FALSE
     )
   }

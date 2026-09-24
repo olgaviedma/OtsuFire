@@ -134,12 +134,41 @@ sup_run <- run_oneyear_supervised_pipeline(
 )
 ```
 
-The supervised model uses **two explicit negative sources: random
-background and Otsu residuals.** The negative-pool strategy is no longer
-configurable. Every run uses `all_sources` implicitly: a burnable-only
-unburned pool assembled from exactly two buckets — random burnable
-background and Otsu current-year residual patches — each with its own
-cap relative to the burned count. The two caps are the typed PUBLIC
+**Training pools.** The burned training pool comprises the deterministic
+keep patches and is hereafter referred to as *burned*. Unburned labels
+come from up to three differentiated pools that distinguish generic
+burnable-background conditions from moderately and strongly burned-like
+confounding surfaces (internal bucket names in brackets):
+
+* **Burnable background** (`random`) — low-ambiguity unburned cells drawn
+  from the burnable domain with a weak immediate change-index response
+  (values at or below the 50th percentile of their distribution within the
+  sampling domain) and located outside a 500-m exclusion zone around all
+  deterministic candidate patches (keep, review and drop).
+* **Moderately burned-like** (`otsu`) — candidate patches segmented by Otsu
+  as potentially burned but assigned to the drop class by the rule-based
+  filters, with `S_PATCH_PA <= 0.15`: the lower end of the burned-like
+  confounder spectrum.
+* **Strongly burned-like** (`artifact_hard`) — drop patches with a stronger
+  burned-like response (high `rbr_med`, low persistence), and therefore
+  greater potential to generate commission errors. This pool is **off by
+  default** (`negative_pool_params$artifact_hard$enabled = FALSE`). When a
+  visual validation is applied with `apply_visual_validation()`, only the
+  visually confirmed patches (`VISUAL = 1`) enter training; this is the
+  configuration used in the paper.
+
+Review patches are withheld from training and remain in the complete
+candidate-patch universe for subsequent scoring. To control class
+imbalance, the burnable-background and moderately burned-like pools are
+capped relative to the size of the burned pool, whereas all eligible
+strongly burned-like patches are retained and balanced by weight
+(`negative_pool_params$artifact_hard$total_weight_ratio`) rather than
+capped.
+
+The negative-pool strategy itself is not configurable. Every run uses
+`all_sources` implicitly, and the burnable-background and moderately
+burned-like pools each have their own cap relative to the burned count.
+The two caps are the typed PUBLIC
 block `negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` (the
 single source of truth; an `Inf` cap disables that bucket's cap),
 mirrored into `cfg$train_control$caps`. The random-background RNG seed
@@ -161,7 +190,8 @@ external `sys.source()` of legacy scripts and no namespace mutation.
 Training eligibility is defined by **explicit class, never by negation**.
 A row with `class == "burned"` is a positive (always kept). A row with
 `class == "unburned"` is a negative **only** when it resolves to exactly
-one of the two valid buckets above (random, otsu); Otsu review / keep
+one of the valid buckets above (`random`, `otsu`, and `artifact_hard` when
+that pool is enabled); Otsu review / keep
 patches are excluded and logged. Any other
 case — `class` missing or unknown, or an unburned row with no valid
 bucket — is a hard error. Review / keep / `NA` / unknown rows can never

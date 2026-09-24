@@ -143,9 +143,17 @@ sup_run <- run_oneyear_supervised_pipeline(sup_cfg, run_consistency = TRUE)
 
 Two points that matter methodologically:
 
-- **Negatives come from exactly two sources** — random burnable background and
-  Otsu current-year residuals — each with its own cap relative to the burned
-  count. Training eligibility is defined by *explicit class, never by negation*:
+- **Three differentiated unburned pools.** Burned labels are the keep patches.
+  Unburned labels come from a *burnable background* pool (weak change-index
+  response, outside a 500-m exclusion zone around all candidate patches), a
+  *moderately burned-like* pool (drop patches with `S_PATCH_PA <= 0.15`) and an
+  optional *strongly burned-like* pool (drop patches with a stronger
+  burned-like response; off by default, visually validated with
+  `apply_visual_validation()` in the paper configuration). The first two are
+  capped relative to the burned count; all eligible strongly burned-like
+  patches are kept and balanced by weight. Review patches are withheld from
+  training and scored afterwards. Training eligibility is defined by
+  *explicit class, never by negation*:
   review/keep/`NA`/unknown rows can never silently become negatives, and an
   unresolvable row is a hard error.
 - **`p_burned` is a model score, not a calibrated probability.** Do not treat it

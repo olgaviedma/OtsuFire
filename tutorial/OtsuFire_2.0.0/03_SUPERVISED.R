@@ -14,14 +14,21 @@
 #   That score is what stage 4 thresholds, per year, against the reference.
 #
 # WHERE THE TRAINING DATA COMES FROM
-#   Positives: the "keep" polygons from stage 2.
-#   Negatives: NOT "everything else". Exactly two buckets, both inside the
+#   Burned: the "keep" polygons from stage 2.
+#   Unburned: NOT "everything else". Up to three pools, all inside the
 #     burnable mask:
-#       random - random background cells
-#       otsu   - Otsu residual patches from this year
-#     Review and keep-Otsu patches are excluded and logged. A row that is
-#     neither a positive nor one of those two buckets is an error, never a
-#     silent negative.
+#       burnable background (random)  - cells with a weak change-index
+#                                       response, outside a 500-m zone around
+#                                       all candidate patches
+#       moderately burned-like (otsu) - drop patches with S_PATCH_PA <= 0.15
+#       strongly burned-like          - drop patches with a stronger
+#         (artifact_hard)               burned-like response; off by default,
+#                                       visually validated with
+#                                       apply_visual_validation() in the paper
+#     The first two are capped relative to the burned pool; strongly
+#     burned-like patches are all kept and balanced by weight. Review patches
+#     are withheld from training and scored afterwards. A row that is neither
+#     burned nor one of these pools is an error, never a silent negative.
 #
 # RUN 00_SETUP.R AND 02_DETERMINISTIC.R FIRST.
 # =============================================================================

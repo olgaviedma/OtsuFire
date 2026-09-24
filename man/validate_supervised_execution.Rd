@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-validate-execution.R
 \name{validate_supervised_execution}
 \alias{validate_supervised_execution}
-\title{Validate a supervised run BEFORE any heavy compute}
+\title{Check supervised workflow inputs and settings before execution}
 \usage{
 validate_supervised_execution(
   config,
@@ -19,140 +19,260 @@ validate_supervised_execution(
 )
 }
 \arguments{
-\item{config}{A resolved \code{otsufire_supervised_burned_config}.}
+\item{config}{A resolved object of class \code{otsufire_supervised_burned_config},
+created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
 
-\item{strict}{Logical. If \code{TRUE}, raise a clear aggregated error when any
-blocking-severity check FAILs; if \code{FALSE} (default), return the report
-without erroring on a check FAIL.}
+\item{strict}{Logical scalar. When \code{TRUE}, stop with an aggregated error if
+any blocking check fails. When \code{FALSE}, return failed checks in the
+report. Default: \code{FALSE}.}
 
-\item{target_year}{Integer. The resolved target year (defaults to
-\code{config$target_year}).}
+\item{target_year}{Integer scalar. Target year used for the execution
+checks. Defaults to \code{config$target_year}.}
 
-\item{reuse_upstream}{Logical. The resolved reuse-upstream toggle. Drives the
-contradictory-config and cache-belonging checks.}
+\item{reuse_upstream}{Logical scalar. Whether the planned run will reuse
+existing pools, folds, and features. Controls checks of required upstream
+outputs and cache provenance. Default: \code{FALSE}.}
 
-\item{feature_whitelist_override}{Character or \code{NULL}. The RESOLVED whitelist
-override, validated as a subset of the canonical whitelist.}
+\item{feature_whitelist_override}{Character vector or \code{NULL}. Resolved
+feature whitelist for the planned run, checked against the
+package-supported feature set.}
 
-\item{model, recipe}{Optional fitted model / recipe. When supplied, check (8)
-asserts the scoring feature schema is compatible.}
+\item{model}{Optional fitted model used to check compatibility with the
+scoring-feature schema.}
 
-\item{scoring_feature_names}{Character or \code{NULL}. The available scoring-feature
-column names, for check (8). \code{NULL} skips the schema check.}
+\item{recipe}{Optional fitted feature recipe used to check compatibility
+with the scoring-feature schema.}
 
-\item{data_base, composite_base, result_name}{Character or \code{NULL}. The data
-roots used to locate inputs that the config does not give explicitly, so
-the validator checks the same input paths the pipeline will use.}
+\item{scoring_feature_names}{Character vector or \code{NULL}. Column names
+available for scoring. When \code{NULL}, the scoring-schema check is skipped.}
+
+\item{data_base}{Character scalar or \code{NULL}. Base directory used to resolve
+conventional supporting-input paths when an explicit configuration path
+is absent.}
+
+\item{composite_base}{Character scalar or \code{NULL}. Base directory used to
+resolve conventional change-index paths when an explicit configuration
+path is absent.}
+
+\item{result_name}{Character scalar or \code{NULL}. Identifier used when
+resolving conventional paths. Default: \code{"Min_Min"}. Use the same value as
+the planned run.}
 }
 \value{
-The report \code{data.frame} (see \strong{The report}). Visible when
-\code{strict = FALSE}; invisible when \code{strict = TRUE} and all blocking checks pass.
+A \code{data.frame} containing the validation report.
+
+The report is returned visibly with \code{strict = FALSE} and invisibly with
+\code{strict = TRUE} when no blocking check fails. If a blocking check fails
+in strict mode, the function stops with an aggregated error.
 }
 \description{
-A fast, read-only pre-flight check for a supervised run. You hand it the
-configuration object from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} and it verifies,
-in well under a second, that the inputs and settings are coherent BEFORE the
-expensive stages (pool build, spatial folds, feature extraction, OOF, final
-model). It opens only metadata and geometry (rasters header-only), writes
-nothing, and so catches a misconfigured run immediately instead of 5-10 min in.
+Check the configuration and inputs for a supervised OtsuFire run before
+starting pool generation, feature extraction, or model training.
 
-It returns a tidy \strong{report} -- one row per check -- so you can see
-exactly what passed, failed, or could not be evaluated. With \code{strict = TRUE}
-it instead stops with a single aggregated error listing every blocking
-failure; that is how the pipeline aborts a bad run early.
-}
-\section{What it checks}{
+The function checks spatial metadata, input compatibility, year
+information, required label fields, reuse settings, and available cache
+provenance. It also previews geometry sanitisation without modifying the
+input layer.
 
-\enumerate{
-\item \strong{CRS} -- present and valid on every on-disk spatial input
-(the change index, delayed change index, topography, CORINE, burnable
-mask, decisions, hotspots).
-\item \strong{Spatial overlap} -- the change-index template overlaps each
-other input (bounding geometries, reprojected to the template CRS).
-\item \strong{Empty raster} -- no raster has zero rows or columns.
-\item \strong{Burnable mask} -- once aligned to the template, the mask has
-at least one burnable cell.
-\item \strong{Correct year} -- year-specific inputs (decisions, change
-index, delayed change index, hotspots, reference map) match
-\code{config$target_year}. Atemporal inputs (topography, peninsula, burnable
-mask, CORINE -- which carries its own epoch) are skipped. A year that is
-determinable but WRONG fails (blocking); an undeterminable year is recorded
-as \code{NOT_VERIFIABLE}, never a silent PASS.
-\item \strong{Required columns} -- \code{internal_decisions} has its label column
-\code{class_final}.
-\item \strong{Column types} -- \code{class_final} is character or factor.
-\item \strong{Feature schema} -- when a \code{model}/\code{recipe} and
-\code{scoring_feature_names} are supplied, the scoring inputs cover the schema
-the model expects. Recoverable mismatches (missing / extra / type-changed /
-all-NA) pass because the scorer heals them; a genuinely incompatible
-feature fails. Skipped when no model/recipe is given.
-\item \strong{Config not contradictory} -- e.g. \code{reuse_upstream = TRUE} with
-no upstream artefacts, or a \code{feature_whitelist_override} outside the
-canonical whitelist.
-\item \strong{Cache provenance} -- a reused negative-pool cache actually
-belongs to THIS config (fingerprint match). Blocking under
-\code{reuse_upstream = TRUE}; a warning otherwise (the pool is just rebuilt).
-\item \strong{Geometry sanitisation (dry-run)} -- a non-destructive preview
-of the polygon sanitiser the pool stage uses. Dropping a few empty
-geometries is normal and reports \code{"PASS_WITH_SANITIZATION"} with the
-counts; it only blocks if sanitisation would empty the layer entirely.
+The function does not write outputs or train a model. It returns a report
+identifying checks that passed, failed, were skipped, or could not be
+evaluated.
+
+Use \code{strict = TRUE} to stop execution when blocking checks fail.
 }
+\section{Scope of the checks}{
+
+The function inspects metadata and geometries and performs targeted data
+checks where needed, such as checking for burnable cells.
+
+Execution time depends on input size, storage access, and the checks
+performed. Passing these checks does not guarantee that every subsequent
+processing stage will complete successfully.
+
+The function validates execution readiness. It does not assess
+burned-area mapping accuracy.
 }
 
-\section{The report (one row per check)}{
-
-\describe{
-\item{\code{check}}{Check id (e.g. \code{"crs_rasters"}, \code{"overlap"}).}
-\item{\code{status}}{\code{"PASS"}, \code{"FAIL"}, \code{"NOT_VERIFIABLE"} (could not be
-evaluated), \code{"SKIPPED"} (not applicable), or \code{"PASS_WITH_SANITIZATION"}
-(passes after dropping a few empty geometries).}
-\item{\code{message}}{Human-readable outcome.}
-\item{\code{evidence}}{What was inspected (path / CRS / year / columns).}
-\item{\code{severity}}{\code{"blocking"}, \code{"warning"}, or \code{"info"}.}
-\item{\code{verifiable}}{Was the check actually evaluable. A \code{NOT_VERIFIABLE} /
-\code{SKIPPED} row is \code{FALSE}, so an unevaluable check can never look like a PASS.}
+\section{Checks performed}{
+\tabular{ll}{
+   Check \tab Purpose \cr
+   Coordinate reference systems \tab Check that inspected spatial inputs have a present and valid CRS. \cr
+   Spatial overlap \tab Check whether each supporting input overlaps the change-index template using bounding geometries transformed to the template CRS. \cr
+   Raster dimensions \tab Check that raster inputs have non-zero row and column counts. \cr
+   Burnable mask \tab Check that the mask contains at least one burnable cell after alignment to the template. \cr
+   Target year \tab Check available year information for year-specific inputs. \cr
+   Required label field \tab Check that the decision layer for Otsu-guided patches contains \code{class_final}. \cr
+   Label-field type \tab Check that \code{class_final} is character or factor. \cr
+   Scoring-feature schema \tab When model or recipe information and scoring-feature names are supplied, check schema compatibility. \cr
+   Configuration consistency \tab Check for incompatible settings, such as requesting upstream reuse without the required files or supplying an unsupported feature whitelist. \cr
+   Cache provenance \tab Compare available negative-pool cache fingerprints with the current configuration. \cr
+   Geometry sanitisation \tab Preview geometry cleaning and report whether usable polygons would remain. \cr
 }
+
+
+A spatial-overlap check based on bounding geometries does not establish
+complete coverage or matching raster grids. Likewise, non-zero raster
+dimensions do not establish that a raster contains valid data throughout
+the study area.
 }
 
-\section{strict = TRUE vs FALSE}{
+\section{Year checks}{
 
-\code{strict = FALSE} (default) ALWAYS returns the report and never errors on a
-check FAIL -- you decide what to do. \code{strict = TRUE} raises one aggregated
-error if any \strong{blocking} check failed (listing each), otherwise returns
-the report invisibly. A non-blocking cache mismatch still warns in both modes.
+Year-specific inputs include the decision layer for Otsu-guided patches,
+immediate and delayed change-index rasters, hotspots, and the external
+burned-area reference.
+
+A detected year that conflicts with the configured target year produces a
+blocking failure. If the year cannot be determined, the result is recorded
+as \code{NOT_VERIFIABLE}.
+
+The target-year check is not applied to supporting inputs such as
+topography, the study-area boundary, the burnable mask, and CORINE land
+cover, which may use a separate reference epoch.
+}
+
+\section{Scoring-feature compatibility}{
+
+The optional schema check uses the supplied model or recipe together with
+\code{scoring_feature_names}.
+
+Missing or additional columns may be recoverable through the scoring
+recipe. An incompatible schema produces a failure.
+
+Column names alone do not establish column types or reveal whether a
+column contains only missing values. Those properties require inspection
+of the scoring data.
+
+If scoring-feature names or the required model/recipe information are
+absent, the schema check is skipped.
+}
+
+\section{Cache reuse}{
+
+A cache fingerprint mismatch is blocking when \code{reuse_upstream = TRUE}.
+
+When upstream reuse is not requested, a cache mismatch is reported as a
+warning so that the downstream workflow can rebuild the affected pool.
+This validation function does not rebuild it.
+
+Use the same reuse setting, feature whitelist, target year, and
+conventional-path settings that will be used for execution.
+}
+
+\section{Geometry sanitisation}{
+
+Geometry sanitisation is evaluated without changing the source layer.
+
+If sanitisation would remove some empty geometries while leaving usable
+polygons, the report records \code{PASS_WITH_SANITIZATION} and the relevant
+counts.
+
+If sanitisation would leave the layer empty, the check produces a blocking
+failure.
+}
+
+\section{Report structure}{
+
+The returned \code{data.frame} contains one row per check.\tabular{ll}{
+   Column \tab Description \cr
+   \code{check} \tab Check identifier, such as \code{"crs_rasters"} or \code{"overlap"}. \cr
+   \code{status} \tab Outcome of the check. See the status definitions below. \cr
+   \code{message} \tab Human-readable explanation of the outcome. \cr
+   \code{evidence} \tab Information inspected, such as paths, CRS values, years, or column names. \cr
+   \code{severity} \tab \code{"blocking"}, \code{"warning"}, or \code{"info"}. \cr
+   \code{verifiable} \tab Logical indicator of whether the check could be evaluated. \code{FALSE} for \code{NOT_VERIFIABLE} and \code{SKIPPED} checks. \cr
+}
+
+
+\strong{Status values}\tabular{ll}{
+   Status \tab Meaning \cr
+   \code{"PASS"} \tab The check was evaluated and passed. \cr
+   \code{"FAIL"} \tab The check was evaluated and failed. \cr
+   \code{"NOT_VERIFIABLE"} \tab The available information was insufficient to evaluate the check. \cr
+   \code{"SKIPPED"} \tab The check was not applicable or its optional inputs were not supplied. \cr
+   \code{"PASS_WITH_SANITIZATION"} \tab The check passes subject to the reported geometry sanitisation. \cr
+}
+
+
+Review \code{NOT_VERIFIABLE} results separately. They do not indicate that an
+input has passed validation.
+}
+
+\section{Strict and report modes}{
+\tabular{ll}{
+   Mode \tab Behaviour \cr
+   \code{strict = FALSE} \tab Return the report without raising an error solely because a check has status \code{"FAIL"}. \cr
+   \code{strict = TRUE} \tab Raise one aggregated error listing all blocking failures. If no blocking check fails, return the report invisibly. \cr
+}
+
+
+Non-blocking cache mismatches may emit warnings in either mode.
+
+A successful strict check means that no blocking failure was detected.
+Some checks may still be skipped or not verifiable.
 }
 
 \examples{
 \dontrun{
-cfg <- build_supervised_burned_config(
-  run_label          = "balanced",
-  internal_decisions = "1985/05_DECISIONS/internal_decisions.gpkg",
-  change_index       = "MinMin_1985_mosaic_res90m.tif",
-  target_year        = 1985
+# Configure a supervised workflow
+config <- build_supervised_burned_config(
+  internal_decisions = "data/internal_decisions_2022.gpkg",
+  change_index = "data/RBR_2022.tif",
+  delayed_change_index = "data/RBR_delayed_2022.tif",
+  topo = "data/elevation_slope.tif",
+  corine_raster = "data/land_cover_2022.tif",
+  burnable_mask = "data/burnable_mask_2022.tif",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022"
 )
 
-# 1) Inspect the full report (never errors):
-rep <- validate_supervised_execution(cfg)
-rep[, c("check", "status", "severity")]
+# Inspect all checks
+report <- validate_supervised_execution(
+  config = config,
+  strict = FALSE
+)
+report[, c("check", "status", "severity")]
 
-# Show only what failed:
-rep[rep$status == "FAIL", c("check", "message")]
+# Inspect failed checks
+report[
+  report$status == "FAIL",
+  c("check", "message", "severity")
+]
 
-# 2) Fail fast before heavy compute (what the pipeline does):
-validate_supervised_execution(cfg, strict = TRUE)
+# Inspect checks that could not be evaluated
+report[
+  report$status == "NOT_VERIFIABLE",
+  c("check", "message", "evidence")
+]
 
-# 3) Also check the scoring schema against a fitted model:
+# Stop before processing if a blocking check fails
 validate_supervised_execution(
-  cfg,
-  model = final$model, recipe = final$recipe,
-  scoring_feature_names = names(sf::st_drop_geometry(scoring_features))
+  config = config,
+  strict = TRUE
 )
+
+# Start the workflow after the strict check succeeds
+result <- run_oneyear_supervised_pipeline(
+  config = config
+)
+
+# Check compatibility with an existing model and feature recipe
+# Here, fitted_model, fitted_recipe, and scoring_features
+# are objects already available in the session.
+schema_report <- validate_supervised_execution(
+  config = config,
+  model = fitted_model,
+  recipe = fitted_recipe,
+  scoring_feature_names = names(
+    sf::st_drop_geometry(scoring_features)
+  )
+)
+schema_report[, c("check", "status", "message")]
 }
 
 }
 \seealso{
-\code{\link[=validate_fire_maps]{validate_fire_maps()}} validates PRODUCED maps against reference
-perimeters such as EFFIS (post-run), where this validates the config and
-inputs (pre-run); \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} builds the config this
-function checks.
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
 }

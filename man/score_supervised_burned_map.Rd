@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-score-map.R
 \name{score_supervised_burned_map}
 \alias{score_supervised_burned_map}
-\title{Score the deterministic polygon universe and export supervised final maps}
+\title{Score Otsu-guided patches and export supervised burned-area outputs}
 \usage{
 score_supervised_burned_map(
   scoring_features,
@@ -25,174 +25,288 @@ score_supervised_burned_map(
 )
 }
 \arguments{
-\item{scoring_features}{sf / data.frame OR a single GPKG path. The
-deterministic scoring universe (the \code{scoring_features} layer of
-\verb{03_FEATURES/features_geometry.gpkg}), read back by \code{scoring_layer}.}
+\item{scoring_features}{\code{sf} object, \code{data.frame}, or GeoPackage path
+containing features for the Otsu-guided patches to score. When a path is
+supplied, \code{scoring_layer} identifies the layer to read. Spatial exports
+require polygon geometry.}
 
-\item{model}{Fitted xgboost model object OR an RDS path.}
+\item{model}{Fitted XGBoost model object or path to its RDS file. Use the
+final model returned by \code{\link[=train_final_burned_model]{train_final_burned_model()}}.}
 
-\item{recipe}{Training recipe list OR an RDS path. \strong{Mandatory} — the
-canonical feature-schema source at scoring. It must carry
-\code{recipe$cols$feature_cols}; the function errors rather than reconstruct the
-schema from the scoring year.}
+\item{recipe}{Training recipe list or path to its RDS file. Required. Must
+contain \code{recipe$cols$feature_cols} and the feature-processing information
+associated with \code{model}. Use a model and recipe saved from the same
+training run.}
 
-\item{config}{Required \code{otsufire_supervised_burned_config} (from
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Provides the output folders, the file
-prefix and \code{target_year} / \code{scenario}.}
+\item{config}{An \code{otsufire_supervised_burned_config} object created by
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies run identifiers and output
+locations.}
 
-\item{oof_summary}{Character path to the OOF labelled-summary GPKG
-(\verb{_labeled_oof_summary.gpkg}) OR \code{NULL}. Used for the OOF \code{p_oof_mean} join;
-when \code{NULL} the function falls back to the canonical \verb{05_OOF} path.}
+\item{oof_summary}{Path to the OOF labelled-summary GeoPackage, or \code{NULL}.
+Supplies OOF information for the \code{p_oof_mean} join. When \code{NULL}, the
+function uses the conventional path under \verb{05_OOF}.}
 
-\item{labelled_features}{sf / data.frame OR a single GPKG path. The labelled
-training features (the \code{train_features} layer of
-\verb{03_FEATURES/features_geometry.gpkg}) used to join OOF predictions by
-\code{source_poly_id}. When \code{NULL} it falls back to
+\item{labelled_features}{\code{sf} object, \code{data.frame}, GeoPackage path, or
+\code{NULL}. Labelled training features used to associate OOF predictions with
+scoring polygons through \code{source_poly_id}. When \code{NULL}, uses
 \code{config$output_routes$features_geometry_gpkg}.}
 
-\item{export_burned_like}{Logical. Whether to export the burned-like subset
-(\verb{_burned_like_scored.gpkg} + \verb{_counts.csv}). Default \code{TRUE}.}
+\item{export_burned_like}{Logical scalar. Whether to export the burned-like
+subset and its counts table. Default: \code{TRUE}.}
 
-\item{preyear_overlap_threshold}{Numeric. Current-year temporal-adjustment
-pre-year overlap threshold. Default \code{0.70}.}
+\item{preyear_overlap_threshold}{Numeric scalar. Previous-year overlap
+threshold used to identify temporal conflicts. Default: \code{0.70}.}
 
-\item{hotspot_density_threshold}{Numeric. Current-year hotspot-density
-threshold. Default \code{0.001}.}
+\item{hotspot_density_threshold}{Numeric scalar. Hotspot-density threshold
+used to assess current-year fire support during temporal adjustment.
+Default: \code{0.001}.}
 
-\item{temporal_penalty_floor}{Numeric. Current-year temporal penalty floor.
-Default \code{0.10}.}
+\item{temporal_penalty_floor}{Numeric scalar. Floor parameter used by the
+temporal score-adjustment rule. Default: \code{0.10}. These three arguments
+control temporal adjustment. They do not specify the score threshold for
+producing a binary burned-area map.}
 
-\item{qa_labelled_layer}{Character. Layer in \code{oof_summary}. Default
+\item{qa_labelled_layer}{Layer name in \code{oof_summary}. Default:
 \code{"labeled_oof_summary"}.}
 
-\item{labelled_features_layer}{Character. Layer in \code{labelled_features}.
-Default \code{"train_features"}.}
+\item{labelled_features_layer}{Layer name read from \code{labelled_features} when
+supplied as a GeoPackage path. Default: \code{"train_features"}.}
 
-\item{scoring_layer}{Character. Layer in \code{scoring_features}. Default
-\code{"scoring_features"}.}
+\item{scoring_layer}{Layer name read from \code{scoring_features} when supplied
+as a GeoPackage path. Default: \code{"scoring_features"}.}
 
-\item{out_map_dir}{Character or \code{NULL}. Output folder for the \verb{09_FINAL_MAP}
-outputs. Defaults to \code{config$output_routes$final_map_dir}.}
+\item{out_map_dir}{Output directory for final-map products, or \code{NULL} to
+use \code{config$output_routes$final_map_dir}, normally the \verb{09_FINAL_MAP}
+folder.}
 
-\item{out_score_dir}{Character or \code{NULL}. Output folder for the \verb{08_SCORED}
-outputs. Defaults to \code{config$output_routes$scored_dir}.}
+\item{out_score_dir}{Output directory for scored products, or \code{NULL} to use
+\code{config$output_routes$scored_dir}, normally the \verb{08_SCORED} folder.}
 
-\item{overwrite}{Logical. Whether to overwrite existing outputs. Default
+\item{overwrite}{Logical scalar. Whether existing outputs may be replaced.
+Default: \code{TRUE}.}
+
+\item{verbose}{Logical scalar. Whether to print progress messages. Default:
 \code{TRUE}.}
-
-\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 }
 \value{
-A named list with both the objects and the written paths:
-\itemize{
-\item \code{deterministic_scored} — the full scored deterministic universe
-(sf, == \code{final_map_full}). ALL scored candidates (no row dropped).
-\item \code{final_map_full} — same as \code{deterministic_scored}.
-\item \code{final_map} — the current-year public final map (sf); the
-temporally-filtered, public-column subset (see the output-layer
-contract above): \code{nrow <= nrow(final_map_full)}.
-\item \code{burned_like_scored} — the burned-like subset (sf), or \code{NULL} when
-\code{export_burned_like = FALSE}.
-\item \code{deterministic_scored_gpkg}, \code{final_map_gpkg},
-\code{final_map_counts_csv}, \code{burned_like_gpkg},
-\code{burned_like_counts_csv} — written paths.
+A named list containing scored spatial objects and output paths.\tabular{ll}{
+   Field \tab Contents \cr
+   \code{deterministic_scored} \tab Complete scored Otsu-guided patch layer as an \code{sf} object. \cr
+   \code{final_map_full} \tab Same spatial object contents as \code{deterministic_scored}. \cr
+   \code{final_map} \tab Public map layer after temporal exclusions and public-column selection. \cr
+   \code{burned_like_scored} \tab Burned-like subset as an \code{sf} object, or \code{NULL} when \code{export_burned_like = FALSE}. \cr
+   \code{deterministic_scored_gpkg} \tab Path to the complete scored output. \cr
+   \code{final_map_gpkg} \tab Path to the final-map GeoPackage. \cr
+   \code{final_map_counts_csv} \tab Path to the final-map counts table. \cr
+   \code{burned_like_gpkg} \tab Path to the optional burned-like output. \cr
+   \code{burned_like_counts_csv} \tab Path to the optional burned-like counts table. \cr
 }
+
+
+Burned-like export paths do not represent newly written products when
+\code{export_burned_like = FALSE}.
 }
 \description{
-Scores every candidate polygon with the trained final model and writes the
-supervised burned-area maps. This is the scoring stage of the supervised
-pipeline; it consumes the \code{model} and \code{recipe} returned by
-\code{\link[=train_final_burned_model]{train_final_burned_model()}}.
+Apply a trained supervised model to the Otsu-guided patches in the scoring
+pool and export their scores and spatial outputs.
 
-Use it after training: pass the deterministic scoring universe, the trained
-model and recipe, the configuration from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
-and the OOF labelled-summary join inputs. It writes the \verb{08_SCORED} and
-\verb{09_FINAL_MAP} outputs and returns the scored layers in memory. Calling it
-directly produces the same result as the scoring stage of the full pipeline
-\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
+The function uses the model and feature-processing recipe returned by
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}. It predicts \code{p_burned}, joins available
+out-of-fold (OOF) information, and applies the current-year temporal
+adjustment.
+
+Outputs include the complete scored candidate layer and a public map layer
+that excludes candidates flagged by the current-year temporal filter. An
+additional burned-like subset can be exported.
+
+Run this function after final-model training. It performs the scoring
+stage used by \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
-\section{What it does}{
+\section{Scoring workflow}{
 
+The function:
 \enumerate{
-\item Validates inputs and resolves the output folders and file prefix from
-the configuration.
-\item Enforces the feature schema against the training \code{recipe} (see
-below), then builds the scoring matrix and predicts \code{p_burned}.
-\item Applies the current-year temporal adjustment and writes the scored
-deterministic universe and the public final map (plus the optional
-burned-like subset).
-}
-}
-
-\section{Feature-schema enforcement}{
-
-The \code{recipe} produced by the final refit is mandatory and is the canonical
-source of the scoring feature schema: feature names and order, types, \verb{_isNA}
-companions, imputation medians and categorical levels all come from the
-recipe, never from the scoring-year data. Before building the scoring matrix,
-the function runs \code{\link[=validate_supervised_execution]{validate_supervised_execution()}} in strict mode with the
-model, recipe and the scoring frame's column names, so a genuinely
-incompatible schema fails fast. Recoverable differences are then reconciled
-and recorded (no silent corrections): an altered column order is realigned; a
-missing feature is created as \code{NA} plus its \verb{_isNA} flag; an extra column is
-dropped; a type change is coerced or set \code{NA}; a new categorical level maps
-to the recipe sentinel; an all-\code{NA} feature is median-imputed.
+\item validates the supplied inputs and resolves output locations;
+\item prepares scoring features using the saved training recipe;
+\item builds the scoring matrix and predicts \code{p_burned};
+\item joins available OOF information using the labelled-feature identifiers;
+\item applies the current-year temporal adjustment;
+\item writes the complete scored layer, public map layer, and optional
+burned-like subset.
 }
 
-\section{Model and recipe inputs}{
-
-\code{model} and \code{recipe} may be in-memory objects (the
-\code{\link[=train_final_burned_model]{train_final_burned_model()}} return fields) or RDS paths; both give the
-same result.
+\code{p_burned} is a model score and is not necessarily a calibrated
+probability.
 }
 
-\section{Output-layer contract}{
+\section{Feature preparation}{
 
-The written \verb{<prefix>_final_map.gpkg} carries three layers with different,
-deliberate contracts, so they are NOT expected to have equal row counts:
+The training recipe defines the feature names, predictor order, expected
+types, missingness indicators, imputation values, and categorical levels
+used for scoring.
+
+The function requires this saved schema rather than deriving a new one
+from the scoring data. It runs \code{\link[=validate_supervised_execution]{validate_supervised_execution()}} in strict
+mode with the model, recipe, and available feature names before
+constructing the scoring matrix.
+
+Recoverable differences are reconciled using the recipe. These may
+include:\tabular{ll}{
+   Difference \tab Treatment \cr
+   Different predictor order \tab Reorder predictors to match the training schema. \cr
+   Missing predictor \tab Create the missing column and apply the recipe's missing-value handling. \cr
+   Additional predictor \tab Exclude it from the model matrix when it is outside the saved schema. \cr
+   Changed column type \tab Convert to the expected type where possible; otherwise handle the affected values as missing. \cr
+   Unseen categorical level \tab Map to the recipe's missing or unknown-category representation. \cr
+   Entirely missing numeric predictor \tab Apply the saved numeric imputation rule. \cr
+}
+
+
+Corrections are recorded by the scoring workflow. An incompatible schema
+raises an error.
+
+The initial check based on column names assesses feature availability.
+Type conversion and missing-value handling occur when the scoring data are
+processed.
+}
+
+\section{OOF information}{
+
+OOF predictions describe labelled examples scored while held out from
+their corresponding training folds.
+
+The optional OOF join adds this information to matching polygons through
+the labelled-feature identifiers. It does not make the final-model
+predictions out-of-fold predictions.
+
+Keep OOF scores and final-model scores distinct when evaluating
+performance, particularly for polygons that also contributed to
+final-model training.
+}
+
+\section{Current-year temporal filtering}{
+
+The temporal rule identifies candidates with a previous-year conflict and
+weak current-year hotspot support.
+
+A temporal conflict is identified when either:
 \itemize{
-\item \code{deterministic_scored} and \code{final_map_full} (identical content) — the
-complete scored deterministic universe: every candidate the final model
-scored, one row per input polygon, all IDs/geometries preserved (the
-authoritative "no candidate is lost" layers; \code{nrow} equals the scoring
-universe size).
-\item \code{final_map} — the current-year public burned map: \code{final_map_full}
-with the public column subset and the current-year temporal filter
-applied. It drops exactly the rows flagged \code{current_year_public_drop}
-(a current-year temporal conflict — pre-year overlap
-\verb{>= preyear_overlap_threshold} or \code{preyear_action == "drop"} — with weak
-current-year hotspot support: a polygon almost certainly re-detecting the
-pre-year fire with no current-year evidence). Such polygons are
-legitimately excluded from the current-year public map while remaining in
-the full scored layers, so
-\verb{nrow(final_map) == nrow(final_map_full) -}
-\code{sum(final_map_full$current_year_public_drop \%in\% TRUE)}. This is a
-documented methodological exclusion, not a silent row loss.
+\item previous-year overlap meets or exceeds \code{preyear_overlap_threshold}; or
+\item \code{preyear_action == "drop"}.
 }
+
+Candidates meeting the public-map exclusion rule are flagged through
+\code{current_year_public_drop}. They remain available in the complete scored
+layers but are excluded from the public \code{final_map} layer.
+
+This flag represents a rule-based temporal exclusion. It does not
+independently establish that a polygon is an old fire scar.
+}
+
+\section{Output layers}{
+
+The final-map GeoPackage contains three layers:\tabular{ll}{
+   Layer \tab Contents \cr
+   \code{deterministic_scored} \tab Complete scored Otsu-guided patch layer, retaining all scored candidates and their identifiers and geometries. \cr
+   \code{final_map_full} \tab Same contents as \code{deterministic_scored}. \cr
+   \code{final_map} \tab Public-column subset after removing candidates flagged by \code{current_year_public_drop}. \cr
+}
+
+
+The name \code{deterministic_scored} is retained for API compatibility.
+
+The complete layers contain one row per input scoring polygon. The public
+layer may contain fewer rows because of temporal exclusions.
+
+When the exclusion flag is fully populated with logical values, the
+expected relationship is:
+\preformatted{
+nrow(final_map) ==
+  nrow(final_map_full) -
+  sum(final_map_full$current_year_public_drop)
+}
+
+The \code{final_map} layer is temporally filtered. Its name alone does not
+imply that a binary threshold has been applied to \code{p_burned}. Apply the
+selected score threshold when preparing a binary burned-area product for
+external validation.
 }
 
 \examples{
 \dontrun{
+# Configure the run using the inputs used in the preceding stages
 cfg <- build_supervised_burned_config(
-  run_label = "balanced", internal_decisions = "decisions.gpkg",
-  change_index = "rbr.tif", target_year = 2017L
+  run_label = "balanced",
+  internal_decisions = "data/internal_decisions_2022.gpkg",
+  change_index = "data/RBR_2022.tif",
+  delayed_change_index = "data/RBR_delayed_2022.tif",
+  hotspots = "data/hotspots_2022.gpkg",
+  topo = "data/elevation_slope.tif",
+  corine_raster = "data/land_cover_2022.tif",
+  burnable_mask = "data/burnable_mask_2022.tif",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022"
 )
-tm <- train_final_burned_model(
-  train_features = "03_FEATURES/features_geometry.gpkg", config = cfg,
-  oof_agg = "05_OOF/2017_balanced_patch_oof_agg.csv"
+
+# Use the feature and OOF files produced by the preceding stages
+features_path <- "path/to/features_geometry.gpkg"
+oof_agg_path <- "path/to/2022_balanced_patch_oof_agg.csv"
+oof_summary_path <-
+  "path/to/2022_balanced_patch_labeled_oof_summary.gpkg"
+
+# Train the final model
+trained <- train_final_burned_model(
+  train_features = features_path,
+  config = cfg,
+  oof_agg = oof_agg_path
 )
-sm <- score_supervised_burned_map(
-  scoring_features  = "03_FEATURES/features_geometry.gpkg",
-  model = tm$model, recipe = tm$recipe, config = cfg,
-  oof_summary = "05_OOF/2017_balanced_patch_labeled_oof_summary.gpkg"
+
+# Score the Otsu-guided patches
+scored <- score_supervised_burned_map(
+  scoring_features = features_path,
+  model = trained$model,
+  recipe = trained$recipe,
+  config = cfg,
+  oof_summary = oof_summary_path,
+  labelled_features = features_path,
+  export_burned_like = TRUE
 )
-sm$final_map_gpkg
+
+# Locate the exported map
+scored$final_map_gpkg
+
+# Compare complete and public-layer counts
+c(
+  all_candidates = nrow(scored$final_map_full),
+  public_candidates = nrow(scored$final_map)
+)
+
+# Inspect temporal exclusions
+table(
+  scored$final_map_full$current_year_public_drop,
+  useNA = "ifany"
+)
+
+# Inspect the public-layer scores
+summary(scored$final_map$p_burned)
+
+# Read the exported public layer
+public_map <- sf::st_read(
+  scored$final_map_gpkg,
+  layer = "final_map",
+  quiet = TRUE
+)
+
+plot(public_map["p_burned"])
 }
+
 }
 \seealso{
-\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
-\code{\link[=validate_supervised_execution]{validate_supervised_execution()}}, \code{\link[=validate_fire_maps]{validate_fire_maps()}},
-\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=validate_fire_maps]{validate_fire_maps()}}, \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

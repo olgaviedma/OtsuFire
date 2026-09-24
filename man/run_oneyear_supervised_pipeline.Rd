@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-run.R
 \name{run_oneyear_supervised_pipeline}
 \alias{run_oneyear_supervised_pipeline}
-\title{Run the complete one-year supervised burned-area workflow}
+\title{Run the supervised burned-area mapping workflow for one year}
 \usage{
 run_oneyear_supervised_pipeline(
   config,
@@ -28,166 +28,354 @@ run_oneyear_supervised_pipeline(
 )
 }
 \arguments{
-\item{config}{\code{otsufire_supervised_burned_config} object from
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
+\item{config}{An object of class \code{otsufire_supervised_burned_config},
+created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Contains the inputs,
+sampling settings, feature controls, model parameters, and output
+locations.}
 
-\item{run_consistency}{Logical. Whether to run the
-deterministic-vs-supervised consistency check. Default \code{TRUE}.}
+\item{run_consistency}{Logical scalar. Whether to compare the
+classifications of Otsu-guided patches with the supervised results.
+Default: \code{TRUE}. These checks do not replace external map validation.}
 
-\item{overwrite}{Logical. Default \code{FALSE}: stage outputs that already
-exist on disk are reused, so an interrupted run can resume without
-recomputing completed stages. Set \code{TRUE} to regenerate every stage
-output.}
+\item{overwrite}{Logical scalar. Whether existing stage outputs may be
+regenerated and replaced. With \code{FALSE}, existing outputs are reused or
+skipped where supported. Default: \code{FALSE}.}
 
-\item{random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric or
-\code{NULL}. Deprecated; set \code{negative_pool_params$caps} in
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Caps on the
-burnable-background and moderately burned-like negatives, as multiples
-of the number of burned labels. \code{NULL} (default) uses the configured
-caps (package default \code{1.0} each).}
+\item{random_to_burned_ratio}{Compatibility argument: cap on background
+negatives relative to the burned-label count. Preferred configuration
+setting: \code{negative_pool_params = list(caps = c(random = ..., otsu = ...))}.
+See \strong{Compatibility arguments}.}
 
-\item{feature_whitelist_override}{Character vector or \code{NULL}. Deprecated;
-set it in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Restricts the
-features the OOF and final models may use to a subset of the package's
-supervised feature list; names outside that list are an error, so the
-list can only be narrowed, never extended. \code{NULL} (default) uses the
-configured feature set.}
+\item{otsu_unburned_to_burned_ratio}{Compatibility argument: cap on
+Otsu-based negatives relative to the burned-label count. Preferred
+configuration setting:
+\code{negative_pool_params = list(caps = c(random = ..., otsu = ...))}.}
 
-\item{feature_weights}{Named numeric vector or \code{NULL}. Deprecated; set it
-in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Per-feature weights passed
-to XGBoost for the OOF and final models. Names must be model features (or
-their \verb{_isNA} companions); unknown names are dropped with a warning and
-unnamed features keep weight 1. Values must be finite and \verb{>= 0}: values
-in (0, 1) attenuate a feature, values above 1 boost it. \code{NULL} (default)
-uses the configured weights (uniform 1 by default).}
-
-\item{reuse_upstream}{Logical. When \code{TRUE}, the pools, folds and features
-stages are skipped and their outputs are read from an existing run
-(\verb{01_POOLS/<year>_<run_label>_pools.gpkg},
-\verb{02_FOLDS/<year>_train_with_folds_<size>m.gpkg} and
-\verb{03_FEATURES/features_geometry.gpkg} must already exist). Default
-\code{FALSE}.}
-
-\item{oof_nrounds_max, oof_early_stop, oof_seed_base}{Integer or \code{NULL}.
-Deprecated; set them in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead.
-Maximum boosting rounds, early-stopping patience and base RNG seed of the
-OOF models. \code{NULL} (default) uses the configured values (package defaults
-\code{4000}, \code{80} and \code{42}).}
-
-\item{final_sampling_seed, final_seed}{Integer or \code{NULL}. Deprecated; set
-them in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. RNG seeds of the
-final model's negative sampling and of its train/validation split and
-training. \code{NULL} (default) uses the configured values (package default
-\code{42}).}
-
-\item{final_val_frac}{Numeric in (0, 1) or \code{NULL}. Deprecated. Validation
-fraction of the final model's train/validation split. \code{NULL} (default)
-uses the configured value (package default \code{0.15}).}
-
-\item{final_group_col}{Character or \code{NULL}. Deprecated. Grouping column of
-the final model's grouped train/validation split. \code{NULL} (default) uses
-the configured value (package default \code{"block_id"}).}
-
-\item{final_nrounds_max, final_early_stopping_rounds}{Integer or \code{NULL}.
-Deprecated. Maximum boosting rounds and early-stopping patience of the
-final model. \code{NULL} (default) uses the configured values (package
-defaults \code{4000} and \code{80}, the same as the OOF models).}
-
-\item{final_impute_numeric}{Character or \code{NULL}. Deprecated.
-Numeric-imputation rule of the final model, \code{"median"} or \code{"zero"}.
-\code{NULL} (default) uses the configured value (package default
-\code{"median"}).}
-
-\item{final_impute_factor_missing}{Character or \code{NULL}. Deprecated. Level
-used for missing factor/character values in the final model. \code{NULL}
-(default) uses the configured value (package default \code{"MISSING"}).}
-
-\item{...}{Not used. Any extra named argument is an error, so a misspelt
-or removed argument is never silently ignored. The removed arguments
-\code{additional_drop_cols} / \code{extra_drop_cols} give an error that points to
+\item{feature_whitelist_override}{Compatibility argument: restrict the
+permitted predictor set. Preferred configuration setting:
 \code{feature_whitelist_override}.}
+
+\item{feature_weights}{Compatibility argument: supply named per-feature
+weights. Preferred configuration setting: \code{feature_weights}.}
+
+\item{reuse_upstream}{Logical scalar. Whether to skip pool generation,
+spatial-fold assignment, and feature extraction and use existing outputs
+from those stages. Default: \code{FALSE}. See \strong{Reusing previous
+outputs}.}
+
+\item{oof_nrounds_max}{Compatibility argument: maximum boosting rounds.
+Preferred configuration setting: \code{nrounds_max}.}
+
+\item{oof_early_stop}{Compatibility argument: early-stopping patience.
+Preferred configuration setting: \code{early_stop}.}
+
+\item{oof_seed_base}{Compatibility argument: random seed for out-of-fold
+training. Preferred configuration setting: \code{oof_seed_base}.}
+
+\item{final_sampling_seed}{Compatibility argument: random seed for final
+negative-pool sampling. Preferred configuration setting:
+\code{final_sampling_seed}.}
+
+\item{final_seed}{Compatibility argument: random seed for the final split
+and model training. Preferred configuration setting: \code{final_seed}.}
+
+\item{final_val_frac}{Compatibility argument: inner validation fraction.
+Preferred configuration setting: \code{val_frac}.}
+
+\item{final_group_col}{Compatibility argument: grouping column for the
+inner train/validation split. Preferred configuration setting:
+\code{group_col}.}
+
+\item{final_nrounds_max}{Compatibility argument: maximum boosting rounds.
+Preferred configuration setting: \code{nrounds_max}.}
+
+\item{final_early_stopping_rounds}{Compatibility argument: early-stopping
+patience. Preferred configuration setting: \code{early_stop}.}
+
+\item{final_impute_numeric}{Compatibility argument: numeric imputation
+rule, \code{"median"} or \code{"zero"}. Preferred configuration setting:
+\code{impute_numeric}.}
+
+\item{final_impute_factor_missing}{Compatibility argument: category used
+for missing factor values. Preferred configuration setting:
+\code{impute_factor_missing}.}
+
+\item{...}{Reserved for detecting unsupported or removed arguments.
+Additional arguments are rejected. The removed arguments
+\code{additional_drop_cols} and \code{extra_drop_cols} produce a migration message
+directing users to \code{feature_whitelist_override}.}
 }
 \value{
-A named list of class \code{otsufire_supervised_run} with fields:
-\code{config}, \code{result_dir}, \code{pools_gpkg}, \code{train_with_folds_gpkg},
-\code{features_geometry_gpkg}, \code{oof_agg_csv}, \code{final_model_rds},
-\code{final_map_gpkg}, \code{burned_like_gpkg}, \code{timing_csv},
-\verb{consistency_*}, \code{resolved_params_provenance},
-\code{model_params_provenance} (per-field XGBoost settings and their origin),
-\code{legacy_run_summary}, \code{legacy_consistency_summary}.
+A named list of class \code{otsufire_supervised_run}.\tabular{ll}{
+   Field \tab Contents \cr
+   \code{config} \tab Configuration used for the run, including resolved settings. \cr
+   \code{result_dir} \tab Main result directory. \cr
+   \code{pools_gpkg} \tab Path to the pool GeoPackage. \cr
+   \code{train_with_folds_gpkg} \tab Path to the training layer with spatial-fold assignments. \cr
+   \code{features_geometry_gpkg} \tab Path to the feature layer with geometries. \cr
+   \code{oof_agg_csv} \tab Path to the aggregated out-of-fold output. \cr
+   \code{final_model_rds} \tab Path to the saved final-model RDS file. \cr
+   \code{final_map_gpkg} \tab Path to the scored candidate map, including \code{p_burned}. \cr
+   \code{burned_like_gpkg} \tab Path to the burned-like output layer. \cr
+   \code{timing_csv} \tab Path to the execution-time summary. \cr
+   \verb{consistency_*} \tab Fields associated with the optional consistency checks. \cr
+   \code{resolved_params_provenance} \tab Record of configuration and compatibility-argument resolution. \cr
+   \code{model_params_provenance} \tab Per-parameter provenance for the resolved XGBoost settings. \cr
+   \code{legacy_run_summary} \tab Run summary retained for compatibility. \cr
+   \code{legacy_consistency_summary} \tab Consistency summary retained for compatibility. \cr
+}
+
+
+The \code{final_map_gpkg} output is a scored layer. A score threshold is needed
+to derive a binary burned-area map.
 }
 \description{
-Runs the whole supervised workflow for one target year from a single
-configuration object: training pools, spatial folds, feature extraction,
-out-of-fold (OOF) diagnostics, final model training, scoring, and the
-optional deterministic-vs-supervised consistency check. Each stage can
-also be run on its own with the corresponding function
-(\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
-\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
-\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
-\code{\link[=check_supervised_consistency]{check_supervised_consistency()}}); the results are the same.
+Run the supervised OtsuFire workflow for one target year using a
+configuration created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
 
-The final map returned in \code{final_map_gpkg} carries the per-patch
-\code{p_burned} score. Threshold it (for example with
-\code{\link[=write_thresholded_burned]{write_thresholded_burned()}}) and pass it to \code{\link[=validate_fire_maps]{validate_fire_maps()}} for
-external validation.
+The function builds training pools from classified Otsu-guided patches and
+background samples, assigns spatial folds, extracts features, generates
+out-of-fold diagnostics, trains the final model, and scores candidate
+polygons.
+
+Optional consistency checks compare the classifications of Otsu-guided
+patches with the supervised results.
+
+The function returns output paths, configuration information, and run
+summaries. External map validation is performed separately with
+\code{\link[=validate_fire_maps]{validate_fire_maps()}} after selecting a threshold for \code{p_burned}.
 }
-\details{
-The OOF and final models share one training procedure: imputation
-medians and \code{scale_pos_weight} are fit on the training rows only, an inner
-validation split selects the number of boosting rounds by early stopping,
-and a fresh model is refit on all training rows at that round count. OOF
-applies the same capped negative sampling as the final model,
-independently within each training fold.
+\section{Compatibility arguments}{
 
-Training eligibility is defined by explicit class, never by negation: only
-burned rows (positives) and unburned rows that belong to a valid negative
-pool (\code{random}, \code{otsu}, and \code{artifact_hard} when enabled) enter training;
-review, keep, \code{NA} or unknown rows never become negatives.
+The arguments \code{random_to_burned_ratio}, \code{otsu_unburned_to_burned_ratio},
+\code{feature_whitelist_override}, \code{feature_weights} and the \verb{oof_*} /
+\verb{final_*} arguments are retained for compatibility. Their default value is
+\code{NULL}, meaning that the resolved configuration value is used.
+
+For new code, supply the corresponding setting to
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
+
+The shared configuration controls keep out-of-fold and final training
+settings aligned. Historical argument prefixes such as \code{oof_} and \code{final_}
+should not be used to define separate training procedures.
+
+See \strong{Compatibility and parameter conflicts} for how non-\code{NULL}
+compatibility arguments are resolved.
 }
-\section{Setting the methodological parameters}{
 
-Every methodological and training-control parameter (negative-pool caps,
-feature set and weights, XGBoost settings, seeds, imputation) is set in
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} and read from the configuration by every
-stage, so the OOF and final models always use the same values.
+\section{Workflow stages}{
 
-The corresponding arguments of this function are deprecated and will be
-removed in a future version. They all default to \code{NULL} (use the
-configured value). A non-\code{NULL} value:
-\itemize{
-\item replaces a value the configuration left at its default, with a
-deprecation warning of class \code{"otsufire_deprecated_param"};
-\item is an error if it contradicts a value set explicitly in the
-configuration;
-\item is applied silently if it equals the configured value.
+The function runs the following stages:\tabular{ll}{
+   Stage \tab Purpose \cr
+   Training pools \tab Build burned and unburned training pools and the candidate pool to be scored. \cr
+   Spatial folds \tab Assign spatial cross-validation folds. \cr
+   Feature extraction \tab Compute predictor variables for training and scoring polygons. \cr
+   Out-of-fold diagnostics \tab Evaluate predictions for spatially held-out labelled observations. \cr
+   Final model training \tab Select the number of boosting rounds and fit the final model. \cr
+   Scoring \tab Apply the final model to candidate polygons. \cr
+   Consistency checks \tab Optionally compare supervised results with the original classifications of Otsu-guided patches. \cr
 }
-Every resolution is recorded in the \code{resolved_params_provenance} field of
-the returned object, and the per-field XGBoost settings in
+
+
+This function runs a single-year workflow. It does not perform
+leave-one-year-out evaluation or coordinate multi-year training.
+}
+
+\section{Training eligibility and negative sampling}{
+
+Training uses explicit burned and unburned labels. Otsu-guided patches
+classified as \code{"keep"} provide the initial burned pool after label
+preparation.
+
+Unburned training examples must belong to a supported negative pool. The
+standard pools are background negatives (\code{random}) and moderately
+burned-like negatives (\code{otsu}). Additional strongly burned-like negatives
+(\code{artifact_hard}) are included when enabled and eligible under the
+configuration.
+
+Review-class candidates and rows with missing or unknown labels do not
+automatically become negatives.
+
+The same negative-sampling policy is used for out-of-fold and final
+training. Background and Otsu-based caps are applied within the relevant
+training subset. Optional hard-negative weighting follows the settings in
+\code{config$negative_pool_params}.
+}
+
+\section{Out-of-fold and final training}{
+
+Both stages use an inner validation split to select the number of boosting
+rounds through early stopping. A fresh model is then fitted on the
+available training observations using the selected number of rounds.
+
+During out-of-fold evaluation, this procedure is repeated within each
+spatial training fold. The outer held-out fold is reserved for prediction
+and evaluation.
+
+Preprocessing statistics and class-balance settings are derived from the
+relevant training observations. Consequently, quantities such as
+imputation medians and \code{scale_pos_weight} may differ between folds and the
+final model.
+
+Out-of-fold diagnostics measure agreement with the internally derived
+labels. They do not provide an independent assessment of map accuracy.
+}
+
+\section{Feature controls}{
+
+Configure the permitted feature set through \code{feature_whitelist_override}
+in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
+
+The whitelist restricts the package-supported feature set; it does not
+introduce arbitrary new predictors. Optional shape-feature availability is
+controlled separately through \code{include_shape_features} in the
+configuration.
+
+\code{feature_weights} supplies named, finite, non-negative weights for
+design-matrix columns. Unspecified features receive a weight of 1. Names
+outside the active feature space generate a warning and are excluded.
+
+These are predictor weights passed to XGBoost, not training-example
+weights or direct multipliers of feature values.
+}
+
+\section{Scores and external validation}{
+
+The scored map includes \code{p_burned}. This is a model score and is not
+necessarily a calibrated probability.
+
+To create a binary burned-area map, select a score threshold. The
+thresholded output can then be evaluated against an external reference
+with \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+
+Setting \code{run_consistency = TRUE} enables internal comparisons with
+Otsu-guided patch classifications. It does not run external map
+validation.
+}
+
+\section{Reusing previous outputs}{
+
+\code{overwrite} and \code{reuse_upstream} control different aspects of execution.\tabular{ll}{
+   Setting \tab Behaviour \cr
+   \code{overwrite = FALSE} \tab Reuse or skip existing stage outputs where supported. Useful for resuming an interrupted run with compatible settings. \cr
+   \code{overwrite = TRUE} \tab Allow stage outputs to be regenerated and replaced. \cr
+   \code{reuse_upstream = TRUE} \tab Explicitly skip pool generation, fold assignment, and feature extraction, and load their existing outputs. \cr
+}
+
+
+Explicit upstream reuse requires the expected files under the configured
+output routes, including \verb{01_POOLS/<year>_<run_label>_pools.gpkg},
+\verb{02_FOLDS/<year>_train_with_folds_<size>m.gpkg} and
+\verb{03_FEATURES/features_geometry.gpkg}.
+
+Reused products must be compatible with the current inputs and settings.
+Changes to labels, sampling rules, spatial folds, or extracted feature
+requirements may require rebuilding the affected stages.
+
+With \code{reuse_upstream = TRUE}, upstream generation remains skipped even
+when later outputs are regenerated.
+}
+
+\section{Compatibility and parameter conflicts}{
+
+Methodological and training settings should be defined in
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. The corresponding function-level
+arguments are deprecated compatibility options.
+
+A non-\code{NULL} compatibility value is handled as follows:\tabular{ll}{
+   Situation \tab Behaviour \cr
+   The configuration field uses a package default and the requested value differs \tab Apply the compatibility value and emit an \code{otsufire_deprecated_param} warning. \cr
+   The configuration contains an explicit user value that differs from the requested value \tab Stop with an error because two explicit settings conflict. \cr
+   The requested value equals the configuration value \tab Accept it without a deprecation warning. \cr
+}
+
+
+Parameter resolution is recorded in \code{resolved_params_provenance}.
+Provenance for individual XGBoost parameters is returned separately in
 \code{model_params_provenance}.
+
+Migrate calls to the configuration builder to avoid relying on these
+compatibility arguments.
 }
 
-\section{Memory}{
+\section{Memory settings}{
 
-While it runs, the function raises the terra memory limit
-(\code{terra::terraOptions(memmax)}) to 16 GB, so that large annual mosaics are
-not processed feature by feature, and restores the previous value on exit.
-The machine should have at least 16 GB of free RAM.
+During execution, the function temporarily sets the terra memory ceiling,
+\code{memmax}, to 16 GB and restores the previous setting on exit.
+
+This setting controls terra processing; it is not a limit on the total
+memory used by the R process. Available memory must also accommodate
+feature tables, model training, and other workflow objects.
 }
 
 \examples{
 \dontrun{
-cfg <- build_supervised_burned_config(
-  run_label = "balanced", internal_decisions = "decisions.gpkg",
-  change_index = "rbr.tif", target_year = 2017L,
-  options = list(data_base = "D:/FIRE", composite_base = "D:/FIRE/Composites")
+# Configure a supervised run from classified Otsu-guided patches
+config <- build_supervised_burned_config(
+  internal_decisions = "data/internal_decisions_2022.gpkg",
+  change_index = "data/RBR_2022.tif",
+  delayed_change_index = "data/RBR_delayed_2022.tif",
+  hotspots = "data/hotspots_2022.gpkg",
+  topo = "data/elevation_slope.tif",
+  corine_raster = "data/land_cover_2022.tif",
+  burnable_mask = "data/burnable_mask_2022.tif",
+  reference_burned_map = "data/reference_burned_2022.gpkg",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022",
+  negative_pool_params = list(
+    caps = c(random = 1.0, otsu = 1.0)
+  ),
+  nrounds_max = 4000L,
+  early_stop = 80L,
+  oof_seed_base = 42L,
+  final_sampling_seed = 42L,
+  final_seed = 42L,
+  random_seed = 42L
 )
-run <- run_oneyear_supervised_pipeline(cfg, run_consistency = TRUE)
-run$final_map_gpkg
+
+# Run the complete single-year workflow
+result <- run_oneyear_supervised_pipeline(
+  config = config,
+  run_consistency = TRUE,
+  overwrite = FALSE
+)
+
+# Inspect output locations
+result$result_dir
+result$final_model_rds
+result$final_map_gpkg
+result$timing_csv
+
+# Load the scored candidate map
+scored_map <- sf::st_read(
+  result$final_map_gpkg,
+  quiet = TRUE
+)
+summary(scored_map$p_burned)
+
+# Inspect how parameters were resolved
+result$resolved_params_provenance
+result$model_params_provenance
+
+# Rerun downstream stages using compatible existing pools,
+# spatial folds, and extracted features
+result_reused <- run_oneyear_supervised_pipeline(
+  config = config,
+  reuse_upstream = TRUE,
+  overwrite = TRUE,
+  run_consistency = TRUE
+)
 }
 
 }
 \seealso{
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=check_supervised_consistency]{check_supervised_consistency()}}, \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},

@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-threshold.R
 \name{write_thresholded_burned}
 \alias{write_thresholded_burned}
-\title{Threshold a scored supervised candidate set and write thresholded_burned.gpkg}
+\title{Apply a score threshold and export burned-area polygons}
 \usage{
 write_thresholded_burned(
   scored,
@@ -17,61 +17,171 @@ write_thresholded_burned(
 )
 }
 \arguments{
-\item{scored}{A scored candidate set: either a path to a GeoPackage (the
-\code{scored_all} layer is used when present, otherwise the first layer),
-or an in-memory \code{sf}.}
+\item{scored}{An \code{sf} object containing scored candidate polygons, or a
+GeoPackage path. When a path is supplied, the function reads the
+\code{scored_all} layer if present; otherwise, it reads the first layer.}
 
-\item{out_dir}{Directory to write into (created if needed).}
+\item{out_dir}{Character scalar. Output directory, created if needed.}
 
-\item{threshold}{Numeric operating threshold on \code{score_col}. Default
-\code{0.50}.}
+\item{threshold}{Numeric scalar. Minimum score required to retain a
+candidate. Values equal to the threshold are included. Default: \code{0.50}.}
 
-\item{score_col}{Name of the model-probability column. Default
-\code{"p_burned_model"} (written by the supervised scorer).}
+\item{score_col}{Character scalar. Name of the numeric score column used
+for selection. Default: \code{"p_burned_model"}. Set this explicitly when the
+input uses another score field, such as \code{"p_burned"}.}
 
-\item{layer}{Output layer name. Default \code{"thresholded_burned"}.}
+\item{layer}{Character scalar. Name of the output GeoPackage layer.
+Default: \code{"thresholded_burned"}. This argument does not select the input
+layer.}
 
-\item{filename}{Output file name. Default \code{"thresholded_burned.gpkg"}.}
+\item{filename}{Character scalar. Output filename within \code{out_dir}.
+Default: \code{"thresholded_burned.gpkg"}.}
 
-\item{overwrite}{Logical. If \code{FALSE} (default) and the output file
-already exists, the function stops; if \code{TRUE} the file (and any
-\code{-wal}/\code{-shm} sidecars) is removed first.}
+\item{overwrite}{Logical scalar. When \code{FALSE}, an existing output file
+causes an error. When \code{TRUE}, the entire output file and any associated
+\code{-wal} and \code{-shm} sidecar files are removed before writing. Default:
+\code{FALSE}.}
 
-\item{clean_geometry}{Logical (default \code{TRUE}). Drop Z/M dimensions,
-make geometries valid, and drop empties before writing.}
+\item{clean_geometry}{Logical scalar. Whether to remove Z/M dimensions,
+repair invalid geometries with \code{sf::st_make_valid()}, and remove empty
+geometries before writing. Default: \code{TRUE}.}
 
-\item{verbose}{Logical (default \code{TRUE}). Emit a one-line summary message.}
+\item{verbose}{Logical scalar. Whether to print a brief processing summary.
+Default: \code{TRUE}.}
 }
 \value{
-Invisibly, a list with \code{path}, \code{layer}, \code{threshold},
-\code{score_col}, \code{n_in}, \code{n_kept}, \code{n_nonfinite},
-\code{n_dropped_empty}, \code{crs_epsg} and \code{overwrite}.
+An invisibly returned named list containing:\tabular{ll}{
+   Field \tab Contents \cr
+   \code{path} \tab Path to the output GeoPackage. \cr
+   \code{layer} \tab Output layer name. \cr
+   \code{threshold} \tab Applied score threshold. \cr
+   \code{score_col} \tab Score column used for selection. \cr
+   \code{n_in} \tab Number of input candidates. \cr
+   \code{n_kept} \tab Number of retained output features. \cr
+   \code{n_nonfinite} \tab Number of input candidates with missing or non-finite scores. \cr
+   \code{n_dropped_empty} \tab Number of empty geometries removed during cleaning. \cr
+   \code{crs_epsg} \tab EPSG identifier reported for the output CRS, when available. \cr
+   \code{overwrite} \tab Applied overwrite setting. \cr
+}
+
+
+Assign the result to an object to inspect the summary and output path.
 }
 \description{
-Takes candidates already scored by the supervised model (a \code{scored_all}
-set carrying a per-row probability column) and writes the burned polygons
-that pass an explicit probability threshold. Use it as the final, inspectable
-threshold-and-write step of the supervised pipeline; it does only that step
-(no scoring, no model, no retraining).
+Select already-scored candidate polygons using an explicit score threshold
+and write the selected polygons to a GeoPackage.
 
-The keep rule is \code{is.finite(score) & score >= threshold}, followed by
-dropping Z/M dimensions, \code{\link[sf]{st_make_valid}}, and removal of empty
-geometries. CRS and all attribute columns (including the score column) are
-preserved.
+A candidate is retained when its score is finite and greater than or equal
+to \code{threshold}. Optional geometry cleaning removes Z/M dimensions, repairs
+invalid geometries, and removes empty geometries before export.
+
+Use this function after supervised scoring to create a thresholded
+burned-area product. It does not train a model, calculate predictions, or
+apply temporal filtering.
 }
+\section{Threshold selection}{
+
+The selection rule is \code{is.finite(score) & score >= threshold}, where
+\code{score} is the column identified by \code{score_col}.
+
+Missing and non-finite scores, including \code{NA}, \code{NaN}, \code{Inf}, and \code{-Inf},
+are excluded.
+
+The default threshold of \code{0.50} is an operating value, not an
+automatically selected optimum. Model scores are not necessarily
+calibrated probabilities. Choose the threshold using the intended mapping
+objective and appropriate evaluation results.
+}
+
+\section{Input layers and score fields}{
+
+GeoPackages may contain several scored layers with different candidate
+sets. When \code{scored} is a path, automatic selection uses \code{scored_all} if
+available and otherwise the first layer.
+
+To threshold a specific layer, read it with \code{sf::st_read()} and pass the
+resulting \code{sf} object.
+
+For outputs from \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}:
+\itemize{
+\item use \code{final_map} to threshold candidates retained after the current-year
+temporal filter;
+\item use \code{final_map_full} to threshold the complete scored candidate set;
+\item specify the score column present in the selected layer.
+}
+
+This function applies only the score threshold and optional geometry
+cleaning. It does not reproduce temporal exclusions when given the complete
+candidate set.
+}
+
+\section{Geometry cleaning}{
+
+When \code{clean_geometry = TRUE}, selected candidates are processed in this
+order:
+\enumerate{
+\item remove Z/M dimensions;
+\item repair invalid geometries;
+\item remove empty geometries.
+}
+
+The CRS and attribute columns, including the selected score column, are
+retained. Geometry repair may alter geometry structure, and removing empty
+geometries may reduce the number of exported features.
+
+When \code{clean_geometry = FALSE}, these cleaning operations are skipped.
+}
+
+\section{Existing outputs}{
+
+With \code{overwrite = TRUE}, replacement applies to the whole output
+GeoPackage, including any other layers it contains. Use a dedicated output
+filename for the thresholded product.
+}
+
 \examples{
 \dontrun{
-# Take a scored candidate set and write the thresholded burned polygons.
+# Threshold a scored_all layer containing p_burned_model
 res <- write_thresholded_burned(
-  ".../balanced/scored_all.gpkg",
-  out_dir   = ".../my_run/balanced",
+  scored = "results/scored_all.gpkg",
+  out_dir = "results/thresholded",
   threshold = 0.50,
-  overwrite = TRUE)
-res$n_in; res$n_kept; res$path
+  score_col = "p_burned_model"
+)
+
+res$n_in
+res$n_kept
+res$path
+
+# Select a specific layer from a supervised final-map GeoPackage
+public_map <- sf::st_read(
+  "path/to/final_map.gpkg",
+  layer = "final_map",
+  quiet = TRUE
+)
+
+# Threshold the public layer using its p_burned field
+res_public <- write_thresholded_burned(
+  scored = public_map,
+  out_dir = "results/thresholded",
+  threshold = 0.50,
+  score_col = "p_burned",
+  filename = "public_thresholded_burned.gpkg"
+)
+
+# Inspect the exported polygons
+burned <- sf::st_read(
+  res_public$path,
+  layer = res_public$layer,
+  quiet = TRUE
+)
+
+plot(sf::st_geometry(burned))
 }
+
 }
 \seealso{
-\code{\link{score_supervised_burned_map}},
-\code{\link{train_final_burned_model}},
-\code{\link{run_oneyear_supervised_pipeline}}
+\code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}, \code{\link[=train_final_burned_model]{train_final_burned_model()}},
+\code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}, \code{\link[=validate_fire_maps]{validate_fire_maps()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }

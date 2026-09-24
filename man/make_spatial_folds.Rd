@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-folds.R
 \name{make_spatial_folds}
 \alias{make_spatial_folds}
-\title{Build spatial block cross-validation folds for the supervised pipeline}
+\title{Assign spatial cross-validation folds to training polygons}
 \usage{
 make_spatial_folds(
   train_labelled,
@@ -16,106 +16,233 @@ make_spatial_folds(
 )
 }
 \arguments{
-\item{train_labelled}{sf POLYGON layer OR a single GPKG path. The labelled
-training pool produced by the pools stage (the \code{train_labeled} object /
-the \code{train_labeled} layer of \verb{01_POOLS/<year>_<run_label>_pools.gpkg}).
-Must carry the \code{class} column (with \code{burned}/\code{unburned} labels) and, for
-\code{split_unit = "fire"}, the \code{fire_uid} column. When a path is supplied the
-\code{train_labeled} layer is read.}
+\item{train_labelled}{\code{sf} polygon object or GeoPackage path containing the
+labelled training pool. Must contain a \code{class} column with \code{"burned"} and
+\code{"unburned"} labels. With \code{split_unit = "fire"}, a \code{fire_uid} column is
+also required. When a path is supplied, the function reads the
+\code{train_labeled} layer.}
 
-\item{config}{Required \code{otsufire_supervised_burned_config} (from
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Used to derive \code{out_dir} (the
-\verb{02_FOLDS} folder under \code{config$output_routes$base}) and the
-output-naming year (\code{config$target_year}).}
+\item{config}{Required object of class \code{otsufire_supervised_burned_config},
+created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies the target year
+and default output location.}
 
-\item{split_unit}{Character scalar. Unit kept together across folds:
-\code{"fire"} (default, recommended for transferability) or \code{"poly"}.}
+\item{split_unit}{Character scalar. Unit kept together within each
+cross-validation repetition: \code{"fire"} groups polygons by \code{fire_uid};
+\code{"poly"} treats each polygon as a separate unit. Default: \code{"fire"}.}
 
-\item{block_sizes_m}{Numeric vector. Candidate block sizes in meters, tried
-from stricter (larger) to looser. Default \code{c(5000, 3000, 2000)}.}
+\item{block_sizes_m}{Numeric vector of candidate square-block sizes in
+metres. Larger sizes are tried before smaller sizes. Default:
+\code{c(5000, 3000, 2000)}.}
 
-\item{k_candidates}{Integer vector. Candidate fold counts, each \verb{>= 2}.
-Default \code{c(5L, 4L, 3L)}.}
+\item{k_candidates}{Integer vector of candidate fold counts. Each value
+must be at least 2. Default: \code{c(5L, 4L, 3L)}.}
 
-\item{out_dir}{Character or \code{NULL}. Output folder. Defaults to
-\code{config$output_routes$folds_dir} (the \verb{02_FOLDS} folder).}
+\item{out_dir}{Character scalar or \code{NULL}. Output directory. When \code{NULL},
+uses \code{config$output_routes$folds_dir}, normally the run's \verb{02_FOLDS}
+folder.}
 
-\item{write_outputs}{Logical. Whether to write the blocks GPKG, folds CSV
-and train-with-folds GPKG. Default \code{TRUE}.}
+\item{write_outputs}{Logical scalar. Whether to write the block grid,
+fold-assignment table, and training layer with folds. Default: \code{TRUE}.}
 
-\item{overwrite}{Logical. Whether to clobber existing fold outputs. Default
-\code{FALSE}. When \code{FALSE} and all three canonical outputs already exist on
-disk, the stage reuses them instead of recomputing (the recomputation is
-skipped and the existing objects/paths are returned).}
+\item{overwrite}{Logical scalar. Whether existing fold outputs may be
+replaced. When \code{FALSE} and all three expected output files exist, they
+are reused without recomputing the partition. Default: \code{FALSE}.}
 }
 \value{
-A named list with both the objects and the written paths:
-\itemize{
-\item \code{blocks} — sf grid of the selected block size.
-\item \code{folds_table} — data.frame of polygon-level fold assignments
-(the contents written to the folds CSV).
-\item \code{train_with_folds} — sf polygons + \verb{fold_rep*} columns.
-\item \code{blocks_gpkg}, \code{folds_csv}, \code{train_with_folds_gpkg} — written
-paths (or the canonical target paths when \code{write_outputs = FALSE}).
-\item \code{selected} — the chosen \verb{(block_size_m, k_folds, ok, ...)}.
+A named list containing spatial objects, fold assignments,
+selected settings, and output paths.\tabular{ll}{
+   Field \tab Contents \cr
+   \code{blocks} \tab Selected block grid as an \code{sf} object. \cr
+   \code{folds_table} \tab \code{data.frame} containing polygon-level fold assignments. \cr
+   \code{train_with_folds} \tab Training polygons as an \code{sf} object with \verb{fold_rep*} columns. \cr
+   \code{blocks_gpkg} \tab Path to the block-grid GeoPackage. \cr
+   \code{folds_csv} \tab Path to the fold-assignment CSV. \cr
+   \code{train_with_folds_gpkg} \tab Path to the training GeoPackage with fold assignments. \cr
+   \code{selected} \tab Selected partition settings and diagnostics, including \code{block_size_m}, \code{k_folds}, and \code{ok}. \cr
 }
+
+
+When \code{write_outputs = FALSE}, path fields contain the expected target
+locations. Their presence in the returned list does not mean that files
+were written.
 }
 \description{
-Assigns spatially blocked cross-validation folds to the labelled training
-pool, so that out-of-fold diagnostics measure spatial transferability rather
-than memorisation of nearby polygons. This is the folds stage of the
-supervised pipeline; its \code{train_with_folds} output then feeds
-\code{\link[=extract_supervised_features]{extract_supervised_features()}} and \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}.
+Assign repeated spatial block cross-validation folds to the labelled
+training pool.
 
-Run it after the pools stage (\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}) and before
-feature extraction. Pass the labelled training pool and the configuration
-from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Calling this function directly
-produces the same fold outputs as the equivalent stage of the full pipeline
-\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
+The function evaluates candidate block sizes and fold counts, selects a
+partition, and assigns folds while keeping observations from the same
+splitting unit together. These assignments support the evaluation of model
+performance on spatially held-out observations.
+
+Run this stage after \code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}} and before
+feature extraction and out-of-fold diagnostics.
 }
-\section{What it does}{
+\section{Input labels and identifiers}{
 
+The input is the labelled training set returned as \code{train_labeled} by
+\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}} or stored in the \code{train_labeled} layer
+of its output GeoPackage.
+
+The argument name is \code{train_labelled}, while the pool object and
+GeoPackage layer use \code{train_labeled}.
+
+With \code{split_unit = "fire"}, polygons sharing a \code{fire_uid} are kept
+together within each repetition. Ensure that these identifiers represent
+the intended grouping units.
+}
+
+\section{Partition selection}{
+
+The function:
 \enumerate{
-\item Builds candidate square block grids over the polygons, trying each
-\code{block_sizes_m} from larger (stricter) to smaller (looser).
-\item Auto-tunes the \verb{(block_size, k)} combination against per-fold
-acceptance gates (minimum burned units and positive blocks per fold).
-\item Assigns repeated block-CV folds, keeping each \code{split_unit} (a whole
-fire or a single polygon) together within one fold.
-\item Propagates the unit-level folds back onto the polygon table.
-\item Writes the \verb{02_FOLDS} outputs and returns the in-memory objects.
-}
-When no candidate passes the acceptance gate, the best non-passing candidate
-is used, a \verb{_FOLD_FALLBACK.txt} audit file is written, and a loud
-\code{warning()} is raised.
+\item Builds candidate square-block grids over the training polygons.
+\item Evaluates combinations of block size and fold count against acceptance
+criteria, including minimum burned-unit and positive-block counts per
+fold.
+\item Selects a partition.
+\item Assigns repeated spatial folds while preserving the selected splitting
+units.
+\item Transfers fold assignments back to the polygon table.
+\item Writes outputs when requested.
 }
 
-\section{Outputs}{
+The selected settings and acceptance result are returned in \code{selected}.
 
-Written under the \verb{02_FOLDS} folder:
-\itemize{
-\item \verb{<year>_blocks_<bs>m.gpkg} — the selected block grid.
-\item \verb{<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv} — fold assignments.
-\item \verb{<year>_train_with_folds_<bs>m.gpkg} — polygons with \verb{fold_rep*}
-columns.
+Larger blocks generally impose broader spatial grouping. Block size alone
+does not guarantee a minimum distance between every training and test
+polygon, particularly near block boundaries.
 }
+
+\section{Fire-level and polygon-level splitting}{
+\tabular{ll}{
+   Setting \tab Behaviour \cr
+   \code{split_unit = "fire"} \tab Keep all polygons sharing a \code{fire_uid} in the same fold within a repetition. \cr
+   \code{split_unit = "poly"} \tab Use individual polygons as splitting units, without an additional shared-fire grouping constraint. \cr
+}
+
+
+Use fire-level splitting when multiple polygons belong to the same event
+and should not be divided between training and evaluation sets.
+}
+
+\section{Repeated cross-validation}{
+
+The returned training layer contains \verb{fold_rep*} columns, with one
+fold-assignment column per repetition.
+
+Grouping constraints apply separately within each repetition. A unit may
+receive a different fold assignment in another repetition.
+}
+
+\section{Fallback partitions}{
+
+If no candidate partition passes the acceptance criteria, the function
+selects the best available non-passing candidate, raises a warning, and
+records the fallback in a \verb{_FOLD_FALLBACK.txt} audit file.
+
+A returned result therefore does not necessarily mean that an acceptable
+partition was found. Inspect \code{selected}, including its \code{ok} value, before
+continuing to out-of-fold evaluation.
+
+A fallback may indicate that the available burned examples are too sparse
+or spatially concentrated for the requested block sizes and fold counts.
+}
+
+\section{Reusing outputs}{
+
+With \code{overwrite = FALSE}, the function reuses existing outputs when all
+three expected files are present.
+
+Before reusing them, ensure that they correspond to the current training
+polygons, labels, grouping identifiers, and fold settings. Use
+\code{overwrite = TRUE} to recompute assignments after changing those inputs.
+}
+
+\section{Output files}{
+
+Outputs are written under \code{out_dir}, normally the run's \verb{02_FOLDS} folder.\tabular{ll}{
+   Filename \tab Contents \cr
+   \verb{<year>_blocks_<bs>m.gpkg} \tab Selected spatial block grid. \cr
+   \verb{<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv} \tab Polygon-level fold assignments. \cr
+   \verb{<year>_train_with_folds_<bs>m.gpkg} \tab Training polygons with \verb{fold_rep*} columns. \cr
+}
+
+
+Here, \verb{<bs>} is the selected block size, \verb{<k>} is the fold count, \verb{<reps>}
+is the number of repetitions, and \verb{<unit>} is the splitting unit.
 }
 
 \examples{
 \dontrun{
-cfg <- build_supervised_burned_config(
-  run_label = "balanced", internal_decisions = "decisions.gpkg",
-  change_index = "rbr.tif", target_year = 2017L
+# Configure the supervised workflow
+config <- build_supervised_burned_config(
+  internal_decisions = "data/internal_decisions_2022.gpkg",
+  change_index = "data/RBR_2022.tif",
+  delayed_change_index = "data/RBR_delayed_2022.tif",
+  topo = "data/elevation_slope.tif",
+  corine_raster = "data/land_cover_2022.tif",
+  burnable_mask = "data/burnable_mask_2022.tif",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022"
 )
-pools <- build_supervised_training_pools(cfg)
-folds <- make_spatial_folds(pools$pools_gpkg, config = cfg)
-folds$train_with_folds_gpkg
+
+# Build the labelled training pool
+pools <- build_supervised_training_pools(
+  config = config,
+  write_outputs = TRUE
+)
+
+# Assign spatial folds from the written pool
+folds <- make_spatial_folds(
+  train_labelled = pools$pools_gpkg,
+  config = config,
+  split_unit = "fire",
+  block_sizes_m = c(5000, 3000, 2000),
+  k_candidates = c(5L, 4L, 3L)
+)
+
+# Inspect the selected partition and acceptance result
+folds$selected
+
+# Stop here if the selected partition failed the acceptance criteria
+if (!isTRUE(folds$selected$ok)) {
+  stop("Review the fallback partition before continuing.")
 }
+
+# Locate the training layer with fold assignments
+folds$train_with_folds_gpkg
+
+# Inspect the fold columns
+fold_columns <- grep(
+  "^fold_rep",
+  names(folds$train_with_folds),
+  value = TRUE
+)
+
+head(
+  sf::st_drop_geometry(folds$train_with_folds)[
+    , c("class", fold_columns), drop = FALSE
+  ]
+)
+
+# Alternatively, supply the in-memory labelled pool
+folds_in_memory <- make_spatial_folds(
+  train_labelled = pools$train_labeled,
+  config = config,
+  split_unit = "fire",
+  write_outputs = FALSE,
+  overwrite = TRUE
+)
+}
+
 }
 \seealso{
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}},
-\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
-\code{\link[=validate_supervised_execution]{validate_supervised_execution()}}, \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=extract_supervised_features]{extract_supervised_features()}},
+\code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

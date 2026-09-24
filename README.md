@@ -24,8 +24,8 @@ package has been rebuilt from scratch: its public API is 43 exports (36
 functions and 7 constants), and runs are driven by configuration objects rather
 than long argument lists.
 
-Code written against 0.1.x will not run unchanged. The 0.1.4 release remains
-available on CRAN for anyone who needs it.
+Code written against 0.1.x will not run unchanged. 0.1.4 is currently the
+release on CRAN, for anyone who needs it.
 
 The supervised stage — training pools, spatial folds, out-of-fold diagnostics
 and gradient-boosted scoring — is entirely new in 2.0.0 and has no counterpart
@@ -40,7 +40,7 @@ in 0.1.x.
 # install.packages("remotes")
 remotes::install_github("olgaviedma/OtsuFire", dependencies = TRUE)
 
-# CRAN currently ships the 0.1.x line, NOT this version:
+# CRAN currently ships 0.1.4, NOT this version:
 install.packages("OtsuFire")
 ```
 
@@ -289,7 +289,7 @@ Otsu-Based Burned-Area Mapping with Rule-Based Unsupervised Filters and
 Supervised Classification.* R package version 2.0.0.
 <https://github.com/olgaviedma/OtsuFire>
 
-The 0.1.x line remains available on CRAN:
+OtsuFire 0.1.4 is currently the release on CRAN:
 <https://CRAN.R-project.org/package=OtsuFire>
 
 ## Disclaimer

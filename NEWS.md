@@ -238,7 +238,7 @@ code written against 0.1.x will not run unchanged.
   diagnostics, gradient-boosted scoring) is new in 2.0.0; it has no
   counterpart in 0.1.x.
 
-The 0.1.4 release remains available on CRAN. The sections below record the
+0.1.4 is currently the release on CRAN. The sections below record the
 development history that produced 2.0.0, newest first.
 
 ## Optional shape/size feature block

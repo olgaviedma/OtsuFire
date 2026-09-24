@@ -99,9 +99,11 @@ retain in the analysis. Default `NULL`.}
 \item{observability_raster}{Optional `SpatRaster`, raster path, or
 `NULL`. When supplied, it is aligned to the validation domain and
 used to exclude reference polygons whose latest observable day of
-year does not reach the reference fire day. The current
-implementation expects a single-layer DOY raster; if a multi-layer
-raster is supplied, only the first layer is used.}
+year does not reach the reference fire day. A single-layer raster is
+read as the DOY layer. A multi-layer raster (for example a composite
+with `rbr` and `doy` bands) must contain a layer named `doy` or with a
+`_doy` / `doy_` name component; the first such layer is used, and an
+error is raised if there is none.}
 
 \item{ref_end_doy_col}{Character. Reference attribute storing the fire
 end day of year. Used first to derive `obs_ref_doy`. Default

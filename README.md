@@ -171,18 +171,30 @@ observations.
 reference such as EFFIS. It reports omission, commission, F1 and IoU.
 
 ```r
+fm <- sf::st_read(sup_run$final_map_gpkg, layer = "final_map_full", quiet = TRUE)
+burned <- fm[is.finite(fm$p_burned_model) & fm$p_burned_model >= 0.5, ]
+sf::st_write(burned, "/path/to/thresholded_burned.gpkg", quiet = TRUE)
+
 val <- validate_fire_maps(
-  predicted = sup_run$final_map_gpkg,
-  reference = "/path/to/Effis_CA_2020_maskKeep_summer.shp",
-  threshold = 0.5
+  input_shapefile = "/path/to/thresholded_burned.gpkg",
+  ref_shapefile   = "/path/to/Validation_fires_burneable_verano_FINAL/Effis_CA_2020_maskKeep_summer.gpkg",
+  mask_shapefile  = "/path/to/Mask_StudyArea_FINAL/mask_3035_2020_final.shp",
+  burnable_raster = "/path/to/burnable_mask_binary.tif",
+  year_target     = 2020L,
+  validation_dir  = "/path/to/VALIDATION",
+  observability_raster = "/path/to/MinMin_2020_mosaic_res90m.tif",  # "doy" band
+  observability_mode   = "wholefire_fraction",
+  ref_obs_doy_col      = "obs_required_doy"
 )
 ```
 
 When an `observability_raster` (day-of-year) is supplied, observability is
-assessed **temporally at the reference-fire level**: a reference fire whose date
-falls after the last observation is excluded from the reference before
-rasterization. This is *not* a pixel-level cloud mask — partially observed fires
-are kept whole.
+assessed **temporally at the reference-fire level**: with
+`observability_mode = "wholefire_fraction"` a reference fire is evaluated only
+if at least 75 % of its burnable pixels were observed on or after its required
+date, and a fire that fails is removed from both the reference and the
+evaluation domain. This is *not* a pixel-level cloud mask — fires are kept or
+removed whole.
 
 `check_supervised_consistency()` compares the deterministic and supervised
 outputs of the same run and writes per-issue diagnostic artefacts.

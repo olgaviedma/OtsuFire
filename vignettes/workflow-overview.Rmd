@@ -227,12 +227,15 @@ sf::st_write(burned, thresholded_gpkg, layer = "thresholded_burned", quiet = TRU
 
 val <- validate_fire_maps(
   input_shapefile = thresholded_gpkg,
-  ref_shapefile   = "/path/to/Validation_fires_burneable_verano/Effis_CA_2020_maskKeep_summer.shp",
-  mask_shapefile  = "/path/to/Mask_StudyArea/mask_Peninsula_3035.shp",
+  ref_shapefile   = "/path/to/Validation_fires_burneable_verano_FINAL/Effis_CA_2020_maskKeep_summer.gpkg",
+  mask_shapefile  = "/path/to/Mask_StudyArea_FINAL/mask_3035_2020_final.shp",
   burnable_raster = "/path/to/Corine_Masks/burnable_mask_binary.tif",
   year_target     = 2020L,
   validation_dir  = "/path/to/Results/VALIDATION",
-  metrics_type    = "all"
+  metrics_type    = "all",
+  observability_raster = "/path/to/MinMin_2020_mosaic_res90m.tif",  # "doy" band
+  observability_mode   = "wholefire_fraction",
+  ref_obs_doy_col      = "obs_required_doy"
 )
 
 val$metrics

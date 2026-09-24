@@ -39,9 +39,8 @@
 #'
 #' @section Model and recipe inputs:
 #' `model` and `recipe` may be in-memory objects (the
-#' [train_final_burned_model()] return fields) or RDS paths. Objects are written
-#' to temporary RDS files so the engine's load path is identical; paths are
-#' forwarded directly.
+#' [train_final_burned_model()] return fields) or RDS paths; both give the
+#' same result.
 #'
 #' @param scoring_features sf / data.frame OR a single GPKG path. The
 #'   deterministic scoring universe (the `scoring_features` layer of
@@ -103,7 +102,7 @@
 #'     legitimately excluded from the current-year public map while remaining in
 #'     the full scored layers, so
 #'     `nrow(final_map) == nrow(final_map_full) -`
-#'     `sum(final_map_full$current_year_public_drop %in% TRUE)`. This is a
+#'     `sum(final_map_full$current_year_public_drop \%in\% TRUE)`. This is a
 #'     documented methodological exclusion, not a silent row loss.
 #' }
 #'

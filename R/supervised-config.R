@@ -154,7 +154,8 @@
 #'
 #' @param min_burned_pool_n Integer `>= 0`. Sparse-year guard: the pipeline
 #'   aborts before training when fewer than this many keep-class (burned-label)
-#'   polygons remain after QA. Consumed by the pool builder / orchestrator.
+#'   polygons remain after QA. Checked by [build_supervised_training_pools()]
+#'   and [run_oneyear_supervised_pipeline()].
 #'   Default `5L`.
 #'
 #' @param nrounds_max,early_stop Integer or `NULL`. XGBoost maximum number of
@@ -200,9 +201,8 @@
 #'       OOF and FINAL.
 #'     \item `artifact_hard = list(...)` --- the OPTIONAL artifact_hard
 #'       hard-negative bucket. \strong{OFF by default} (`enabled =
-#'       FALSE`); when disabled this sub-block selects no rows and the resolved
-#'       config / training / model is byte-identical to the no-artifact_hard
-#'       baseline. Keys:
+#'       FALSE`); when disabled this sub-block selects no rows and has no effect
+#'       on the configuration, the training or the model. Keys:
 #'       \itemize{
 #'         \item `enabled` (logical, default `FALSE`) --- master switch.
 #'         \item `total_weight_ratio` (numeric `>= 0`, default `0.10`) --- the
@@ -229,11 +229,8 @@
 #'   weighted per `total_weight_ratio`, and the run writes a consolidated
 #'   `supervised_training_pool.gpkg` layer (see the \strong{Consolidated
 #'   training-pool layer} section in \strong{Details}).
-#'   The former top-level `cap_random` / `cap_otsu` builder arguments
-#'   were removed; caps live ONLY in `negative_pool_params$caps`. Passing
-#'   `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
-#'   now errors with an unused-argument error. The remaining negative-pool /
-#'   Otsu-residual engine knobs (random exclusion buffer + patch size; Otsu mode
+#'   The caps are set only in `negative_pool_params$caps`. The remaining
+#'   negative-pool engine settings (random exclusion buffer + patch size; Otsu mode
 #'   `"burnable_only"`, min pixels, buffers, core threshold, boosts, distance
 #'   power, keep/drop confidence, exclusion buffer, min area, `use_drop`,
 #'   `drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal defaults,
@@ -246,7 +243,7 @@
 #'   from the methodological fingerprint. Stored in `cfg$negative_pool_runtime`.
 #'
 #' @param random_seed Integer or `NULL`. The negative-pool random-background RNG
-#'   seed (historically `options$unb_random_seed`). It changes WHICH negatives
+#'   seed. It changes WHICH negatives
 #'   are selected, so it is methodological + reproducibility-affecting and lives
 #'   in the canonical seeds block `cfg$train_control$seeds$random_seed` alongside
 #'   the three training seeds (and is folded into the methodological
@@ -260,17 +257,14 @@
 #'   are stored in `cfg$train_control` and consumed identically by the OOF and
 #'   FINAL stages. `NULL` uses the full feature set with equal weights.
 #'
-#' @param include_shape_features Logical. OPTIONAL shape/size feature block
-#'   (OtsuFire 0.12.0), OFF by default (`FALSE`). When `TRUE` it (a) makes
-#'   feature extraction COMPUTE six geometric columns (`area_ha`, `n_pix`,
-#'   `log_area`, `perim_m`, `compactness`, `elongation`) and (b) makes them
-#'   ELIGIBLE model features: the admissible feature universe becomes the
-#'   canonical 50-name whitelist plus those six names
-#'   (`.supervised_feature_universe(TRUE)`). The OOF and FINAL stages both read
-#'   this single `cfg$train_control$include_shape_features` field, so they
-#'   cannot diverge on the active feature set. With `FALSE` (default) the
-#'   resolved feature universe and every model / OOF / FINAL / extraction output
-#'   are byte-identical to 0.11.0. SAMPLING-BIAS CAVEAT: the random-background
+#' @param include_shape_features Logical. Optional shape/size feature block,
+#'   off by default (`FALSE`). When `TRUE` it (a) makes feature extraction
+#'   compute six geometric columns (`area_ha`, `n_pix`, `log_area`, `perim_m`,
+#'   `compactness`, `elongation`) and (b) makes them eligible model features,
+#'   added to the package's supervised feature list. The OOF and FINAL stages
+#'   both read this single `cfg$train_control$include_shape_features` field, so
+#'   they cannot diverge on the active feature set. With `FALSE` (default) the
+#'   block has no effect. SAMPLING-BIAS CAVEAT: the random-background
 #'   negatives are tiny fixed cells (~0.81 ha squares), so shape/area is partly
 #'   a sampling artifact rather than a physical signal; this block is intended
 #'   for experimentation only and its effect should be judged with EFFIS, not
@@ -283,8 +277,9 @@
 #'
 #' Training eligibility is defined by EXPLICIT class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training;
-#' review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
+#' valid negative bucket (`random`, `otsu`, and `artifact_hard` when enabled)
+#' enter training; review / keep / `NA` / unknown rows never become negatives.
+#' OOF and FINAL
 #' share one internal eligibility resolver and one capping helper.
 #'
 #' @param model_params Named list or `NULL`. Optional \emph{partial} override of
@@ -485,20 +480,19 @@
 #'       ones. When set, both the random/deterministic unburned GPKG
 #'       (`<unburned_base_dir>/UNBURNED/<year>_unburned.gpkg`) and the
 #'       Otsu-negative working root (`<unburned_base_dir>/_OTSU_NEGATIVE`) live
-#'       under it. When absent (default), the historical scenario-scoped paths
-#'       are used (byte-identical behaviour).
+#'       under it. When absent (default), the negative pool is stored inside
+#'       the run's own output folder.
 #'     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
 #'       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
 #'       same names; surfaced on `cfg$tool_paths`.
 #'   }
 #'
-#'   The negative-pool knobs are no longer free-form
-#'   options. The user-settable subset lives in the typed `negative_pool_params`
-#'   block (random `n_cells` / `rbr_quantile`, Otsu `candidate_threshold` /
-#'   `reference_threshold`, `caps`), the random-background seed lives in
-#'   `random_seed`, and the technical toggles live in `runtime_options`. The
-#'   former free-form `options$unb_*` / `options$otsu_negative_*` keys are no
-#'   longer read; the remaining low-level knobs are FIXED internal defaults.
+#'   The negative-pool settings are not part of `options`: the user-settable
+#'   ones are in the typed `negative_pool_params` block (random `n_cells` /
+#'   `rbr_quantile`, Otsu `candidate_threshold` / `reference_threshold`,
+#'   `caps`), the random-background seed is `random_seed`, and the technical
+#'   toggles are in `runtime_options`; the remaining low-level settings are
+#'   fixed internal defaults.
 #'
 #'   \strong{Reproducibility-sensitive options} (set them to make a run fully
 #'   reproducible from the configuration alone): the negative-pool random
@@ -508,12 +502,10 @@
 #'   `currentyear_hotspot_density_thr` (`0.001`) and
 #'   `currentyear_temporal_penalty_floor` (`0.10`).
 #'
-#'   \strong{Deprecated / unsupported options}: the negative-pool policy is
-#'   fixed to `"all_sources"` and is no longer user-settable. Passing
-#'   `negative_pool_policy = "all_sources"` is accepted as a no-op; any other
-#'   value errors. The former `engine_root` / `supervised_engine_root` /
-#'   `scripts_root` keys are no longer used (the engine is in-package). See
-#'   \code{NEWS.md} for the full history.
+#'   \strong{Unsupported options}: the negative-pool policy is fixed to
+#'   `"all_sources"` and is not user-settable; `negative_pool_policy =
+#'   "all_sources"` is accepted and has no effect, and any other value is an
+#'   error.
 #' }
 #'
 #' @return An S3 object of class `otsufire_supervised_burned_config`.
@@ -570,8 +562,7 @@
 #' pools <- build_supervised_training_pools(cfg)
 #'
 #' ## No-hotspot profile: omit hotspots and drop the hotspot feature block via
-#' ## a whitelist override (see inst/scripts/ for the canonical versioned
-#' ## examples).
+#' ## a whitelist override.
 #' cfg_nohs <- build_supervised_burned_config(
 #'   run_label                  = "balanced",
 #'   internal_decisions         = "1994/internal_decisions.gpkg",
@@ -606,7 +597,7 @@
 #' ## After run_oneyear_supervised_pipeline(cfg_artifact_hard), open + filter the
 #' ## consolidated training pool:
 #' pool <- sf::st_read(
-#'   "results/1989/.../07_FINAL_MODEL_V2/supervised_training_pool.gpkg",
+#'   "results/1989/.../01_POOLS/supervised_training_pool.gpkg",
 #'   layer = "supervised_training_pool")
 #' table(pool$pool_source[pool$used_in_training])
 #' }

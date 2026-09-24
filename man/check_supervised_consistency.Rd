@@ -16,7 +16,7 @@ check_supervised_consistency(
 \arguments{
 \item{deterministic_decisions}{GPKG path to the deterministic
 `internal_decisions.gpkg` (must contain layer `internal_decisions`).
-sf objects are not supported in 0.2.x — pass a path instead.}
+`sf` objects are not accepted; pass a path.}
 
 \item{final_map}{GPKG path to the supervised final-map file
 (must contain layers `final_map_full` and `final_map`).}
@@ -25,19 +25,25 @@ sf objects are not supported in 0.2.x — pass a path instead.}
 `config$output_routes$consistency_dir`.}
 
 \item{config}{Optional `otsufire_supervised_burned_config`. When
-supplied, `target_year` and `scenario` are taken from it. If NULL,
-the wrapper accepts a numeric `target_year` (column 1 of the GPKG
-path's parent year folder) — see Examples in the package vignette.}
+supplied, `target_year` and `scenario` are taken from it. Otherwise
+supply `target_year` and `scenario` directly.}
 
 \item{target_year}{Optional integer; ignored when `config` is supplied.}
 
-\item{scenario}{Optional character; ignored when `config` is supplied.}
+\item{scenario}{Optional character, the run label used to name the
+output files; ignored when `config` is supplied.}
+}
+\value{
+A list with the paths of the written artefacts
+  (`consistency_issues_gpkg`, `consistency_summary_csv`,
+  `consistency_summary_txt`, `pburned_overall_summary`,
+  `pburned_by_class_input`, `pburned_by_source_set`) and `summary_row`,
+  the one-row summary of the check (`NULL` if the check could not run).
 }
 \description{
-Public consistency-check entry point defined by
-`SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`. As of Block 6 this
-wrapper executes the consistency check directly via the package-internal
-engine; the same engine is also invoked from
+Compares the deterministic decisions and the supervised final map of the
+same run and writes per-issue diagnostic artefacts (GPKG, CSV and TXT).
+The same check runs automatically from
 [run_oneyear_supervised_pipeline()] when `run_consistency = TRUE`.
 }
 \seealso{

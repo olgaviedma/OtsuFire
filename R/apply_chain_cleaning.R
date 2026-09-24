@@ -25,7 +25,7 @@
 #' touched; everything else passes through byte-for-byte. A candidate is chained when
 #' its Polsby-Popper inflation \code{1/sqrt(compact_pp)} (with
 #' \code{compact_pp = 4*pi*A/P^2}, the package convention) exceeds \code{inflation_thr}
-#' (default 22.135, the geometric-sanity-gate threshold), optionally also requiring
+#' (default 22.135), optionally also requiring
 #' \code{area_ha >= min_area_ha}. Flagged candidates are rasterised on a
 #' \code{pixel_size_m} grid and a morphological \strong{opening} (erosion then
 #' dilation with a disk of radius \code{opening_px}) severs necks narrower than the
@@ -89,7 +89,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' refine <- file.path("1_DATA/Results/1985/DETERMINISTIC/1985_very_permissive",
+#' refine <- file.path("/path/to/Results/1985/DETERMINISTIC/1985_very_permissive",
 #'                     "02_REFINE/BA_1985_REFINE_MERGED_otsu285_d115_seed12_whitebox.gpkg")
 #' # cut necks up to 180 m wide on chained blobs only:
 #' res <- apply_chain_cleaning(refine, dechain_distance_m = 180)

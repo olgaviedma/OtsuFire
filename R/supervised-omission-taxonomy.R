@@ -31,7 +31,7 @@
 #'
 #' Fixed thresholds and the class-level/colour vectors that define the
 #' candidate-first omission taxonomy (7 classes) and the commission taxonomy
-#' (4 classes). These are the single source of truth used by
+#' (4 classes). They are the values used by
 #' \code{\link{of_classify}} and \code{\link{of_classify_commission}}.
 #'
 #' \describe{
@@ -113,9 +113,9 @@ OF_CLC <- data.frame(code = 1:11, burnable = c(rep(TRUE, 7), rep(FALSE, 4)))
 
 #' Classify omission sources (candidate-first 7-class taxonomy)
 #'
-#' THE omission classifier. For each omitted fire, candidate presence is
-#' evaluated FIRST: when the total candidate overlap is below \code{OF_SLIVER}
-#' the fire has NO final candidate and is classified by the physical
+#' Classifies the source of each omitted fire. Candidate presence is
+#' evaluated first: when the total candidate overlap is below \code{OF_SLIVER}
+#' the fire has no final candidate and is classified by the physical
 #' RBR/burnability cascade; otherwise it takes the dominant of its
 #' keep/review/drop footprints. Every no-candidate class depends only on
 #' \code{(burnable, rbr, seed)} and is invariant between models.

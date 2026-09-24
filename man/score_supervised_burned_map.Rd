@@ -142,9 +142,8 @@ to the recipe sentinel; an all-`NA` feature is median-imputed.
 \section{Model and recipe inputs}{
 
 `model` and `recipe` may be in-memory objects (the
-[train_final_burned_model()] return fields) or RDS paths. Objects are written
-to temporary RDS files so the engine's load path is identical; paths are
-forwarded directly.
+[train_final_burned_model()] return fields) or RDS paths; both give the
+same result.
 }
 
 \section{Output-layer contract}{
@@ -167,7 +166,7 @@ deliberate contracts, so they are NOT expected to have equal row counts:
     legitimately excluded from the current-year public map while remaining in
     the full scored layers, so
     `nrow(final_map) == nrow(final_map_full) -`
-    `sum(final_map_full$current_year_public_drop %in% TRUE)`. This is a
+    `sum(final_map_full$current_year_public_drop \%in\% TRUE)`. This is a
     documented methodological exclusion, not a silent row loss.
 }
 }

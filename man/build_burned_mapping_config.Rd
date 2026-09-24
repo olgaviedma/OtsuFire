@@ -28,12 +28,11 @@ used with pre-built candidates, for example direct calls to
 \code{\link[=score_burned_patches]{score_burned_patches()}}.}
 
 \item{vegetation_map}{Raster, `sf` object, or path. Optional vegetation
-or land-cover stratification layer (CORINE-compatible in OtsuFire
-0.2.x).}
+or land-cover stratification layer (CORINE-compatible).}
 
 \item{burnable_mask}{Character. Path to a raster on disk with the
 binary burnable-area mask (`1 = burnable`, `0 = non-burnable`).
-Required. **Path-only contract (P0-DET-01, 2026-05-28):** in-memory
+Required. **Path only:** in-memory
 `SpatRaster` / `sf` / `SpatVector` objects are rejected with an
 explicit error naming the parameter and the received class. Persist
 in-memory inputs to disk first.}
@@ -47,8 +46,8 @@ previous-year burned map used for temporal conflict assessment.}
 \item{reference_burned_map}{Character. Path to a vector or raster
 reference of burned area on disk, used by
 \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-validation is requested. Optional. **Path-only contract
-(P0-DET-01, 2026-05-28):** in-memory `sf` / `SpatRaster` /
+validation is requested. Optional. **Path
+only:** in-memory `sf` / `SpatRaster` /
 `SpatVector` objects are rejected with an explicit error naming
 the parameter and the received class. Persist in-memory inputs to
 disk first.}

@@ -960,9 +960,9 @@
 #'   asserts the scoring feature schema is compatible.
 #' @param scoring_feature_names Character or `NULL`. The available scoring-feature
 #'   column names, for check (8). `NULL` skips the schema check.
-#' @param data_base,composite_base,result_name Character or `NULL`. The resolved
-#'   convention roots, so the validator resolves the SAME input paths the
-#'   orchestrator will consume (cfg path \%||\% convention).
+#' @param data_base,composite_base,result_name Character or `NULL`. The data
+#'   roots used to locate inputs that the config does not give explicitly, so
+#'   the validator checks the same input paths the pipeline will use.
 #'
 #' @return The report `data.frame` (see \strong{The report}). Visible when
 #'   `strict = FALSE`; invisible when `strict = TRUE` and all blocking checks pass.
@@ -970,6 +970,7 @@
 #' @examples
 #' \dontrun{
 #' cfg <- build_supervised_burned_config(
+#'   run_label          = "balanced",
 #'   internal_decisions = "1985/05_DECISIONS/internal_decisions.gpkg",
 #'   change_index       = "MinMin_1985_mosaic_res90m.tif",
 #'   target_year        = 1985

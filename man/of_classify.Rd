@@ -23,9 +23,9 @@ with the hierarchical keep/review/drop candidate footprints (see
 An ordered \code{factor} with levels \code{OF_LEVELS}.
 }
 \description{
-THE omission classifier. For each omitted fire, candidate presence is
-evaluated FIRST: when the total candidate overlap is below \code{OF_SLIVER}
-the fire has NO final candidate and is classified by the physical
+Classifies the source of each omitted fire. Candidate presence is
+evaluated first: when the total candidate overlap is below \code{OF_SLIVER}
+the fire has no final candidate and is classified by the physical
 RBR/burnability cascade; otherwise it takes the dominant of its
 keep/review/drop footprints. Every no-candidate class depends only on
 \code{(burnable, rbr, seed)} and is invariant between models.

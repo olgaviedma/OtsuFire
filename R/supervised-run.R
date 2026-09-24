@@ -1,219 +1,143 @@
 #' Run the complete one-year supervised burned-area workflow
 #'
 #' @description
-#' Top-level one-year supervised orchestrator defined by
-#' `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`. Chains pool
-#' generation, spatial folds, feature extraction, OOF diagnostics, final
-#' model training, scoring, and optional consistency checks for a single
-#' target year and scenario.
+#' Runs the whole supervised workflow for one target year from a single
+#' configuration object: training pools, spatial folds, feature extraction,
+#' out-of-fold (OOF) diagnostics, final model training, scoring, and the
+#' optional deterministic-vs-supervised consistency check. Each stage can
+#' also be run on its own with the corresponding function
+#' ([build_supervised_training_pools()], [make_spatial_folds()],
+#' [extract_supervised_features()], [run_oof_diagnostics()],
+#' [train_final_burned_model()], [score_supervised_burned_map()],
+#' [check_supervised_consistency()]); the results are the same.
 #'
-#' Delegates the heavy numerical chain to the validated supervised engine
-#' (`run_supervised_pipeline()` inside `03_PATCH_LEVEL_PIPELINE_2.R`) via
-#' the internal dispatcher, with configuration injected. Mirrors the
-#' Block 2b deterministic dispatcher pattern.
-#'
-#' The generic multi-year `run_supervised_pipeline()` is intentionally
-#' NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
-#'
-#' Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
-#' be passed to [validate_fire_maps()] for external validation.
+#' The final map returned in `final_map_gpkg` carries the per-patch
+#' `p_burned` score. Threshold it (for example with
+#' [write_thresholded_burned()]) and pass it to [validate_fire_maps()] for
+#' external validation.
 #'
 #' @param config `otsufire_supervised_burned_config` object from
 #'   [build_supervised_burned_config()].
-#' @param run_consistency Logical. Whether to execute the
-#'   deterministic-vs-supervised consistency block.
-#' @param overwrite Logical. Default `FALSE`: existing on-disk stage
-#'   outputs are skipped/reused instead of being clobbered (the flag is
-#'   forwarded to the unburned builder and the OOF / final-model
-#'   wrappers). Set `TRUE` to regenerate/clobber every stage output. (The
-#'   default is `FALSE` so an interrupted run can resume without
-#'   recomputing completed stages. Before 2026-06-05 this flag was
-#'   cosmetic: it was validated but never threaded, and the engine always
-#'   behaved as if `overwrite = TRUE`.)
-#' @param random_to_burned_ratio Numeric. Cap on
-#'   random-burnable-background negatives for the FINAL model, as a
-#'   multiple of `n_burned`. Default `1.0` (historical behaviour).
-#' @param otsu_unburned_to_burned_ratio Numeric. Cap on Otsu current-year
-#'   unburned-patch negatives for the FINAL model, as a multiple of
-#'   `n_burned`. Default `1.0` (historical behaviour).
-#' @param feature_whitelist_override Character vector. Optional subset
-#'   of the canonical `.supervised_feature_cols` whitelist that the
-#'   supervised stages (OOF + final model) are allowed to see. Names
-#'   not in `.supervised_feature_cols` are rejected with an error: the
-#'   canonical list is fixed and this argument can only RESTRICT it,
-#'   never extend it. Default `NULL` reproduces the canonical 50-feature
-#'   behaviour. The OOF wrapper and the final model both consume the
-#'   same active whitelist, so OOF metrics and final-model behaviour
-#'   stay symmetric. Phase B Exp4b example: pass
-#'   `setdiff(OtsuFire:::.supervised_feature_cols,
-#'           c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`
-#'   to drop the four hotspot-presence features.
-#' @param feature_weights Named numeric vector forwarded to xgboost via
-#'   the `xgb.DMatrix` `feature_weights` info on every per-fold OOF
-#'   dtrain/dtest and on the final-model dtrain/dval. Names must
-#'   correspond to columns of the supervised design matrix
-#'   (i.e. members of the active whitelist or their `_isNA`
-#'   companions). Names that do not appear in the active feature space
-#'   trigger a warning and are silently dropped; features the caller
-#'   does not name implicitly receive weight 1.0. Values must be
-#'   finite and >= 0; values in (0, 1) attenuate, > 1 boost. Default
-#'   `NULL` reproduces the canonical uniform-1.0 behaviour. Phase B
-#'   Exp5a example: pass
-#'   `setNames(rep(0.05, length(hs_cols)), hs_cols)` for the 13
-#'   hotspot columns to attenuate them by 20x.
+#' @param run_consistency Logical. Whether to run the
+#'   deterministic-vs-supervised consistency check. Default `TRUE`.
+#' @param overwrite Logical. Default `FALSE`: stage outputs that already
+#'   exist on disk are reused, so an interrupted run can resume without
+#'   recomputing completed stages. Set `TRUE` to regenerate every stage
+#'   output.
+#' @param random_to_burned_ratio,otsu_unburned_to_burned_ratio Numeric or
+#'   `NULL`. Deprecated; set `negative_pool_params$caps` in
+#'   [build_supervised_burned_config()] instead. Caps on the
+#'   burnable-background and moderately burned-like negatives, as multiples
+#'   of the number of burned labels. `NULL` (default) uses the configured
+#'   caps (package default `1.0` each).
+#' @param feature_whitelist_override Character vector or `NULL`. Deprecated;
+#'   set it in [build_supervised_burned_config()] instead. Restricts the
+#'   features the OOF and final models may use to a subset of the package's
+#'   supervised feature list; names outside that list are an error, so the
+#'   list can only be narrowed, never extended. `NULL` (default) uses the
+#'   configured feature set.
+#' @param feature_weights Named numeric vector or `NULL`. Deprecated; set it
+#'   in [build_supervised_burned_config()] instead. Per-feature weights passed
+#'   to XGBoost for the OOF and final models. Names must be model features (or
+#'   their `_isNA` companions); unknown names are dropped with a warning and
+#'   unnamed features keep weight 1. Values must be finite and `>= 0`: values
+#'   in (0, 1) attenuate a feature, values above 1 boost it. `NULL` (default)
+#'   uses the configured weights (uniform 1 by default).
+#' @param reuse_upstream Logical. When `TRUE`, the pools, folds and features
+#'   stages are skipped and their outputs are read from an existing run
+#'   (`01_POOLS/<year>_<run_label>_pools.gpkg`,
+#'   `02_FOLDS/<year>_train_with_folds_<size>m.gpkg` and
+#'   `03_FEATURES/features_geometry.gpkg` must already exist). Default
+#'   `FALSE`.
+#' @param oof_nrounds_max,oof_early_stop,oof_seed_base Integer or `NULL`.
+#'   Deprecated; set them in [build_supervised_burned_config()] instead.
+#'   Maximum boosting rounds, early-stopping patience and base RNG seed of the
+#'   OOF models. `NULL` (default) uses the configured values (package defaults
+#'   `4000`, `80` and `42`).
+#' @param final_sampling_seed,final_seed Integer or `NULL`. Deprecated; set
+#'   them in [build_supervised_burned_config()] instead. RNG seeds of the
+#'   final model's negative sampling and of its train/validation split and
+#'   training. `NULL` (default) uses the configured values (package default
+#'   `42`).
+#' @param final_val_frac Numeric in (0, 1) or `NULL`. Deprecated. Validation
+#'   fraction of the final model's train/validation split. `NULL` (default)
+#'   uses the configured value (package default `0.15`).
+#' @param final_group_col Character or `NULL`. Deprecated. Grouping column of
+#'   the final model's grouped train/validation split. `NULL` (default) uses
+#'   the configured value (package default `"block_id"`).
+#' @param final_nrounds_max,final_early_stopping_rounds Integer or `NULL`.
+#'   Deprecated. Maximum boosting rounds and early-stopping patience of the
+#'   final model. `NULL` (default) uses the configured values (package
+#'   defaults `4000` and `80`, the same as the OOF models).
+#' @param final_impute_numeric Character or `NULL`. Deprecated.
+#'   Numeric-imputation rule of the final model, `"median"` or `"zero"`.
+#'   `NULL` (default) uses the configured value (package default
+#'   `"median"`).
+#' @param final_impute_factor_missing Character or `NULL`. Deprecated. Level
+#'   used for missing factor/character values in the final model. `NULL`
+#'   (default) uses the configured value (package default `"MISSING"`).
+#' @param ... Not used. Any extra named argument is an error, so a misspelt
+#'   or removed argument is never silently ignored. The removed arguments
+#'   `additional_drop_cols` / `extra_drop_cols` give an error that points to
+#'   `feature_whitelist_override`.
 #'
-#' @param reuse_upstream Logical. When `TRUE`, skip STEP A (pools),
-#'   STEP B1-B2 (folds), and STEP B3 (features), and consume pre-existing
-#'   upstream artefacts from disk instead. Requires an existing baseline
-#'   run with `01_POOLS/<year>_<run_label>_pools.gpkg`,
-#'   `02_FOLDS/<year>_train_with_folds_<size>m.gpkg`, and
-#'   `03_FEATURES/features_geometry.gpkg` already present. Default
-#'   `FALSE` reproduces the historical behaviour.
-#'
-#' @param oof_nrounds_max Integer. Maximum xgboost boosting rounds for the OOF
-#'   per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
-#'   FINAL-model default (was `3000`). Threaded to [run_oof_diagnostics()].
-#' @param oof_early_stop Integer. xgboost early-stopping patience for the OOF
-#'   per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
-#'   (was `75`).
-#' @param oof_seed_base Integer. Base RNG seed for the repeated block-CV OOF
-#'   runs. Default `42`. The canonical seed shared with the FINAL stage.
-#' @param final_sampling_seed Integer. RNG seed for the FINAL-model
-#'   negative-pool sampling. Default `42`. FRENTE 1: UNIFIED with the OOF
-#'   canonical seed (was `999`). Threaded to [train_final_burned_model()].
-#' @param final_seed Integer. RNG seed for the FINAL-model train/val split and
-#'   xgboost training. Default `42`. FRENTE 1: UNIFIED with the OOF canonical
-#'   seed (was `999`).
-#' @param final_val_frac Numeric in (0, 1). Validation fraction for the
-#'   FINAL-model train/val split. Default `0.15`.
-#' @param final_group_col Character or `NULL`. Grouping column for the
-#'   FINAL-model grouped train/val split. Default `"block_id"`.
-#' @param final_nrounds_max Integer. Maximum xgboost boosting rounds for the
-#'   FINAL model. Default `4000`. FRENTE 1 (2026-06-05): now UNIFIED with
-#'   `oof_nrounds_max`.
-#' @param final_early_stopping_rounds Integer. xgboost early-stopping patience
-#'   for the FINAL model. Default `80`. FRENTE 1: now UNIFIED with
-#'   `oof_early_stop`.
-#' @param final_impute_numeric Character. Numeric-imputation rule for the
-#'   FINAL model: `"median"` (default) or `"zero"`.
-#' @param final_impute_factor_missing Character. Sentinel level for missing
-#'   factor/character values in the FINAL model. Default `"MISSING"`.
 #' @details
-#' OOF uses the same capped negative-sampling policy as the final model, applied
-#' independently within each training fold. The OOF and FINAL stages share one
-#' internal core — medians and `scale_pos_weight` are fit on the training rows
-#' only, an inner validation split is the sole early-stopping set, and a fresh
-#' model is refit on all training rows at the selected `best_iteration` before
-#' deployment.
+#' The OOF and final models share one training procedure: imputation
+#' medians and `scale_pos_weight` are fit on the training rows only, an inner
+#' validation split selects the number of boosting rounds by early stopping,
+#' and a fresh model is refit on all training rows at that round count. OOF
+#' applies the same capped negative sampling as the final model,
+#' independently within each training fold.
 #'
-#' Training eligibility is defined by EXPLICIT class, never by negation: only
-#' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training;
-#' review / keep / `NA` / unknown rows never become negatives. Both stages route
-#' through one internal eligibility resolver and one shared capping helper.
+#' Training eligibility is defined by explicit class, never by negation: only
+#' burned rows (positives) and unburned rows that belong to a valid negative
+#' pool (`random`, `otsu`, and `artifact_hard` when enabled) enter training;
+#' review, keep, `NA` or unknown rows never become negatives.
 #'
-#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
-#' The methodological / training-control arguments of this function (the two
-#' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
-#' `oof_*` / `final_*` training knobs) are
-#' DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
-#' methodological parameter is [build_supervised_burned_config()]
-#' (`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
-#' truth). The shims are resolved ONLY at this public boundary and the resolved
-#' scalars are what flow downstream.
+#' @section Setting the methodological parameters:
+#' Every methodological and training-control parameter (negative-pool caps,
+#' feature set and weights, XGBoost settings, seeds, imputation) is set in
+#' [build_supervised_burned_config()] and read from the configuration by every
+#' stage, so the OOF and final models always use the same values.
 #'
-#' Behaviour of a non-`NULL` function-level override:
+#' The corresponding arguments of this function are deprecated and will be
+#' removed in a future version. They all default to `NULL` (use the
+#' configured value). A non-`NULL` value:
 #' \itemize{
-#'   \item over a CANONICAL DEFAULT field -> the override is applied and a
-#'     deprecation warning of stable class `"otsufire_deprecated_param"` is
-#'     emitted, naming the parameter and pointing at the builder;
-#'   \item over an EXPLICIT builder-user value that DIFFERS -> a hard error
-#'     (two explicit, incompatible sources are never silently reconciled);
-#'   \item equal to the cfg value -> applied silently.
+#'   \item replaces a value the configuration left at its default, with a
+#'     deprecation warning of class `"otsufire_deprecated_param"`;
+#'   \item is an error if it contradicts a value set explicitly in the
+#'     configuration;
+#'   \item is applied silently if it equals the configured value.
 #' }
-#' Each resolution is recorded (cfg value / requested override / resolved value /
-#' provenance label) on `cfg$resolved_params_provenance` and in the returned run
-#' object's `resolved_params_provenance` field. The PER-FIELD `cfg$model_params`
-#' provenance (the builder folds a PARTIAL xgb override onto the canonical block,
-#' so each xgb field carries canonical / requested / resolved / provenance) is
-#' surfaced separately on the run object's `model_params_provenance` field.
+#' Every resolution is recorded in the `resolved_params_provenance` field of
+#' the returned object, and the per-field XGBoost settings in
+#' `model_params_provenance`.
 #'
-#' REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
-#' future minor version. Migrate callers to
-#' `build_supervised_burned_config(<param>=...)`; the warning-free canonical
-#' path is the builder.
-#'
-#' @section Gate 1B (2026-06-07) cfg single source of truth:
-#' The supervised methodological / training-control parameters now live in
-#' exactly ONE place: the cfg object built by
-#' [build_supervised_burned_config()] (`cfg$model_params` and
-#' `cfg$train_control`). Every methodological argument of this function (the
-#' two `*_to_burned_ratio` caps — `random_to_burned_ratio` /
-#' `otsu_unburned_to_burned_ratio` — `feature_whitelist_override`,
-#' `feature_weights`, the `oof_*` / `final_*` training knobs)
-#' now DEFAULTS TO `NULL`, meaning "use the value resolved on
-#' the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
-#' explicit argument > cfg) and is written through to BOTH the OOF and FINAL
-#' stages identically. The canonical numeric defaults are no longer duplicated in
-#' this function; change them once, at the builder, and the whole chain follows.
-#'
-#' @section D1 training knobs (2026-06-05) + FRENTE 1 unification:
-#' The `oof_*` and `final_*` arguments expose the OOF and final-model training
-#' hyperparameters that were previously hardcoded at the engine defaults. They
-#' remain fully user-overridable. FRENTE 1 (2026-06-05) UNIFIED the OOF and
-#' FINAL hyperparameters to a single CANONICAL set: the XGBoost params block
-#' (objective/eval_metric/eta/max_depth/min_child_weight/subsample/
-#' colsample_bytree/gamma/lambda/alpha) now comes from one source of truth
-#' [.of_canonical_xgb_params()] used by BOTH stages, and the training controls
-#' were aligned (`oof_nrounds_max` 3000 -> 4000, `oof_early_stop` 75 -> 80,
-#' `final_sampling_seed`/`final_seed` 999 -> 42 to match `oof_seed_base`). This
-#' is RESULT-AFFECTING (the FINAL model changes vs the historical baseline) and
-#' was signed off by Natalia; it is first evaluated in the 2017 run. Only
-#' `scale_pos_weight` differs between the two stages, because each computes it
-#' from its own training labels.
-#'
-#' @param ... Migration trap for removed arguments. Reserved for
-#'   detecting calls that still pass the OtsuFire 0.4.x deny-list
-#'   arguments `additional_drop_cols` / `extra_drop_cols`, which were
-#'   removed in 0.5.0; such calls error with a migration message
-#'   pointing at `feature_whitelist_override`. Any other named argument
-#'   passed here is also rejected with an "Unused arguments" error
-#'   (never silently ignored).
-#'
-#' @section Phase B sampling caps and feature space:
-#' The pass-through hooks above support the Phase B experiment matrix
-#' (`random_to_burned_ratio`  in  \{0.25, 1.0, Inf\} x
-#' hotspot-feature variants \{All, L1, L2, None\}) and the eventual mass
-#' re-training (10 years x 3 scenarios). All defaults reproduce the
-#' historical behaviour byte-for-byte; a caller that does not pass
-#' them obtains exactly the same final model as before.
-#'
-#' OtsuFire 0.5.0 (2026-05-09): the deprecated `additional_drop_cols`
-#' deny-list was removed. Callers that pass it now get a hard error
-#' with a migration message pointing at `feature_whitelist_override`.
-#' Phase B Exp4b is reproduced by passing
-#' `feature_whitelist_override = setdiff(.supervised_feature_cols,
-#' c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`;
-#' Phase B Exp5a is reproduced by passing a `feature_weights` vector
-#' that sets the 13 hotspot columns to 0.05.
-#'
-#' @section terra memory ceiling:
-#' On entry the function lifts `terra::terraOptions(memmax)` to 16 GB
-#' and restores the previous value on exit (`on.exit()`), so the
-#' caller's R session is not contaminated. The default terra ceiling
-#' (~1 GB) forces per-feature processing on large mosaics and was
-#' exhausting RAM inside `extract_features()` and downstream raster
-#' stages when the annual mosaic carried ~16k polygons (e.g. 2025).
-#' The 16 GB ceiling assumes the host has at least that much free
-#' RAM available; the package was developed on a 64 GB machine.
+#' @section Memory:
+#' While it runs, the function raises the terra memory limit
+#' (`terra::terraOptions(memmax)`) to 16 GB, so that large annual mosaics are
+#' not processed feature by feature, and restores the previous value on exit.
+#' The machine should have at least 16 GB of free RAM.
 #'
 #' @return A named list of class `otsufire_supervised_run` with fields:
 #'   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
 #'   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
 #'   `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
 #'   `consistency_*`, `resolved_params_provenance`,
-#'   `model_params_provenance` (per-field cfg$model_params provenance table),
+#'   `model_params_provenance` (per-field XGBoost settings and their origin),
 #'   `legacy_run_summary`, `legacy_consistency_summary`.
+#'
+#' @examples
+#' \dontrun{
+#' cfg <- build_supervised_burned_config(
+#'   run_label = "balanced", internal_decisions = "decisions.gpkg",
+#'   change_index = "rbr.tif", target_year = 2017L,
+#'   options = list(data_base = "D:/FIRE", composite_base = "D:/FIRE/Composites")
+#' )
+#' run <- run_oneyear_supervised_pipeline(cfg, run_consistency = TRUE)
+#' run$final_map_gpkg
+#' }
 #'
 #' @family workflow
 #' @export

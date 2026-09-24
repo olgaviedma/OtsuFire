@@ -90,7 +90,7 @@ pixel values are extracted per polygon, finite values are accumulated
 to derive reference quantiles, and a per-polygon median is accumulated
 into \code{keep_medians}. Non-finite values are ignored.
 
-\strong{Fixed V1 internal parameters} (not exposed): \code{qref_prob =
+\strong{Fixed internal parameters} (not exposed): \code{qref_prob =
 0.05}, \code{promote_p_above_ref = 0.50}, \code{promote_percentile =
 0.10}, \code{min_area_ha = 10}. \code{min_pix} is also not exposed but
 is \emph{derived} (not \code{NULL}) using the exact same logic as the

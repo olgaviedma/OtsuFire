@@ -1,5 +1,3 @@
-#' Build a mosaic from raster tiles
-#'
 #' @title Build a mosaic from raster tiles
 #' @description
 #' Build a masked mosaic from raster tiles stored in a folder. The function

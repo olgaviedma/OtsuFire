@@ -73,9 +73,9 @@
 #'   the canonical parameter block is built (see Details).
 #' @param feature_whitelist_override Character vector restricting the active OOF
 #'   feature space to a subset of the canonical whitelist, or `NULL` (default)
-#'   for the full whitelist. Forwarded to [run_dm_oof_pipeline()].
+#'   for the full whitelist.
 #' @param feature_weights Named numeric vector of per-feature weights, or
-#'   `NULL` (default). Forwarded to [run_dm_oof_pipeline()].
+#'   `NULL` (default).
 #' @param include_shape_features Logical or `NULL`. Optional shape/size feature
 #'   block. `NULL` (default) reads `cfg$train_control$include_shape_features` —
 #'   the same field the final stage reads, so OOF and final cannot diverge on
@@ -109,10 +109,9 @@
 #'   design-matrix bundle. Defaults to `config$output_routes$matrix_dir`.
 #' @param labelled_gpkg Character or `NULL`. Path to the train-with-folds GPKG
 #'   used to attach geometry to the OOF aggregate for the
-#'   `labeled_oof_summary` layer. When `NULL` no labelled-summary GPKG is
-#'   written by the inner wrapper (the orchestrator always passes the runtime
-#'   `02_FOLDS` train-with-folds GPKG; its block size is not fixed, so it is an
-#'   explicit argument rather than a config route).
+#'   `labeled_oof_summary` layer (normally the
+#'   `02_FOLDS/<year>_train_with_folds_<bs>m.gpkg` written by
+#'   [make_spatial_folds()]). When `NULL` no labelled-summary GPKG is written.
 #' @param labelled_layer Character. Layer name inside `labelled_gpkg`. Default
 #'   `"train_with_folds"`.
 #' @details
@@ -125,7 +124,8 @@
 #'
 #' Training eligibility is defined by explicit class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training; review / keep / `NA` /
+#' valid negative bucket (`random`, `otsu`, and `artifact_hard` when enabled)
+#' enter training; review / keep / `NA` /
 #' unknown rows never become negatives. The OOF and final stages share one
 #' eligibility resolver and one capping helper, so they cannot diverge on which
 #' rows are used or how negatives are capped.
@@ -142,11 +142,10 @@
 #' @param group_col Character or `NULL`. Grouping column for the grouped
 #'   block-CV. `NULL` (default) reads `cfg$train_control$group_col` (the same
 #'   field the final stage reads, so OOF and final never diverge).
-#' @param overwrite Logical. Forwarded to [run_dm_oof_pipeline()] (controls
-#'   whether the design-matrix bundle is recomputed/clobbered). Default `TRUE`.
-#' @param .internal_resolved Internal use only; set by the orchestrator. When
-#'   `TRUE` the deprecated methodological shims were already resolved upstream,
-#'   so this boundary skips re-warning. Direct callers leave it `FALSE`.
+#' @param overwrite Logical. Whether the design-matrix bundle is recomputed
+#'   and overwritten. Default `TRUE`.
+#' @param .internal_resolved For internal use by
+#'   [run_oneyear_supervised_pipeline()]. Leave it `FALSE` (the default).
 #'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{

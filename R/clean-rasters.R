@@ -332,7 +332,6 @@ clean_raster_inmem <- function(
 #' Check a raster file for common integrity problems and, if needed,
 #' repair it directly on disk.
 #'
-#' This function is the file-based counterpart of [clean_raster_inmem()].
 #' It loads a raster with `terra::rast()`, checks whether the file is
 #' internally consistent, and optionally rewrites it using the standard
 #' OtsuFire output settings.
@@ -382,9 +381,6 @@ clean_raster_inmem <- function(
 #' @param verbose Logical scalar. If `TRUE`, informative progress messages
 #'   are emitted, including confirmation when the raster is already clean.
 #' @details
-#' The raster is evaluated using the same integrity rules as
-#' [clean_raster_inmem()].
-#'
 #' A raster is considered inconsistent when at least one of the following
 #' conditions is detected:
 #' \enumerate{

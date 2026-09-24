@@ -55,7 +55,7 @@ Run it AFTER feature extraction and the spatial folds, and BEFORE the OOF /
 final-model stages. It selects candidates from `scoring_features` (which only
 exists post-extraction), so it cannot run before [make_spatial_folds()].
 Promoted rows receive synthetic per-repeat folds plus a unique
-`block_id`/`fire_uid` (assigned by the orchestrator after promotion);
+`block_id`/`fire_uid` (assigned by [run_oneyear_supervised_pipeline()] after promotion);
 [make_spatial_folds()] is not re-run. This way the promoted rows still appear
 in the out-of-fold predictions and are trained on by the final model.
 

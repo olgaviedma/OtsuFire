@@ -43,7 +43,7 @@ OF_COM_COLORS
 \description{
 Fixed thresholds and the class-level/colour vectors that define the
 candidate-first omission taxonomy (7 classes) and the commission taxonomy
-(4 classes). These are the single source of truth used by
+(4 classes). They are the values used by
 \code{\link{of_classify}} and \code{\link{of_classify_commission}}.
 }
 \details{

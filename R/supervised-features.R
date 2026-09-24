@@ -19,7 +19,7 @@
 #'     post-fire DOY, autumn-winter RBR, DEM, slope, CORINE) to the
 #'     change-index master template.
 #'   \item Optionally loads the target-year hotspot layer.
-#'   \item Runs the patch-level feature engine [extract_features()] on the
+#'   \item Runs the patch-level feature engine on the
 #'     labelled and scoring polygons with the pipeline's standard settings.
 #'   \item Optionally appends shape/size features (see `use_shape`).
 #'   \item Writes `features_geometry.gpkg` (carrying the `train_features` and
@@ -28,13 +28,9 @@
 #' }
 #'
 #' @details
-#' \strong{Self-contained raster loading.} The aligned raster stack, hotspot
-#' layer and CORINE group lookup are used only by this stage. When called
-#' standalone the function resolves the raster input paths from
-#' `config$options$data_base` / `composite_base` / `result_name` and runs the
-#' alignment itself. When the orchestrator delegates to this function it passes
-#' its already-built objects through the internal arguments `.aligned_rasters` /
-#' `.hotspots_sf` / `.cor_groups`, so no raster is loaded or aligned twice.
+#' \strong{Raster loading.} The function resolves the raster input paths from
+#' `config$options$data_base` / `composite_base` / `result_name` and aligns
+#' them to the change-index template itself.
 #'
 #' \strong{Staleness rebuild.} When `features_geometry.gpkg` already exists it
 #' is rebuilt when it is older than the pools / folds inputs, when it is missing
@@ -62,8 +58,7 @@
 #'   change-index master template, and `target_year` / `scenario`.
 #' @param use_hotspots Logical. When `FALSE` (default) the hotspot feature block
 #'   is forced off. When `TRUE` the block is enabled if and only if the loaded
-#'   hotspot layer has rows with a usable CRS (the orchestrator's runtime
-#'   `use_hotspots_flag`). Default `FALSE`.
+#'   hotspot layer has rows with a usable CRS. Default `FALSE`.
 #' @param use_shape Logical. Optional shape/size feature block, off by default
 #'   (`FALSE`). When `TRUE` the engine computes four geometric columns
 #'   (`log_area`, `perim_m`, `compactness`, `elongation`; `area_ha` / `n_pix`
@@ -77,15 +72,9 @@
 #'   outputs. Defaults to `config$output_routes$features_dir`.
 #' @param write_outputs Logical. Whether to write the `features_geometry.gpkg`
 #'   and `*_features.rds` outputs. Default `TRUE`.
-#' @param .aligned_rasters Internal. Named list of already-aligned SpatRasters
-#'   (`rbr_summer`, `doy_post`, `rbr_aw`, `dem_r`, `slope_r`, `corine_r`) the
-#'   orchestrator passes for byte-identical delegation without double-loading.
-#'   `NULL` (default) triggers self-contained loading + alignment from config.
-#' @param .hotspots_sf Internal. The already-loaded hotspot sf the orchestrator
-#'   passes (its `hotspots_sf_base`). `NULL` (default) triggers self-contained
-#'   loading from config.
-#' @param .cor_groups Internal. The CORINE group LUT list the orchestrator
-#'   passes. `NULL` (default) uses the package-level `cor_groups`.
+#' @param .aligned_rasters,.hotspots_sf,.cor_groups For internal use by
+#'   [run_oneyear_supervised_pipeline()], which passes rasters and layers it has
+#'   already loaded. Leave them as `NULL` (the default).
 #'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{

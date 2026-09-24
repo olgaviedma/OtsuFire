@@ -14,7 +14,7 @@ build_supervised_training_pools(
 \arguments{
 \item{config}{Required `otsufire_supervised_burned_config` (from
 [build_supervised_burned_config()]). Source of every input path, output
-route, `UNB_*` parameter and tool path used by the stage.}
+route, negative-pool parameter and tool path used by the stage.}
 
 \item{deterministic_decisions}{Optional sf, SpatVector, or single GPKG path
 to the deterministic decisions (layer `internal_decisions`). When `NULL`
@@ -38,8 +38,9 @@ A named list with both the objects and the written paths:
       feature stages).
     \item `audited_internal_gpkg`, `qa_summary_csv`, `qa_transitions_csv`,
       `qa_reasons_csv` — the QA audit file paths.
-    \item `unburned_hard`, `unburned_random`, `unburned_final_raw`,
-      `exclusion_buffer` — the auxiliary unburned sub-pools.
+    \item `unburned_random`, `unburned_final_raw`, `exclusion_buffer` —
+      the auxiliary unburned sub-pools and the 500-m exclusion zone;
+      `unburned_hard` is kept for compatibility and is always empty.
     \item `b4_audit` — audit record for the random burnable background: cell
       accounting at each stage (valid index, burnable, per-rule exclusions),
       the percentile domain and value, eligible cells, finally selected
@@ -70,17 +71,16 @@ pipeline [run_oneyear_supervised_pipeline()].
 }
 \details{
 Every parameter the stage needs is resolved straight from `config`: the
-negative-pool (`UNB_*`) parameters from `config$options`, the external tool
-paths (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`,
-`ogr2ogr_exe`) from `config$tool_paths`, the input imagery roots, and the
-`01_POOLS` output folder and `pools.gpkg` path from `config$output_routes`.
+negative-pool parameters, the external tool paths (`python_exe`,
+`gdal_polygonize_script`, `gdalwarp_path`, `ogr2ogr_exe`) from
+`config$tool_paths`, the input imagery roots, and the `01_POOLS` output
+folder and `pools.gpkg` path from `config$output_routes`.
 
-Determinism: the random burnable-background sampling uses a fixed seed and
-the two unburned builders run in a fixed order (deterministic decisions
-first, Otsu negative second), so the sampled negatives are reproducible. The
-Otsu negative builder passes its full valid drop pool forward; the per-bucket
-cap `cap_otsu` (`otsu_unburned_to_burned_ratio`) is the sole seeded Otsu
-selector.
+Determinism: the burnable-background sampling uses a fixed seed and the
+pools are built in a fixed order, so the sampled negatives are
+reproducible. All valid moderately burned-like patches are passed on, and
+the seeded cap `negative_pool_params$caps[["otsu"]]` is the only step that
+subsamples them.
 
 The random burnable-background bucket computes its change-index percentile
 and draws its sample only within the aligned burnable domain, so no selected
@@ -92,16 +92,17 @@ capping and before the training set is assembled.
 \section{What it does}{
 
 \enumerate{
-  \item Reads the deterministic `internal_decisions` layer and runs the
-    conservative QA relabelling ([audit_deterministic_pools()]).
-  \item Assembles the burned, review and scoring pools.
-  \item Builds the negative (unburned) pool from two sources: the
-    deterministic drops plus a random burnable background
-    ([build_unburned_from_deterministic_decisions()]) and the Otsu
-    current-year residual patches ([build_otsu_negative_pipeline()]).
+  \item Reads the deterministic `internal_decisions` layer and runs a
+    conservative QA relabelling of the deterministic classes.
+  \item Assembles the burned (keep), review and scoring pools.
+  \item Builds the two capped unburned pools: the burnable background
+    (`random`) and the moderately burned-like drop patches (`otsu`). The
+    optional strongly burned-like pool (`artifact_hard`) is added later, by
+    [promote_artifact_hard_negatives()]. See the \strong{Training pools}
+    section of [build_supervised_burned_config()].
   \item Merges the labelled training set (`burned + unburned`).
-  \item Writes the canonical `01_POOLS/<year>_<run_label>_pools.gpkg` and the
-    QA audit files.
+  \item Writes `01_POOLS/<year>_<run_label>_pools.gpkg` and the QA audit
+    files.
 }
 }
 

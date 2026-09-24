@@ -49,18 +49,18 @@ Invisibly, a list with:
   }
 }
 \description{
-A REVIEW EXPORTER (not a model step). It takes a supervised training pool,
-resolves the VISUAL decisions through \code{\link{apply_visual_validation}}
-and writes/returns the pool split by \code{review_bucket} so it is easy to
-inspect in QGIS. It NEVER trains a model, NEVER scores and NEVER rebuilds the
-pool; the input object is not modified.
+Prepares a supervised training pool for visual review. It resolves the
+VISUAL decisions through \code{\link{apply_visual_validation}} and
+writes/returns the pool split by \code{review_bucket} so it is easy to
+inspect in QGIS. It is a review step, not a model step: it does not train,
+score or rebuild the pool, and the input object is not modified.
 }
 \details{
 Typical loop: (1) export with this function, (2) open the GPKG in QGIS and
 edit the \code{VISUAL} column (\code{0}/\code{1}/blank) on the rows you
 review, (3) read the edited \code{all_tagged} layer back and pass it to
 \code{\link{apply_visual_validation}} to get the clean training set. The
-\code{all_tagged} layer is the canonical RE-ENTRY layer: it carries
+\code{all_tagged} layer is the one to edit and read back: it carries
 \code{VISUAL} and \code{artifact_hard_eligible}, so editing \code{VISUAL}
 there and re-reading preserves the full semantics. The per-bucket layers
 carry the same columns and the same semantics; they are a convenience for

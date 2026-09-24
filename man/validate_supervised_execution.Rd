@@ -40,9 +40,9 @@ asserts the scoring feature schema is compatible.}
 \item{scoring_feature_names}{Character or `NULL`. The available scoring-feature
 column names, for check (8). `NULL` skips the schema check.}
 
-\item{data_base, composite_base, result_name}{Character or `NULL`. The resolved
-convention roots, so the validator resolves the SAME input paths the
-orchestrator will consume (cfg path \%||\% convention).}
+\item{data_base, composite_base, result_name}{Character or `NULL`. The data
+roots used to locate inputs that the config does not give explicitly, so
+the validator checks the same input paths the pipeline will use.}
 }
 \value{
 The report `data.frame` (see \strong{The report}). Visible when
@@ -125,6 +125,7 @@ the report invisibly. A non-blocking cache mismatch still warns in both modes.
 \examples{
 \dontrun{
 cfg <- build_supervised_burned_config(
+  run_label          = "balanced",
   internal_decisions = "1985/05_DECISIONS/internal_decisions.gpkg",
   change_index       = "MinMin_1985_mosaic_res90m.tif",
   target_year        = 1985

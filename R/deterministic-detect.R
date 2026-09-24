@@ -86,8 +86,8 @@
 #'
 #' Before delegating to the internal engine, the function also validates
 #' that the required inputs exist on disk and runs the configured
-#' `change_index` sanity check through [clean_raster_inmem()] with
-#' `action = "fail"`.
+#' `change_index` integrity check (the same rules as [clean_raster_file()]),
+#' stopping with an error if the raster is not clean.
 #'
 #' \strong{Current AOI limitation and what to do instead}
 #'
@@ -114,11 +114,6 @@
 #' external preparation principle should be applied consistently to other
 #' relevant spatial inputs, such as hotspot layers or previous-year
 #' burned maps.
-#'
-#' The planned future implementation is the deeper engine-level approach:
-#' `aoi` will be propagated through the underlying grow and refine stages
-#' so that detection can be restricted internally, instead of relying
-#' only on user-managed pre-cropped inputs.
 #'
 #' \strong{Why this stage matters}
 #'
@@ -154,7 +149,7 @@
 #'   `refined_patches_path`, and `detection_diagnostics` are the main
 #'   populated outputs. The object placeholders `otsu_raster`,
 #'   `seed_raster`, `grown_patches`, and `refined_patches` are kept for
-#'   contract stability and currently return `NULL`.
+#'   compatibility and currently return `NULL`.
 #'
 #'   The exact internal implementation should not be relied upon beyond
 #'   these stable public outputs.

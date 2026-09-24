@@ -28,7 +28,8 @@
 #'
 #' Training eligibility is defined by explicit class, never by negation: only
 #' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training; review / keep / `NA` /
+#' valid negative bucket (`random`, `otsu`, and `artifact_hard` when enabled)
+#' enter training; review / keep / `NA` /
 #' unknown rows never become negatives. The OOF and final stages share one
 #' eligibility resolver and one capping helper, so they cannot diverge on which
 #' rows are used or how negatives are capped.
@@ -111,17 +112,15 @@
 #' @param out_dir Character or `NULL`. Output folder for the
 #'   `07_FINAL_MODEL_V2` artifacts. Defaults to
 #'   `config$output_routes$final_model_dir`.
-#' @param canonical_oof_fingerprint Internal use only. The canonical OOF
-#'   structural feature-schema fingerprint, threaded by the orchestrator so the
-#'   final refit can assert it matches before training/saving (error on
-#'   mismatch). `NULL` (default) = run standalone and compute/persist its own
-#'   fingerprint.
+#' @param canonical_oof_fingerprint For internal use by
+#'   [run_oneyear_supervised_pipeline()], which passes the OOF feature-schema
+#'   fingerprint so the final model is checked against it. Leave it `NULL`
+#'   (the default).
 #' @param overwrite Logical. Controls clobbering of the training-ok GPKG.
 #'   Default `TRUE`.
 #' @param verbose Logical. Print progress messages. Default `TRUE`.
-#' @param .internal_resolved Internal use only; set by the orchestrator. When
-#'   `TRUE` the deprecated methodological shims were already resolved upstream,
-#'   so this boundary skips re-warning. Direct callers leave it `FALSE`.
+#' @param .internal_resolved For internal use by
+#'   [run_oneyear_supervised_pipeline()]. Leave it `FALSE` (the default).
 #'
 #' @return A named list with both the objects and the written paths:
 #'   \itemize{

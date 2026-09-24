@@ -49,9 +49,6 @@ count, merges them with `terra::merge()`, crops and masks the result to the
 input mask, optionally caps values below a lower bound, writes the final
 GeoTIFF, and returns its path.
 }
-\details{
-Build a mosaic from raster tiles
-}
 \examples{
 # Synthetic example: build a small mosaic from two tiles created on the fly
 tmp_dir <- tempfile("mosaic_example_")

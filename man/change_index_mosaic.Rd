@@ -71,10 +71,6 @@ that all input tiles share CRS, resolution, origin alignment, and band count,
 merges them into a single mosaic, clips the result to the area of interest,
 optionally caps unrealistically low values, writes the final GeoTIFF, and
 returns a compact structured summary.
-
-Public entry point defined by `MOSAIC_PUBLIC_FUNCTION_CONTRACTS.csv`.
-Parameters and defaults are frozen by `MOSAIC_INPUTS_FINAL.csv`; returned
-objects follow `MOSAIC_OUTPUTS_FINAL.csv`.
 }
 \seealso{
 Other workflow: 

@@ -8,10 +8,6 @@
 #' optionally caps unrealistically low values, writes the final GeoTIFF, and
 #' returns a compact structured summary.
 #'
-#' Public entry point defined by `MOSAIC_PUBLIC_FUNCTION_CONTRACTS.csv`.
-#' Parameters and defaults are frozen by `MOSAIC_INPUTS_FINAL.csv`; returned
-#' objects follow `MOSAIC_OUTPUTS_FINAL.csv`.
-#'
 #' @param folder_path Character. Directory containing the raster tiles to mosaic.
 #' @param mask An `sf` object, a `terra::SpatVector`, or a path to a vector file
 #'   used to crop and mask the mosaic to the area of interest.

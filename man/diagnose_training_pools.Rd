@@ -120,7 +120,7 @@ Statistically assesses whether the categories of a supervised training pool
 (e.g. \code{pool_source} or \code{training_label}) are coherent and separable
 across the numeric features the supervised model will later use, \emph{before}
 any model is fit. It is a \strong{diagnostic only}: it never trains or calls
-the final supervised model (no \code{train_supervised_model} / \code{xgboost}).
+the final supervised model (no \code{xgboost}).
 The optional probe classifier (module G) is an explicitly-labelled separability
 probe (LDA), not the production model, and its predictions are never used
 downstream.

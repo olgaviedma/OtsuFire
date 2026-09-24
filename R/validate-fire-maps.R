@@ -40,8 +40,9 @@
 #' @param year_target Numeric. Target year used to filter the reference
 #'   polygons to the correct fire season.
 #' @param validation_dir Character. Root output directory. A
-#'   `VALIDATION/` subfolder is created inside it. Main CSV and vector
-#'   outputs are currently written directly in that folder.
+#'   `VALIDATION/` subfolder is created inside it, with the outputs
+#'   organised in `01_SUMMARY/`, `02_OBSERVABILITY/`, `03_STRATA/`,
+#'   `04_ERROR_LAYERS/` and `_CACHE/` (see Details).
 #' @param binary_burnable Logical. If `TRUE` (default), the burnable
 #'   raster is treated as binary and cells at or above
 #'   `burnable_threshold` are considered burnable. If `FALSE`,
@@ -96,10 +97,8 @@
 #'   authoritative and reports the fire as `UNDETERMINED_OBS_DATE`.
 #'   `"end_doy"` falls back to `ref_end_doy_col`, which is appropriate only for
 #'   reference layers whose observability column is deliberately populated for
-#'   some sources and not others — for instance Reference v2's `DOY`, which
-#'   exists for the Portuguese Neves atlas (where `end_doy` carries the
-#'   estimated `meanDOY`) and is `NA` for EFFIS (where `end_doy` is a reported
-#'   event date). Never falls back to `ref_start_doy_col` under either setting.
+#'   some sources and not others (for instance a reference that merges
+#'   sources of which only some carry an observability date). Never falls back to `ref_start_doy_col` under either setting.
 #'   Ignored when `ref_obs_doy_col` is `NULL`.
 #' @param observability_undetermined_policy Character. What to do with fires
 #'   whose observability cannot be verified because the reference carries no
@@ -150,7 +149,7 @@
 #'   Default `1024L`.
 #' @param na_strata_as_zero Logical. How to treat `NA` prediction or
 #'   reference pixels inside the strata domain. If `TRUE` (default),
-#'   treat them as unburned (`0`) to match the legacy validator. If
+#'   treat them as unburned (`0`), as earlier releases did. If
 #'   `FALSE`, drop those pixels.
 #' @param write_excel Logical. If `TRUE`, also write a combined Excel
 #'   workbook with the available validation outputs. Requires the
@@ -209,18 +208,21 @@
 #' explicit and avoids treating trivial overlaps as successful detections
 #' unless the user chooses that behaviour.
 #'
-#' Fifth, the function writes the requested outputs into
-#' `validation_dir/VALIDATION/`. The main global tables are currently
-#' written as `metrics_summary_<year>.csv` and
-#' `polygon_summary_<year>.csv`. When observability filtering is used,
-#' the summary table is written as
-#' `reference_observability_<year>_<tag>.csv`. When stratified metrics
-#' are requested, the current file names are
-#' `pixel_by_stratum_<year>_<input>.csv`,
-#' `stratum_global_<year>_<input>.csv`, and
-#' `diagnostics_strata_<year>_<input>.csv`. Error layers and cached
-#' intermediate rasters are also written in the same `VALIDATION/`
-#' folder using descriptive file names.
+#' Fifth, the function writes the requested outputs under
+#' `validation_dir/VALIDATION/`:
+#' \itemize{
+#'   \item `01_SUMMARY/` --- the global tables `metrics_summary_<year>.csv`
+#'     and `polygon_summary_<year>.csv`, and the optional Excel workbook;
+#'   \item `02_OBSERVABILITY/` --- the per-fire observability tables and
+#'     audit files, when `observability_raster` is supplied;
+#'   \item `03_STRATA/` --- `pixel_by_stratum_<year>_<input>.csv`,
+#'     `stratum_global_<year>_<input>.csv` and
+#'     `diagnostics_strata_<year>_<input>.csv`, when `strata_raster` is
+#'     supplied;
+#'   \item `04_ERROR_LAYERS/` --- the omission and commission polygon layers;
+#'   \item `_CACHE/` --- cached intermediate reference and prediction
+#'     products.
+#' }
 #'
 #' \strong{Pixel-based validation}
 #'
@@ -242,7 +244,7 @@
 #' The function then derives accuracy metrics such as `Precision`,
 #' `Recall`, `F1`, `IoU`, `Specificity`, `BalancedAccuracy`, and
 #' `ErrorRate`. These metrics are returned in `metrics` and written to
-#' `validation_dir/VALIDATION/metrics_summary_<year>.csv`.
+#' `validation_dir/VALIDATION/01_SUMMARY/metrics_summary_<year>.csv`.
 #'
 #' \strong{Polygon- and area-based validation}
 #'
@@ -262,11 +264,10 @@
 #'
 #' By default, `threshold_min_detected = 10`, meaning that at least 10\%
 #' of a reference polygon must overlap the prediction to be counted as
-#' detected. This is stricter than the earlier legacy behaviour, which
-#' counted any non-zero overlap as detection. To recover that older
-#' behaviour, set `threshold_min_detected = 0`.
+#' detected. To count any non-zero overlap as a detection instead, set
+#' `threshold_min_detected = 0`.
 #'
-#' \strong{Whole-fire observability rules (0.11.1)}
+#' \strong{Whole-fire observability rules}
 #'
 #' Two whole-fire rules are available through `observability_mode`. In both the
 #' unit of decision is the fire: a fire is either evaluated in full or excluded
@@ -283,9 +284,11 @@
 #' reaches `observability_min_fraction`. The required DOY comes from
 #' `ref_obs_doy_col` when that argument is supplied and from `ref_end_doy_col`
 #' otherwise, with \emph{no} silent fallback to the start DOY: a fire without a
-#' usable date is reported as `UNDETERMINED_OBS_DATE` and excluded, because
-#' there is no date from which it would be reasonable to require it to be
-#' mapped.
+#' usable date is reported as `UNDETERMINED_OBS_DATE`. What happens to it is
+#' set by `observability_undetermined_policy`: with the default `"evaluate"`
+#' it stays in the evaluation domain as a positive reference fire (a missing
+#' date is not evidence that the fire was not observable); with `"exclude"`
+#' it is removed like a `NOT_OBSERVABLE` fire.
 #'
 #' `ref_obs_doy_col` is \strong{authoritative} by default: when supplied, no
 #' other date column is consulted, so a deliberate `NA` in the reference means
@@ -296,11 +299,12 @@
 #' `ref_obs_doy_fallback = "end_doy"` relaxes this and exists only for
 #' reference layers whose observability column is deliberately populated for
 #' some sources and not others. `undetermined_cause` records which situation
-#' produced each `UNDETERMINED` fire, and a warning reports how many fires the
-#' authoritative rule excluded.
+#' produced each `UNDETERMINED` fire, and a warning reports how many fires are
+#' undetermined and how they are being treated.
 #'
 #' Under this mode the excluded fires (`NOT_OBSERVABLE`,
-#' `UNDETERMINED_OBS_DATE`, `NO_OBSERVABILITY_DATA`) additionally have their
+#' `NO_OBSERVABILITY_DATA`, and `UNDETERMINED_OBS_DATE` only under
+#' `observability_undetermined_policy = "exclude"`) additionally have their
 #' whole geometry removed from the evaluation domain: reference, prediction and
 #' strata are all set to `NA` there, so those fires can produce neither false
 #' positives nor false negatives nor true negatives. Territory outside those
@@ -310,11 +314,11 @@
 #'
 #' \strong{Evidence and domain membership are separate.} `observable_flag` is
 #' the EVIDENCE flag and means only `observability_status == "OBSERVABLE"`; it
-#' no longer decides who is evaluated. `in_evaluation_domain` is the DOMAIN
+#' does not decide who is evaluated. `in_evaluation_domain` is the DOMAIN
 #' flag and is what drives the reference subset and the masking. Under
 #' `wholefire_fraction` it is `TRUE` for `OBSERVABLE` and, with the default
 #' `observability_undetermined_policy = "evaluate"`, also for
-#' `UNDETERMINED_OBS_DATE`. Under `legacy_any` the two coincide, as before.
+#' `UNDETERMINED_OBS_DATE`. Under `legacy_any` the two coincide.
 #'
 #' `observability_status` takes one of, in precedence order:
 #' \describe{
@@ -342,12 +346,6 @@
 #' `undetermined_cause` records which of the possible situations applied
 #' (`na_in_authoritative_<col>`, `no_obs_doy_and_no_end_doy`, `no_end_doy`, or
 #' `no_end_or_start_doy` under `legacy_any`).
-#'
-#' The state was called `UNDETERMINED_END_DATE` in 2.1.x. It was renamed in
-#' 2.2.0 because, once the reference resolves source-specific date semantics
-#' into a single `obs_required_doy` column, "missing end date" stopped
-#' describing what the state means. The set of fires it selects, and every
-#' metric, are unchanged by the rename.
 #'
 #' \strong{Temporal observability filter (legacy_any)}
 #'
@@ -387,9 +385,9 @@
 #'
 #' \strong{Partial-observability audit (informative only)}
 #'
-#' Within the fires the contract keeps whole, some burnable-domain pixels may
+#' Within the fires that are kept whole, some burnable-domain pixels may
 #' still lack an observation. This is reported for audit but \strong{never}
-#' modifies the validation contract (no TP/FP/FN/TN/coverage figure changes,
+#' modifies the validation (no TP/FP/FN/TN/coverage figure changes,
 #' no per-pixel denominator is introduced). `validate_fire_maps()` returns
 #' `observability_audit` and writes three CSVs to `02_OBSERVABILITY`:
 #' `OBSERVABILITY_AUDIT_<year>.csv` (counts: `n_reference_fires_original`,
@@ -400,8 +398,8 @@
 #' area, total / temporally-valid / non-observable pixels, non-observable
 #' area, observable fraction, and a `contract_keeps_whole_fire` confirmation).
 #'
-#' Pixel-level (spatial) observability masking is intentionally out of scope
-#' for this version and is recorded only as possible future work.
+#' Pixel-level (spatial) observability masking is not implemented: fires are
+#' always kept or removed whole.
 #'
 #' \strong{Polygon-level omission and commission by class}
 #'
@@ -427,7 +425,7 @@
 #' excluded from the stratified aggregation. Within valid strata,
 #' missing prediction or reference pixels are treated according to
 #' `na_strata_as_zero`: if `TRUE`, they are treated as unburned to match
-#' the legacy validator; if `FALSE`, they are dropped from the stratified
+#' earlier releases; if `FALSE`, they are dropped from the stratified
 #' calculation.
 #'
 #' \strong{Caching and reprocessing}
@@ -445,7 +443,7 @@
 #' the observability raster content, its band/layer or the DOY columns; the
 #' observability rule itself; the burnable raster (including resolution, CRS
 #' and grid/extent); the study-area mask; the burnable thresholding
-#' (`binary_burnable`, `burnable_classes`, `burnable_threshold`); the EFFIS
+#' (`binary_burnable`, `burnable_classes`, `burnable_threshold`); the
 #' reference content; and `min_area_reference_ha` / `dissolve_ref_by`. The
 #' prediction cache additionally folds in the burnable-domain identity. File
 #' content is fingerprinted by size, mtime and (for files below 64 MB) an
@@ -491,22 +489,6 @@
 #'   \item{`excel_path`}{Path to the combined Excel workbook, or `NULL`
 #'     when `write_excel = FALSE`.}
 #' }
-#'
-#' @note
-#' This is the canonical v2 validation implementation. Deprecated v1
-#' GDAL / Python parameters are no longer part of the public interface.
-#'
-#' Version 0.2.1 added `Specificity`, `BalancedAccuracy`, and
-#' `ErrorRate` to the global and stratified pixel outputs; coverage
-#' summaries plus `Detected_Definition` to the polygon outputs; and the
-#' `threshold_min_detected`, `dissolve_ref_by`, and `dissolve_input_by`
-#' controls. Version 0.5.0 adds the optional temporal observability
-#' filter controlled by `observability_raster`. Version 0.10.1 makes the
-#' reference/observability cache key content-aware (it now invalidates on a
-#' change to the observability raster content, band or rule, the burnable
-#' mask, resolution, CRS, grid, study-area mask, reference content or
-#' burnable thresholding) and adds the informative `observability_audit`
-#' of partial spatial observability, which never changes any metric.
 #'
 #' @seealso [run_deterministic_pipeline()] for the deterministic
 #'   workflow that commonly produces the prediction layer passed to

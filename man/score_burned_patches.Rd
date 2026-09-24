@@ -40,13 +40,10 @@ score_burned_patches(
 \item{keep_pool}{Optional explicit keep-like reference pool used
   during spectral-support scoring in Filter 3.
 
-  This object should match the structure consumed by
-  \code{\link[=score_rbr_keep_classes]{score_rbr_keep_classes()}}, for
-  example the output of:
-  \itemize{
-    \item \code{\link[=collect_keep_reference_samples]{collect_keep_reference_samples()}}
-    \item \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}
-  }
+  This is normally the output of
+  \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}},
+  built from samples selected with
+  \code{\link[=collect_keep_reference_samples]{collect_keep_reference_samples()}}.
 
   When supplied, the scoring workflow uses this reference directly.
 
@@ -423,15 +420,6 @@ The deterministic scoring workflow provides:
 Separating candidate generation from deterministic scoring improves
 methodological transparency and facilitates downstream supervised
 modelling and validation.
-
-\strong{Contract source}
-
-Stable public behaviour is governed by:
-\itemize{
-  \item `DETERMINISTIC_PUBLIC_FUNCTION_CONTRACTS.csv`
-  \item `DETERMINISTIC_OUTPUTS_FINAL.csv`
-  \item `DETERMINISTIC_DATA_MODEL_FINAL.csv`
-}
 }
 \examples{
 \dontrun{

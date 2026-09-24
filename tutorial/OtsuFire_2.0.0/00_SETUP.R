@@ -129,9 +129,11 @@ PREVIOUS_YEAR_BURNED <- file.path(
 # official regional cartography for Spain. ERA2 2006-2025: EFFIS raw.
 # Use the authoritative temporal layer (population_doy / obs_required_doy),
 # NOT start_doy / end_doy, which are kept only for legacy compatibility.
+# The burnable domain is NOT applied to this layer: validate_fire_maps()
+# intersects VALIDATION_MASK with BURNABLE_MASK itself.
 REFERENCE_BURNED_MAP <- file.path(
-  DATA_BASE, "Fires", "Validation_fires_burneable_verano",
-  sprintf("Effis_CA_%d_maskKeep_summer.shp", TARGET_YEAR)
+  DATA_BASE, "Fires", "Validation_fires_burneable_verano_FINAL",
+  sprintf("Effis_CA_%d_maskKeep_summer.gpkg", TARGET_YEAR)
 )
 
 

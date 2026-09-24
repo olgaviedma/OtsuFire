@@ -138,7 +138,7 @@
 #'   CORINE epoch of the convention paths. \strong{Required.}
 #'
 #' @param output_dir Character scalar. Root output directory. The builder
-#'   creates a `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`
+#'   creates a `<output_dir>/<year>/<run_name>/SUPERVISED/<run_label>/...`
 #'   layout. Defaults to `tempdir()`.
 #'
 #' @param run_name Character scalar. Stable identifier for the supervised run,
@@ -147,7 +147,7 @@
 #'
 #' @param flat_output_routes Logical. When `FALSE` (default) the output routes
 #'   use the canonical nested layout
-#'   `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`. When `TRUE`,
+#'   `<output_dir>/<year>/<run_name>/SUPERVISED/<run_label>/...`. When `TRUE`,
 #'   every product hangs DIRECTLY off `output_dir` (`<output_dir>/01_POOLS`,
 #'   `<output_dir>/03_FEATURES`, ...). Use `TRUE` when `output_dir` already IS
 #'   the per-run scenario folder, to avoid a duplicated nested path.
@@ -1800,7 +1800,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
                                                 flat = FALSE) {
   # `flat = TRUE` hangs every product DIRECTLY off output_dir (output_dir/01_POOLS,
   # output_dir/03_FEATURES, ...) instead of the canonical deep
-  # <output_dir>/<year>/<run_name>/SUPERVISED/<scenario> tree. Use it when
+  # <output_dir>/<year>/<run_name>/SUPERVISED/<run_label> tree. Use it when
   # output_dir already IS the per-run scenario folder, so the layout is not
   # duplicated. Default FALSE = the canonical nested layout (unchanged).
   base <- if (isTRUE(flat)) {

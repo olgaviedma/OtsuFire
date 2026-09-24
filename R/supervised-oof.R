@@ -27,7 +27,7 @@
 #' }
 #'
 #' @section Outputs:
-#' Files are prefixed `"<year>_<scenario>_patch"`:
+#' Files are prefixed `"<year>_<run_label>_patch"`:
 #' \itemize{
 #'   \item `<prefix>_oof_agg.csv`, `<prefix>_oof_long.csv` — per-unit and
 #'     per-fold OOF scores.
@@ -66,7 +66,7 @@
 #'   [build_supervised_burned_config()]). Used to derive `out_dir` (the
 #'   `05_OOF` folder), `matrix_dir` (the `04_MATRIX` folder), `result_dir`
 #'   (the SUPERVISED scenario base), the output prefix
-#'   (`"<year>_<scenario>_patch"`), and `target_year` / `scenario`.
+#'   (`"<year>_<run_label>_patch"`), and `target_year` / `scenario` (the run label).
 #' @param fold_cols Character vector of fold column names. Default
 #'   `c("fold_rep1", "fold_rep2")`.
 #' @param params Optional named list of XGBoost params. When `NULL` (default)
@@ -330,7 +330,7 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   # 1) Resolve out_dir / matrix_dir / result_dir / prefix / year-scenario from
   #    config, mirroring the orchestrator (dirs$05_OOF == oof_dir,
   #    dirs$04_MATRIX == matrix_dir, result_dir == output_routes$base,
-  #    prefix_oof == "<year>_<scenario>_patch").
+  #    prefix_oof == "<year>_<run_label>_patch").
   # ---------------------------------------------------------------------------
   if (is.null(out_dir)) {
     out_dir <- config$output_routes$oof_dir

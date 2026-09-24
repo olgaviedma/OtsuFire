@@ -199,7 +199,7 @@ score_supervised_burned_map <- function(
   # ---------------------------------------------------------------------------
   # 1) Resolve dirs + prefix from config (result_dir == output_routes$base,
   #    out_score_dir == 08_SCORED, out_map_dir == 09_FINAL_MAP, prefix ==
-  #    "<year>_<scenario>_patch_certified").
+  #    "<year>_<run_label>_patch_certified").
   # ---------------------------------------------------------------------------
   result_dir <- config$output_routes$base
   if (is.null(result_dir) || !is.character(result_dir) ||

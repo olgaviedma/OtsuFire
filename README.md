@@ -213,7 +213,7 @@ outputs of the same run and writes per-issue diagnostic artefacts.
 ## Outputs
 
 A supervised one-year run writes under
-`<output_dir>/<target_year>/<run_name>/SUPERVISED/<scenario>/`:
+`<output_dir>/<target_year>/<run_name>/SUPERVISED/<run_label>/`:
 
 | Directory | Contents |
 |---|---|

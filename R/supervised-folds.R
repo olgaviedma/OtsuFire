@@ -39,7 +39,7 @@
 #'
 #' @param train_labelled sf POLYGON layer OR a single GPKG path. The labelled
 #'   training pool produced by the pools stage (the `train_labeled` object /
-#'   the `train_labeled` layer of `01_POOLS/<year>_<scenario>_pools.gpkg`).
+#'   the `train_labeled` layer of `01_POOLS/<year>_<run_label>_pools.gpkg`).
 #'   Must carry the `class` column (with `burned`/`unburned` labels) and, for
 #'   `split_unit = "fire"`, the `fire_uid` column. When a path is supplied the
 #'   `train_labeled` layer is read.

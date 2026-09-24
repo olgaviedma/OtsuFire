@@ -27,7 +27,7 @@ mk_cfg_m <- function() {
 # -> QA relabel via audit_deterministic_pools() -> burned/review/scoring pools
 # -> BOTH all_sources unburned builders (deterministic drops + random burnable
 # background, and the Otsu/legacy current-year residual patches) -> merge
-# train_labeled -> write 01_POOLS/<year>_<scenario>_pools.gpkg). A faithful
+# train_labeled -> write 01_POOLS/<year>_<run_label>_pools.gpkg). A faithful
 # happy-path fixture would require a deterministic decisions GPKG with the
 # expected QA columns, the full composite/mask raster stack for the target year
 # AND the external GDAL/Python tool binaries the legacy Otsu builder shells out

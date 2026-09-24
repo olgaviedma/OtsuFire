@@ -49,7 +49,7 @@ supplied the `scoring_features` layer is read.}
 [build_supervised_burned_config()]). Used to derive `out_dir` (the
 `05_OOF` folder), `matrix_dir` (the `04_MATRIX` folder), `result_dir`
 (the SUPERVISED scenario base), the output prefix
-(`"<year>_<scenario>_patch"`), and `target_year` / `scenario`.}
+(`"<year>_<run_label>_patch"`), and `target_year` / `scenario` (the run label).}
 
 \item{fold_cols}{Character vector of fold column names. Default
 `c("fold_rep1", "fold_rep2")`.}
@@ -210,7 +210,7 @@ rows are used or how negatives are capped.
 
 \section{Outputs}{
 
-Files are prefixed `"<year>_<scenario>_patch"`:
+Files are prefixed `"<year>_<run_label>_patch"`:
 \itemize{
   \item `<prefix>_oof_agg.csv`, `<prefix>_oof_long.csv` — per-unit and
     per-fold OOF scores.

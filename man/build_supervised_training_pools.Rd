@@ -34,7 +34,7 @@ A named list with both the objects and the written paths:
     \item `train_labeled` — the merged labelled training set
       (`burned + unburned`), consumed by [make_spatial_folds()].
     \item `pools_gpkg` — written path of
-      `01_POOLS/<year>_<scenario>_pools.gpkg` (consumed by the folds and
+      `01_POOLS/<year>_<run_label>_pools.gpkg` (consumed by the folds and
       feature stages).
     \item `audited_internal_gpkg`, `qa_summary_csv`, `qa_transitions_csv`,
       `qa_reasons_csv` — the QA audit file paths.
@@ -51,7 +51,7 @@ A named list with both the objects and the written paths:
       RNG seeds, the exclusions and the relevant inputs, so any cached pool
       whose fingerprint no longer matches is invalidated rather than reused.
       Also written as a sidecar
-      `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
+      `01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt`.
     \item `otsu_random_dedup_audit` — Otsu-over-random spatial-dedup record:
       `random_before`, `random_removed_by_otsu`, `random_final`,
       `area_removed` and `removed_ids_hash`.
@@ -100,7 +100,7 @@ capping and before the training set is assembled.
     ([build_unburned_from_deterministic_decisions()]) and the Otsu
     current-year residual patches ([build_otsu_negative_pipeline()]).
   \item Merges the labelled training set (`burned + unburned`).
-  \item Writes the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` and the
+  \item Writes the canonical `01_POOLS/<year>_<run_label>_pools.gpkg` and the
     QA audit files.
 }
 }

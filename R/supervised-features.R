@@ -53,7 +53,7 @@
 #'   `class`. When a path is supplied the `train_with_folds` layer is read.
 #' @param scoring_pool sf POLYGON layer OR a single GPKG path. The deterministic
 #'   scoring universe produced by the pools stage (the `scoring_pool` object /
-#'   the `scoring_pool` layer of `01_POOLS/<year>_<scenario>_pools.gpkg`). When
+#'   the `scoring_pool` layer of `01_POOLS/<year>_<run_label>_pools.gpkg`). When
 #'   a path is supplied the `scoring_pool` layer is read.
 #' @param config Required `otsufire_supervised_burned_config` (from
 #'   [build_supervised_burned_config()]). Used to derive `out_dir` (the

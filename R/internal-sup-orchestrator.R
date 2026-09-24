@@ -773,7 +773,7 @@ run_supervised_pipeline <- function(target_year, scenario,
   # build_supervised_training_pools(); the orchestrator DELEGATES to it instead
   # of inlining the A1-A6 sequence (read internal_decisions -> QA relabel ->
   # burned/review/scoring pools -> both all_sources unburned builders -> merge
-  # train_labeled -> write 01_POOLS/<year>_<scenario>_pools.gpkg). Behaviour is
+  # train_labeled -> write 01_POOLS/<year>_<run_label>_pools.gpkg). Behaviour is
   # byte-identical:
   #   * config is the supervised config S3 object (threaded explicitly by the
   #     dispatcher). The stage resolves the deterministic decisions path, every

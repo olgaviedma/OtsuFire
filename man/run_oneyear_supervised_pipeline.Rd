@@ -81,7 +81,7 @@ hotspot columns to attenuate them by 20x.}
 \item{reuse_upstream}{Logical. When `TRUE`, skip STEP A (pools),
 STEP B1-B2 (folds), and STEP B3 (features), and consume pre-existing
 upstream artefacts from disk instead. Requires an existing baseline
-run with `01_POOLS/<year>_<scenario>_pools.gpkg`,
+run with `01_POOLS/<year>_<run_label>_pools.gpkg`,
 `02_FOLDS/<year>_train_with_folds_<size>m.gpkg`, and
 `03_FEATURES/features_geometry.gpkg` already present. Default
 `FALSE` reproduces the historical behaviour.}

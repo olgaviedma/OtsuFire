@@ -98,7 +98,7 @@ to name and route outputs, to filter temporal layers, and to resolve the
 CORINE epoch of the convention paths. \strong{Required.}}
 
 \item{output_dir}{Character scalar. Root output directory. The builder
-creates a `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`
+creates a `<output_dir>/<year>/<run_name>/SUPERVISED/<run_label>/...`
 layout. Defaults to `tempdir()`.}
 
 \item{run_name}{Character scalar. Stable identifier for the supervised run,
@@ -107,7 +107,7 @@ to `"supervised_burned_map"`.}
 
 \item{flat_output_routes}{Logical. When `FALSE` (default) the output routes
 use the canonical nested layout
-`<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`. When `TRUE`,
+`<output_dir>/<year>/<run_name>/SUPERVISED/<run_label>/...`. When `TRUE`,
 every product hangs DIRECTLY off `output_dir` (`<output_dir>/01_POOLS`,
 `<output_dir>/03_FEATURES`, ...). Use `TRUE` when `output_dir` already IS
 the per-run scenario folder, to avoid a duplicated nested path.}

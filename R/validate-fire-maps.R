@@ -1972,6 +1972,27 @@ validate_fire_maps <- function(input_shapefile,
       det_ref_pix[is.na(det_ref_pix)] <- 0
       det_not_matched <- det[det_ref_pix == 0, , drop = FALSE]
 
+      # ---- Block 10c: reconcile size attributes with the written geometry ----
+      # The geometry of `ref_polygons` / `det` was clipped by
+      # sf::st_intersection(*, mask_geom) (and st_make_valid / optional
+      # dissolve), but `area_ha` (and `n_pix`) still carry the PRE-CLIP values
+      # inherited from the scored map. Downstream error-layer consumers
+      # (EGIF cross-check, commission characterisation, ...) read these
+      # attributes as the polygon size, so recompute them from the geometry
+      # that is about to be written. `n_pix` is by construction the
+      # rasterised-cell count of the polygon (area = n_pix * cell_area_ha),
+      # so recomputing it consistently from the corrected area is valid for
+      # this post-hoc, vector-clipped layer.
+      reconcile_size <- function(g) {
+        if (nrow(g) == 0L) return(g)
+        a_ha <- suppressWarnings(as.numeric(sf::st_area(g))) / 10000
+        if ("area_ha" %in% names(g)) g$area_ha <- a_ha
+        if ("n_pix"   %in% names(g)) g$n_pix   <- as.integer(round(a_ha / cell_area_ha))
+        g
+      }
+      ref_not_detected <- reconcile_size(ref_not_detected)
+      det_not_matched  <- reconcile_size(det_not_matched)
+
       if (nrow(ref_not_detected) > 0) {
         sf::st_write(
           ref_not_detected,

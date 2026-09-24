@@ -12,8 +12,10 @@ four stages: a **mosaic** stage, a **deterministic** Otsu/grow segmentation
 workflow, a **supervised** one-year probabilistic workflow, and a
 **workflow-independent validation** utility.
 
-Imagery is Landsat (through 2016) and Sentinel-2 (from 2017); the package itself
-is sensor-agnostic and only requires a change-index raster.
+The package itself is sensor-agnostic and only requires a change-index raster.
+The Landsat (through 2016) and Sentinel-2 (from 2017) imagery refers to the
+reference workflow the package was developed and validated with (the Iberian
+Peninsula), not to a requirement of the package.
 
 ---
 

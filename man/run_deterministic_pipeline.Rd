@@ -2,7 +2,7 @@
 % Please edit documentation in R/deterministic-run.R
 \name{run_deterministic_pipeline}
 \alias{run_deterministic_pipeline}
-\title{Run the full deterministic burned-area pipeline for one year}
+\title{Run the deterministic burned-area mapping workflow}
 \usage{
 run_deterministic_pipeline(
   config,
@@ -13,124 +13,180 @@ run_deterministic_pipeline(
 )
 }
 \arguments{
-\item{config}{An \code{otsufire_burned_mapping_config} object returned by
-\code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.}
+\item{config}{An object of class \code{otsufire_burned_mapping_config}, created
+with \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.}
 
-\item{write_outputs}{Logical scalar. Whether the pipeline writes its
-outputs to disk. Default \code{TRUE}. When \code{FALSE}, shared validation is
-usually skipped because the validator expects an on-disk decision
-layer.}
+\item{write_outputs}{Logical scalar. Whether to write workflow outputs to
+disk. Default: \code{TRUE}. Validation requires a decision layer saved to
+disk.}
 
-\item{overwrite}{Logical scalar. Whether existing outputs from the same
-run may be replaced. Default \code{FALSE}.}
+\item{overwrite}{Logical scalar. Whether existing output files from the
+same run may be replaced. Default: \code{FALSE}.}
 
-\item{keep_pool}{Optional explicit keep-like reference pool passed
-through to
-\code{\link[=score_burned_patches]{score_burned_patches()}}. This
-should be a pre-built keep-pool summary object such as the output of
-\code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
-When \code{NULL} (default), the pipeline uses the deterministic scoring
-local fallback for the target year. Explicit pools that include the
-same target year are intentionally rejected when helper metadata
-reveal that overlap; for same-year scoring, use \code{keep_pool = NULL}.}
+\item{keep_pool}{Optional spectral-support reference summary, such as an
+object returned by \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}. Explicit references
+must contain trusted samples from years other than the target year. When
+\code{NULL}, a local reference is constructed from high-confidence target-year
+candidates. Default: \code{NULL}.}
 
-\item{run_validation}{Logical scalar or \code{"auto"}. Controls validation
-behaviour.
-\itemize{
-\item \code{TRUE}: always attempts validation;
-\item \code{FALSE}: skips validation;
-\item \code{"auto"} (default): runs validation only when
-\code{config$inputs$reference_burned_map} is non-NULL.
-}}
+\item{run_validation}{Logical scalar or \code{"auto"}. Controls whether
+validation is requested. See \strong{Validation} below. Default:
+\code{"auto"}.}
 }
 \value{
-A named list of class \code{otsufire_deterministic_run} with fields:
-\describe{
-\item{\code{detection}}{Output object returned by
-\code{\link[=detect_burned_patches]{detect_burned_patches()}}.}
-\item{\code{scoring}}{Output object returned by
-\code{\link[=score_burned_patches]{score_burned_patches()}}.}
-\item{\code{validation}}{Validation outputs returned by
-\code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-validation is executed successfully; otherwise \code{NULL}.}
-\item{\code{result_paths}}{Named list of important written output paths
-produced during the workflow. Some entries may be \code{NA} when a
-stage did not write that product.}
-\item{\code{timing_log}}{Timing diagnostics summarising execution time
-for each deterministic stage.}
-\item{\code{config}}{The input configuration object used to run the
-workflow.}
+A named list of class \code{otsufire_deterministic_run} with the
+following fields:\tabular{ll}{
+   Field \tab Description \cr
+   \code{detection} \tab Result returned by \code{\link[=detect_burned_patches]{detect_burned_patches()}}. \cr
+   \code{scoring} \tab Result returned by \code{\link[=score_burned_patches]{score_burned_patches()}}. \cr
+   \code{validation} \tab Result returned by \code{\link[=validate_fire_maps]{validate_fire_maps()}} when validation completes successfully; otherwise \code{NULL} in a returned run object. \cr
+   \code{result_paths} \tab Named list of main output paths. Entries may be \code{NA} when a product was not written. \cr
+   \code{timing_log} \tab Execution-time diagnostics for the workflow stages. \cr
+   \code{config} \tab Configuration used for the run. \cr
 }
 }
 \description{
-Run detection, scoring, and optional validation for one target year
-using a single deterministic configuration object.
-Internally, the wrapper chains
-\code{\link[=detect_burned_patches]{detect_burned_patches()}},
-\code{\link[=score_burned_patches]{score_burned_patches()}}, and, when
-requested, \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+Run burned-area detection, scoring, and optional validation for one year
+using a configuration created with \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.
 
-The pipeline implements the full unsupervised OtsuFire decision
-workflow, including candidate patch delineation through adaptive
-seed-and-grow segmentation, sequential rule-based filtering,
-temporal-conflict assessment, spectral-support scoring, and final
-deterministic confidence assignment into \code{keep}, \code{review}, or \code{drop}.
+The workflow delineates candidate patches, applies rule-based filters,
+assesses temporal conflicts, and evaluates spectral support. Each candidate
+receives a final decision: \code{"keep"}, \code{"review"}, or \code{"drop"}.
 
-Deterministic scoring within the pipeline can reuse an explicit
-spectral-support \code{keep_pool} supplied by the caller from trusted
-external years, or fall back to the same-year local reference
-automatically when \code{keep_pool} is omitted. The deterministic
-pipeline does not read or depend on implicit external burned-like
-registries.
-
-It also returns timing diagnostics and the main output paths in one
-place, so it is a convenient entry point when you want the full
-workflow rather than stage-by-stage control.
+The function returns detection and scoring results, any validation
+results, output paths, and execution times.
 }
-\details{
-\strong{Deterministic workflow structure}
+\section{Detection and scoring}{
 
-The pipeline executes the deterministic burned-area workflow in three
-main stages:
+The function runs \code{\link[=detect_burned_patches]{detect_burned_patches()}} followed by
+\code{\link[=score_burned_patches]{score_burned_patches()}}.
 
-\enumerate{
-\item \strong{Detection stage.}
-\code{\link[=detect_burned_patches]{detect_burned_patches()}}
-applies adaptive Otsu thresholding and seed-and-grow segmentation
-to the annual change-index raster in order to generate candidate
-burned patches.
-\item \strong{Scoring stage.}
-\code{\link[=score_burned_patches]{score_burned_patches()}}
-evaluates candidate patches through a sequential rule-based system
-including:
-\itemize{
-\item Filter 1: seed support and burnable-context plausibility;
-\item Filter 2: optional active-fire hotspot corroboration;
-\item Temporal consistency assessment against previous-year
-burned areas (a distinct step, not a numbered filter);
-\item Filter 3: spectral-support evaluation relative to a
-high-confidence keep-like reference distribution.
+Detection uses adaptive Otsu thresholding and seed-and-grow segmentation
+of the annual change-index raster to delineate candidate burned patches.
+
+Scoring evaluates the candidates using the following sequence:\tabular{ll}{
+   Step \tab Purpose \cr
+   Filter 1 \tab Assess seed support and the plausibility of the surrounding burnable-land context. \cr
+   Filter 2 \tab Assess corroboration from active-fire hotspots, when supplied. \cr
+   Temporal assessment \tab Assess conflicts with previous-year burned areas, when supplied. This is separate from the numbered filters. \cr
+   Filter 3 \tab Evaluate spectral support against a high-confidence reference distribution. \cr
 }
-The outputs of these components are integrated into a final
-deterministic confidence decision assigning each patch to \code{keep},
-\code{review}, or \code{drop}, while preserving a clear decision trail.
 
-\if{html}{\out{<div class="sourceCode">}}\preformatted{Within the current wrapper, this scoring stage can use either an
-explicit \code{keep_pool} built from trusted external years or the
-local same-year spectral-support fallback when \code{keep_pool} is
-omitted. Explicit same-year \code{keep_pool} references are not a
-supported public mode.
-}\if{html}{\out{</div>}}
 
-\item \strong{Validation stage.} When validation is enabled, a
-reference burned-area layer is available, and scoring produced an
-on-disk decision layer that the shared validator can read,
-\code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
-the resulting deterministic burned-area outputs against external
-burned-area references.
+These assessments are combined into a final decision for each candidate:\tabular{ll}{
+   Decision \tab Interpretation \cr
+   \code{"keep"} \tab Retained as a burned-area candidate by the deterministic rules. \cr
+   \code{"review"} \tab Flagged for further assessment. \cr
+   \code{"drop"} \tab Rejected by the deterministic rules. \cr
 }
+
+
+The scoring results retain the information used to reach these decisions.
+}
+
+\section{Spectral-support references}{
+
+When \code{keep_pool = NULL}, scoring uses a local reference constructed
+automatically from high-confidence candidates for the target year.
+
+To use a reference from other years, supply a pre-built summary through
+\code{keep_pool}. Explicit pools containing the target year are not supported
+and are rejected when their metadata identify that overlap. The caller is
+responsible for ensuring that an explicit pool excludes the target year.
+
+The spectral-support reference is separate from the burned-area map used
+for validation. The pipeline does not automatically load external
+burned-area registries for scoring.
+}
+
+\section{Validation}{
+
+\code{run_validation} accepts the following values:\tabular{ll}{
+   Value \tab Behaviour \cr
+   \code{"auto"} \tab Request validation when \code{config$inputs$reference_burned_map} is not \code{NULL}. \cr
+   \code{TRUE} \tab Explicitly request a validation attempt. \cr
+   \code{FALSE} \tab Skip validation. \cr
+}
+
+
+Validation is performed with \code{\link[=validate_fire_maps]{validate_fire_maps()}}. It requires both a
+reference burned-area layer and a decision layer saved to disk that the
+validator can read.
+
+Setting \code{run_validation = TRUE} does not supply missing inputs. For a run
+without written outputs, use \code{write_outputs = FALSE} and
+\code{run_validation = FALSE}.
+}
+
+\section{Output files}{
+
+When \code{write_outputs = TRUE}, outputs are written to the locations defined
+by \code{config}. Set \code{overwrite = TRUE} to allow replacement of existing
+outputs from the same run.
+
+The returned \code{result_paths} field provides the main output locations.
+Entries may be \code{NA} for products that were not written.
+}
+
+\examples{
+\dontrun{
+# Configure an annual RBR mapping workflow
+config <- build_burned_mapping_config(
+  change_index = "data/RBR_2022.tif",
+  vegetation_map = "data/vegetation_classes.tif",
+  burnable_mask = "data/burnable_mask.tif",
+  hotspots = "data/hotspots_2022.gpkg",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022"
+)
+
+# Run detection and scoring with the local spectral reference
+result <- run_deterministic_pipeline(
+  config = config,
+  run_validation = FALSE
+)
+
+# Inspect output paths and execution times
+result$result_paths
+result$timing_log
+
+# Access the scoring results
+result$scoring
+
+# Configure a run with an external validation reference
+config_validation <- build_burned_mapping_config(
+  change_index = "data/RBR_2022.tif",
+  vegetation_map = "data/vegetation_classes.tif",
+  burnable_mask = "data/burnable_mask.tif",
+  hotspots = "data/hotspots_2022.gpkg",
+  reference_burned_map = "data/reference_burned_2022.gpkg",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022_validation"
+)
+
+# Validation is requested automatically because a reference is supplied
+result_validation <- run_deterministic_pipeline(
+  config = config_validation,
+  run_validation = "auto"
+)
+result_validation$validation
+
+# Run without writing outputs or requesting validation
+result_unwritten <- run_deterministic_pipeline(
+  config = config,
+  write_outputs = FALSE,
+  run_validation = FALSE
+)
+}
+
 }
 \seealso{
+\code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}, \code{\link[=detect_burned_patches]{detect_burned_patches()}},
+\code{\link[=score_burned_patches]{score_burned_patches()}}, \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}},
+\code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},
 \code{\link{build_supervised_burned_config}()},

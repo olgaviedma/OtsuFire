@@ -1,5 +1,5 @@
 Package: OtsuFire
-Title: Otsu-Based Burned-Area Mapping with Rule-Based Unsupervised Filters and Supervised Classification
+Title: A Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and Decades
 Version: 2.3.0
 Date: 2026-08-19
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),

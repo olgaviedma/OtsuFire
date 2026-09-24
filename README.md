@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/olgaviedma/OtsuFire/main/README/OtsuFire_logo.png" width="400"/>
 </p>
 
-<h1 align="center">OtsuFire: Otsu-Based Burned-Area Mapping</h1>
+<h1 align="center">OtsuFire: A Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and Decades</h1>
 
 **Authors:** Natalia Quintero, Olga Viedma, Hammadi Achour, Jose Manuel Moreno
 
@@ -287,9 +287,9 @@ Please report any issue regarding the OtsuFire package to Dr. Olga Viedma
 
 ## Citing OtsuFire
 
-Quintero, N.; Viedma, O.; Achour, H.; and Moreno, J. M. (2026). *OtsuFire:
-Otsu-Based Burned-Area Mapping with Rule-Based Unsupervised Filters and
-Supervised Classification.* R package version 2.0.0.
+Quintero, N.; Viedma, O.; Achour, H.; and Moreno, J. M. (2026). *OtsuFire: A
+Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and
+Decades.* R package version 2.0.0.
 <https://github.com/olgaviedma/OtsuFire>
 
 OtsuFire 0.1.4 is currently the release on CRAN:

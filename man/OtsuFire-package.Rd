@@ -4,7 +4,7 @@
 \name{OtsuFire-package}
 \alias{OtsuFire-package}
 \alias{OtsuFire}
-\title{OtsuFire: Otsu-Based Burned-Area Mapping}
+\title{OtsuFire: A Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and Decades}
 \description{
 Reproducible multi-year burned-area mapping from change-index rasters.
 Provides four layers that can be used together or independently:

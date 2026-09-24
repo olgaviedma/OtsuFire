@@ -17,7 +17,7 @@ is sensor-agnostic and only requires a change-index raster.
 
 ---
 
-## ⚠️ Version 2.0.0 is a complete rewrite
+## ⚠️ Version 2.0.0 is a complete new release
 
 **2.0.0 is a complete new release, not an update of the 0.1.x line.** The
 package has been rebuilt from scratch: its public API is 43 exports (36

@@ -235,7 +235,8 @@ The deterministic stage writes to the parallel `DETERMINISTIC/<run_name>/` tree.
 
 **Deterministic stage** — `build_burned_mapping_config()`,
 `run_deterministic_pipeline()`, `detect_burned_patches()`,
-`score_burned_patches()`, `apply_chain_cleaning()`
+`score_burned_patches()`, `apply_chain_cleaning()` (also exported under the
+short alias `apply_chain()`)
 
 **Supervised stage** — `build_supervised_burned_config()`,
 `run_oneyear_supervised_pipeline()`, `build_supervised_training_pools()`,

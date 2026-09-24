@@ -19,15 +19,13 @@ is sensor-agnostic and only requires a change-index raster.
 
 ## ⚠️ Version 2.0.0 is a complete rewrite
 
-**2.0.0 is not backward compatible with the 0.1.x line.** Of the 19 functions
-exported by 0.1.x, **17 have been removed**. Only `clean_raster_file()` and
-`validate_fire_maps()` survive under their old names, and the public API is now
-43 exports (36 functions and 7 constants). Runs are driven by configuration
-objects rather than long argument lists.
+**2.0.0 is a complete new release, not an update of the 0.1.x line.** The
+package has been rebuilt from scratch: its public API is 43 exports (36
+functions and 7 constants), and runs are driven by configuration objects rather
+than long argument lists.
 
-Code written against 0.1.x will not run unchanged. If you need the old function
-set, pin the 0.1.4 release from CRAN. See `NEWS.md` for the full list of removed
-functions and the rationale.
+Code written against 0.1.x will not run unchanged. The 0.1.4 release remains
+available on CRAN for anyone who needs it.
 
 The supervised stage — training pools, spatial folds, out-of-fold diagnostics
 and gradient-boosted scoring — is entirely new in 2.0.0 and has no counterpart
@@ -283,7 +281,7 @@ Otsu-Based Burned-Area Mapping with Rule-Based Unsupervised Filters and
 Supervised Classification.* R package version 2.0.0.
 <https://github.com/olgaviedma/OtsuFire>
 
-The 0.1.x line is archived on CRAN:
+The 0.1.x line remains available on CRAN:
 <https://CRAN.R-project.org/package=OtsuFire>
 
 ## Disclaimer

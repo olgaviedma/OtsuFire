@@ -7,9 +7,8 @@ For the current workflow see [`../OtsuFire_2.0.0/`](../OtsuFire_2.0.0/).
 
 ## Why they no longer run
 
-The 2.0.0 rebuild removed 17 of the 19 functions exported by 0.1.x and
-reorganised the rest behind config objects. Two changes in particular break
-every script in this folder:
+2.0.0 is a complete new release with its own API, driven by config objects.
+Two changes in particular break every script in this folder:
 
 * The supervised stage is driven by `build_supervised_burned_config()` +
   `run_oneyear_supervised_pipeline()`. The older entry points these scripts

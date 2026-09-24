@@ -216,25 +216,13 @@ introduced.
 
 # OtsuFire 2.0.0 (2026-08-02)
 
-## BREAKING CHANGE — complete rebuild of the package
+## Complete new release
 
-2.0.0 is a full rewrite of OtsuFire. It is **not** backward compatible with
-the 0.1.x line (0.1.4 on CRAN, 0.1.5 on GitHub). Code written against 0.1.x
-will not run unchanged.
+2.0.0 is a complete new release of OtsuFire, rebuilt from scratch. It is
+**not** an update of the 0.1.x line and is not backward compatible with it:
+code written against 0.1.x will not run unchanged.
 
-* **17 of the 19 functions exported by 0.1.x have been removed.** Only
-  `clean_raster_file()` and `validate_fire_maps()` survive under their old
-  names. Removed: `calculate_polygon_metrics()`, `corine_mask_reclass()`,
-  `download_zenodo_data()`, `erase_overlap_with_preyear()`,
-  `mask_mosaic_raster()`, `merge_aoi_shapefiles()`,
-  `merge_internal_with_effis_flags()`,
-  `phase4_diagnostics_internal_external()`,
-  `prepare_fire_polys_for_validation()`, `process_otsu_rasters_grow()`,
-  `score_rbr_keep_classes()`, `scoring_burned_area_stage2()`,
-  `scoring_internal_burned_area()`, `scoring_reference_burned_area()`,
-  `scoring_validation_burned_area()`, `segmentation_refinement()` and
-  `validation_statistics()`.
-* **The public API is now 43 exports** (36 functions and 7 `OF_*` plotting
+* **The public API is 43 exports** (36 functions and 7 `OF_*` plotting
   and threshold constants). The functions are organised as four stages:
   a mosaic stage (`change_index_mosaic()`, `mosaic_from_tiles()`), a
   deterministic Otsu/grow segmentation workflow
@@ -250,9 +238,8 @@ will not run unchanged.
   diagnostics, gradient-boosted scoring) is new in 2.0.0; it has no
   counterpart in 0.1.x.
 
-Users of 0.1.x who need the old function set should pin the CRAN 0.1.4
-release. The sections below record the development history that produced
-2.0.0, newest first.
+The 0.1.4 release remains available on CRAN. The sections below record the
+development history that produced 2.0.0, newest first.
 
 ## Optional shape/size feature block
 

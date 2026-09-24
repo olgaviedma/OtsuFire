@@ -62,4 +62,5 @@ SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,
     out to gdal_polygonize.py and ogr2ogr).
 Config/testthat/edition: 3
 VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2

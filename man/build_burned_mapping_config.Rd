@@ -21,34 +21,34 @@ build_burned_mapping_config(
 )
 }
 \arguments{
-\item{change_index}{Raster path, `terra::SpatRaster`, or `NULL`.
+\item{change_index}{Raster path, \code{terra::SpatRaster}, or \code{NULL}.
 Annual change-index raster (e.g. RBR, dNBR, RdNBR). Required before
-detection runs but may be `NULL` when the configuration will only be
+detection runs but may be \code{NULL} when the configuration will only be
 used with pre-built candidates, for example direct calls to
 \code{\link[=score_burned_patches]{score_burned_patches()}}.}
 
-\item{vegetation_map}{Raster, `sf` object, or path. Optional vegetation
+\item{vegetation_map}{Raster, \code{sf} object, or path. Optional vegetation
 or land-cover stratification layer (CORINE-compatible).}
 
 \item{burnable_mask}{Character. Path to a raster on disk with the
-binary burnable-area mask (`1 = burnable`, `0 = non-burnable`).
-Required. **Path only:** in-memory
-`SpatRaster` / `sf` / `SpatVector` objects are rejected with an
+binary burnable-area mask (\code{1 = burnable}, \code{0 = non-burnable}).
+Required. \strong{Path only:} in-memory
+\code{SpatRaster} / \code{sf} / \code{SpatVector} objects are rejected with an
 explicit error naming the parameter and the received class. Persist
 in-memory inputs to disk first.}
 
-\item{hotspots}{`sf` POINT layer or path. Optional hotspot layer for
+\item{hotspots}{\code{sf} POINT layer or path. Optional hotspot layer for
 the target year.}
 
-\item{previous_year_burned}{`sf` POLYGON layer or path. Optional
+\item{previous_year_burned}{\code{sf} POLYGON layer or path. Optional
 previous-year burned map used for temporal conflict assessment.}
 
 \item{reference_burned_map}{Character. Path to a vector or raster
 reference of burned area on disk, used by
 \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-validation is requested. Optional. **Path
-only:** in-memory `sf` / `SpatRaster` /
-`SpatVector` objects are rejected with an explicit error naming
+validation is requested. Optional. \strong{Path
+only:} in-memory \code{sf} / \code{SpatRaster} /
+\code{SpatVector} objects are rejected with an explicit error naming
 the parameter and the received class. Persist in-memory inputs to
 disk first.}
 
@@ -56,29 +56,29 @@ disk first.}
 and filtering temporal layers.}
 
 \item{output_dir}{Character scalar. Root output directory. Defaults to
-`tempdir()`.}
+\code{tempdir()}.}
 
 \item{run_name}{Character scalar. Visible experiment identifier used to
 name output folders and files. Must be a single non-empty string and
-must not contain `/` or `\\`. Defaults to
-`"deterministic_burned_map"`.}
+must not contain \code{/} or \verb{\\\\}. Defaults to
+\code{"deterministic_burned_map"}.}
 
 \item{detect_params}{Named list containing detection-stage parameters.
-  Recognized keys:
-  \itemize{
-    \item `seed_threshold`
-    \item `growth_delta`
-    \item `minimum_growth_threshold`
-    \item `minimum_seed_pixels`
-    \item `seed_threshold_by_vegetation`
-    \item `growth_delta_by_vegetation`
-    \item `minimum_growth_threshold_by_vegetation`
-  }
-  Unknown keys raise an error.
+Recognized keys:
+\itemize{
+\item \code{seed_threshold}
+\item \code{growth_delta}
+\item \code{minimum_growth_threshold}
+\item \code{minimum_seed_pixels}
+\item \code{seed_threshold_by_vegetation}
+\item \code{growth_delta_by_vegetation}
+\item \code{minimum_growth_threshold_by_vegetation}
+}
+Unknown keys raise an error.
 
-  When `detect_params = list()`, the package uses the following
-  defaults:
-  \preformatted{list(
+When \code{detect_params = list()}, the package uses the following
+defaults:
+\preformatted{list(
   seed_threshold = 310,
   growth_delta = 90,
   minimum_growth_threshold = 240,
@@ -97,24 +97,24 @@ must not contain `/` or `\\`. Defaults to
   )
 )}
 
-  These defaults are RBR-oriented operational starting values. They
-  are not hard-coded methodological rules: users can replace them with
-  year-specific or study-area-specific settings when another change
-  index or ecological context requires different thresholds.}
+These defaults are RBR-oriented operational starting values. They
+are not hard-coded methodological rules: users can replace them with
+year-specific or study-area-specific settings when another change
+index or ecological context requires different thresholds.}
 
 \item{refine_params}{Named list containing refinement-stage parameters.
-  Recognized keys:
-  \itemize{
-    \item `aoi_buffer_m`
-    \item `omission_buffer_m`
-    \item `minimum_detected_area_m2`
-    \item `merge_overlaps`
-    \item `merge_overlaps_buffer_m`
-  }
-  Unknown keys raise an error.
+Recognized keys:
+\itemize{
+\item \code{aoi_buffer_m}
+\item \code{omission_buffer_m}
+\item \code{minimum_detected_area_m2}
+\item \code{merge_overlaps}
+\item \code{merge_overlaps_buffer_m}
+}
+Unknown keys raise an error.
 
-  When `refine_params = list()`, the package uses:
-  \preformatted{list(
+When \code{refine_params = list()}, the package uses:
+\preformatted{list(
   aoi_buffer_m = 5000,
   omission_buffer_m = 0,
   minimum_detected_area_m2 = 10,
@@ -122,24 +122,24 @@ must not contain `/` or `\\`. Defaults to
   merge_overlaps_buffer_m = 0
 )}
 
-  These defaults are the standard RBR-oriented refinement settings
-  used by the deterministic workflow, but users may update them to
-  match a different mapping scale, polygonization behaviour, or study
-  design.}
+These defaults are the standard RBR-oriented refinement settings
+used by the deterministic workflow, but users may update them to
+match a different mapping scale, polygonization behaviour, or study
+design.}
 
 \item{scoring_params}{Named list containing scoring-stage parameters.
-  Recognized keys:
-  \itemize{
-    \item `support_buffer_m`
-    \item `previous_fire_exclusion_buffer_m`
-    \item `previous_fire_cleanup_buffer_m`
-    \item `minimum_remaining_area_m2`
-    \item `reference_buffer_m`
-  }
-  Unknown keys raise an error.
+Recognized keys:
+\itemize{
+\item \code{support_buffer_m}
+\item \code{previous_fire_exclusion_buffer_m}
+\item \code{previous_fire_cleanup_buffer_m}
+\item \code{minimum_remaining_area_m2}
+\item \code{reference_buffer_m}
+}
+Unknown keys raise an error.
 
-  When `scoring_params = list()`, the package uses:
-  \preformatted{list(
+When \code{scoring_params = list()}, the package uses:
+\preformatted{list(
   support_buffer_m = 0,
   previous_fire_exclusion_buffer_m = 90,
   previous_fire_cleanup_buffer_m = 90,
@@ -147,76 +147,76 @@ must not contain `/` or `\\`. Defaults to
   reference_buffer_m = 90
 )}
 
-  These defaults are the standard RBR-oriented scoring settings used
-  by the deterministic workflow. They can be changed by the user when
-  temporal-cleanup or support-reference behaviour needs to be adapted
-  to another index, resolution, or application context.}
+These defaults are the standard RBR-oriented scoring settings used
+by the deterministic workflow. They can be changed by the user when
+temporal-cleanup or support-reference behaviour needs to be adapted
+to another index, resolution, or application context.}
 
 \item{options}{Named list containing technical/runtime options only
-  (not methodological controls). Recognized keys include:
-  \itemize{
-    \item `deterministic_seed`
-    \item `engine_root`
-    \item `whitebox_exe`
-    \item `gdalwarp_path`
-    \item `tool_paths`
-    \item `ecoregion_shapefile_path`
-    \item `peninsula_shapefile_path`
-    \item `future_globals_maxsize`
-    \item `change_index_validation`
-  }
+(not methodological controls). Recognized keys include:
+\itemize{
+\item \code{deterministic_seed}
+\item \code{engine_root}
+\item \code{whitebox_exe}
+\item \code{gdalwarp_path}
+\item \code{tool_paths}
+\item \code{ecoregion_shapefile_path}
+\item \code{peninsula_shapefile_path}
+\item \code{future_globals_maxsize}
+\item \code{change_index_validation}
+}
 
-  The deterministic workflow does not consume external burned-area
-  registries during scoring. Consequently, supplying
-  `options$registry_path` raises an error.
+The deterministic workflow does not consume external burned-area
+registries during scoring. Consequently, supplying
+\code{options$registry_path} raises an error.
 
-  \strong{\code{options$change_index_validation}}
+\strong{\code{options$change_index_validation}}
 
-  Optional advanced sub-list controlling the sanity check applied to
-  `change_index` before detection. Recognized sub-keys:
-  \itemize{
-    \item `expected_nodata`
-    \item `lower_cap`
-    \item `cap_below`
-    \item `check_finite`
-  }
+Optional advanced sub-list controlling the sanity check applied to
+\code{change_index} before detection. Recognized sub-keys:
+\itemize{
+\item \code{expected_nodata}
+\item \code{lower_cap}
+\item \code{cap_below}
+\item \code{check_finite}
+}
 
-  Defaults:
-  \preformatted{list(
+Defaults:
+\preformatted{list(
   expected_nodata = -9999,
   lower_cap = -1000,
   cap_below = TRUE,
   check_finite = TRUE
 )}
 
-  The validated default `lower_cap = -1000` is appropriate for RBR
-  products. Other change indices may require different valid ranges.}
+The validated default \code{lower_cap = -1000} is appropriate for RBR
+products. Other change indices may require different valid ranges.}
 }
 \value{
 Returns an S3 object of class
-  `otsufire_burned_mapping_config`.
+\code{otsufire_burned_mapping_config}.
 
-  Stable public fields include:
-  \itemize{
-    \item `target_year`
-    \item `inputs`
-    \item `run_name`
-    \item `output_routes`
-    \item `detect_params`
-    \item `refine_params`
-    \item `scoring_params`
-    \item `rescue_params`
-    \item `options`
-    \item `engine_root`
-    \item `deterministic_seed`
-    \item `tool_paths`
-  }
+Stable public fields include:
+\itemize{
+\item \code{target_year}
+\item \code{inputs}
+\item \code{run_name}
+\item \code{output_routes}
+\item \code{detect_params}
+\item \code{refine_params}
+\item \code{scoring_params}
+\item \code{rescue_params}
+\item \code{options}
+\item \code{engine_root}
+\item \code{deterministic_seed}
+\item \code{tool_paths}
+}
 
-  The configuration object stores fully resolved parameter blocks in
-  their internal engine-ready structure.
+The configuration object stores fully resolved parameter blocks in
+their internal engine-ready structure.
 
-  Internal implementation details beyond these stable public fields
-  should not be relied upon by downstream user code.
+Internal implementation details beyond these stable public fields
+should not be relied upon by downstream user code.
 }
 \description{
 Create, validate, and normalize the configuration used by the
@@ -225,10 +225,10 @@ deterministic OtsuFire workflow.
 Think of this as the setup step for the deterministic pipeline. It
 gathers:
 \itemize{
-  \item the spatial inputs,
-  \item the user-facing methodological parameters,
-  \item the output structure,
-  \item and the technical runtime options
+\item the spatial inputs,
+\item the user-facing methodological parameters,
+\item the output structure,
+\item and the technical runtime options
 }
 into one validated object that you can then pass to
 \code{\link[=detect_burned_patches]{detect_burned_patches()}},
@@ -242,9 +242,9 @@ are inconsistent.
 The user-facing methodological controls are intentionally grouped into
 three blocks:
 \itemize{
-  \item \code{detect_params},
-  \item \code{refine_params},
-  \item \code{scoring_params}.
+\item \code{detect_params},
+\item \code{refine_params},
+\item \code{scoring_params}.
 }
 This keeps the public API compact while leaving lower-level engine
 settings fixed to validated defaults.
@@ -257,11 +257,11 @@ registries during scoring.
 Instead, the spectral-support reference used at scoring time comes
 from one of two places:
 \itemize{
-  \item from an explicit \code{keep_pool} supplied to
-    \code{\link[=score_burned_patches]{score_burned_patches()}} and
-    built from trusted \emph{external} years,
-  \item or from a local same-year reference automatically constructed
-    from high-confidence current-year candidate patches.
+\item from an explicit \code{keep_pool} supplied to
+\code{\link[=score_burned_patches]{score_burned_patches()}} and
+built from trusted \emph{external} years,
+\item or from a local same-year reference automatically constructed
+from high-confidence current-year candidate patches.
 }
 
 Explicit same-year \code{keep_pool} references are not supported in
@@ -275,9 +275,9 @@ only to compute spectral-support metrics during scoring.
 The deterministic workflow is organised into three methodological
 stages:
 \enumerate{
-  \item detection,
-  \item refinement,
-  \item scoring.
+\item detection,
+\item refinement,
+\item scoring.
 }
 
 Each stage exposes a restricted public parameter surface designed to
@@ -286,89 +286,89 @@ ecological adaptation.
 
 \strong{Vegetation classes used by \code{*_by_vegetation}}
 \itemize{
-  \item \code{1} Agroforestry
-  \item \code{2} Grassland
-  \item \code{3} Sparse / burned
-  \item \code{4} Shrubland
-  \item \code{5} Broadleaved forest
-  \item \code{6} Mixed forest
-  \item \code{7} Conifer forest
-  \item \code{8} Artificial areas
-  \item \code{9} Agricultural areas
-  \item \code{10} Water / wetlands
-  \item \code{11} Bare
+\item \code{1} Agroforestry
+\item \code{2} Grassland
+\item \code{3} Sparse / burned
+\item \code{4} Shrubland
+\item \code{5} Broadleaved forest
+\item \code{6} Mixed forest
+\item \code{7} Conifer forest
+\item \code{8} Artificial areas
+\item \code{9} Agricultural areas
+\item \code{10} Water / wetlands
+\item \code{11} Bare
 }
 
 \strong{Detection parameters}
 
 \itemize{
-  \item \code{seed_threshold}: global minimum change-index value
-  required for a pixel to become a burned seed. Higher values produce
-  fewer and more conservative seeds; lower values increase sensitivity
-  but also false-positive risk.
+\item \code{seed_threshold}: global minimum change-index value
+required for a pixel to become a burned seed. Higher values produce
+fewer and more conservative seeds; lower values increase sensitivity
+but also false-positive risk.
 
-  \item \code{seed_threshold_by_vegetation}: class-specific lower
-  bounds for seed generation. Use when omission or commission errors
-  are concentrated in specific vegetation types.
+\item \code{seed_threshold_by_vegetation}: class-specific lower
+bounds for seed generation. Use when omission or commission errors
+are concentrated in specific vegetation types.
 
-  \item \code{growth_delta}: global reduction applied from the seed
-  threshold to the growth threshold. Higher values allow more
-  permissive expansion and larger patches; lower values produce
-  tighter and more conservative boundaries.
+\item \code{growth_delta}: global reduction applied from the seed
+threshold to the growth threshold. Higher values allow more
+permissive expansion and larger patches; lower values produce
+tighter and more conservative boundaries.
 
-  \item \code{growth_delta_by_vegetation}: class-specific relaxation
-  applied during region growing. Controls vegetation-specific patch
-  expansion behaviour.
+\item \code{growth_delta_by_vegetation}: class-specific relaxation
+applied during region growing. Controls vegetation-specific patch
+expansion behaviour.
 
-  \item \code{minimum_growth_threshold}: global minimum floor allowed
-  during region growing. Higher values restrict expansion into weak
-  spectral change; lower values allow growth into lower-severity
-  pixels.
+\item \code{minimum_growth_threshold}: global minimum floor allowed
+during region growing. Higher values restrict expansion into weak
+spectral change; lower values allow growth into lower-severity
+pixels.
 
-  \item \code{minimum_growth_threshold_by_vegetation}: class-specific
-  minimum floor constraining region growing. Useful when over- or
-  under-expansion is concentrated in particular land-cover classes.
+\item \code{minimum_growth_threshold_by_vegetation}: class-specific
+minimum floor constraining region growing. Useful when over- or
+under-expansion is concentrated in particular land-cover classes.
 
-  \item \code{minimum_seed_pixels}: minimum number of seed pixels
-  required to retain a candidate patch. Higher values remove small
-  isolated detections; lower values increase small-fire sensitivity.
-  Interpret together with raster resolution.
+\item \code{minimum_seed_pixels}: minimum number of seed pixels
+required to retain a candidate patch. Higher values remove small
+isolated detections; lower values increase small-fire sensitivity.
+Interpret together with raster resolution.
 }
 
 \strong{Refinement parameters}
 
 \itemize{
-  \item \code{aoi_buffer_m}: buffer around the area of interest used
-  during refinement. Controls edge artefacts near AOI boundaries.
+\item \code{aoi_buffer_m}: buffer around the area of interest used
+during refinement. Controls edge artefacts near AOI boundaries.
 
-  \item \code{minimum_detected_area_m2}: minimum polygon area retained
-  after segmentation. Usually kept permissive because later filters
-  evaluate patch reliability.
+\item \code{minimum_detected_area_m2}: minimum polygon area retained
+after segmentation. Usually kept permissive because later filters
+evaluate patch reliability.
 
-  \item \code{merge_overlaps}: logical flag controlling whether
-  overlapping polygons are merged during refinement.
+\item \code{merge_overlaps}: logical flag controlling whether
+overlapping polygons are merged during refinement.
 }
 
 \strong{Scoring parameters}
 
 \itemize{
-  \item \code{support_buffer_m}: buffer used to evaluate contextual
-  support around candidate patches.
+\item \code{support_buffer_m}: buffer used to evaluate contextual
+support around candidate patches.
 
-  \item \code{previous_fire_exclusion_buffer_m}: buffer around
-  previous-year burned areas used to identify temporal conflicts.
-  Increasing this value makes repeated-burn detection more
-  conservative.
+\item \code{previous_fire_exclusion_buffer_m}: buffer around
+previous-year burned areas used to identify temporal conflicts.
+Increasing this value makes repeated-burn detection more
+conservative.
 
-  \item \code{previous_fire_cleanup_buffer_m}: buffer used to clean
-  residual overlap with previous-year burned polygons.
+\item \code{previous_fire_cleanup_buffer_m}: buffer used to clean
+residual overlap with previous-year burned polygons.
 
-  \item \code{minimum_remaining_area_m2}: minimum polygon area
-  retained after temporal cleanup. Useful for removing residual
-  slivers after overlap removal.
+\item \code{minimum_remaining_area_m2}: minimum polygon area
+retained after temporal cleanup. Useful for removing residual
+slivers after overlap removal.
 
-  \item \code{reference_buffer_m}: buffer used when constructing or
-  comparing spectral-support references.
+\item \code{reference_buffer_m}: buffer used when constructing or
+comparing spectral-support references.
 }
 }
 \examples{
@@ -390,12 +390,12 @@ final_map <- run_deterministic_pipeline(config)
 \seealso{
 Related workflow functions:
 \itemize{
-  \item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}
-  \item \code{\link[=change_index_mosaic]{change_index_mosaic()}}
-  \item \code{\link[=detect_burned_patches]{detect_burned_patches()}}
-  \item \code{\link[=score_burned_patches]{score_burned_patches()}}
-  \item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}
-  \item \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
+\item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}
+\item \code{\link[=change_index_mosaic]{change_index_mosaic()}}
+\item \code{\link[=detect_burned_patches]{detect_burned_patches()}}
+\item \code{\link[=score_burned_patches]{score_burned_patches()}}
+\item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}
+\item \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 }
 
 Other workflow: 

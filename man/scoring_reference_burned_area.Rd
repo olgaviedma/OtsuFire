@@ -41,21 +41,21 @@ scoring_reference_burned_area(
 \item{burnable_corine}{sf or terra::SpatRaster. Burnable mask used to check domain
 and compute NA coverage when raster-based.}
 
-\item{burnable_classes}{Integer vector or NULL. If `burnable_corine` is categorical,
-these values are treated as burnable. If NULL, `burnable_corine` must be binary-like (0/1).}
+\item{burnable_classes}{Integer vector or NULL. If \code{burnable_corine} is categorical,
+these values are treated as burnable. If NULL, \code{burnable_corine} must be binary-like (0/1).}
 
-\item{rbr_rast}{Optional terra::SpatRaster. If provided and `compute_median=TRUE`,
-adds per-polygon median to `median_colname`.}
+\item{rbr_rast}{Optional terra::SpatRaster. If provided and \code{compute_median=TRUE},
+adds per-polygon median to \code{median_colname}.}
 
 \item{max_corine_na_frac}{Numeric or NULL. If finite, polygons with NA fraction in
-`burnable_corine` greater than this value are flagged as `drop_corine_na`.}
+\code{burnable_corine} greater than this value are flagged as \code{drop_corine_na}.}
 
 \item{na_exact}{Logical. If TRUE, uses exact extraction weights when computing NA fraction.}
 
 \item{burnable_exact}{Logical. If TRUE, uses exact extraction weights for burnable hit test.}
 
 \item{clip_to_burnable}{Logical. If TRUE, clip polygons to burnable pixels before scoring.
-Requires `burnable_corine` as a raster.}
+Requires \code{burnable_corine} as a raster.}
 
 \item{clip_mask_buffer_m}{Numeric. Buffer (meters) for expanding burnable mask in raster clip.}
 
@@ -97,22 +97,26 @@ Requires `burnable_corine` as a raster.}
 }
 \value{
 list with:
-- ref_flagged: reference polygons with diagnostics and `flag_ref_internal`
-- ref_flagged_clean: flagged layer where kept geometries are replaced by erased geometries (when available)
-- ref_kept, ref_kept_clean, ref_dropped
-- ref_kept_erased (NULL if no erase was performed)
-- out_paths (paths when saved)
+\itemize{
+\item ref_flagged: reference polygons with diagnostics and \code{flag_ref_internal}
+\item ref_flagged_clean: flagged layer where kept geometries are replaced by erased geometries (when available)
+\item ref_kept, ref_kept_clean, ref_dropped
+\item ref_kept_erased (NULL if no erase was performed)
+\item out_paths (paths when saved)
+}
 }
 \description{
 This helper is designed to make reference polygons directly comparable to the
 internally detected polygons by producing:
-- a burnable-domain quality flag (`flag_ref_internal`) with optional drops for
-  high NA coverage in the burnable raster and/or non-burnable locations
-- optional per-polygon median RBR (`median_colname`)
-- optional pre-year erase (same geometry cleaning logic as internal)
+\itemize{
+\item a burnable-domain quality flag (\code{flag_ref_internal}) with optional drops for
+high NA coverage in the burnable raster and/or non-burnable locations
+\item optional per-polygon median RBR (\code{median_colname})
+\item optional pre-year erase (same geometry cleaning logic as internal)
+}
 }
 \details{
-Unlike `scoring_internal_burned_area()`, this function does not use Stage-1 support
+Unlike \code{scoring_internal_burned_area()}, this function does not use Stage-1 support
 to define keep/review. Instead, it focuses on harmonizing per-polygon diagnostics
 and optional domain filtering.
 }

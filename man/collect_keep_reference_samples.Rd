@@ -51,17 +51,17 @@ the strict rule. Default \code{100}.}
 }
 \value{
 An object of class
-  \code{c("otsufire_keep_reference_samples", "list")} with fields:
+\code{c("otsufire_keep_reference_samples", "list")} with fields:
 \describe{
-  \item{\code{samples}}{\code{sf} of selected polygons (original useful
-    columns preserved, plus \code{run_label} and \code{decision_path}).}
-  \item{\code{summary}}{list with \code{n_files_input},
-    \code{n_polygons_input}, \code{n_polygons_selected},
-    \code{years_used}, \code{run_labels_used},
-    \code{target_year_excluded}, \code{min_area_ha}, \code{rule}.}
-  \item{\code{exclusion_counts}}{auditable \code{data.frame} with
-    columns \code{rule} and \code{n} (stable schema; see Details).}
-  \item{\code{decision_paths}}{the input paths.}
+\item{\code{samples}}{\code{sf} of selected polygons (original useful
+columns preserved, plus \code{run_label} and \code{decision_path}).}
+\item{\code{summary}}{list with \code{n_files_input},
+\code{n_polygons_input}, \code{n_polygons_selected},
+\code{years_used}, \code{run_labels_used},
+\code{target_year_excluded}, \code{min_area_ha}, \code{rule}.}
+\item{\code{exclusion_counts}}{auditable \code{data.frame} with
+columns \code{rule} and \code{n} (stable schema; see Details).}
+\item{\code{decision_paths}}{the input paths.}
 }
 
 The \code{exclusion_counts} schema is stable and always contains, in
@@ -92,9 +92,9 @@ which turns them into a reusable spectral-support \code{keep_pool}.
 
 This is the first of a two-step explicit workflow:
 \enumerate{
-  \item \strong{Select} reliable historical samples (this function).
-  \item \strong{Build} a reusable \code{keep_pool} from those samples
-    (\code{build_keep_pool_from_samples()}).
+\item \strong{Select} reliable historical samples (this function).
+\item \strong{Build} a reusable \code{keep_pool} from those samples
+(\code{build_keep_pool_from_samples()}).
 }
 
 \strong{Explicit helper workflow.} Neither this function nor
@@ -113,15 +113,15 @@ the selection rule described below is fixed in the public helper.
 \strong{Fixed \code{strict_hotspot} rule.} A polygon is selected only
 when \emph{all} of the following hold:
 \itemize{
-  \item \code{class_final == "keep"};
-  \item \code{filter_1 == "keep"};
-  \item \code{filter_2 == "keep"};
-  \item \code{filter_3 == "keep"};
-  \item \code{area_ha >= min_area_ha};
-  \item \code{conf_area == "ok"};
-  \item \code{conf_pix == "ok"};
-  \item if a \code{preyear_action} column exists,
-    \code{preyear_action != "drop"}.
+\item \code{class_final == "keep"};
+\item \code{filter_1 == "keep"};
+\item \code{filter_2 == "keep"};
+\item \code{filter_3 == "keep"};
+\item \code{area_ha >= min_area_ha};
+\item \code{conf_area == "ok"};
+\item \code{conf_pix == "ok"};
+\item if a \code{preyear_action} column exists,
+\code{preyear_action != "drop"}.
 }
 
 \code{run_label} is derived per polygon as the first available of

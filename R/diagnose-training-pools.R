@@ -965,7 +965,7 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
 #'   \item{B. Univariate separability}{per-feature Kruskal-Wallis across the group
 #'     column with BH-FDR. Effect sizes use \code{effectsize::rank_epsilon_squared}
 #'     (epsilon^2 = H/(n-1)) and \code{effectsize::rank_eta_squared}
-#'     (eta^2[H] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
+#'     (eta^2\[H\] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
 #'     quantities are computed manually and reported under the SAME column names
 #'     (\code{epsilon_squared}, \code{eta_squared}). Features ranked primarily by
 #'     epsilon^2. If \code{run_pairwise}, pairwise Wilcoxon between categories with

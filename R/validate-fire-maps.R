@@ -262,7 +262,7 @@
 #' count detected polygons, namely
 #' `coverage_ref >= threshold_min_detected`.
 #'
-#' By default, `threshold_min_detected = 10`, meaning that at least 10\%
+#' By default, `threshold_min_detected = 10`, meaning that at least 10%
 #' of a reference polygon must overlap the prediction to be counted as
 #' detected. To count any non-zero overlap as a detection instead, set
 #' `threshold_min_detected = 0`.

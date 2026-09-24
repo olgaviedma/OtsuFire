@@ -25,65 +25,65 @@ the raster metadata.}
 below this threshold are considered invalid and are capped during
 cleaning.}
 
-\item{cap_below}{Logical scalar. Whether values below `lower_cap` should
+\item{cap_below}{Logical scalar. Whether values below \code{lower_cap} should
 be treated as integrity problems.}
 
-\item{check_finite}{Logical scalar. Whether non-finite values (`Inf`,
-`-Inf`, `NaN`) should be checked and cleaned.}
+\item{check_finite}{Logical scalar. Whether non-finite values (\code{Inf},
+\code{-Inf}, \code{NaN}) should be checked and cleaned.}
 
 \item{action}{Character scalar controlling what to do when integrity
-  problems are found.
+problems are found.
 
-  Available options:
-  \itemize{
-    \item `"ask"`: interactive diagnostic mode. When the raster is dirty,
-      prompts the user to choose between backup-and-overwrite, overwrite,
-      skip, or fail.
-    \item `"backup_and_overwrite"`: safely rewrites the raster after
-      creating a timestamped backup.
-    \item `"overwrite"`: destructive overwrite without backup. In
-      interactive use, the function requires explicit confirmation before
-      proceeding.
-    \item `"fail"`: stops execution with a detailed error.
-  }}
+Available options:
+\itemize{
+\item \code{"ask"}: interactive diagnostic mode. When the raster is dirty,
+prompts the user to choose between backup-and-overwrite, overwrite,
+skip, or fail.
+\item \code{"backup_and_overwrite"}: safely rewrites the raster after
+creating a timestamped backup.
+\item \code{"overwrite"}: destructive overwrite without backup. In
+interactive use, the function requires explicit confirmation before
+proceeding.
+\item \code{"fail"}: stops execution with a detailed error.
+}}
 
 \item{backup_suffix}{Character scalar. Suffix inserted before the
-  timestamp when creating backup files.
+timestamp when creating backup files.
 
-  Resulting filename pattern:
-  `<stem><backup_suffix>_<YYYYmmdd_HHMMSS><ext>`.}
+Resulting filename pattern:
+\verb{<stem><backup_suffix>_<YYYYmmdd_HHMMSS><ext>}.}
 
-\item{verbose}{Logical scalar. If `TRUE`, informative progress messages
+\item{verbose}{Logical scalar. If \code{TRUE}, informative progress messages
 are emitted, including confirmation when the raster is already clean.}
 }
 \value{
 A character scalar containing the raster path.
 
-  If the raster is already clean, the original path is returned
-  unchanged.
+If the raster is already clean, the original path is returned
+unchanged.
 
-  If the raster is cleaned and rewritten, the returned path still points
-  to the cleaned raster location.
+If the raster is cleaned and rewritten, the returned path still points
+to the cleaned raster location.
 
-  If `action = "ask"` and the user chooses `skip`, the original path is
-  returned unchanged without rewriting the file.
+If \code{action = "ask"} and the user chooses \code{skip}, the original path is
+returned unchanged without rewriting the file.
 
-  If `action = "fail"` and integrity problems are detected, the function
-  aborts with `stop()`.
+If \code{action = "fail"} and integrity problems are detected, the function
+aborts with \code{stop()}.
 }
 \description{
 Check a raster file for common integrity problems and, if needed,
 repair it directly on disk.
 
-It loads a raster with `terra::rast()`, checks whether the file is
+It loads a raster with \code{terra::rast()}, checks whether the file is
 internally consistent, and optionally rewrites it using the standard
 OtsuFire output settings.
 
 Typical problems detected include:
 \itemize{
-  \item missing or inconsistent NoData metadata,
-  \item corrupted or non-finite pixel values (`Inf`, `-Inf`, `NaN`),
-  \item unexpected extreme negative values below the accepted lower bound.
+\item missing or inconsistent NoData metadata,
+\item corrupted or non-finite pixel values (\code{Inf}, \code{-Inf}, \code{NaN}),
+\item unexpected extreme negative values below the accepted lower bound.
 }
 
 The goal is to catch problems early and avoid unstable behaviour in
@@ -96,25 +96,24 @@ path unchanged without modifying disk contents.
 A raster is considered inconsistent when at least one of the following
 conditions is detected:
 \enumerate{
-  \item the declared NoData value differs from `expected_nodata`,
-  \item the raster minimum falls below `lower_cap`,
-  \item non-finite values (`Inf`, `-Inf`, `NaN`) are present.
+\item the declared NoData value differs from \code{expected_nodata},
+\item the raster minimum falls below \code{lower_cap},
+\item non-finite values (\code{Inf}, \code{-Inf}, \code{NaN}) are present.
 }
 
 When cleaning is applied, the function performs the following
 operations:
 \enumerate{
-  \item replaces non-finite values with `NA`,
-  \item caps values below `lower_cap`,
-  \item rewrites raster metadata using the expected NoData value,
-  \item writes the raster using standard OtsuFire GDAL options.
+\item replaces non-finite values with \code{NA},
+\item caps values below \code{lower_cap},
+\item rewrites raster metadata using the expected NoData value,
+\item writes the raster using standard OtsuFire GDAL options.
 }
 
 The raster is always written using:
-`wopt = list(NAflag = expected_nodata, gdal = c("COMPRESS=LZW",
-"BIGTIFF=YES", "TILED=YES"))`.
+\code{wopt = list(NAflag = expected_nodata, gdal = c("COMPRESS=LZW", "BIGTIFF=YES", "TILED=YES"))}.
 
-This matches the writing strategy used internally by `mosaic_from_tiles()`.
+This matches the writing strategy used internally by \code{mosaic_from_tiles()}.
 
 Large remote-sensing workflows frequently depend on chained raster
 operations involving mosaicking, thresholding, polygonization, and
@@ -122,12 +121,12 @@ machine-learning pipelines.
 
 Corrupted raster metadata or invalid pixel values may silently cause:
 \itemize{
-  \item failed processing steps,
-  \item unstable summary statistics,
-  \item incorrect thresholds,
-  \item invalid polygons,
-  \item model instability,
-  \item or inconsistent burned-area products.
+\item failed processing steps,
+\item unstable summary statistics,
+\item incorrect thresholds,
+\item invalid polygons,
+\item model instability,
+\item or inconsistent burned-area products.
 }
 
 In practice, this gives you a reproducible way to validate and

@@ -20,97 +20,97 @@ extract_supervised_features(
 \arguments{
 \item{train_with_folds}{sf POLYGON layer OR a single GPKG path. The labelled
 training layer with fold columns produced by the folds stage (the
-`train_with_folds` object / the `train_with_folds` layer of
-`02_FOLDS/<year>_train_with_folds_<bs>m.gpkg`). Must carry `fire_uid` and
-`class`. When a path is supplied the `train_with_folds` layer is read.}
+\code{train_with_folds} object / the \code{train_with_folds} layer of
+\verb{02_FOLDS/<year>_train_with_folds_<bs>m.gpkg}). Must carry \code{fire_uid} and
+\code{class}. When a path is supplied the \code{train_with_folds} layer is read.}
 
 \item{scoring_pool}{sf POLYGON layer OR a single GPKG path. The deterministic
-scoring universe produced by the pools stage (the `scoring_pool` object /
-the `scoring_pool` layer of `01_POOLS/<year>_<run_label>_pools.gpkg`). When
-a path is supplied the `scoring_pool` layer is read.}
+scoring universe produced by the pools stage (the \code{scoring_pool} object /
+the \code{scoring_pool} layer of \verb{01_POOLS/<year>_<run_label>_pools.gpkg}). When
+a path is supplied the \code{scoring_pool} layer is read.}
 
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Used to derive `out_dir` (the
-`03_FEATURES` folder), the raster INPUT paths
-(`config$options$data_base` / `composite_base` / `result_name`), the
-change-index master template, and `target_year` / `scenario`.}
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Used to derive \code{out_dir} (the
+\verb{03_FEATURES} folder), the raster INPUT paths
+(\code{config$options$data_base} / \code{composite_base} / \code{result_name}), the
+change-index master template, and \code{target_year} / \code{scenario}.}
 
-\item{use_hotspots}{Logical. When `FALSE` (default) the hotspot feature block
-is forced off. When `TRUE` the block is enabled if and only if the loaded
-hotspot layer has rows with a usable CRS. Default `FALSE`.}
+\item{use_hotspots}{Logical. When \code{FALSE} (default) the hotspot feature block
+is forced off. When \code{TRUE} the block is enabled if and only if the loaded
+hotspot layer has rows with a usable CRS. Default \code{FALSE}.}
 
 \item{use_shape}{Logical. Optional shape/size feature block, off by default
-(`FALSE`). When `TRUE` the engine computes four geometric columns
-(`log_area`, `perim_m`, `compactness`, `elongation`; `area_ha` / `n_pix`
+(\code{FALSE}). When \code{TRUE} the engine computes four geometric columns
+(\code{log_area}, \code{perim_m}, \code{compactness}, \code{elongation}; \code{area_ha} / \code{n_pix}
 already ride along as pool-builder columns) and left-joins them onto both
-the train and scoring feature layers. When left at its `FALSE` default it
-is driven from the config (`cfg$train_control$include_shape_features` or
-the convenience `options$use_shape`); an explicit `TRUE` always wins. With
+the train and scoring feature layers. When left at its \code{FALSE} default it
+is driven from the config (\code{cfg$train_control$include_shape_features} or
+the convenience \code{options$use_shape}); an explicit \code{TRUE} always wins. With
 the block off no join runs and the extraction output is unchanged. See the
-sampling-bias note in [build_supervised_burned_config()].}
+sampling-bias note in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
 
-\item{out_dir}{Character or `NULL`. Output folder for the `03_FEATURES`
-outputs. Defaults to `config$output_routes$features_dir`.}
+\item{out_dir}{Character or \code{NULL}. Output folder for the \verb{03_FEATURES}
+outputs. Defaults to \code{config$output_routes$features_dir}.}
 
-\item{write_outputs}{Logical. Whether to write the `features_geometry.gpkg`
-and `*_features.rds` outputs. Default `TRUE`.}
+\item{write_outputs}{Logical. Whether to write the \code{features_geometry.gpkg}
+and \verb{*_features.rds} outputs. Default \code{TRUE}.}
 
 \item{.aligned_rasters, .hotspots_sf, .cor_groups}{For internal use by
-[run_oneyear_supervised_pipeline()], which passes rasters and layers it has
-already loaded. Leave them as `NULL` (the default).}
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, which passes rasters and layers it has
+already loaded. Leave them as \code{NULL} (the default).}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `train_features` — the labelled training features (sf), the
-      `train_features` layer contents.
-    \item `scoring_features` — the scoring-universe features (sf), the
-      `scoring_features` layer contents.
-    \item `features_geometry_gpkg` — written path of `features_geometry.gpkg`.
-    \item `train_features_rds`, `scoring_features_rds` — written RDS paths.
-  }
+\itemize{
+\item \code{train_features} — the labelled training features (sf), the
+\code{train_features} layer contents.
+\item \code{scoring_features} — the scoring-universe features (sf), the
+\code{scoring_features} layer contents.
+\item \code{features_geometry_gpkg} — written path of \code{features_geometry.gpkg}.
+\item \code{train_features_rds}, \code{scoring_features_rds} — written RDS paths.
+}
 }
 \description{
 Computes the per-polygon predictor features the burned-area model is trained
 and scored on, for both the labelled training polygons and the deterministic
 scoring universe. This is the feature-extraction stage of the supervised
-pipeline; its `features_geometry.gpkg` output then feeds the OOF and
+pipeline; its \code{features_geometry.gpkg} output then feeds the OOF and
 final-model stages.
 
-Run it after the folds stage and before [run_oof_diagnostics()]. Pass the
+Run it after the folds stage and before \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}. Pass the
 train-with-folds layer, the scoring pool, and the configuration from
-[build_supervised_burned_config()]. Calling this function directly produces
-the same `03_FEATURES` outputs as the equivalent stage of the full pipeline
-[run_oneyear_supervised_pipeline()].
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Calling this function directly produces
+the same \verb{03_FEATURES} outputs as the equivalent stage of the full pipeline
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
 \details{
 \strong{Raster loading.} The function resolves the raster input paths from
-`config$options$data_base` / `composite_base` / `result_name` and aligns
+\code{config$options$data_base} / \code{composite_base} / \code{result_name} and aligns
 them to the change-index template itself.
 
-\strong{Staleness rebuild.} When `features_geometry.gpkg` already exists it
+\strong{Staleness rebuild.} When \code{features_geometry.gpkg} already exists it
 is rebuilt when it is older than the pools / folds inputs, when it is missing
-the `train_features` / `scoring_features` layers, or when its layer row
+the \code{train_features} / \code{scoring_features} layers, or when its layer row
 counts do not match the train-with-folds / scoring-pool row counts; otherwise
 it is reused.
 
 \strong{Hotspots.} The engine's hotspot block is enabled only when the loaded
-hotspot layer has rows with a usable CRS. Setting `use_hotspots = FALSE`
+hotspot layer has rows with a usable CRS. Setting \code{use_hotspots = FALSE}
 (the default) forces the block off regardless of the loaded layer.
 }
 \section{What it does}{
 
 \enumerate{
-  \item Loads and aligns the supervised raster support stack (RBR summer,
-    post-fire DOY, autumn-winter RBR, DEM, slope, CORINE) to the
-    change-index master template.
-  \item Optionally loads the target-year hotspot layer.
-  \item Runs the patch-level feature engine on the
-    labelled and scoring polygons with the pipeline's standard settings.
-  \item Optionally appends shape/size features (see `use_shape`).
-  \item Writes `features_geometry.gpkg` (carrying the `train_features` and
-    `scoring_features` layers) plus `train_features.rds` and
-    `scoring_features.rds`, and returns the in-memory objects.
+\item Loads and aligns the supervised raster support stack (RBR summer,
+post-fire DOY, autumn-winter RBR, DEM, slope, CORINE) to the
+change-index master template.
+\item Optionally loads the target-year hotspot layer.
+\item Runs the patch-level feature engine on the
+labelled and scoring polygons with the pipeline's standard settings.
+\item Optionally appends shape/size features (see \code{use_shape}).
+\item Writes \code{features_geometry.gpkg} (carrying the \code{train_features} and
+\code{scoring_features} layers) plus \code{train_features.rds} and
+\code{scoring_features.rds}, and returns the in-memory objects.
 }
 }
 
@@ -130,10 +130,10 @@ feats$features_geometry_gpkg
 }
 }
 \seealso{
-[build_supervised_burned_config()], [make_spatial_folds()],
-[run_oof_diagnostics()], [train_final_burned_model()],
-[score_supervised_burned_map()], [validate_supervised_execution()],
-[run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}, \code{\link[=train_final_burned_model]{train_final_burned_model()}},
+\code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

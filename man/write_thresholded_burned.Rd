@@ -44,8 +44,8 @@ make geometries valid, and drop empties before writing.}
 }
 \value{
 Invisibly, a list with \code{path}, \code{layer}, \code{threshold},
-  \code{score_col}, \code{n_in}, \code{n_kept}, \code{n_nonfinite},
-  \code{n_dropped_empty}, \code{crs_epsg} and \code{overwrite}.
+\code{score_col}, \code{n_in}, \code{n_kept}, \code{n_nonfinite},
+\code{n_dropped_empty}, \code{crs_epsg} and \code{overwrite}.
 }
 \description{
 Takes candidates already scored by the supervised model (a \code{scored_all}

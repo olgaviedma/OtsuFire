@@ -23,7 +23,7 @@ mosaic.}
 mask the mosaic.}
 
 \item{raster_pattern}{Character scalar. Pattern used to list candidate raster
-tiles inside `folder_path`.}
+tiles inside \code{folder_path}.}
 
 \item{nodata_value}{Numeric scalar used as NoData when reading and writing
 rasters.}
@@ -31,12 +31,12 @@ rasters.}
 \item{tol}{Numeric scalar. Tolerance used when checking tile resolution and
 origin alignment.}
 
-\item{cap_below}{Logical scalar. Whether values below `lower_cap` should be
-replaced by `lower_cap`.}
+\item{cap_below}{Logical scalar. Whether values below \code{lower_cap} should be
+replaced by \code{lower_cap}.}
 
-\item{lower_cap}{Numeric scalar. Lower bound applied when `cap_below = TRUE`.}
+\item{lower_cap}{Numeric scalar. Lower bound applied when \code{cap_below = TRUE}.}
 
-\item{method}{Character scalar. Mosaic method. Currently only `"merge"` is
+\item{method}{Character scalar. Mosaic method. Currently only \code{"merge"} is
 implemented.}
 }
 \value{
@@ -45,7 +45,7 @@ Character scalar with the path to the written mosaic GeoTIFF.
 \description{
 Build a masked mosaic from raster tiles stored in a folder. The function
 checks that all tiles share CRS, resolution, origin alignment, and band
-count, merges them with `terra::merge()`, crops and masks the result to the
+count, merges them with \code{terra::merge()}, crops and masks the result to the
 input mask, optionally caps values below a lower bound, writes the final
 GeoTIFF, and returns its path.
 }

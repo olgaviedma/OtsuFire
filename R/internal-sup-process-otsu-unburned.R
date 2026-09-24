@@ -26,7 +26,7 @@
 #'   - Threshold log files
 #'
 #' @details
-#' - Raster values are internally rescaled to [0, 255] before Otsu thresholding.
+#' - Raster values are internally rescaled to \[0, 255\] before Otsu thresholding.
 #' - Histogram smoothing and variance curves are used for enhanced threshold detection.
 #' - Output shapefiles can be in ESRI Shapefile or GeoJSON format.
 #' - Intermediate tile shapefiles and rasters are cleaned after processing.

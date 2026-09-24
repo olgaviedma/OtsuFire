@@ -91,9 +91,9 @@ NULL keeps all columns.}
 Named list (one element per input) with output paths and in-memory sf objects.
 }
 \description{
-This function computes geometric metrics on a (optionally) **dissolved** representation
+This function computes geometric metrics on a (optionally) \strong{dissolved} representation
 of polygons (contiguous patches), and then propagates those metrics back to the
-**original** polygons (or to an optional overlay geometry). It can also create a
+\strong{original} polygons (or to an optional overlay geometry). It can also create a
 filtered subset based on user thresholds.
 
 The implementation is optimized to avoid expensive polygon intersections by using a
@@ -101,22 +101,22 @@ fast point-in-polygon join (point-on-surface + within). If the join is ambiguous
 (a point falls inside multiple dissolved polygons), the largest dissolved polygon
 by area is selected.
 
-By default, outputs store only **clean metric names** (no legacy aliases). Set
+By default, outputs store only \strong{clean metric names} (no legacy aliases). Set
 \code{keep_legacy = TRUE} to also store legacy fields for backward compatibility.
 }
 \section{Clean metrics (saved by default)}{
 
 \describe{
-  \item{\code{burned_id}}{ID of the dissolved polygon (patch) used to attach metrics.}
-  \item{\code{area_ha}}{Area (ha) of the dissolved polygon.}
-  \item{\code{bbox_w_m}, \code{bbox_h_m}}{Axis-aligned bounding box width/height (m).}
-  \item{\code{perimeter_m}}{Perimeter (m).}
-  \item{\code{mrr_w_m}, \code{mrr_l_m}}{Minimum rotated rectangle short/long side (m).}
-  \item{\code{elong_mrr}}{Elongation from MRR: \code{mrr_l_m / mrr_w_m} (rotation-invariant).}
-  \item{\code{compact_pp}}{Polsby-Popper compactness: \code{4*pi*A/P^2} (0-1).}
-  \item{\code{shape_index}}{Shape index: \code{P/(2*sqrt(pi*A))} (>= 1).}
-  \item{\code{rect_fill}}{Rectangular fill: \code{A / (mrr_w_m*mrr_l_m)} (0-1).}
-  \item{\code{join_ambiguous}}{TRUE if the join was ambiguous (multiple dissolved hits).}
+\item{\code{burned_id}}{ID of the dissolved polygon (patch) used to attach metrics.}
+\item{\code{area_ha}}{Area (ha) of the dissolved polygon.}
+\item{\code{bbox_w_m}, \code{bbox_h_m}}{Axis-aligned bounding box width/height (m).}
+\item{\code{perimeter_m}}{Perimeter (m).}
+\item{\code{mrr_w_m}, \code{mrr_l_m}}{Minimum rotated rectangle short/long side (m).}
+\item{\code{elong_mrr}}{Elongation from MRR: \code{mrr_l_m / mrr_w_m} (rotation-invariant).}
+\item{\code{compact_pp}}{Polsby-Popper compactness: \code{4*pi*A/P^2} (0-1).}
+\item{\code{shape_index}}{Shape index: \code{P/(2*sqrt(pi*A))} (>= 1).}
+\item{\code{rect_fill}}{Rectangular fill: \code{A / (mrr_w_m*mrr_l_m)} (0-1).}
+\item{\code{join_ambiguous}}{TRUE if the join was ambiguous (multiple dissolved hits).}
 }
 }
 
@@ -126,7 +126,7 @@ Filtering is applied on dissolved polygons using the provided thresholds. If
 \code{filter_logic = "AND"}, all active filters must pass; if \code{"OR"}, any active
 filter is sufficient. Set \code{filter_logic = NULL} to disable filtering entirely.
 
-Note: Some filter thresholds are defined on *legacy* metrics (\code{p_w_ratio_min},
+Note: Some filter thresholds are defined on \emph{legacy} metrics (\code{p_w_ratio_min},
 \code{h_w_ratio_min}). These are computed internally if needed for filtering, but are
 not written unless \code{keep_legacy = TRUE}.
 }

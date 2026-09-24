@@ -17,87 +17,87 @@ make_spatial_folds(
 }
 \arguments{
 \item{train_labelled}{sf POLYGON layer OR a single GPKG path. The labelled
-training pool produced by the pools stage (the `train_labeled` object /
-the `train_labeled` layer of `01_POOLS/<year>_<run_label>_pools.gpkg`).
-Must carry the `class` column (with `burned`/`unburned` labels) and, for
-`split_unit = "fire"`, the `fire_uid` column. When a path is supplied the
-`train_labeled` layer is read.}
+training pool produced by the pools stage (the \code{train_labeled} object /
+the \code{train_labeled} layer of \verb{01_POOLS/<year>_<run_label>_pools.gpkg}).
+Must carry the \code{class} column (with \code{burned}/\code{unburned} labels) and, for
+\code{split_unit = "fire"}, the \code{fire_uid} column. When a path is supplied the
+\code{train_labeled} layer is read.}
 
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Used to derive `out_dir` (the
-`02_FOLDS` folder under `config$output_routes$base`) and the
-output-naming year (`config$target_year`).}
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Used to derive \code{out_dir} (the
+\verb{02_FOLDS} folder under \code{config$output_routes$base}) and the
+output-naming year (\code{config$target_year}).}
 
 \item{split_unit}{Character scalar. Unit kept together across folds:
-`"fire"` (default, recommended for transferability) or `"poly"`.}
+\code{"fire"} (default, recommended for transferability) or \code{"poly"}.}
 
 \item{block_sizes_m}{Numeric vector. Candidate block sizes in meters, tried
-from stricter (larger) to looser. Default `c(5000, 3000, 2000)`.}
+from stricter (larger) to looser. Default \code{c(5000, 3000, 2000)}.}
 
-\item{k_candidates}{Integer vector. Candidate fold counts, each `>= 2`.
-Default `c(5L, 4L, 3L)`.}
+\item{k_candidates}{Integer vector. Candidate fold counts, each \verb{>= 2}.
+Default \code{c(5L, 4L, 3L)}.}
 
-\item{out_dir}{Character or `NULL`. Output folder. Defaults to
-`config$output_routes$folds_dir` (the `02_FOLDS` folder).}
+\item{out_dir}{Character or \code{NULL}. Output folder. Defaults to
+\code{config$output_routes$folds_dir} (the \verb{02_FOLDS} folder).}
 
 \item{write_outputs}{Logical. Whether to write the blocks GPKG, folds CSV
-and train-with-folds GPKG. Default `TRUE`.}
+and train-with-folds GPKG. Default \code{TRUE}.}
 
 \item{overwrite}{Logical. Whether to clobber existing fold outputs. Default
-`FALSE`. When `FALSE` and all three canonical outputs already exist on
+\code{FALSE}. When \code{FALSE} and all three canonical outputs already exist on
 disk, the stage reuses them instead of recomputing (the recomputation is
 skipped and the existing objects/paths are returned).}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `blocks` — sf grid of the selected block size.
-    \item `folds_table` — data.frame of polygon-level fold assignments
-      (the contents written to the folds CSV).
-    \item `train_with_folds` — sf polygons + `fold_rep*` columns.
-    \item `blocks_gpkg`, `folds_csv`, `train_with_folds_gpkg` — written
-      paths (or the canonical target paths when `write_outputs = FALSE`).
-    \item `selected` — the chosen `(block_size_m, k_folds, ok, ...)`.
-  }
+\itemize{
+\item \code{blocks} — sf grid of the selected block size.
+\item \code{folds_table} — data.frame of polygon-level fold assignments
+(the contents written to the folds CSV).
+\item \code{train_with_folds} — sf polygons + \verb{fold_rep*} columns.
+\item \code{blocks_gpkg}, \code{folds_csv}, \code{train_with_folds_gpkg} — written
+paths (or the canonical target paths when \code{write_outputs = FALSE}).
+\item \code{selected} — the chosen \verb{(block_size_m, k_folds, ok, ...)}.
+}
 }
 \description{
 Assigns spatially blocked cross-validation folds to the labelled training
 pool, so that out-of-fold diagnostics measure spatial transferability rather
 than memorisation of nearby polygons. This is the folds stage of the
-supervised pipeline; its `train_with_folds` output then feeds
-[extract_supervised_features()] and [run_oof_diagnostics()].
+supervised pipeline; its \code{train_with_folds} output then feeds
+\code{\link[=extract_supervised_features]{extract_supervised_features()}} and \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}.
 
-Run it after the pools stage ([build_supervised_training_pools()]) and before
+Run it after the pools stage (\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}) and before
 feature extraction. Pass the labelled training pool and the configuration
-from [build_supervised_burned_config()]. Calling this function directly
+from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Calling this function directly
 produces the same fold outputs as the equivalent stage of the full pipeline
-[run_oneyear_supervised_pipeline()].
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
 \section{What it does}{
 
 \enumerate{
-  \item Builds candidate square block grids over the polygons, trying each
-    `block_sizes_m` from larger (stricter) to smaller (looser).
-  \item Auto-tunes the `(block_size, k)` combination against per-fold
-    acceptance gates (minimum burned units and positive blocks per fold).
-  \item Assigns repeated block-CV folds, keeping each `split_unit` (a whole
-    fire or a single polygon) together within one fold.
-  \item Propagates the unit-level folds back onto the polygon table.
-  \item Writes the `02_FOLDS` outputs and returns the in-memory objects.
+\item Builds candidate square block grids over the polygons, trying each
+\code{block_sizes_m} from larger (stricter) to smaller (looser).
+\item Auto-tunes the \verb{(block_size, k)} combination against per-fold
+acceptance gates (minimum burned units and positive blocks per fold).
+\item Assigns repeated block-CV folds, keeping each \code{split_unit} (a whole
+fire or a single polygon) together within one fold.
+\item Propagates the unit-level folds back onto the polygon table.
+\item Writes the \verb{02_FOLDS} outputs and returns the in-memory objects.
 }
 When no candidate passes the acceptance gate, the best non-passing candidate
-is used, a `_FOLD_FALLBACK.txt` audit file is written, and a loud
-`warning()` is raised.
+is used, a \verb{_FOLD_FALLBACK.txt} audit file is written, and a loud
+\code{warning()} is raised.
 }
 
 \section{Outputs}{
 
-Written under the `02_FOLDS` folder:
+Written under the \verb{02_FOLDS} folder:
 \itemize{
-  \item `<year>_blocks_<bs>m.gpkg` — the selected block grid.
-  \item `<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv` — fold assignments.
-  \item `<year>_train_with_folds_<bs>m.gpkg` — polygons with `fold_rep*`
-    columns.
+\item \verb{<year>_blocks_<bs>m.gpkg} — the selected block grid.
+\item \verb{<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv} — fold assignments.
+\item \verb{<year>_train_with_folds_<bs>m.gpkg} — polygons with \verb{fold_rep*}
+columns.
 }
 }
 
@@ -113,9 +113,9 @@ folds$train_with_folds_gpkg
 }
 }
 \seealso{
-[build_supervised_burned_config()], [build_supervised_training_pools()],
-[extract_supervised_features()], [run_oof_diagnostics()],
-[validate_supervised_execution()], [run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=validate_supervised_execution]{validate_supervised_execution()}}, \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

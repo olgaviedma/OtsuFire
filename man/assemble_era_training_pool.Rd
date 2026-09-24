@@ -29,8 +29,8 @@ assemble_era_training_pool(
 }
 \value{
 A list with \code{pool} (the merged \code{sf} training pool),
-  \code{omissions} (\code{sf} of \code{VISUAL = 0} real fires, or
-  \code{NULL}) and \code{summary} (per-year row counts).
+\code{omissions} (\code{sf} of \code{VISUAL = 0} real fires, or
+\code{NULL}) and \code{summary} (per-year row counts).
 }
 \description{
 Merges several years of visually-validated supervised pools into one

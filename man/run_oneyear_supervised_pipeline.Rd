@@ -28,93 +28,93 @@ run_oneyear_supervised_pipeline(
 )
 }
 \arguments{
-\item{config}{`otsufire_supervised_burned_config` object from
-[build_supervised_burned_config()].}
+\item{config}{\code{otsufire_supervised_burned_config} object from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
 
 \item{run_consistency}{Logical. Whether to run the
-deterministic-vs-supervised consistency check. Default `TRUE`.}
+deterministic-vs-supervised consistency check. Default \code{TRUE}.}
 
-\item{overwrite}{Logical. Default `FALSE`: stage outputs that already
+\item{overwrite}{Logical. Default \code{FALSE}: stage outputs that already
 exist on disk are reused, so an interrupted run can resume without
-recomputing completed stages. Set `TRUE` to regenerate every stage
+recomputing completed stages. Set \code{TRUE} to regenerate every stage
 output.}
 
 \item{random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric or
-`NULL`. Deprecated; set `negative_pool_params$caps` in
-[build_supervised_burned_config()] instead. Caps on the
+\code{NULL}. Deprecated; set \code{negative_pool_params$caps} in
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Caps on the
 burnable-background and moderately burned-like negatives, as multiples
-of the number of burned labels. `NULL` (default) uses the configured
-caps (package default `1.0` each).}
+of the number of burned labels. \code{NULL} (default) uses the configured
+caps (package default \code{1.0} each).}
 
-\item{feature_whitelist_override}{Character vector or `NULL`. Deprecated;
-set it in [build_supervised_burned_config()] instead. Restricts the
+\item{feature_whitelist_override}{Character vector or \code{NULL}. Deprecated;
+set it in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Restricts the
 features the OOF and final models may use to a subset of the package's
 supervised feature list; names outside that list are an error, so the
-list can only be narrowed, never extended. `NULL` (default) uses the
+list can only be narrowed, never extended. \code{NULL} (default) uses the
 configured feature set.}
 
-\item{feature_weights}{Named numeric vector or `NULL`. Deprecated; set it
-in [build_supervised_burned_config()] instead. Per-feature weights passed
+\item{feature_weights}{Named numeric vector or \code{NULL}. Deprecated; set it
+in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. Per-feature weights passed
 to XGBoost for the OOF and final models. Names must be model features (or
-their `_isNA` companions); unknown names are dropped with a warning and
-unnamed features keep weight 1. Values must be finite and `>= 0`: values
-in (0, 1) attenuate a feature, values above 1 boost it. `NULL` (default)
+their \verb{_isNA} companions); unknown names are dropped with a warning and
+unnamed features keep weight 1. Values must be finite and \verb{>= 0}: values
+in (0, 1) attenuate a feature, values above 1 boost it. \code{NULL} (default)
 uses the configured weights (uniform 1 by default).}
 
-\item{reuse_upstream}{Logical. When `TRUE`, the pools, folds and features
+\item{reuse_upstream}{Logical. When \code{TRUE}, the pools, folds and features
 stages are skipped and their outputs are read from an existing run
-(`01_POOLS/<year>_<run_label>_pools.gpkg`,
-`02_FOLDS/<year>_train_with_folds_<size>m.gpkg` and
-`03_FEATURES/features_geometry.gpkg` must already exist). Default
-`FALSE`.}
+(\verb{01_POOLS/<year>_<run_label>_pools.gpkg},
+\verb{02_FOLDS/<year>_train_with_folds_<size>m.gpkg} and
+\verb{03_FEATURES/features_geometry.gpkg} must already exist). Default
+\code{FALSE}.}
 
-\item{oof_nrounds_max, oof_early_stop, oof_seed_base}{Integer or `NULL`.
-Deprecated; set them in [build_supervised_burned_config()] instead.
+\item{oof_nrounds_max, oof_early_stop, oof_seed_base}{Integer or \code{NULL}.
+Deprecated; set them in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead.
 Maximum boosting rounds, early-stopping patience and base RNG seed of the
-OOF models. `NULL` (default) uses the configured values (package defaults
-`4000`, `80` and `42`).}
+OOF models. \code{NULL} (default) uses the configured values (package defaults
+\code{4000}, \code{80} and \code{42}).}
 
-\item{final_sampling_seed, final_seed}{Integer or `NULL`. Deprecated; set
-them in [build_supervised_burned_config()] instead. RNG seeds of the
+\item{final_sampling_seed, final_seed}{Integer or \code{NULL}. Deprecated; set
+them in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead. RNG seeds of the
 final model's negative sampling and of its train/validation split and
-training. `NULL` (default) uses the configured values (package default
-`42`).}
+training. \code{NULL} (default) uses the configured values (package default
+\code{42}).}
 
-\item{final_val_frac}{Numeric in (0, 1) or `NULL`. Deprecated. Validation
-fraction of the final model's train/validation split. `NULL` (default)
-uses the configured value (package default `0.15`).}
+\item{final_val_frac}{Numeric in (0, 1) or \code{NULL}. Deprecated. Validation
+fraction of the final model's train/validation split. \code{NULL} (default)
+uses the configured value (package default \code{0.15}).}
 
-\item{final_group_col}{Character or `NULL`. Deprecated. Grouping column of
-the final model's grouped train/validation split. `NULL` (default) uses
-the configured value (package default `"block_id"`).}
+\item{final_group_col}{Character or \code{NULL}. Deprecated. Grouping column of
+the final model's grouped train/validation split. \code{NULL} (default) uses
+the configured value (package default \code{"block_id"}).}
 
-\item{final_nrounds_max, final_early_stopping_rounds}{Integer or `NULL`.
+\item{final_nrounds_max, final_early_stopping_rounds}{Integer or \code{NULL}.
 Deprecated. Maximum boosting rounds and early-stopping patience of the
-final model. `NULL` (default) uses the configured values (package
-defaults `4000` and `80`, the same as the OOF models).}
+final model. \code{NULL} (default) uses the configured values (package
+defaults \code{4000} and \code{80}, the same as the OOF models).}
 
-\item{final_impute_numeric}{Character or `NULL`. Deprecated.
-Numeric-imputation rule of the final model, `"median"` or `"zero"`.
-`NULL` (default) uses the configured value (package default
-`"median"`).}
+\item{final_impute_numeric}{Character or \code{NULL}. Deprecated.
+Numeric-imputation rule of the final model, \code{"median"} or \code{"zero"}.
+\code{NULL} (default) uses the configured value (package default
+\code{"median"}).}
 
-\item{final_impute_factor_missing}{Character or `NULL`. Deprecated. Level
-used for missing factor/character values in the final model. `NULL`
-(default) uses the configured value (package default `"MISSING"`).}
+\item{final_impute_factor_missing}{Character or \code{NULL}. Deprecated. Level
+used for missing factor/character values in the final model. \code{NULL}
+(default) uses the configured value (package default \code{"MISSING"}).}
 
 \item{...}{Not used. Any extra named argument is an error, so a misspelt
 or removed argument is never silently ignored. The removed arguments
-`additional_drop_cols` / `extra_drop_cols` give an error that points to
-`feature_whitelist_override`.}
+\code{additional_drop_cols} / \code{extra_drop_cols} give an error that points to
+\code{feature_whitelist_override}.}
 }
 \value{
-A named list of class `otsufire_supervised_run` with fields:
-  `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
-  `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
-  `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
-  `consistency_*`, `resolved_params_provenance`,
-  `model_params_provenance` (per-field XGBoost settings and their origin),
-  `legacy_run_summary`, `legacy_consistency_summary`.
+A named list of class \code{otsufire_supervised_run} with fields:
+\code{config}, \code{result_dir}, \code{pools_gpkg}, \code{train_with_folds_gpkg},
+\code{features_geometry_gpkg}, \code{oof_agg_csv}, \code{final_model_rds},
+\code{final_map_gpkg}, \code{burned_like_gpkg}, \code{timing_csv},
+\verb{consistency_*}, \code{resolved_params_provenance},
+\code{model_params_provenance} (per-field XGBoost settings and their origin),
+\code{legacy_run_summary}, \code{legacy_consistency_summary}.
 }
 \description{
 Runs the whole supervised workflow for one target year from a single
@@ -122,19 +122,19 @@ configuration object: training pools, spatial folds, feature extraction,
 out-of-fold (OOF) diagnostics, final model training, scoring, and the
 optional deterministic-vs-supervised consistency check. Each stage can
 also be run on its own with the corresponding function
-([build_supervised_training_pools()], [make_spatial_folds()],
-[extract_supervised_features()], [run_oof_diagnostics()],
-[train_final_burned_model()], [score_supervised_burned_map()],
-[check_supervised_consistency()]); the results are the same.
+(\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=check_supervised_consistency]{check_supervised_consistency()}}); the results are the same.
 
-The final map returned in `final_map_gpkg` carries the per-patch
-`p_burned` score. Threshold it (for example with
-[write_thresholded_burned()]) and pass it to [validate_fire_maps()] for
+The final map returned in \code{final_map_gpkg} carries the per-patch
+\code{p_burned} score. Threshold it (for example with
+\code{\link[=write_thresholded_burned]{write_thresholded_burned()}}) and pass it to \code{\link[=validate_fire_maps]{validate_fire_maps()}} for
 external validation.
 }
 \details{
 The OOF and final models share one training procedure: imputation
-medians and `scale_pos_weight` are fit on the training rows only, an inner
+medians and \code{scale_pos_weight} are fit on the training rows only, an inner
 validation split selects the number of boosting rounds by early stopping,
 and a fresh model is refit on all training rows at that round count. OOF
 applies the same capped negative sampling as the final model,
@@ -142,35 +142,35 @@ independently within each training fold.
 
 Training eligibility is defined by explicit class, never by negation: only
 burned rows (positives) and unburned rows that belong to a valid negative
-pool (`random`, `otsu`, and `artifact_hard` when enabled) enter training;
-review, keep, `NA` or unknown rows never become negatives.
+pool (\code{random}, \code{otsu}, and \code{artifact_hard} when enabled) enter training;
+review, keep, \code{NA} or unknown rows never become negatives.
 }
 \section{Setting the methodological parameters}{
 
 Every methodological and training-control parameter (negative-pool caps,
 feature set and weights, XGBoost settings, seeds, imputation) is set in
-[build_supervised_burned_config()] and read from the configuration by every
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} and read from the configuration by every
 stage, so the OOF and final models always use the same values.
 
 The corresponding arguments of this function are deprecated and will be
-removed in a future version. They all default to `NULL` (use the
-configured value). A non-`NULL` value:
+removed in a future version. They all default to \code{NULL} (use the
+configured value). A non-\code{NULL} value:
 \itemize{
-  \item replaces a value the configuration left at its default, with a
-    deprecation warning of class `"otsufire_deprecated_param"`;
-  \item is an error if it contradicts a value set explicitly in the
-    configuration;
-  \item is applied silently if it equals the configured value.
+\item replaces a value the configuration left at its default, with a
+deprecation warning of class \code{"otsufire_deprecated_param"};
+\item is an error if it contradicts a value set explicitly in the
+configuration;
+\item is applied silently if it equals the configured value.
 }
-Every resolution is recorded in the `resolved_params_provenance` field of
+Every resolution is recorded in the \code{resolved_params_provenance} field of
 the returned object, and the per-field XGBoost settings in
-`model_params_provenance`.
+\code{model_params_provenance}.
 }
 
 \section{Memory}{
 
 While it runs, the function raises the terra memory limit
-(`terra::terraOptions(memmax)`) to 16 GB, so that large annual mosaics are
+(\code{terra::terraOptions(memmax)}) to 16 GB, so that large annual mosaics are
 not processed feature by feature, and restores the previous value on exit.
 The machine should have at least 16 GB of free RAM.
 }

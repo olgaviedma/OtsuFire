@@ -26,148 +26,148 @@ score_supervised_burned_map(
 }
 \arguments{
 \item{scoring_features}{sf / data.frame OR a single GPKG path. The
-deterministic scoring universe (the `scoring_features` layer of
-`03_FEATURES/features_geometry.gpkg`), read back by `scoring_layer`.}
+deterministic scoring universe (the \code{scoring_features} layer of
+\verb{03_FEATURES/features_geometry.gpkg}), read back by \code{scoring_layer}.}
 
 \item{model}{Fitted xgboost model object OR an RDS path.}
 
 \item{recipe}{Training recipe list OR an RDS path. \strong{Mandatory} — the
 canonical feature-schema source at scoring. It must carry
-`recipe$cols$feature_cols`; the function errors rather than reconstruct the
+\code{recipe$cols$feature_cols}; the function errors rather than reconstruct the
 schema from the scoring year.}
 
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Provides the output folders, the file
-prefix and `target_year` / `scenario`.}
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Provides the output folders, the file
+prefix and \code{target_year} / \code{scenario}.}
 
 \item{oof_summary}{Character path to the OOF labelled-summary GPKG
-(`_labeled_oof_summary.gpkg`) OR `NULL`. Used for the OOF `p_oof_mean` join;
-when `NULL` the function falls back to the canonical `05_OOF` path.}
+(\verb{_labeled_oof_summary.gpkg}) OR \code{NULL}. Used for the OOF \code{p_oof_mean} join;
+when \code{NULL} the function falls back to the canonical \verb{05_OOF} path.}
 
 \item{labelled_features}{sf / data.frame OR a single GPKG path. The labelled
-training features (the `train_features` layer of
-`03_FEATURES/features_geometry.gpkg`) used to join OOF predictions by
-`source_poly_id`. When `NULL` it falls back to
-`config$output_routes$features_geometry_gpkg`.}
+training features (the \code{train_features} layer of
+\verb{03_FEATURES/features_geometry.gpkg}) used to join OOF predictions by
+\code{source_poly_id}. When \code{NULL} it falls back to
+\code{config$output_routes$features_geometry_gpkg}.}
 
 \item{export_burned_like}{Logical. Whether to export the burned-like subset
-(`_burned_like_scored.gpkg` + `_counts.csv`). Default `TRUE`.}
+(\verb{_burned_like_scored.gpkg} + \verb{_counts.csv}). Default \code{TRUE}.}
 
 \item{preyear_overlap_threshold}{Numeric. Current-year temporal-adjustment
-pre-year overlap threshold. Default `0.70`.}
+pre-year overlap threshold. Default \code{0.70}.}
 
 \item{hotspot_density_threshold}{Numeric. Current-year hotspot-density
-threshold. Default `0.001`.}
+threshold. Default \code{0.001}.}
 
 \item{temporal_penalty_floor}{Numeric. Current-year temporal penalty floor.
-Default `0.10`.}
+Default \code{0.10}.}
 
-\item{qa_labelled_layer}{Character. Layer in `oof_summary`. Default
-`"labeled_oof_summary"`.}
+\item{qa_labelled_layer}{Character. Layer in \code{oof_summary}. Default
+\code{"labeled_oof_summary"}.}
 
-\item{labelled_features_layer}{Character. Layer in `labelled_features`.
-Default `"train_features"`.}
+\item{labelled_features_layer}{Character. Layer in \code{labelled_features}.
+Default \code{"train_features"}.}
 
-\item{scoring_layer}{Character. Layer in `scoring_features`. Default
-`"scoring_features"`.}
+\item{scoring_layer}{Character. Layer in \code{scoring_features}. Default
+\code{"scoring_features"}.}
 
-\item{out_map_dir}{Character or `NULL`. Output folder for the `09_FINAL_MAP`
-outputs. Defaults to `config$output_routes$final_map_dir`.}
+\item{out_map_dir}{Character or \code{NULL}. Output folder for the \verb{09_FINAL_MAP}
+outputs. Defaults to \code{config$output_routes$final_map_dir}.}
 
-\item{out_score_dir}{Character or `NULL`. Output folder for the `08_SCORED`
-outputs. Defaults to `config$output_routes$scored_dir`.}
+\item{out_score_dir}{Character or \code{NULL}. Output folder for the \verb{08_SCORED}
+outputs. Defaults to \code{config$output_routes$scored_dir}.}
 
 \item{overwrite}{Logical. Whether to overwrite existing outputs. Default
-`TRUE`.}
+\code{TRUE}.}
 
-\item{verbose}{Logical. Print progress messages. Default `TRUE`.}
+\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `deterministic_scored` — the full scored deterministic universe
-      (sf, == `final_map_full`). ALL scored candidates (no row dropped).
-    \item `final_map_full` — same as `deterministic_scored`.
-    \item `final_map` — the current-year public final map (sf); the
-      temporally-filtered, public-column subset (see the output-layer
-      contract above): `nrow <= nrow(final_map_full)`.
-    \item `burned_like_scored` — the burned-like subset (sf), or `NULL` when
-      `export_burned_like = FALSE`.
-    \item `deterministic_scored_gpkg`, `final_map_gpkg`,
-      `final_map_counts_csv`, `burned_like_gpkg`,
-      `burned_like_counts_csv` — written paths.
-  }
+\itemize{
+\item \code{deterministic_scored} — the full scored deterministic universe
+(sf, == \code{final_map_full}). ALL scored candidates (no row dropped).
+\item \code{final_map_full} — same as \code{deterministic_scored}.
+\item \code{final_map} — the current-year public final map (sf); the
+temporally-filtered, public-column subset (see the output-layer
+contract above): \code{nrow <= nrow(final_map_full)}.
+\item \code{burned_like_scored} — the burned-like subset (sf), or \code{NULL} when
+\code{export_burned_like = FALSE}.
+\item \code{deterministic_scored_gpkg}, \code{final_map_gpkg},
+\code{final_map_counts_csv}, \code{burned_like_gpkg},
+\code{burned_like_counts_csv} — written paths.
+}
 }
 \description{
 Scores every candidate polygon with the trained final model and writes the
 supervised burned-area maps. This is the scoring stage of the supervised
-pipeline; it consumes the `model` and `recipe` returned by
-[train_final_burned_model()].
+pipeline; it consumes the \code{model} and \code{recipe} returned by
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}.
 
 Use it after training: pass the deterministic scoring universe, the trained
-model and recipe, the configuration from [build_supervised_burned_config()],
-and the OOF labelled-summary join inputs. It writes the `08_SCORED` and
-`09_FINAL_MAP` outputs and returns the scored layers in memory. Calling it
+model and recipe, the configuration from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+and the OOF labelled-summary join inputs. It writes the \verb{08_SCORED} and
+\verb{09_FINAL_MAP} outputs and returns the scored layers in memory. Calling it
 directly produces the same result as the scoring stage of the full pipeline
-[run_oneyear_supervised_pipeline()].
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
 \section{What it does}{
 
 \enumerate{
-  \item Validates inputs and resolves the output folders and file prefix from
-    the configuration.
-  \item Enforces the feature schema against the training `recipe` (see
-    below), then builds the scoring matrix and predicts `p_burned`.
-  \item Applies the current-year temporal adjustment and writes the scored
-    deterministic universe and the public final map (plus the optional
-    burned-like subset).
+\item Validates inputs and resolves the output folders and file prefix from
+the configuration.
+\item Enforces the feature schema against the training \code{recipe} (see
+below), then builds the scoring matrix and predicts \code{p_burned}.
+\item Applies the current-year temporal adjustment and writes the scored
+deterministic universe and the public final map (plus the optional
+burned-like subset).
 }
 }
 
 \section{Feature-schema enforcement}{
 
-The `recipe` produced by the final refit is mandatory and is the canonical
-source of the scoring feature schema: feature names and order, types, `_isNA`
+The \code{recipe} produced by the final refit is mandatory and is the canonical
+source of the scoring feature schema: feature names and order, types, \verb{_isNA}
 companions, imputation medians and categorical levels all come from the
 recipe, never from the scoring-year data. Before building the scoring matrix,
-the function runs [validate_supervised_execution()] in strict mode with the
+the function runs \code{\link[=validate_supervised_execution]{validate_supervised_execution()}} in strict mode with the
 model, recipe and the scoring frame's column names, so a genuinely
 incompatible schema fails fast. Recoverable differences are then reconciled
 and recorded (no silent corrections): an altered column order is realigned; a
-missing feature is created as `NA` plus its `_isNA` flag; an extra column is
-dropped; a type change is coerced or set `NA`; a new categorical level maps
-to the recipe sentinel; an all-`NA` feature is median-imputed.
+missing feature is created as \code{NA} plus its \verb{_isNA} flag; an extra column is
+dropped; a type change is coerced or set \code{NA}; a new categorical level maps
+to the recipe sentinel; an all-\code{NA} feature is median-imputed.
 }
 
 \section{Model and recipe inputs}{
 
-`model` and `recipe` may be in-memory objects (the
-[train_final_burned_model()] return fields) or RDS paths; both give the
+\code{model} and \code{recipe} may be in-memory objects (the
+\code{\link[=train_final_burned_model]{train_final_burned_model()}} return fields) or RDS paths; both give the
 same result.
 }
 
 \section{Output-layer contract}{
 
-The written `<prefix>_final_map.gpkg` carries three layers with different,
+The written \verb{<prefix>_final_map.gpkg} carries three layers with different,
 deliberate contracts, so they are NOT expected to have equal row counts:
 \itemize{
-  \item `deterministic_scored` and `final_map_full` (identical content) — the
-    complete scored deterministic universe: every candidate the final model
-    scored, one row per input polygon, all IDs/geometries preserved (the
-    authoritative "no candidate is lost" layers; `nrow` equals the scoring
-    universe size).
-  \item `final_map` — the current-year public burned map: `final_map_full`
-    with the public column subset and the current-year temporal filter
-    applied. It drops exactly the rows flagged `current_year_public_drop`
-    (a current-year temporal conflict — pre-year overlap
-    `>= preyear_overlap_threshold` or `preyear_action == "drop"` — with weak
-    current-year hotspot support: a polygon almost certainly re-detecting the
-    pre-year fire with no current-year evidence). Such polygons are
-    legitimately excluded from the current-year public map while remaining in
-    the full scored layers, so
-    `nrow(final_map) == nrow(final_map_full) -`
-    `sum(final_map_full$current_year_public_drop \%in\% TRUE)`. This is a
-    documented methodological exclusion, not a silent row loss.
+\item \code{deterministic_scored} and \code{final_map_full} (identical content) — the
+complete scored deterministic universe: every candidate the final model
+scored, one row per input polygon, all IDs/geometries preserved (the
+authoritative "no candidate is lost" layers; \code{nrow} equals the scoring
+universe size).
+\item \code{final_map} — the current-year public burned map: \code{final_map_full}
+with the public column subset and the current-year temporal filter
+applied. It drops exactly the rows flagged \code{current_year_public_drop}
+(a current-year temporal conflict — pre-year overlap
+\verb{>= preyear_overlap_threshold} or \code{preyear_action == "drop"} — with weak
+current-year hotspot support: a polygon almost certainly re-detecting the
+pre-year fire with no current-year evidence). Such polygons are
+legitimately excluded from the current-year public map while remaining in
+the full scored layers, so
+\verb{nrow(final_map) == nrow(final_map_full) -}
+\code{sum(final_map_full$current_year_public_drop \%in\% TRUE)}. This is a
+documented methodological exclusion, not a silent row loss.
 }
 }
 
@@ -190,9 +190,9 @@ sm$final_map_gpkg
 }
 }
 \seealso{
-[train_final_burned_model()], [build_supervised_burned_config()],
-[validate_supervised_execution()], [validate_fire_maps()],
-[run_oneyear_supervised_pipeline()]
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
+\code{\link[=validate_supervised_execution]{validate_supervised_execution()}}, \code{\link[=validate_fire_maps]{validate_fire_maps()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

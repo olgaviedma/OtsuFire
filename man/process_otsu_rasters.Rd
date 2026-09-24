@@ -49,13 +49,13 @@ process_otsu_rasters_(
 
 \item{otsu_thresholds}{Numeric vector of minimum values to filter raster before applying Otsu.}
 
-\item{trim_percentiles}{Optional data.frame with `min` and `max` columns to define percentile clipping thresholds.}
+\item{trim_percentiles}{Optional data.frame with \code{min} and \code{max} columns to define percentile clipping thresholds.}
 
-\item{use_original}{Logical. Use raw values without filtering (ignored if `trim_percentiles` is set).}
+\item{use_original}{Logical. Use raw values without filtering (ignored if \code{trim_percentiles} is set).}
 
 \item{corine_raster_path}{Path to CORINE raster for stratified segmentation.}
 
-\item{reclassify_corine}{Logical. If TRUE, reclassifies CORINE using `reclass_matrix`.}
+\item{reclassify_corine}{Logical. If TRUE, reclassifies CORINE using \code{reclass_matrix}.}
 
 \item{reclass_matrix}{Matrix with original and new values for CORINE reclassification.}
 
@@ -75,9 +75,9 @@ process_otsu_rasters_(
 
 \item{python_exe}{Path to Python executable.}
 
-\item{gdal_polygonize_script}{Path to `gdal_polygonize.py` script.}
+\item{gdal_polygonize_script}{Path to \code{gdal_polygonize.py} script.}
 
-\item{gdalwarp_path}{Path to `gdalwarp` executable (default = "gdalwarp").}
+\item{gdalwarp_path}{Path to \code{gdalwarp} executable (default = "gdalwarp").}
 
 \item{n_rows, n_cols}{Number of rows/columns for raster tiling.}
 
@@ -85,7 +85,7 @@ process_otsu_rasters_(
 
 \item{tile}{Logical. Apply raster tiling before polygonization.}
 
-\item{index_type}{"RBR" or "dNBR". Used if `nbr_pre_path`/`nbr_post_path` are provided.}
+\item{index_type}{"RBR" or "dNBR". Used if \code{nbr_pre_path}/\code{nbr_post_path} are provided.}
 
 \item{vectorize}{Logical. If TRUE, polygonize the burned mask; if FALSE, keep only raster output.}
 
@@ -95,7 +95,7 @@ process_otsu_rasters_(
 
 \item{dissolve}{Ignored at write-time. Writing never dissolves; if you need to dissolve, do it explicitly before writing.}
 
-\item{burnable_mask}{Optional `terra::SpatRaster` (0/1). Cells with 0/NA are treated as non-burnable and masked out before binarization.}
+\item{burnable_mask}{Optional \code{terra::SpatRaster} (0/1). Cells with 0/NA are treated as non-burnable and masked out before binarization.}
 }
 \value{
 Invisibly returns a named list with small summaries per output written.
@@ -104,31 +104,39 @@ Invisibly returns a named list with small summaries per output written.
 This function computes binary burned area masks from a severity index raster (RBR or dNBR)
 using Otsu's thresholding or percentile clipping. The segmentation can be applied
 to the full raster or stratified by:
-- CORINE land cover classes (`corine_raster_path`)
+\itemize{
+\item CORINE land cover classes (\code{corine_raster_path})
+}
 
 Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / CORINE × ecoregion
 stratification was removed (it was never wired into any supervised run; the
-canonical supervised negative-pool Otsu mode is `burnable_only`). The
+canonical supervised negative-pool Otsu mode is \code{burnable_only}). The
 CORINE × ecoregion stratified Otsu lives in the DETERMINISTIC delineation
-stage (`process_otsu_rasters_grow()`), which is unaffected.
-
-## Key features:
-- Supports Otsu thresholding after pre-filtering by minimum index values (`otsu_thresholds`) or using original values
-- Supports percentile-based thresholding via `trim_percentiles`
-- Enforces a minimum threshold (`min_otsu_threshold_value`) when Otsu yields low values
-- Allows stratification by CORINE land-cover classes
-- Enables CORINE reclassification using a custom `reclass_matrix`
-- Automatically computes RBR or dNBR if `nbr_pre_path` and `nbr_post_path` are provided
-- Outputs:
-  - Burned area binary rasters
-  - Polygon shapefiles (no dissolve at write-time; attributes preserved)
-  - Histogram and inter-class variance plots per threshold
-  - Threshold log files
+stage (\code{process_otsu_rasters_grow()}), which is unaffected.
+\subsection{Key features:}{
+\itemize{
+\item Supports Otsu thresholding after pre-filtering by minimum index values (\code{otsu_thresholds}) or using original values
+\item Supports percentile-based thresholding via \code{trim_percentiles}
+\item Enforces a minimum threshold (\code{min_otsu_threshold_value}) when Otsu yields low values
+\item Allows stratification by CORINE land-cover classes
+\item Enables CORINE reclassification using a custom \code{reclass_matrix}
+\item Automatically computes RBR or dNBR if \code{nbr_pre_path} and \code{nbr_post_path} are provided
+\item Outputs:
+\itemize{
+\item Burned area binary rasters
+\item Polygon shapefiles (no dissolve at write-time; attributes preserved)
+\item Histogram and inter-class variance plots per threshold
+\item Threshold log files
+}
+}
+}
 }
 \details{
-- Raster values are internally rescaled to [0, 255] before Otsu thresholding.
-- Histogram smoothing and variance curves are used for enhanced threshold detection.
-- Output shapefiles can be in ESRI Shapefile or GeoJSON format.
-- Intermediate tile shapefiles and rasters are cleaned after processing.
+\itemize{
+\item Raster values are internally rescaled to [0, 255] before Otsu thresholding.
+\item Histogram smoothing and variance curves are used for enhanced threshold detection.
+\item Output shapefiles can be in ESRI Shapefile or GeoJSON format.
+\item Intermediate tile shapefiles and rasters are cleaned after processing.
+}
 }
 \keyword{internal}

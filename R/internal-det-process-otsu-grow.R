@@ -107,7 +107,7 @@
 #' Expected structure: \code{list(corine=..., ecoregion=..., intersection=...)}. Values may be named lists or named vectors.
 #'
 #' @param trim_percentiles List or NULL. Optional trimming used only for Otsu estimation:
-#' \code{list(min=..., max=...)} in [0,1] with \code{min < max}.
+#' \code{list(min=..., max=...)} in \[0, 1\] with \code{min < max}.
 #' @param otsu_value_range Numeric length-2 or NULL. Optional hard filter \code{c(lo, hi)} used only for Otsu estimation.
 #'
 #' @param corine_raster_path Character or NULL. CORINE raster path (required for \code{workflow="otsu_grow"}).

@@ -35,120 +35,120 @@ run_oof_diagnostics(
 }
 \arguments{
 \item{train_features}{sf / data.frame OR a single GPKG path. The labelled
-training features produced by the features stage (the `train_features`
-object / the `train_features` layer of
-`03_FEATURES/features_geometry.gpkg`). Must carry the `class` column and
-the fold columns (`fold_cols`). When a path is supplied the
-`train_features` layer is read.}
+training features produced by the features stage (the \code{train_features}
+object / the \code{train_features} layer of
+\verb{03_FEATURES/features_geometry.gpkg}). Must carry the \code{class} column and
+the fold columns (\code{fold_cols}). When a path is supplied the
+\code{train_features} layer is read.}
 
 \item{scoring_features}{sf / data.frame OR a single GPKG path. The scoring
-(burned-like) features (`scoring_features` object / layer). When a path is
-supplied the `scoring_features` layer is read.}
+(burned-like) features (\code{scoring_features} object / layer). When a path is
+supplied the \code{scoring_features} layer is read.}
 
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Used to derive `out_dir` (the
-`05_OOF` folder), `matrix_dir` (the `04_MATRIX` folder), `result_dir`
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Used to derive \code{out_dir} (the
+\verb{05_OOF} folder), \code{matrix_dir} (the \verb{04_MATRIX} folder), \code{result_dir}
 (the SUPERVISED scenario base), the output prefix
-(`"<year>_<run_label>_patch"`), and `target_year` / `scenario` (the run label).}
+(\code{"<year>_<run_label>_patch"}), and \code{target_year} / \code{scenario} (the run label).}
 
 \item{fold_cols}{Character vector of fold column names. Default
-`c("fold_rep1", "fold_rep2")`.}
+\code{c("fold_rep1", "fold_rep2")}.}
 
-\item{params}{Optional named list of XGBoost params. When `NULL` (default)
+\item{params}{Optional named list of XGBoost params. When \code{NULL} (default)
 the canonical parameter block is built (see Details).}
 
 \item{feature_whitelist_override}{Character vector restricting the active OOF
-feature space to a subset of the canonical whitelist, or `NULL` (default)
+feature space to a subset of the canonical whitelist, or \code{NULL} (default)
 for the full whitelist.}
 
 \item{feature_weights}{Named numeric vector of per-feature weights, or
-`NULL` (default).}
+\code{NULL} (default).}
 
-\item{include_shape_features}{Logical or `NULL`. Optional shape/size feature
-block. `NULL` (default) reads `cfg$train_control$include_shape_features` —
+\item{include_shape_features}{Logical or \code{NULL}. Optional shape/size feature
+block. \code{NULL} (default) reads \code{cfg$train_control$include_shape_features} —
 the same field the final stage reads, so OOF and final cannot diverge on
-the active feature set. When effectively `TRUE` the OOF whitelist universe
-gains the six shape names and their `_isNA` companions; when `FALSE` the
+the active feature set. When effectively \code{TRUE} the OOF whitelist universe
+gains the six shape names and their \verb{_isNA} companions; when \code{FALSE} the
 OOF output is unchanged.}
 
-\item{nrounds_max}{Integer or `NULL`. Maximum XGBoost boosting rounds for the
-OOF per-fold models. `NULL` (default) reads the configured value (matches
+\item{nrounds_max}{Integer or \code{NULL}. Maximum XGBoost boosting rounds for the
+OOF per-fold models. \code{NULL} (default) reads the configured value (matches
 the final-model default).}
 
-\item{early_stop}{Integer or `NULL`. XGBoost early-stopping patience for the
-OOF per-fold models. `NULL` (default) reads the configured value (matches
+\item{early_stop}{Integer or \code{NULL}. XGBoost early-stopping patience for the
+OOF per-fold models. \code{NULL} (default) reads the configured value (matches
 the final stage).}
 
-\item{seed_base}{Integer or `NULL`. Base RNG seed for the repeated block-CV
-OOF runs. `NULL` (default) reads the configured value (matches the final
+\item{seed_base}{Integer or \code{NULL}. Base RNG seed for the repeated block-CV
+OOF runs. \code{NULL} (default) reads the configured value (matches the final
 stage).}
 
-\item{random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric or `NULL`. The two negative-bucket caps forwarded to the OOF chain
-so OOF sees the same caps as the final model. `NULL` (default) reads the
+\item{random_to_burned_ratio, otsu_unburned_to_burned_ratio}{Numeric or \code{NULL}. The two negative-bucket caps forwarded to the OOF chain
+so OOF sees the same caps as the final model. \code{NULL} (default) reads the
 configured caps.}
 
-\item{val_frac}{Numeric or `NULL`. Inner validation fraction for the
-per-fold split. `NULL` (default) reads the configured value.}
+\item{val_frac}{Numeric or \code{NULL}. Inner validation fraction for the
+per-fold split. \code{NULL} (default) reads the configured value.}
 
-\item{impute_numeric}{Character or `NULL`. Numeric-imputation rule
-(`"median"` or `"zero"`). `NULL` (default) reads the configured value.}
+\item{impute_numeric}{Character or \code{NULL}. Numeric-imputation rule
+(\code{"median"} or \code{"zero"}). \code{NULL} (default) reads the configured value.}
 
-\item{impute_factor_missing}{Character or `NULL`. Sentinel level for missing
-factor/character values. `NULL` (default) reads the configured value.}
+\item{impute_factor_missing}{Character or \code{NULL}. Sentinel level for missing
+factor/character values. \code{NULL} (default) reads the configured value.}
 
-\item{group_col}{Character or `NULL`. Grouping column for the grouped
-block-CV. `NULL` (default) reads `cfg$train_control$group_col` (the same
+\item{group_col}{Character or \code{NULL}. Grouping column for the grouped
+block-CV. \code{NULL} (default) reads \code{cfg$train_control$group_col} (the same
 field the final stage reads, so OOF and final never diverge).}
 
 \item{source_weights}{Named numeric vector of per-row weights keyed by the
-`source` column, or `NULL` (default). `NULL` reads the configured value
-(`config$negative_pool_params$source_weights`, off by default). With no
+\code{source} column, or \code{NULL} (default). \code{NULL} reads the configured value
+(\code{config$negative_pool_params$source_weights}, off by default). With no
 override and no artifact_hard rows present, no weight vector is built.}
 
-\item{artifact_hard_source}{Character vector of `source` value(s) marking
-promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
-`"artifact_hard"` when that feature is enabled, else `character(0)` (off).
+\item{artifact_hard_source}{Character vector of \code{source} value(s) marking
+promoted artifact_hard rows, or \code{NULL} (default). \code{NULL} resolves to
+\code{"artifact_hard"} when that feature is enabled, else \code{character(0)} (off).
 Used by the per-fold eligibility resolver (promoted rows enter the uncapped
 artifact_hard bucket) and the per-row sample-weight resolver.}
 
-\item{total_weight_ratio}{Numeric or `NULL`. Pool-level weight balance
-(artifact_hard total weight / burned total weight). `NULL` (default) reads
-`config$negative_pool_params$artifact_hard$total_weight_ratio`.}
+\item{total_weight_ratio}{Numeric or \code{NULL}. Pool-level weight balance
+(artifact_hard total weight / burned total weight). \code{NULL} (default) reads
+\code{config$negative_pool_params$artifact_hard$total_weight_ratio}.}
 
-\item{out_dir}{Character or `NULL`. Output folder for the `05_OOF` outputs.
-Defaults to `config$output_routes$oof_dir`.}
+\item{out_dir}{Character or \code{NULL}. Output folder for the \verb{05_OOF} outputs.
+Defaults to \code{config$output_routes$oof_dir}.}
 
-\item{matrix_dir}{Character or `NULL`. Output folder for the `04_MATRIX`
-design-matrix bundle. Defaults to `config$output_routes$matrix_dir`.}
+\item{matrix_dir}{Character or \code{NULL}. Output folder for the \verb{04_MATRIX}
+design-matrix bundle. Defaults to \code{config$output_routes$matrix_dir}.}
 
-\item{labelled_gpkg}{Character or `NULL`. Path to the train-with-folds GPKG
+\item{labelled_gpkg}{Character or \code{NULL}. Path to the train-with-folds GPKG
 used to attach geometry to the OOF aggregate for the
-`labeled_oof_summary` layer (normally the
-`02_FOLDS/<year>_train_with_folds_<bs>m.gpkg` written by
-[make_spatial_folds()]). When `NULL` no labelled-summary GPKG is written.}
+\code{labeled_oof_summary} layer (normally the
+\verb{02_FOLDS/<year>_train_with_folds_<bs>m.gpkg} written by
+\code{\link[=make_spatial_folds]{make_spatial_folds()}}). When \code{NULL} no labelled-summary GPKG is written.}
 
-\item{labelled_layer}{Character. Layer name inside `labelled_gpkg`. Default
-`"train_with_folds"`.}
+\item{labelled_layer}{Character. Layer name inside \code{labelled_gpkg}. Default
+\code{"train_with_folds"}.}
 
 \item{overwrite}{Logical. Whether the design-matrix bundle is recomputed
-and overwritten. Default `TRUE`.}
+and overwritten. Default \code{TRUE}.}
 
 \item{.internal_resolved}{For internal use by
-[run_oneyear_supervised_pipeline()]. Leave it `FALSE` (the default).}
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}. Leave it \code{FALSE} (the default).}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `design_bundle` — the design-matrix bundle (`dm`) returned by the
-      inner wrapper (the object kept for the downstream final-model stage).
-    \item `oof_agg` — the per-unit OOF aggregate data.frame.
-    \item `oof_long` — the per-fold long OOF data.frame.
-    \item `labeled_oof_summary` — the OOF aggregate joined back to geometry
-      (sf), or `NULL` when `labelled_gpkg` is not available.
-    \item `oof_agg_csv`, `oof_long_csv`, `oof_metrics_by_threshold_csv`,
-      `oof_metrics_summary_txt`, `oof_best_thresholds_csv`,
-      `labeled_oof_summary_gpkg`, `design_bundle_rds` — written paths.
-  }
+\itemize{
+\item \code{design_bundle} — the design-matrix bundle (\code{dm}) returned by the
+inner wrapper (the object kept for the downstream final-model stage).
+\item \code{oof_agg} — the per-unit OOF aggregate data.frame.
+\item \code{oof_long} — the per-fold long OOF data.frame.
+\item \code{labeled_oof_summary} — the OOF aggregate joined back to geometry
+(sf), or \code{NULL} when \code{labelled_gpkg} is not available.
+\item \code{oof_agg_csv}, \code{oof_long_csv}, \code{oof_metrics_by_threshold_csv},
+\code{oof_metrics_summary_txt}, \code{oof_best_thresholds_csv},
+\code{labeled_oof_summary_gpkg}, \code{design_bundle_rds} — written paths.
+}
 }
 \description{
 Cross-validates the burned-area model on the spatial folds and reports how
@@ -157,39 +157,39 @@ is the diagnostics stage of the supervised pipeline: it tells you which score
 threshold to use and how the model is expected to perform before you train
 and apply the final model.
 
-Run it after the features stage and before [train_final_burned_model()]. Pass
+Run it after the features stage and before \code{\link[=train_final_burned_model]{train_final_burned_model()}}. Pass
 the labelled and scoring features and the configuration from
-[build_supervised_burned_config()]; the methodological settings (XGBoost
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}; the methodological settings (XGBoost
 parameters, negative-pool caps, feature whitelist/weights, seeds) are read
 from the configuration, so calling this function directly produces the same
 result as the equivalent stage of the full pipeline
-[run_oneyear_supervised_pipeline()].
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
 \details{
 The OOF stage and the final-model stage share one training core, so their
-diagnostics and the fitted model cannot diverge. With `params = NULL` the
+diagnostics and the fitted model cannot diverge. With \code{params = NULL} the
 XGBoost parameter block is the canonical one used by both stages (booster
-`gbtree`, objective `binary:logistic`, `eval_metric` of `logloss` first —
-which drives early stopping — then `aucpr`, `eta = 0.05`, `max_depth = 5`,
-`min_child_weight = 5`, `subsample = 0.8`, `colsample_bytree = 0.75`,
-`gamma = 0`, `lambda = 1`, `alpha = 0`), with `scale_pos_weight` computed
-here as `n_unburned / n_burned` from the OOF training labels.
+\code{gbtree}, objective \code{binary:logistic}, \code{eval_metric} of \code{logloss} first —
+which drives early stopping — then \code{aucpr}, \code{eta = 0.05}, \code{max_depth = 5},
+\code{min_child_weight = 5}, \code{subsample = 0.8}, \code{colsample_bytree = 0.75},
+\code{gamma = 0}, \code{lambda = 1}, \code{alpha = 0}), with \code{scale_pos_weight} computed
+here as \code{n_unburned / n_burned} from the OOF training labels.
 
-`feature_whitelist_override` and `feature_weights` are forwarded so the OOF
+\code{feature_whitelist_override} and \code{feature_weights} are forwarded so the OOF
 stage trains under the same feature space and per-feature weights as the
 final model; this is why both are part of the signature.
 
 OOF uses the same capped negative-sampling policy as the final model, applied
 independently within each training fold. Each outer fold runs through the
-shared leakage-free core: per-fold medians and `scale_pos_weight` are fit on
+shared leakage-free core: per-fold medians and \code{scale_pos_weight} are fit on
 the outer-train rows only, an inner-validation split is the sole
 early-stopping set, the model is refit on all outer-train rows at the best
 iteration, and the untouched outer-test fold is predicted.
 
 Training eligibility is defined by explicit class, never by negation: only
 explicit burned rows (positives) and explicit unburned rows that resolve to a
-valid negative bucket (`random`, `otsu`, and `artifact_hard` when enabled)
-enter training; review / keep / `NA` /
+valid negative bucket (\code{random}, \code{otsu}, and \code{artifact_hard} when enabled)
+enter training; review / keep / \code{NA} /
 unknown rows never become negatives. The OOF and final stages share one
 eligibility resolver and one capping helper, so they cannot diverge on which
 rows are used or how negatives are capped.
@@ -197,40 +197,40 @@ rows are used or how negatives are capped.
 \section{What it does}{
 
 \enumerate{
-  \item Builds the XGBoost design matrix from the extracted features.
-  \item Runs repeated spatially blocked out-of-fold scoring (each fold is
-    predicted by a model that never saw it).
-  \item Computes per-threshold OOF metrics and picks the recommended and best
-    thresholds.
-  \item Writes the `05_OOF` metric outputs and the `04_MATRIX` design-matrix
-    bundle.
+\item Builds the XGBoost design matrix from the extracted features.
+\item Runs repeated spatially blocked out-of-fold scoring (each fold is
+predicted by a model that never saw it).
+\item Computes per-threshold OOF metrics and picks the recommended and best
+thresholds.
+\item Writes the \verb{05_OOF} metric outputs and the \verb{04_MATRIX} design-matrix
+bundle.
 }
 }
 
 \section{Outputs}{
 
-Files are prefixed `"<year>_<run_label>_patch"`:
+Files are prefixed \code{"<year>_<run_label>_patch"}:
 \itemize{
-  \item `<prefix>_oof_agg.csv`, `<prefix>_oof_long.csv` — per-unit and
-    per-fold OOF scores.
-  \item `<prefix>_oof_metrics_by_threshold.csv`,
-    `<prefix>_oof_metrics_summary.txt`, `<prefix>_oof_best_thresholds.csv` —
-    the threshold sweep and chosen thresholds.
-  \item `<prefix>_labeled_oof_summary.gpkg` — OOF scores joined back to
-    geometry (when a labelled GPKG is available).
-  \item the design-matrix bundle under `04_MATRIX`.
+\item \verb{<prefix>_oof_agg.csv}, \verb{<prefix>_oof_long.csv} — per-unit and
+per-fold OOF scores.
+\item \verb{<prefix>_oof_metrics_by_threshold.csv},
+\verb{<prefix>_oof_metrics_summary.txt}, \verb{<prefix>_oof_best_thresholds.csv} —
+the threshold sweep and chosen thresholds.
+\item \verb{<prefix>_labeled_oof_summary.gpkg} — OOF scores joined back to
+geometry (when a labelled GPKG is available).
+\item the design-matrix bundle under \verb{04_MATRIX}.
 }
 }
 
 \section{Deprecated function-level parameter shims}{
 
-The methodological / training-control arguments here (`nrounds_max`,
-`early_stop`, `seed_base`, the `*_to_burned_ratio` caps,
-`feature_whitelist_override`, `feature_weights`, `val_frac`, `impute_*`,
-`group_col`) are deprecated compatibility shims. Set them in
-[build_supervised_burned_config()] instead (`cfg$train_control`), which every
-stage reads. A non-`NULL` override of a canonical-default field emits a
-deprecation warning of class `"otsufire_deprecated_param"`; an override that
+The methodological / training-control arguments here (\code{nrounds_max},
+\code{early_stop}, \code{seed_base}, the \verb{*_to_burned_ratio} caps,
+\code{feature_whitelist_override}, \code{feature_weights}, \code{val_frac}, \verb{impute_*},
+\code{group_col}) are deprecated compatibility shims. Set them in
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead (\code{cfg$train_control}), which every
+stage reads. A non-\code{NULL} override of a canonical-default field emits a
+deprecation warning of class \code{"otsufire_deprecated_param"}; an override that
 conflicts with an explicit builder value errors. These shims are scheduled
 for removal in a future minor version.
 }
@@ -255,10 +255,10 @@ oof$oof_agg_csv
 }
 }
 \seealso{
-[build_supervised_burned_config()], [extract_supervised_features()],
-[train_final_burned_model()], [score_supervised_burned_map()],
-[make_spatial_folds()], [validate_supervised_execution()],
-[run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=extract_supervised_features]{extract_supervised_features()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=make_spatial_folds]{make_spatial_folds()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

@@ -16,7 +16,7 @@ clean_raster_inmem(
 )
 }
 \arguments{
-\item{r}{`SpatRaster`. Raster already loaded in memory.}
+\item{r}{\code{SpatRaster}. Raster already loaded in memory.}
 
 \item{name}{Character scalar. Human-readable label used in messages,
 warnings, and error outputs.}
@@ -25,90 +25,90 @@ warnings, and error outputs.}
 declared in the raster metadata.}
 
 \item{lower_cap}{Numeric scalar. Minimum accepted pixel value. Pixels below
-this threshold are considered invalid when `cap_below = TRUE`.}
+this threshold are considered invalid when \code{cap_below = TRUE}.}
 
-\item{cap_below}{Logical scalar. Whether values below `lower_cap` should be
+\item{cap_below}{Logical scalar. Whether values below \code{lower_cap} should be
 treated as integrity problems (and capped during cleaning).}
 
-\item{check_finite}{Logical scalar. Whether non-finite values (`Inf`,
-`-Inf`, `NaN`) should be checked and cleaned.}
+\item{check_finite}{Logical scalar. Whether non-finite values (\code{Inf},
+\code{-Inf}, \code{NaN}) should be checked and cleaned.}
 
 \item{action}{Character scalar controlling what to do when a problem is
-found. One of `"warn_and_clean"` (warn and clean automatically),
-`"report_only"` (report the problem but leave the raster unchanged),
-or `"fail"` (stop with a detailed error).}
+found. One of \code{"warn_and_clean"} (warn and clean automatically),
+\code{"report_only"} (report the problem but leave the raster unchanged),
+or \code{"fail"} (stop with a detailed error).}
 
-\item{verbose}{Logical scalar. If `TRUE`, informative progress messages are
+\item{verbose}{Logical scalar. If \code{TRUE}, informative progress messages are
 emitted, including confirmation when the raster passes all checks.}
 }
 \value{
-A `SpatRaster`.
+A \code{SpatRaster}.
 
-  If the raster is already clean, the original raster is returned
-  unchanged.
+If the raster is already clean, the original raster is returned
+unchanged.
 
-  If `action = "warn_and_clean"` and integrity problems are detected, the
-  cleaned raster is returned.
+If \code{action = "warn_and_clean"} and integrity problems are detected, the
+cleaned raster is returned.
 
-  If `action = "report_only"`, the raster is returned unchanged even when
-  problems are detected.
+If \code{action = "report_only"}, the raster is returned unchanged even when
+problems are detected.
 
-  If `action = "fail"` and integrity problems are detected, the function
-  aborts with `stop()`.
+If \code{action = "fail"} and integrity problems are detected, the function
+aborts with \code{stop()}.
 }
 \description{
 Check an in-memory raster for common integrity problems and, if you
 choose, repair them before running segmentation, mosaicking,
 thresholding, or feature-extraction workflows.
 
-The function inspects an in-memory `SpatRaster` and evaluates whether it is
+The function inspects an in-memory \code{SpatRaster} and evaluates whether it is
 internally consistent according to three validation rules commonly required
 in OtsuFire workflows:
 \itemize{
-  \item the raster declares the expected NoData value,
-  \item pixel values do not fall below an accepted lower bound,
-  \item and the raster does not contain non-finite values such as `Inf`,
-    `-Inf`, or `NaN`.
+\item the raster declares the expected NoData value,
+\item pixel values do not fall below an accepted lower bound,
+\item and the raster does not contain non-finite values such as \code{Inf},
+\code{-Inf}, or \code{NaN}.
 }
 
-Depending on the selected `action`, the function can:
+Depending on the selected \code{action}, the function can:
 \itemize{
-  \item return the raster unchanged,
-  \item report integrity problems without modifying the raster,
-  \item automatically clean the raster,
-  \item or stop execution with a detailed error.
+\item return the raster unchanged,
+\item report integrity problems without modifying the raster,
+\item automatically clean the raster,
+\item or stop execution with a detailed error.
 }
 
 This function is mainly a defensive preprocessing check before
 downstream operations such as segmentation, compositing,
 polygonization, or polygon-level feature extraction.
 
-For file-based workflows, see [clean_raster_file()].
+For file-based workflows, see \code{\link[=clean_raster_file]{clean_raster_file()}}.
 }
 \details{
 A raster is considered inconsistent when at least one of the following
 conditions is detected:
 \enumerate{
-  \item the declared NoData value differs from `expected_nodata`,
-  \item the raster minimum falls below `lower_cap` (when
-    `cap_below = TRUE`),
-  \item non-finite pixel values are present (when `check_finite = TRUE`).
+\item the declared NoData value differs from \code{expected_nodata},
+\item the raster minimum falls below \code{lower_cap} (when
+\code{cap_below = TRUE}),
+\item non-finite pixel values are present (when \code{check_finite = TRUE}).
 }
 
 For source-backed rasters whose physical metadata already declares the
 expected NoData value in all bands, the non-finite check is skipped. In
-floating-point rasters (`FLT4S` or `FLT8S`), these values often correspond
+floating-point rasters (\code{FLT4S} or \code{FLT8S}), these values often correspond
 to correctly encoded NoData pixels rather than true corruption.
 
 When cleaning is applied, the function performs the following operations:
 \enumerate{
-  \item replaces `Inf`, `-Inf`, and `NaN` values with `NA`,
-  \item caps pixel values below `lower_cap`,
-  \item forces the raster NoData metadata to `expected_nodata`.
+\item replaces \code{Inf}, \code{-Inf}, and \code{NaN} values with \code{NA},
+\item caps pixel values below \code{lower_cap},
+\item forces the raster NoData metadata to \code{expected_nodata}.
 }
 
 The cleaning logic mirrors the behaviour used internally by
-`mosaic_from_tiles()` when writing newly generated mosaics.
+\code{mosaic_from_tiles()} when writing newly generated mosaics.
 
 In large remote-sensing workflows, corrupted raster metadata or invalid
 pixel values may silently propagate through segmentation, mosaicking,
@@ -116,13 +116,13 @@ thresholding, or machine-learning stages.
 
 Common consequences include:
 \itemize{
-  \item failed polygonization,
-  \item unstable summary statistics,
-  \item invalid percentile calculations,
-  \item crashes during model fitting,
-  \item inconsistent burned-area delineation,
-  \item or silent propagation of corrupted values into downstream
-    products.
+\item failed polygonization,
+\item unstable summary statistics,
+\item invalid percentile calculations,
+\item crashes during model fitting,
+\item inconsistent burned-area delineation,
+\item or silent propagation of corrupted values into downstream
+products.
 }
 
 In practice, this gives you a reproducible way to standardise raster

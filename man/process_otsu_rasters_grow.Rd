@@ -74,7 +74,7 @@ Provide this OR both \code{nbr_pre_path} and \code{nbr_post_path}.}
 Larger values force more conservative seeds. Does not affect Otsu estimation (\code{OTSU_RAW}).}
 
 \item{trim_percentiles}{List or NULL. Optional trimming used only for Otsu estimation:
-\code{list(min=..., max=...)} in [0,1] with \code{min < max}.}
+\code{list(min=..., max=...)} in [0, 1] with \code{min < max}.}
 
 \item{otsu_value_range}{Numeric length-2 or NULL. Optional hard filter \code{c(lo, hi)} used only for Otsu estimation.}
 
@@ -173,18 +173,18 @@ sample-based Otsu estimation reproducible.}
 \value{
 A named list (one element per run). Each element is a list with:
 \itemize{
-  \item \code{out_file}: path to the saved vector output (or \code{NA} if empty),
-  \item \code{log_file}: path to the per-unit log table (\code{.txt}).
+\item \code{out_file}: path to the saved vector output (or \code{NA} if empty),
+\item \code{log_file}: path to the per-unit log table (\code{.txt}).
 }
 }
 \description{
 Workflow \code{"otsu_grow"} (implemented here) uses:
 \itemize{
-  \item \strong{Seed threshold (THR_SEED)}: per-unit Otsu estimate (\code{OTSU_RAW})
-  constrained by a run-level global lower bound (\code{LB_GLOBAL}) and, optionally,
-  a classwise lower bound (\code{LB_CLASS}).
-  \item \strong{Growth threshold (THR_GROW)}: expands candidates down from seeds
-  using a delta (\code{DELTA_USED}) and an optional minimum growth floor.
+\item \strong{Seed threshold (THR_SEED)}: per-unit Otsu estimate (\code{OTSU_RAW})
+constrained by a run-level global lower bound (\code{LB_GLOBAL}) and, optionally,
+a classwise lower bound (\code{LB_CLASS}).
+\item \strong{Growth threshold (THR_GROW)}: expands candidates down from seeds
+using a delta (\code{DELTA_USED}) and an optional minimum growth floor.
 }
 Candidate components are labeled on the growth mask and kept only if they contain
 at least \code{min_seed_pixels_per_component} seed pixels (seed-supported growth).
@@ -203,11 +203,11 @@ Otsu helpers are provided by \pkg{otsuSeg} (or \pkg{OtsuSeg}) in \code{Suggests:
 \section{Required inputs (for \code{workflow="otsu_grow"})}{
 
 \itemize{
-  \item Provide either \code{raster_path} (single-band severity index) OR both
-  \code{nbr_pre_path} and \code{nbr_post_path} (to compute \code{index_type}).
-  \item \code{"otsu_grow"} requires stratification into units, therefore it needs
-  \code{corine_raster_path}, \code{ecoregion_shapefile_path}, and
-  \code{segment_by_intersection=TRUE}.
+\item Provide either \code{raster_path} (single-band severity index) OR both
+\code{nbr_pre_path} and \code{nbr_post_path} (to compute \code{index_type}).
+\item \code{"otsu_grow"} requires stratification into units, therefore it needs
+\code{corine_raster_path}, \code{ecoregion_shapefile_path}, and
+\code{segment_by_intersection=TRUE}.
 }
 }
 
@@ -224,8 +224,8 @@ Otsu is estimated on real severity values using a smoothed-histogram approach:
 values are linearly scaled to 0--255 for histogram-based Otsu and then mapped back
 to real units. Two optional filters affect only the values used for estimation:
 \itemize{
-  \item \code{trim_percentiles}: trims tails (e.g., 0.05--0.99) before estimating Otsu.
-  \item \code{otsu_value_range}: hard filter \code{c(lo, hi)} before estimating Otsu.
+\item \code{trim_percentiles}: trims tails (e.g., 0.05--0.99) before estimating Otsu.
+\item \code{otsu_value_range}: hard filter \code{c(lo, hi)} before estimating Otsu.
 }
 A single global Otsu threshold is also estimated from a large random sample and used
 \emph{only} as a fallback when unit-level estimation is unreliable (small units, low
@@ -244,9 +244,9 @@ THR_SEED = max(OTSU_RAW, LB_GLOBAL, LB_CLASS)
 }
 where:
 \itemize{
-  \item \code{OTSU_RAW}: unit-specific Otsu estimate (or global fallback if needed),
-  \item \code{LB_GLOBAL}: run-level global seed lower bound from \code{otsu_thresholds},
-  \item \code{LB_CLASS}: optional classwise seed lower bound from \code{otsu_min_by_class}.
+\item \code{OTSU_RAW}: unit-specific Otsu estimate (or global fallback if needed),
+\item \code{LB_GLOBAL}: run-level global seed lower bound from \code{otsu_thresholds},
+\item \code{LB_CLASS}: optional classwise seed lower bound from \code{otsu_min_by_class}.
 }
 \code{otsu_min_by_class} supports \code{$corine}, \code{$ecoregion}, and \code{$intersection}.
 Each entry should be named by the class identifier (stored as character keys).
@@ -260,10 +260,10 @@ THR_GROW = max(THR_SEED - DELTA_USED, GROW_FLOOR_USED)
 }
 where:
 \itemize{
-  \item \code{DELTA_USED} comes from \code{grow_delta} (default) and can be overridden by
-  \code{grow_delta_by_class}.
-  \item \code{GROW_FLOOR_USED} comes from \code{min_grow_threshold_value} and/or
-  \code{min_grow_threshold_by_class} (recommended when you want to prevent overly permissive growth).
+\item \code{DELTA_USED} comes from \code{grow_delta} (default) and can be overridden by
+\code{grow_delta_by_class}.
+\item \code{GROW_FLOOR_USED} comes from \code{min_grow_threshold_value} and/or
+\code{min_grow_threshold_by_class} (recommended when you want to prevent overly permissive growth).
 }
 Candidate components are labeled on the growth mask and retained only if they contain at
 least \code{min_seed_pixels_per_component} seed pixels.
@@ -282,8 +282,8 @@ For most users, leaving them as \code{NULL} avoids overlapping controls.
 
 For each run, the function writes:
 \itemize{
-  \item a vector file (\code{.shp} or \code{.geojson}) with one polygon per retained component, and
-  \item a tab-delimited \code{*_log.txt} with unit-level thresholds, bounds applied, and Otsu sampling diagnostics.
+\item a vector file (\code{.shp} or \code{.geojson}) with one polygon per retained component, and
+\item a tab-delimited \code{*_log.txt} with unit-level thresholds, bounds applied, and Otsu sampling diagnostics.
 }
 The return value is a named list keyed by the run label.
 }

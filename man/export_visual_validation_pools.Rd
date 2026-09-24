@@ -37,16 +37,16 @@ validation result (defaults \code{"VISUAL"}, \code{"artifact_hard_eligible"},
 }
 \value{
 Invisibly, a list with:
-  \describe{
-    \item{\code{layers}}{a named list of \code{sf} layers:
-      \code{all_tagged}, \code{keep}, \code{otsu_residual},
-      \code{random_background}, \code{artifact_hard}.}
-    \item{\code{summary}}{a list of count tables: \code{by_bucket},
-      \code{by_visual}, \code{by_action}, \code{by_training} and
-      \code{bucket_x_action}.}
-    \item{\code{path}}{the output path (or \code{NULL}).}
-    \item{\code{n}}{total row count of \code{all_tagged}.}
-  }
+\describe{
+\item{\code{layers}}{a named list of \code{sf} layers:
+\code{all_tagged}, \code{keep}, \code{otsu_residual},
+\code{random_background}, \code{artifact_hard}.}
+\item{\code{summary}}{a list of count tables: \code{by_bucket},
+\code{by_visual}, \code{by_action}, \code{by_training} and
+\code{bucket_x_action}.}
+\item{\code{path}}{the output path (or \code{NULL}).}
+\item{\code{n}}{total row count of \code{all_tagged}.}
+}
 }
 \description{
 Prepares a supervised training pool for visual review. It resolves the
@@ -70,11 +70,11 @@ visual review only.
 \code{VISUAL = 1} confirms; \code{VISUAL = 0} rejects; blank/\code{NA} is
 unreviewed. For the \code{artifact_hard} family the meaning is special:
 \itemize{
-  \item \code{VISUAL = 1}: promote the candidate as a HARD-NEGATIVE (it is a
-    confirmed false positive, usable as a negative).
-  \item \code{VISUAL = 0}: treat the candidate as an OMITTED REAL FIRE -- do
-    NOT use it as a negative; it goes to the omissions set.
-  \item \code{VISUAL = NA}: not reviewed / not promoted.
+\item \code{VISUAL = 1}: promote the candidate as a HARD-NEGATIVE (it is a
+confirmed false positive, usable as a negative).
+\item \code{VISUAL = 0}: treat the candidate as an OMITTED REAL FIRE -- do
+NOT use it as a negative; it goes to the omissions set.
+\item \code{VISUAL = NA}: not reviewed / not promoted.
 }
 }
 \examples{

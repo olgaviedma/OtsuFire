@@ -12,74 +12,74 @@ build_supervised_training_pools(
 )
 }
 \arguments{
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Source of every input path, output
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Source of every input path, output
 route, negative-pool parameter and tool path used by the stage.}
 
 \item{deterministic_decisions}{Optional sf, SpatVector, or single GPKG path
-to the deterministic decisions (layer `internal_decisions`). When `NULL`
-(default) the `config$inputs$internal_decisions` path is used.}
+to the deterministic decisions (layer \code{internal_decisions}). When \code{NULL}
+(default) the \code{config$inputs$internal_decisions} path is used.}
 
 \item{write_outputs}{Logical. Whether to write the pools GPKG + QA files.
-Default `TRUE`.}
+Default \code{TRUE}.}
 
 \item{overwrite}{Logical. Forwarded to the deterministic-decisions unburned
-builder (`overwrite_output`). Default `FALSE`.}
+builder (\code{overwrite_output}). Default \code{FALSE}.}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `burned_pool`, `unburned_pool`, `review_pool`, `scoring_pool` —
-      the four pool sf objects.
-    \item `train_labeled` — the merged labelled training set
-      (`burned + unburned`), consumed by [make_spatial_folds()].
-    \item `pools_gpkg` — written path of
-      `01_POOLS/<year>_<run_label>_pools.gpkg` (consumed by the folds and
-      feature stages).
-    \item `audited_internal_gpkg`, `qa_summary_csv`, `qa_transitions_csv`,
-      `qa_reasons_csv` — the QA audit file paths.
-    \item `unburned_random`, `unburned_final_raw`, `exclusion_buffer` —
-      the auxiliary unburned sub-pools and the 500-m exclusion zone;
-      `unburned_hard` is kept for compatibility and is always empty.
-    \item `b4_audit` — audit record for the random burnable background: cell
-      accounting at each stage (valid index, burnable, per-rule exclusions),
-      the percentile domain and value, eligible cells, finally selected
-      observations, and confirmation that no selected observation falls
-      outside the burnable domain.
-    \item `neg_pool_fingerprint` — deterministic `list(text, checksum)`
-      identity of the negative pool. It folds in the burnable-domain
-      decision, the aligned-mask hash, the percentile config and value, the
-      RNG seeds, the exclusions and the relevant inputs, so any cached pool
-      whose fingerprint no longer matches is invalidated rather than reused.
-      Also written as a sidecar
-      `01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt`.
-    \item `otsu_random_dedup_audit` — Otsu-over-random spatial-dedup record:
-      `random_before`, `random_removed_by_otsu`, `random_final`,
-      `area_removed` and `removed_ids_hash`.
-  }
+\itemize{
+\item \code{burned_pool}, \code{unburned_pool}, \code{review_pool}, \code{scoring_pool} —
+the four pool sf objects.
+\item \code{train_labeled} — the merged labelled training set
+(\code{burned + unburned}), consumed by \code{\link[=make_spatial_folds]{make_spatial_folds()}}.
+\item \code{pools_gpkg} — written path of
+\verb{01_POOLS/<year>_<run_label>_pools.gpkg} (consumed by the folds and
+feature stages).
+\item \code{audited_internal_gpkg}, \code{qa_summary_csv}, \code{qa_transitions_csv},
+\code{qa_reasons_csv} — the QA audit file paths.
+\item \code{unburned_random}, \code{unburned_final_raw}, \code{exclusion_buffer} —
+the auxiliary unburned sub-pools and the 500-m exclusion zone;
+\code{unburned_hard} is kept for compatibility and is always empty.
+\item \code{b4_audit} — audit record for the random burnable background: cell
+accounting at each stage (valid index, burnable, per-rule exclusions),
+the percentile domain and value, eligible cells, finally selected
+observations, and confirmation that no selected observation falls
+outside the burnable domain.
+\item \code{neg_pool_fingerprint} — deterministic \code{list(text, checksum)}
+identity of the negative pool. It folds in the burnable-domain
+decision, the aligned-mask hash, the percentile config and value, the
+RNG seeds, the exclusions and the relevant inputs, so any cached pool
+whose fingerprint no longer matches is invalidated rather than reused.
+Also written as a sidecar
+\verb{01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt}.
+\item \code{otsu_random_dedup_audit} — Otsu-over-random spatial-dedup record:
+\code{random_before}, \code{random_removed_by_otsu}, \code{random_final},
+\code{area_removed} and \code{removed_ids_hash}.
+}
 }
 \description{
 Builds the labelled training pools for the supervised burned-area pipeline:
 the burned (positive) pool, the negative (unburned) pool, and the review and
-scoring pools. This is the pools stage of the pipeline; its `train_labeled`
-output feeds [make_spatial_folds()] and the feature stage.
+scoring pools. This is the pools stage of the pipeline; its \code{train_labeled}
+output feeds \code{\link[=make_spatial_folds]{make_spatial_folds()}} and the feature stage.
 
 Run it first, before folds and feature extraction. Pass the configuration
-from [build_supervised_burned_config()]. Calling this function directly
-produces the same `01_POOLS` outputs as the equivalent stage of the full
-pipeline [run_oneyear_supervised_pipeline()].
+from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Calling this function directly
+produces the same \verb{01_POOLS} outputs as the equivalent stage of the full
+pipeline \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
 \details{
-Every parameter the stage needs is resolved straight from `config`: the
-negative-pool parameters, the external tool paths (`python_exe`,
-`gdal_polygonize_script`, `gdalwarp_path`, `ogr2ogr_exe`) from
-`config$tool_paths`, the input imagery roots, and the `01_POOLS` output
-folder and `pools.gpkg` path from `config$output_routes`.
+Every parameter the stage needs is resolved straight from \code{config}: the
+negative-pool parameters, the external tool paths (\code{python_exe},
+\code{gdal_polygonize_script}, \code{gdalwarp_path}, \code{ogr2ogr_exe}) from
+\code{config$tool_paths}, the input imagery roots, and the \verb{01_POOLS} output
+folder and \code{pools.gpkg} path from \code{config$output_routes}.
 
 Determinism: the burnable-background sampling uses a fixed seed and the
 pools are built in a fixed order, so the sampled negatives are
 reproducible. All valid moderately burned-like patches are passed on, and
-the seeded cap `negative_pool_params$caps[["otsu"]]` is the only step that
+the seeded cap \code{negative_pool_params$caps[["otsu"]]} is the only step that
 subsamples them.
 
 The random burnable-background bucket computes its change-index percentile
@@ -92,17 +92,17 @@ capping and before the training set is assembled.
 \section{What it does}{
 
 \enumerate{
-  \item Reads the deterministic `internal_decisions` layer and runs a
-    conservative QA relabelling of the deterministic classes.
-  \item Assembles the burned (keep), review and scoring pools.
-  \item Builds the two capped unburned pools: the burnable background
-    (`random`) and the moderately burned-like drop patches (`otsu`). The
-    optional strongly burned-like pool (`artifact_hard`) is added later, by
-    [promote_artifact_hard_negatives()]. See the \strong{Training pools}
-    section of [build_supervised_burned_config()].
-  \item Merges the labelled training set (`burned + unburned`).
-  \item Writes `01_POOLS/<year>_<run_label>_pools.gpkg` and the QA audit
-    files.
+\item Reads the deterministic \code{internal_decisions} layer and runs a
+conservative QA relabelling of the deterministic classes.
+\item Assembles the burned (keep), review and scoring pools.
+\item Builds the two capped unburned pools: the burnable background
+(\code{random}) and the moderately burned-like drop patches (\code{otsu}). The
+optional strongly burned-like pool (\code{artifact_hard}) is added later, by
+\code{\link[=promote_artifact_hard_negatives]{promote_artifact_hard_negatives()}}. See the \strong{Training pools}
+section of \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
+\item Merges the labelled training set (\code{burned + unburned}).
+\item Writes \verb{01_POOLS/<year>_<run_label>_pools.gpkg} and the QA audit
+files.
 }
 }
 
@@ -119,8 +119,8 @@ folds <- make_spatial_folds(pools$pools_gpkg, config = cfg)
 }
 }
 \seealso{
-[build_supervised_burned_config()], [make_spatial_folds()],
-[extract_supervised_features()], [run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

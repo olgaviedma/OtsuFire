@@ -25,21 +25,23 @@ erase_overlap_with_preyear(
 
 \item{min_area_m2}{numeric. Drop fragments smaller than this area after erase.}
 
-\item{quiet}{logical. If `FALSE`, prints a message when no overlaps are found.}
+\item{quiet}{logical. If \code{FALSE}, prints a message when no overlaps are found.}
 
-\item{suppress_sf_warnings}{logical. If `TRUE`, suppress common sf warnings.}
+\item{suppress_sf_warnings}{logical. If \code{TRUE}, suppress common sf warnings.}
 }
 \value{
-sf. Same attributes as `stage2_sf`, possibly with rows expanded or removed after erase.
+sf. Same attributes as \code{stage2_sf}, possibly with rows expanded or removed after erase.
 }
 \description{
-Removes (differences out) the areas of `stage2_sf` overlapping `preyear_sf`,
+Removes (differences out) the areas of \code{stage2_sf} overlapping \code{preyear_sf},
 optionally buffering the mask outward and shaving thin strips after erase.
 }
 \details{
 Notes:
-- This function performs `st_difference()` only on polygons that actually intersect the mask,
-  and keeps non-intersecting polygons unchanged (fast + avoids unnecessary geometry churn).
-- If `post_shave_m > 0`, the result is buffered inward then outward to remove thin slivers.
+\itemize{
+\item This function performs \code{st_difference()} only on polygons that actually intersect the mask,
+and keeps non-intersecting polygons unchanged (fast + avoids unnecessary geometry churn).
+\item If \code{post_shave_m > 0}, the result is buffered inward then outward to remove thin slivers.
+}
 }
 \keyword{internal}

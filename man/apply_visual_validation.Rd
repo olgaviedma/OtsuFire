@@ -32,18 +32,18 @@ is an error (the input is not a visually-validated pool).}
 }
 \value{
 A list with class \code{"otsufire_visual_validation"}:
-  \describe{
-    \item{\code{pool}}{the full input with three added traceability columns:
-      \code{visual_value} (parsed integer), \code{visual_action} (factor),
-      \code{used_for_training} (logical).}
-    \item{\code{training}}{the CLEAN subset where \code{used_for_training} is
-      \code{TRUE} (ready for training; geometry preserved when the input was
-      \code{sf}).}
-    \item{\code{omissions}}{candidate rows rejected as real fires
-      (\code{visual_action == "omitted_real_fire"}).}
-    \item{\code{dropped}}{positive/background rows visually rejected.}
-    \item{\code{summary}}{a data.frame of counts per \code{visual_action}.}
-  }
+\describe{
+\item{\code{pool}}{the full input with three added traceability columns:
+\code{visual_value} (parsed integer), \code{visual_action} (factor),
+\code{used_for_training} (logical).}
+\item{\code{training}}{the CLEAN subset where \code{used_for_training} is
+\code{TRUE} (ready for training; geometry preserved when the input was
+\code{sf}).}
+\item{\code{omissions}}{candidate rows rejected as real fires
+(\code{visual_action == "omitted_real_fire"}).}
+\item{\code{dropped}}{positive/background rows visually rejected.}
+\item{\code{summary}}{a data.frame of counts per \code{visual_action}.}
+}
 }
 \description{
 Reads a visually-validated supervised training pool and resolves, per row,
@@ -61,16 +61,16 @@ has been filled by a human reviewer with \code{0}, \code{1} or left blank /
 candidate (column \code{eligible_col}, default
 \code{artifact_hard_eligible == TRUE}) or an ordinary positive/background row:
 \itemize{
-  \item \code{VISUAL = NA} (blank, unreviewed): positives & background are
-    KEPT as training rows; artifact_hard candidates are NOT promoted (a
-    candidate enters only when explicitly confirmed).
-  \item \code{VISUAL = 0} (visually rejected): a positive/background row is
-    DROPPED from training; an \code{artifact_hard} candidate is read as a
-    REAL FIRE among the drops, so it is excluded from training and routed to
-    \code{$omissions} (\code{visual_action == "omitted_real_fire"}).
-  \item \code{VISUAL = 1} (visually confirmed): an \code{artifact_hard}
-    candidate is PROMOTED to a hard-negative and enters training; a
-    positive/background row is confirmed (kept).
+\item \code{VISUAL = NA} (blank, unreviewed): positives & background are
+KEPT as training rows; artifact_hard candidates are NOT promoted (a
+candidate enters only when explicitly confirmed).
+\item \code{VISUAL = 0} (visually rejected): a positive/background row is
+DROPPED from training; an \code{artifact_hard} candidate is read as a
+REAL FIRE among the drops, so it is excluded from training and routed to
+\code{$omissions} (\code{visual_action == "omitted_real_fire"}).
+\item \code{VISUAL = 1} (visually confirmed): an \code{artifact_hard}
+candidate is PROMOTED to a hard-negative and enters training; a
+positive/background row is confirmed (kept).
 }
 In short, for artifact_hard candidates \code{VISUAL = 1} means
 "confirmed false positive -> usable as a hard negative", while

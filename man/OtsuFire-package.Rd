@@ -14,24 +14,26 @@ workflow-independent validation utility.
 }
 \section{Workflow entry points}{
 
-- [change_index_mosaic()] — annual mosaic of a change index.
-- [build_burned_mapping_config()] + [run_deterministic_pipeline()] —
-  deterministic workflow.
-- [build_supervised_burned_config()] +
-  [run_oneyear_supervised_pipeline()] — one-year supervised workflow.
-- [validate_fire_maps()] — shared workflow-independent validation
-  utility; usable inside the deterministic pipeline and directly on
-  any compatible burned-area prediction layer (including supervised
-  outputs after thresholding `p_burned`).
+\itemize{
+\item \code{\link[=change_index_mosaic]{change_index_mosaic()}} — annual mosaic of a change index.
+\item \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}} + \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}} —
+deterministic workflow.
+\item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} +
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} — one-year supervised workflow.
+\item \code{\link[=validate_fire_maps]{validate_fire_maps()}} — shared workflow-independent validation
+utility; usable inside the deterministic pipeline and directly on
+any compatible burned-area prediction layer (including supervised
+outputs after thresholding \code{p_burned}).
+}
 }
 
 \section{Modular utilities}{
 
-[detect_burned_patches()], [score_burned_patches()],
-[build_supervised_training_pools()], [make_spatial_folds()],
-[extract_supervised_features()], [run_oof_diagnostics()],
-[train_final_burned_model()], [score_supervised_burned_map()],
-[check_supervised_consistency()].
+\code{\link[=detect_burned_patches]{detect_burned_patches()}}, \code{\link[=score_burned_patches]{score_burned_patches()}},
+\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=check_supervised_consistency]{check_supervised_consistency()}}.
 }
 
 \seealso{

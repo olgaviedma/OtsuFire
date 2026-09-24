@@ -34,131 +34,131 @@ train_final_burned_model(
 }
 \arguments{
 \item{train_features}{sf / data.frame OR a single GPKG path. The labelled
-training features produced by the features stage (the `train_features`
-layer of `03_FEATURES/features_geometry.gpkg`). Must carry the `class`,
-`source`, `neg_type` and feature columns. A path is read using
-`labelled_layer`; an in-memory object is written to a temporary GPKG and
+training features produced by the features stage (the \code{train_features}
+layer of \verb{03_FEATURES/features_geometry.gpkg}). Must carry the \code{class},
+\code{source}, \code{neg_type} and feature columns. A path is read using
+\code{labelled_layer}; an in-memory object is written to a temporary GPKG and
 read back identically.}
 
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Provides the output folder, the file
-prefix, `target_year` / `scenario`, and the resolved methodological
+\item{config}{Required \code{otsufire_supervised_burned_config} (from
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}). Provides the output folder, the file
+prefix, \code{target_year} / \code{scenario}, and the resolved methodological
 parameters.}
 
-\item{oof_agg}{Character path to the OOF aggregate CSV (`_oof_agg.csv`) OR
-`NULL`. Used for summary enrichment only.}
+\item{oof_agg}{Character path to the OOF aggregate CSV (\verb{_oof_agg.csv}) OR
+\code{NULL}. Used for summary enrichment only.}
 
-\item{random_to_burned_ratio}{Numeric or `NULL`. Cap on
+\item{random_to_burned_ratio}{Numeric or \code{NULL}. Cap on
 random-burnable-background negatives, as a multiple of the burned-label
-count. `NULL` (default) reads the configured cap.}
+count. \code{NULL} (default) reads the configured cap.}
 
-\item{otsu_unburned_to_burned_ratio}{Numeric or `NULL`. Cap on Otsu
-current-year unburned-patch negatives. `NULL` (default) reads the
+\item{otsu_unburned_to_burned_ratio}{Numeric or \code{NULL}. Cap on Otsu
+current-year unburned-patch negatives. \code{NULL} (default) reads the
 configured cap.}
 
 \item{feature_whitelist_override}{Character vector restricting the active
-feature space to a subset of the canonical whitelist, or `NULL` (default)
+feature space to a subset of the canonical whitelist, or \code{NULL} (default)
 to use the configured whitelist.}
 
-\item{feature_weights}{Named numeric vector of per-feature weights, or `NULL`
+\item{feature_weights}{Named numeric vector of per-feature weights, or \code{NULL}
 (default) to use the configured weights.}
 
-\item{include_shape_features}{Logical or `NULL`. Optional shape/size feature
-block. `NULL` (default) reads `cfg$train_control$include_shape_features`
+\item{include_shape_features}{Logical or \code{NULL}. Optional shape/size feature
+block. \code{NULL} (default) reads \code{cfg$train_control$include_shape_features}
 (the same field the OOF stage reads, so the two cannot diverge). When
-effectively `TRUE` the feature universe gains the six geometric columns and
-their `_isNA` companions; when `FALSE` the model is unchanged.}
+effectively \code{TRUE} the feature universe gains the six geometric columns and
+their \verb{_isNA} companions; when \code{FALSE} the model is unchanged.}
 
-\item{sampling_seed}{Integer or `NULL`. RNG seed for the negative-pool
-sampling step. `NULL` (default) reads the configured seed.}
+\item{sampling_seed}{Integer or \code{NULL}. RNG seed for the negative-pool
+sampling step. \code{NULL} (default) reads the configured seed.}
 
-\item{seed}{Integer or `NULL`. RNG seed for the train/val split and the
-XGBoost training call. `NULL` (default) reads the configured seed.}
+\item{seed}{Integer or \code{NULL}. RNG seed for the train/val split and the
+XGBoost training call. \code{NULL} (default) reads the configured seed.}
 
-\item{val_frac}{Numeric in (0, 1) or `NULL`. Validation fraction for the
-final-model train/val split. `NULL` (default) reads the configured value.}
+\item{val_frac}{Numeric in (0, 1) or \code{NULL}. Validation fraction for the
+final-model train/val split. \code{NULL} (default) reads the configured value.}
 
-\item{group_col}{Character or `NULL`. Grouping column for the grouped
-train/val split (kept-together unit). `NULL` (default) reads the configured
+\item{group_col}{Character or \code{NULL}. Grouping column for the grouped
+train/val split (kept-together unit). \code{NULL} (default) reads the configured
 value.}
 
-\item{nrounds_max}{Integer or `NULL`. Maximum XGBoost boosting rounds. `NULL`
+\item{nrounds_max}{Integer or \code{NULL}. Maximum XGBoost boosting rounds. \code{NULL}
 (default) reads the configured value.}
 
-\item{early_stopping_rounds}{Integer or `NULL`. XGBoost early-stopping
-patience. `NULL` (default) reads the configured value.}
+\item{early_stopping_rounds}{Integer or \code{NULL}. XGBoost early-stopping
+patience. \code{NULL} (default) reads the configured value.}
 
-\item{impute_numeric}{Character or `NULL`. Numeric-imputation rule
-(`"median"` or `"zero"`). `NULL` (default) reads the configured value.}
+\item{impute_numeric}{Character or \code{NULL}. Numeric-imputation rule
+(\code{"median"} or \code{"zero"}). \code{NULL} (default) reads the configured value.}
 
-\item{impute_factor_missing}{Character or `NULL`. Sentinel level for missing
-factor/character values. `NULL` (default) reads the configured value.}
+\item{impute_factor_missing}{Character or \code{NULL}. Sentinel level for missing
+factor/character values. \code{NULL} (default) reads the configured value.}
 
 \item{source_weights}{Named numeric vector of per-row weights keyed by the
-`source` column (e.g. `c(artifact_hard = 0.3)`), or `NULL` (default) to
-read `config$negative_pool_params$source_weights` (off by default). With no
+\code{source} column (e.g. \code{c(artifact_hard = 0.3)}), or \code{NULL} (default) to
+read \code{config$negative_pool_params$source_weights} (off by default). With no
 override and no artifact_hard rows present, no weight vector is built.}
 
-\item{artifact_hard_source}{Character vector of `source` value(s) marking
-promoted artifact_hard rows, or `NULL` (default). `NULL` resolves to
-`"artifact_hard"` when the artifact_hard feature is enabled, else
-`character(0)` (off). Used by the eligibility and per-row weight resolvers.}
+\item{artifact_hard_source}{Character vector of \code{source} value(s) marking
+promoted artifact_hard rows, or \code{NULL} (default). \code{NULL} resolves to
+\code{"artifact_hard"} when the artifact_hard feature is enabled, else
+\code{character(0)} (off). Used by the eligibility and per-row weight resolvers.}
 
-\item{total_weight_ratio}{Numeric or `NULL`. Pool-level weight balance
-(artifact_hard total weight / burned total weight). `NULL` (default) reads
-`config$negative_pool_params$artifact_hard$total_weight_ratio`. Ignored
-when an explicit artifact_hard pin is supplied via `source_weights`.}
+\item{total_weight_ratio}{Numeric or \code{NULL}. Pool-level weight balance
+(artifact_hard total weight / burned total weight). \code{NULL} (default) reads
+\code{config$negative_pool_params$artifact_hard$total_weight_ratio}. Ignored
+when an explicit artifact_hard pin is supplied via \code{source_weights}.}
 
-\item{labelled_layer}{Character. Layer name read from `train_features` when
-it is a GPKG path. Default `"train_features"`.}
+\item{labelled_layer}{Character. Layer name read from \code{train_features} when
+it is a GPKG path. Default \code{"train_features"}.}
 
-\item{out_dir}{Character or `NULL`. Output folder for the
-`07_FINAL_MODEL_V2` artifacts. Defaults to
-`config$output_routes$final_model_dir`.}
+\item{out_dir}{Character or \code{NULL}. Output folder for the
+\verb{07_FINAL_MODEL_V2} artifacts. Defaults to
+\code{config$output_routes$final_model_dir}.}
 
 \item{canonical_oof_fingerprint}{For internal use by
-[run_oneyear_supervised_pipeline()], which passes the OOF feature-schema
-fingerprint so the final model is checked against it. Leave it `NULL`
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, which passes the OOF feature-schema
+fingerprint so the final model is checked against it. Leave it \code{NULL}
 (the default).}
 
 \item{overwrite}{Logical. Controls clobbering of the training-ok GPKG.
-Default `TRUE`.}
+Default \code{TRUE}.}
 
-\item{verbose}{Logical. Print progress messages. Default `TRUE`.}
+\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 
 \item{.internal_resolved}{For internal use by
-[run_oneyear_supervised_pipeline()]. Leave it `FALSE` (the default).}
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}. Leave it \code{FALSE} (the default).}
 }
 \value{
 A named list with both the objects and the written paths:
-  \itemize{
-    \item `model` — the fitted xgboost model.
-    \item `recipe` — the training recipe list (impute medians, feature/x
-      columns, params, applied whitelist/weights).
-    \item `training_ok` — the selected training-ok sf (the
-      `training_ok.gpkg` contents).
-    \item `split_idx` — the train/val split index list.
-    \item `final_model_rds`, `recipe_rds`, `feature_importance_csv`,
-      `model_summary_txt`, `meta_txt`, `split_idx_rds`, `training_ok_csv`,
-      `training_ok_gpkg` — written paths.
-  }
+\itemize{
+\item \code{model} — the fitted xgboost model.
+\item \code{recipe} — the training recipe list (impute medians, feature/x
+columns, params, applied whitelist/weights).
+\item \code{training_ok} — the selected training-ok sf (the
+\code{training_ok.gpkg} contents).
+\item \code{split_idx} — the train/val split index list.
+\item \code{final_model_rds}, \code{recipe_rds}, \code{feature_importance_csv},
+\code{model_summary_txt}, \code{meta_txt}, \code{split_idx_rds}, \code{training_ok_csv},
+\code{training_ok_gpkg} — written paths.
+}
 }
 \description{
 Trains the final XGBoost burned-area model on all labelled training rows and
 writes the model artifacts. This is the training stage of the supervised
-pipeline; the companion [score_supervised_burned_map()] then uses the
-returned `model` and `recipe` to score the candidate polygons.
+pipeline; the companion \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}} then uses the
+returned \code{model} and \code{recipe} to score the candidate polygons.
 
 Use it after the features and out-of-fold (OOF) stages: pass the labelled
-training features, the configuration from [build_supervised_burned_config()],
+training features, the configuration from \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}},
 and (optionally) the OOF aggregate CSV. The methodological settings (caps,
 seeds, feature whitelist/weights, XGBoost rounds, imputation rules) are read
 from the configuration, so calling this function directly produces the same
 result as the equivalent stage of the full pipeline
-[run_oneyear_supervised_pipeline()].
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 
-It returns the in-memory objects (`model`, `recipe`, `training_ok`,
-`split_idx`) together with the paths it wrote under the `07_FINAL_MODEL_V2`
+It returns the in-memory objects (\code{model}, \code{recipe}, \code{training_ok},
+\code{split_idx}) together with the paths it wrote under the \verb{07_FINAL_MODEL_V2}
 folder.
 }
 \section{How the model is fit}{
@@ -172,27 +172,27 @@ OOF diagnostics and the final model share an identical training core.
 
 Training eligibility is defined by explicit class, never by negation: only
 explicit burned rows (positives) and explicit unburned rows that resolve to a
-valid negative bucket (`random`, `otsu`, and `artifact_hard` when enabled)
-enter training; review / keep / `NA` /
+valid negative bucket (\code{random}, \code{otsu}, and \code{artifact_hard} when enabled)
+enter training; review / keep / \code{NA} /
 unknown rows never become negatives. The OOF and final stages share one
 eligibility resolver and one capping helper, so they cannot diverge on which
 rows are used or how negatives are capped.
 
-The `oof_agg` CSV (when supplied) only enriches `model_summary.txt` with the
+The \code{oof_agg} CSV (when supplied) only enriches \code{model_summary.txt} with the
 OOF recommended-threshold block; it does not change the fitted model.
 }
 
 \section{Configuration is the source of truth}{
 
-The methodological / training-control arguments here (the `*_to_burned_ratio`
-caps, `feature_whitelist_override`, `feature_weights`, `sampling_seed`,
-`seed`, `val_frac`, `group_col`, `nrounds_max`, `early_stopping_rounds`,
-`impute_*`) are deprecated compatibility shims. Set them in
-[build_supervised_burned_config()] instead (`cfg$train_control` /
-`cfg$model_params`), which every stage reads. Each argument defaults to
-`NULL`, meaning "use the configured value". A non-`NULL` override of a
+The methodological / training-control arguments here (the \verb{*_to_burned_ratio}
+caps, \code{feature_whitelist_override}, \code{feature_weights}, \code{sampling_seed},
+\code{seed}, \code{val_frac}, \code{group_col}, \code{nrounds_max}, \code{early_stopping_rounds},
+\verb{impute_*}) are deprecated compatibility shims. Set them in
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} instead (\code{cfg$train_control} /
+\code{cfg$model_params}), which every stage reads. Each argument defaults to
+\code{NULL}, meaning "use the configured value". A non-\code{NULL} override of a
 canonical-default field emits a deprecation warning of class
-`"otsufire_deprecated_param"`; an override that conflicts with an explicit
+\code{"otsufire_deprecated_param"}; an override that conflicts with an explicit
 builder value errors. These shims are scheduled for removal in a future
 minor version.
 }
@@ -213,9 +213,9 @@ tm$model
 }
 }
 \seealso{
-[build_supervised_burned_config()], [run_oof_diagnostics()],
-[score_supervised_burned_map()], [validate_supervised_execution()],
-[run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

@@ -12,71 +12,71 @@ detect_burned_patches(
 )
 }
 \arguments{
-\item{config}{An `otsufire_burned_mapping_config` object generated with
-[build_burned_mapping_config()]. This object contains validated
+\item{config}{An \code{otsufire_burned_mapping_config} object generated with
+\code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}. This object contains validated
 workflow inputs, methodological parameters, output routes, and
 runtime options.}
 
-\item{aoi}{NOT YET IMPLEMENTED — must be `NULL`. The parameter is
+\item{aoi}{NOT YET IMPLEMENTED — must be \code{NULL}. The parameter is
 reserved for a future release in which detection can be spatially
 restricted to an AOI. The current detection engine does not propagate
-the AOI to the underlying grow/refine stages, so a non-`NULL` value
+the AOI to the underlying grow/refine stages, so a non-\code{NULL} value
 is rejected with an explicit error rather than silently ignored.
-Pass `aoi = NULL` (the default) to run detection over the full valid
+Pass \code{aoi = NULL} (the default) to run detection over the full valid
 extent of the change-index raster.}
 
 \item{write_outputs}{Logical scalar. Whether the detection products
-should be written to disk. Defaults to `TRUE` because this stage is
+should be written to disk. Defaults to \code{TRUE} because this stage is
 commonly inspected visually during workflow development and QA/QC.}
 
 \item{overwrite}{Logical scalar. Whether existing outputs may be
-replaced when `write_outputs = TRUE`. Defaults to `FALSE`.}
+replaced when \code{write_outputs = TRUE}. Defaults to \code{FALSE}.}
 }
 \value{
 Returns a named list containing the main detection products and
-  their associated file paths.
+their associated file paths.
 
-  Stable public fields currently include:
-  \itemize{
-    \item `otsu_raster`
-    \item `seed_raster`
-    \item `grown_patches`
-    \item `grown_patches_path`
-    \item `refined_patches`
-    \item `refined_patches_path`
-    \item `detection_diagnostics`
-  }
+Stable public fields currently include:
+\itemize{
+\item \code{otsu_raster}
+\item \code{seed_raster}
+\item \code{grown_patches}
+\item \code{grown_patches_path}
+\item \code{refined_patches}
+\item \code{refined_patches_path}
+\item \code{detection_diagnostics}
+}
 
-  In the current public wrapper, `grown_patches_path`,
-  `refined_patches_path`, and `detection_diagnostics` are the main
-  populated outputs. The object placeholders `otsu_raster`,
-  `seed_raster`, `grown_patches`, and `refined_patches` are kept for
-  compatibility and currently return `NULL`.
+In the current public wrapper, \code{grown_patches_path},
+\code{refined_patches_path}, and \code{detection_diagnostics} are the main
+populated outputs. The object placeholders \code{otsu_raster},
+\code{seed_raster}, \code{grown_patches}, and \code{refined_patches} are kept for
+compatibility and currently return \code{NULL}.
 
-  The exact internal implementation should not be relied upon beyond
-  these stable public outputs.
+The exact internal implementation should not be relied upon beyond
+these stable public outputs.
 }
 \description{
 Run the detection stage of the deterministic OtsuFire workflow on an
 annual change-index raster.
 
 This function takes an
-[otsufire_burned_mapping_config][build_burned_mapping_config] object
+\link[=build_burned_mapping_config]{otsufire_burned_mapping_config} object
 and produces the candidate burned-patch outputs later used by
-[score_burned_patches()].
+\code{\link[=score_burned_patches]{score_burned_patches()}}.
 It is the "find candidate fires" step, not the final burned-map step.
 
 Conceptually, this stage includes:
 \enumerate{
-  \item Otsu-based threshold estimation,
-  \item seed generation,
-  \item seed-supported region growing,
-  \item segmentation refinement,
-  \item candidate merging.
+\item Otsu-based threshold estimation,
+\item seed generation,
+\item seed-supported region growing,
+\item segmentation refinement,
+\item candidate merging.
 }
 
 In practice, the wrapper validates inputs, prepares the runtime
-context, rejects unsupported `aoi` input explicitly, and then calls
+context, rejects unsupported \code{aoi} input explicitly, and then calls
 the internal detection engine.
 
 Given the same inputs and parameter settings, this stage is
@@ -90,63 +90,63 @@ into spatially coherent candidate burned patches.
 
 The workflow proceeds conceptually as follows:
 \enumerate{
-  \item estimate vegetation-aware seed thresholds from the
-    change-index distribution,
-  \item identify high-confidence burned seed pixels,
-  \item expand seeds into neighbouring burned-like pixels using
-    constrained region growing,
-  \item refine and filter candidate polygons,
-  \item merge overlapping or fragmented detections where appropriate.
+\item estimate vegetation-aware seed thresholds from the
+change-index distribution,
+\item identify high-confidence burned seed pixels,
+\item expand seeds into neighbouring burned-like pixels using
+constrained region growing,
+\item refine and filter candidate polygons,
+\item merge overlapping or fragmented detections where appropriate.
 }
 
 The resulting outputs are candidate burned patches, not final burned
-decisions. Reliability assessment and final `keep` / `review` /
-`drop` assignment happen later in [score_burned_patches()].
+decisions. Reliability assessment and final \code{keep} / \code{review} /
+\code{drop} assignment happen later in \code{\link[=score_burned_patches]{score_burned_patches()}}.
 
 The detection stage operates exclusively on the deterministic
 candidate-generation workflow and does not perform probabilistic
 classification or supervised scoring.
 
 Detection behaviour is controlled through the parameter blocks stored
-inside `config`, particularly:
+inside \code{config}, particularly:
 \itemize{
-  \item `detect_params`
-  \item `refine_params`
+\item \code{detect_params}
+\item \code{refine_params}
 }
 
 Key methodological controls include:
 \itemize{
-  \item seed-generation thresholds,
-  \item vegetation-specific constraints,
-  \item region-growing permissiveness,
-  \item minimum patch size,
-  \item overlap-merging behaviour.
+\item seed-generation thresholds,
+\item vegetation-specific constraints,
+\item region-growing permissiveness,
+\item minimum patch size,
+\item overlap-merging behaviour.
 }
 
 Before delegating to the internal engine, the function also validates
 that the required inputs exist on disk and runs the configured
-`change_index` integrity check (the same rules as [clean_raster_file()]),
+\code{change_index} integrity check (the same rules as \code{\link[=clean_raster_file]{clean_raster_file()}}),
 stopping with an error if the raster is not clean.
 
 \strong{Current AOI limitation and what to do instead}
 
-At the moment, `aoi` is intentionally rejected rather than partially
+At the moment, \code{aoi} is intentionally rejected rather than partially
 applied. The current detection engine still runs through the full grow
 and refine machinery without a true AOI-aware execution path, so
-allowing `aoi` now would be misleading.
+allowing \code{aoi} now would be misleading.
 
 If you need an AOI-limited run today, you must guarantee that the
 workflow inputs have already been prepared externally for that AOI
-before calling `detect_burned_patches()`. In practice, this means that
+before calling \code{detect_burned_patches()}. In practice, this means that
 the files on disk should already be cropped or masked to the intended
 AOI for at least:
 \itemize{
-  \item `change_index`,
-  \item `vegetation_map`,
-  \item `burnable_mask`,
-  \item and any supporting spatial layers used later in the workflow,
-    especially the study-area boundary and ecoregion layers referenced
-    through `config$options`.
+\item \code{change_index},
+\item \code{vegetation_map},
+\item \code{burnable_mask},
+\item and any supporting spatial layers used later in the workflow,
+especially the study-area boundary and ecoregion layers referenced
+through \code{config$options}.
 }
 
 If later deterministic stages should also remain AOI-limited, the same
@@ -161,10 +161,10 @@ before scoring ever begins.
 
 The deterministic detection stage is designed to:
 \itemize{
-  \item maximise spatial coherence,
-  \item reduce obvious false positives early,
-  \item preserve low-severity burned edges where possible,
-  \item produce a traceable candidate universe for later scoring.
+\item maximise spatial coherence,
+\item reduce obvious false positives early,
+\item preserve low-severity burned edges where possible,
+\item produce a traceable candidate universe for later scoring.
 }
 
 Keeping candidate generation separate from scoring makes the workflow
@@ -193,11 +193,11 @@ plot(sf::st_geometry(refined))
 \seealso{
 Related deterministic workflow functions:
 \itemize{
-  \item [build_burned_mapping_config()]
-  \item [score_burned_patches()]
-  \item [run_deterministic_pipeline()]
-  \item [validate_fire_maps()]
-  \item [build_supervised_burned_config()]
+\item \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}
+\item \code{\link[=score_burned_patches]{score_burned_patches()}}
+\item \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}
+\item \code{\link[=validate_fire_maps]{validate_fire_maps()}}
+\item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}
 }
 
 Other modular: 

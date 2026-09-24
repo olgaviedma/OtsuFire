@@ -20,11 +20,11 @@ scoring_validation_burned_area(
 )
 }
 \arguments{
-\item{internal_polys}{sf. Internal polygons (must contain column `flag_internal`).}
+\item{internal_polys}{sf. Internal polygons (must contain column \code{flag_internal}).}
 
 \item{ref_polys}{sf. Reference polygons (e.g., EFFIS).}
 
-\item{internal_keep_value}{Character vector. Values in `flag_internal` treated as "keep".}
+\item{internal_keep_value}{Character vector. Values in \code{flag_internal} treated as "keep".}
 
 \item{buffer_m}{numeric. Tolerance buffer (meters) used for both directions.}
 
@@ -45,11 +45,13 @@ scoring_validation_burned_area(
 \item{suppress_sf_warnings}{logical. Suppress sf warnings.}
 }
 \value{
-list with `ref_flagged`, `internal_flagged`, and `out_paths` (if saved).
+list with \code{ref_flagged}, \code{internal_flagged}, and \code{out_paths} (if saved).
 }
 \description{
 Produces two complementary products:
-1) reference polygons flagged as keep_ref/review_ref against internal keep
-2) internal keep polygons flagged as keep_common/review_int_no_effis against reference
+\enumerate{
+\item reference polygons flagged as keep_ref/review_ref against internal keep
+\item internal keep polygons flagged as keep_common/review_int_no_effis against reference
+}
 }
 \keyword{internal}

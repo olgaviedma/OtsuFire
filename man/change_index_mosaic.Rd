@@ -23,21 +23,21 @@ change_index_mosaic(
 \arguments{
 \item{folder_path}{Character. Directory containing the raster tiles to mosaic.}
 
-\item{mask}{An `sf` object, a `terra::SpatVector`, or a path to a vector file
+\item{mask}{An \code{sf} object, a \code{terra::SpatVector}, or a path to a vector file
 used to crop and mask the mosaic to the area of interest.}
 
 \item{year}{Optional integer or character scalar identifying the target year.
-If `NULL`, the function tries to infer it from `folder_path` or from the
+If \code{NULL}, the function tries to infer it from \code{folder_path} or from the
 first tile name.}
 
 \item{raster_pattern}{Character. Pattern used to list candidate tiles inside
-`folder_path`.}
+\code{folder_path}.}
 
 \item{output_dir}{Character. Directory where the final mosaic will be written.
-Defaults to `folder_path`.}
+Defaults to \code{folder_path}.}
 
 \item{mosaic_name}{Optional character scalar. Stable output name to use for
-the mosaic. If `NULL`, a name is derived from the first tile.}
+the mosaic. If \code{NULL}, a name is derived from the first tile.}
 
 \item{nodata_value}{Numeric scalar used as NoData when reading and writing
 rasters.}
@@ -45,24 +45,24 @@ rasters.}
 \item{tol}{Numeric scalar. Tolerance used when checking tile resolution and
 grid origin compatibility.}
 
-\item{cap_below}{Logical. Whether values below `lower_cap` should be replaced
-by `lower_cap` before writing the mosaic.}
+\item{cap_below}{Logical. Whether values below \code{lower_cap} should be replaced
+by \code{lower_cap} before writing the mosaic.}
 
 \item{lower_cap}{Optional numeric scalar. Lower bound applied when
-`cap_below = TRUE`.}
+\code{cap_below = TRUE}.}
 
-\item{method}{Character. Mosaic method. Supported values are `"merge"` and
-`"vrt"`.}
+\item{method}{Character. Mosaic method. Supported values are \code{"merge"} and
+\code{"vrt"}.}
 
 \item{overwrite}{Logical. Whether an existing output mosaic may be replaced.}
 
 \item{keep_temporary_files}{Logical. Whether to keep the temporary VRT when
-`method = "vrt"`.}
+\code{method = "vrt"}.}
 }
 \value{
-A named list with class `change_index_mosaic_result`, containing
-  `mosaic_path`, `tile_inventory`, `method_used`, `mask_summary`,
-  `mosaic_diagnostics`, and `temporary_vrt`.
+A named list with class \code{change_index_mosaic_result}, containing
+\code{mosaic_path}, \code{tile_inventory}, \code{method_used}, \code{mask_summary},
+\code{mosaic_diagnostics}, and \code{temporary_vrt}.
 }
 \description{
 Build a masked yearly mosaic from raster tiles representing a burned-area

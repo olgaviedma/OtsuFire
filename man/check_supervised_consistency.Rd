@@ -15,36 +15,36 @@ check_supervised_consistency(
 }
 \arguments{
 \item{deterministic_decisions}{GPKG path to the deterministic
-`internal_decisions.gpkg` (must contain layer `internal_decisions`).
-`sf` objects are not accepted; pass a path.}
+\code{internal_decisions.gpkg} (must contain layer \code{internal_decisions}).
+\code{sf} objects are not accepted; pass a path.}
 
 \item{final_map}{GPKG path to the supervised final-map file
-(must contain layers `final_map_full` and `final_map`).}
+(must contain layers \code{final_map_full} and \code{final_map}).}
 
 \item{out_dir}{Output folder; defaults to
-`config$output_routes$consistency_dir`.}
+\code{config$output_routes$consistency_dir}.}
 
-\item{config}{Optional `otsufire_supervised_burned_config`. When
-supplied, `target_year` and `scenario` are taken from it. Otherwise
-supply `target_year` and `scenario` directly.}
+\item{config}{Optional \code{otsufire_supervised_burned_config}. When
+supplied, \code{target_year} and \code{scenario} are taken from it. Otherwise
+supply \code{target_year} and \code{scenario} directly.}
 
-\item{target_year}{Optional integer; ignored when `config` is supplied.}
+\item{target_year}{Optional integer; ignored when \code{config} is supplied.}
 
 \item{scenario}{Optional character, the run label used to name the
-output files; ignored when `config` is supplied.}
+output files; ignored when \code{config} is supplied.}
 }
 \value{
 A list with the paths of the written artefacts
-  (`consistency_issues_gpkg`, `consistency_summary_csv`,
-  `consistency_summary_txt`, `pburned_overall_summary`,
-  `pburned_by_class_input`, `pburned_by_source_set`) and `summary_row`,
-  the one-row summary of the check (`NULL` if the check could not run).
+(\code{consistency_issues_gpkg}, \code{consistency_summary_csv},
+\code{consistency_summary_txt}, \code{pburned_overall_summary},
+\code{pburned_by_class_input}, \code{pburned_by_source_set}) and \code{summary_row},
+the one-row summary of the check (\code{NULL} if the check could not run).
 }
 \description{
 Compares the deterministic decisions and the supervised final map of the
 same run and writes per-issue diagnostic artefacts (GPKG, CSV and TXT).
 The same check runs automatically from
-[run_oneyear_supervised_pipeline()] when `run_consistency = TRUE`.
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} when \code{run_consistency = TRUE}.
 }
 \seealso{
 Other modular: 

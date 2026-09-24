@@ -102,7 +102,7 @@
 #'     legitimately excluded from the current-year public map while remaining in
 #'     the full scored layers, so
 #'     `nrow(final_map) == nrow(final_map_full) -`
-#'     `sum(final_map_full$current_year_public_drop \%in\% TRUE)`. This is a
+#'     `sum(final_map_full$current_year_public_drop %in% TRUE)`. This is a
 #'     documented methodological exclusion, not a silent row loss.
 #' }
 #'

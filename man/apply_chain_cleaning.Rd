@@ -77,9 +77,9 @@ Default FALSE.}
 }
 \value{
 A list with: \code{output_path}, \code{audit_path}, \code{params_path},
-  \code{n_candidates_before}, \code{n_candidates_after}, \code{n_chained_flagged},
-  \code{area_before_ha}, \code{area_after_ha}, \code{area_removed_ha},
-  \code{opening_px}, \code{dechain_distance_m}.
+\code{n_candidates_before}, \code{n_candidates_after}, \code{n_chained_flagged},
+\code{area_before_ha}, \code{area_after_ha}, \code{area_removed_ha},
+\code{opening_px}, \code{dechain_distance_m}.
 }
 \description{
 \code{apply_chain_cleaning()} (alias \code{apply_chain()}) is an \strong{optional}

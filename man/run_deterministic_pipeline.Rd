@@ -13,53 +13,53 @@ run_deterministic_pipeline(
 )
 }
 \arguments{
-\item{config}{An `otsufire_burned_mapping_config` object returned by
+\item{config}{An \code{otsufire_burned_mapping_config} object returned by
 \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}.}
 
 \item{write_outputs}{Logical scalar. Whether the pipeline writes its
-outputs to disk. Default `TRUE`. When `FALSE`, shared validation is
+outputs to disk. Default \code{TRUE}. When \code{FALSE}, shared validation is
 usually skipped because the validator expects an on-disk decision
 layer.}
 
 \item{overwrite}{Logical scalar. Whether existing outputs from the same
-run may be replaced. Default `FALSE`.}
+run may be replaced. Default \code{FALSE}.}
 
 \item{keep_pool}{Optional explicit keep-like reference pool passed
 through to
 \code{\link[=score_burned_patches]{score_burned_patches()}}. This
 should be a pre-built keep-pool summary object such as the output of
 \code{\link[=build_keep_pool_from_samples]{build_keep_pool_from_samples()}}.
-When `NULL` (default), the pipeline uses the deterministic scoring
+When \code{NULL} (default), the pipeline uses the deterministic scoring
 local fallback for the target year. Explicit pools that include the
 same target year are intentionally rejected when helper metadata
-reveal that overlap; for same-year scoring, use `keep_pool = NULL`.}
+reveal that overlap; for same-year scoring, use \code{keep_pool = NULL}.}
 
-\item{run_validation}{Logical scalar or `"auto"`. Controls validation
+\item{run_validation}{Logical scalar or \code{"auto"}. Controls validation
 behaviour.
 \itemize{
-  \item `TRUE`: always attempts validation;
-  \item `FALSE`: skips validation;
-  \item `"auto"` (default): runs validation only when
-    `config$inputs$reference_burned_map` is non-NULL.
+\item \code{TRUE}: always attempts validation;
+\item \code{FALSE}: skips validation;
+\item \code{"auto"} (default): runs validation only when
+\code{config$inputs$reference_burned_map} is non-NULL.
 }}
 }
 \value{
-A named list of class `otsufire_deterministic_run` with fields:
+A named list of class \code{otsufire_deterministic_run} with fields:
 \describe{
-  \item{`detection`}{Output object returned by
-    \code{\link[=detect_burned_patches]{detect_burned_patches()}}.}
-  \item{`scoring`}{Output object returned by
-    \code{\link[=score_burned_patches]{score_burned_patches()}}.}
-  \item{`validation`}{Validation outputs returned by
-    \code{\link[=validate_fire_maps]{validate_fire_maps()}} when
-    validation is executed successfully; otherwise `NULL`.}
-  \item{`result_paths`}{Named list of important written output paths
-    produced during the workflow. Some entries may be `NA` when a
-    stage did not write that product.}
-  \item{`timing_log`}{Timing diagnostics summarising execution time
-    for each deterministic stage.}
-  \item{`config`}{The input configuration object used to run the
-    workflow.}
+\item{\code{detection}}{Output object returned by
+\code{\link[=detect_burned_patches]{detect_burned_patches()}}.}
+\item{\code{scoring}}{Output object returned by
+\code{\link[=score_burned_patches]{score_burned_patches()}}.}
+\item{\code{validation}}{Validation outputs returned by
+\code{\link[=validate_fire_maps]{validate_fire_maps()}} when
+validation is executed successfully; otherwise \code{NULL}.}
+\item{\code{result_paths}}{Named list of important written output paths
+produced during the workflow. Some entries may be \code{NA} when a
+stage did not write that product.}
+\item{\code{timing_log}}{Timing diagnostics summarising execution time
+for each deterministic stage.}
+\item{\code{config}}{The input configuration object used to run the
+workflow.}
 }
 }
 \description{
@@ -74,7 +74,7 @@ The pipeline implements the full unsupervised OtsuFire decision
 workflow, including candidate patch delineation through adaptive
 seed-and-grow segmentation, sequential rule-based filtering,
 temporal-conflict assessment, spectral-support scoring, and final
-deterministic confidence assignment into `keep`, `review`, or `drop`.
+deterministic confidence assignment into \code{keep}, \code{review}, or \code{drop}.
 
 Deterministic scoring within the pipeline can reuse an explicit
 spectral-support \code{keep_pool} supplied by the caller from trusted
@@ -94,38 +94,40 @@ The pipeline executes the deterministic burned-area workflow in three
 main stages:
 
 \enumerate{
-  \item \strong{Detection stage.}
-    \code{\link[=detect_burned_patches]{detect_burned_patches()}}
-    applies adaptive Otsu thresholding and seed-and-grow segmentation
-    to the annual change-index raster in order to generate candidate
-    burned patches.
-  \item \strong{Scoring stage.}
-    \code{\link[=score_burned_patches]{score_burned_patches()}}
-    evaluates candidate patches through a sequential rule-based system
-    including:
-    \itemize{
-      \item Filter 1: seed support and burnable-context plausibility;
-      \item Filter 2: optional active-fire hotspot corroboration;
-      \item Temporal consistency assessment against previous-year
-        burned areas (a distinct step, not a numbered filter);
-      \item Filter 3: spectral-support evaluation relative to a
-        high-confidence keep-like reference distribution.
-    }
-    The outputs of these components are integrated into a final
-    deterministic confidence decision assigning each patch to `keep`,
-    `review`, or `drop`, while preserving a clear decision trail.
+\item \strong{Detection stage.}
+\code{\link[=detect_burned_patches]{detect_burned_patches()}}
+applies adaptive Otsu thresholding and seed-and-grow segmentation
+to the annual change-index raster in order to generate candidate
+burned patches.
+\item \strong{Scoring stage.}
+\code{\link[=score_burned_patches]{score_burned_patches()}}
+evaluates candidate patches through a sequential rule-based system
+including:
+\itemize{
+\item Filter 1: seed support and burnable-context plausibility;
+\item Filter 2: optional active-fire hotspot corroboration;
+\item Temporal consistency assessment against previous-year
+burned areas (a distinct step, not a numbered filter);
+\item Filter 3: spectral-support evaluation relative to a
+high-confidence keep-like reference distribution.
+}
+The outputs of these components are integrated into a final
+deterministic confidence decision assigning each patch to \code{keep},
+\code{review}, or \code{drop}, while preserving a clear decision trail.
 
-    Within the current wrapper, this scoring stage can use either an
-    explicit \code{keep_pool} built from trusted external years or the
-    local same-year spectral-support fallback when \code{keep_pool} is
-    omitted. Explicit same-year \code{keep_pool} references are not a
-    supported public mode.
-  \item \strong{Validation stage.} When validation is enabled, a
-    reference burned-area layer is available, and scoring produced an
-    on-disk decision layer that the shared validator can read,
-    \code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
-    the resulting deterministic burned-area outputs against external
-    burned-area references.
+\if{html}{\out{<div class="sourceCode">}}\preformatted{Within the current wrapper, this scoring stage can use either an
+explicit \code{keep_pool} built from trusted external years or the
+local same-year spectral-support fallback when \code{keep_pool} is
+omitted. Explicit same-year \code{keep_pool} references are not a
+supported public mode.
+}\if{html}{\out{</div>}}
+
+\item \strong{Validation stage.} When validation is enabled, a
+reference burned-area layer is available, and scoring produced an
+on-disk decision layer that the shared validator can read,
+\code{\link[=validate_fire_maps]{validate_fire_maps()}} evaluates
+the resulting deterministic burned-area outputs against external
+burned-area references.
 }
 }
 \seealso{

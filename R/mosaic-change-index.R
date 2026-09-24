@@ -1,12 +1,13 @@
 #' Build an annual change-index mosaic
 #'
 #' @description
-#' Build a masked yearly mosaic from raster tiles representing a burned-area
-#' change index such as MinMin, RBR, or similar products. The function checks
-#' that all input tiles share CRS, resolution, origin alignment, and band count,
-#' merges them into a single mosaic, clips the result to the area of interest,
-#' optionally caps unrealistically low values, writes the final GeoTIFF, and
-#' returns a compact structured summary.
+#' Build a masked mosaic from raster tiles representing a burned-area change
+#' index, such as dNBR or RBR. The function verifies that all input tiles have
+#' matching coordinate reference systems, spatial resolutions, grid alignment,
+#' and band counts. It then merges the tiles, clips and masks the mosaic to the
+#' area of interest, optionally applies a user-defined lower bound to valid
+#' index values, and writes the resulting GeoTIFF. It returns a compact,
+#' structured summary of the output.
 #'
 #' @param folder_path Character. Directory containing the raster tiles to mosaic.
 #' @param mask An `sf` object, a `terra::SpatVector`, or a path to a vector file

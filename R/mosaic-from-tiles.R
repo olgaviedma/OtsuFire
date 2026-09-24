@@ -1,31 +1,58 @@
 #' @title Build a mosaic from raster tiles
 #' @description
-#' Build a masked mosaic from raster tiles stored in a folder. The function
-#' checks that all tiles share CRS, resolution, origin alignment, and band
-#' count, merges them with `terra::merge()`, crops and masks the result to the
-#' input mask, optionally caps values below a lower bound, writes the final
-#' GeoTIFF, and returns its path.
-#' @param folder_path Character scalar. Folder containing the raster tiles to
-#'   mosaic.
-#' @param mask_path Character scalar. Path to the vector mask used to crop and
-#'   mask the mosaic.
-#' @param raster_pattern Character scalar. Pattern used to list candidate raster
-#'   tiles inside `folder_path`.
-#' @param nodata_value Numeric scalar used as NoData when reading and writing
-#'   rasters.
-#' @param tol Numeric scalar. Tolerance used when checking tile resolution and
-#'   origin alignment.
-#' @param cap_below Logical scalar. Whether values below `lower_cap` should be
-#'   replaced by `lower_cap`.
-#' @param lower_cap Numeric scalar. Lower bound applied when `cap_below = TRUE`.
-#' @param method Character scalar. Mosaic method. Currently only `"merge"` is
-#'   implemented.
-#' @return Character scalar with the path to the written mosaic GeoTIFF.
+#' Build a mosaic from raster tiles stored in a folder and mask it to a study
+#' area. The function checks that the tiles have matching coordinate reference
+#' systems, spatial resolutions, grid alignment, and band counts. It then
+#' merges the tiles, crops and masks the mosaic, optionally applies a lower
+#' bound to pixel values, and writes the resulting GeoTIFF.
+#' @param folder_path Character scalar. Path to the folder containing the
+#'   raster tiles.
+#' @param mask_path Character scalar. Path to the vector file defining the
+#'   study area used to crop and mask the mosaic.
+#' @param raster_pattern Character scalar. Filename pattern used to select
+#'   raster tiles within `folder_path`. Default:
+#'   `"IBERIAN_MinMin_all_year_*.tif"`.
+#' @param nodata_value Numeric scalar. Value used to identify missing data when
+#'   reading the tiles and to encode missing data in the output. Default:
+#'   `-9999`.
+#' @param tol Numeric scalar. Numerical tolerance used when checking tile
+#'   resolution and grid alignment. Default: `1e-07`.
+#' @param cap_below Logical scalar. Whether to replace values below
+#'   `lower_cap` with `lower_cap`. Default: `TRUE`.
+#' @param lower_cap Numeric scalar. Lower bound applied when
+#'   `cap_below = TRUE`. Choose a value appropriate for the index and its
+#'   scaling. Default: `-1000`.
+#' @param method Character scalar. Method used to combine the tiles.
+#'   Currently, only `"merge"` is supported.
+#' @details
+#' The function checks the compatibility of the selected tiles before
+#' combining them with `terra::merge()`. Tiles must have matching coordinate
+#' reference systems, spatial resolutions, grid alignment, and band counts.
+#'
+#' The merged raster is cropped to the extent of the study area and masked to
+#' its geometry. Cells outside the mask are assigned missing values.
+#'
+#' When `cap_below = TRUE`, non-missing pixel values below `lower_cap` are
+#' replaced with the lower bound. For example, with `lower_cap = -1000`, a
+#' value of `-1500` becomes `-1000`. Set `cap_below = FALSE` to disable this
+#' operation.
+#'
+#' The filename pattern determines which tiles are included. For an annual
+#' mosaic, select tiles from a single year, for example with
+#' `"RBR_2020_*.tif"`, or store each year's tiles in a separate folder.
+#'
+#' Although the default filename pattern refers to RBR, the function can also
+#' be used with other raster indices by changing `raster_pattern` and, where
+#' appropriate, `lower_cap`. All selected tiles should represent the same
+#' index and use the same units and scaling.
+#' @return A character scalar containing the path to the output mosaic
+#'   GeoTIFF.
 #' @examples
-#' # Synthetic example: build a small mosaic from two tiles created on the fly
+#' # Create a temporary folder for two example tiles
 #' tmp_dir <- tempfile("mosaic_example_")
 #' dir.create(tmp_dir)
 #'
+#' # Create adjacent raster tiles with matching grids
 #' tile1 <- terra::rast(
 #'   nrows = 2, ncols = 2,
 #'   xmin = 0, xmax = 2,
@@ -43,46 +70,68 @@
 #'
 #' terra::writeRaster(
 #'   tile1,
-#'   file.path(tmp_dir, "synthetic_tile_2020_a.tif"),
+#'   file.path(tmp_dir, "RBR_2020_tile_a.tif"),
+#'   NAflag = -9999,
 #'   overwrite = TRUE
 #' )
 #' terra::writeRaster(
 #'   tile2,
-#'   file.path(tmp_dir, "synthetic_tile_2020_b.tif"),
+#'   file.path(tmp_dir, "RBR_2020_tile_b.tif"),
+#'   NAflag = -9999,
 #'   overwrite = TRUE
 #' )
 #'
-#' mask_path <- file.path(tmp_dir, "synthetic_mask.gpkg")
+#' # Create a polygon mask covering both tiles
 #' mask_vect <- terra::vect(
-#'   matrix(c(
-#'     0, 0,
-#'     4, 0,
-#'     4, 2,
-#'     0, 2,
-#'     0, 0
-#'   ), ncol = 2, byrow = TRUE),
+#'   matrix(
+#'     c(
+#'       0, 0,
+#'       4, 0,
+#'       4, 2,
+#'       0, 2,
+#'       0, 0
+#'     ),
+#'     ncol = 2,
+#'     byrow = TRUE
+#'   ),
 #'   type = "polygons",
 #'   crs = "EPSG:3035"
 #' )
-#' terra::writeVector(mask_vect, mask_path, overwrite = TRUE)
 #'
+#' mask_path <- file.path(tmp_dir, "study_area.gpkg")
+#' terra::writeVector(
+#'   mask_vect,
+#'   mask_path,
+#'   overwrite = TRUE
+#' )
+#'
+#' # Build the mosaic
 #' result_path <- mosaic_from_tiles(
 #'   folder_path = tmp_dir,
 #'   mask_path = mask_path,
-#'   raster_pattern = "synthetic_tile_2020_*.tif",
+#'   raster_pattern = "RBR_2020_*.tif",
 #'   lower_cap = -1000
 #' )
 #'
+#' # Inspect the output
 #' result_path
 #' terra::rast(result_path)
 #'
 #' \dontrun{
-#' # Example with generic user paths
-#' result <- mosaic_from_tiles(
-#'   folder_path = "path/to/tiles_directory",
-#'   mask_path = "path/to/study_area_mask.shp",
-#'   raster_pattern = "my_tiles_2020_*.tif",
+#' # Build an annual mosaic from your own raster tiles
+#' result_path <- mosaic_from_tiles(
+#'   folder_path = "path/to/raster_tiles",
+#'   mask_path = "path/to/study_area.gpkg",
+#'   raster_pattern = "RBR_2020_*.tif",
 #'   lower_cap = -1000
+#' )
+#'
+#' # Build a mosaic without applying a lower bound
+#' result_path <- mosaic_from_tiles(
+#'   folder_path = "path/to/raster_tiles",
+#'   mask_path = "path/to/study_area.gpkg",
+#'   raster_pattern = "RBR_2020_*.tif",
+#'   cap_below = FALSE
 #' )
 #' }
 #' @export

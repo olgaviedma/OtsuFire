@@ -16,44 +16,72 @@ mosaic_from_tiles(
 )
 }
 \arguments{
-\item{folder_path}{Character scalar. Folder containing the raster tiles to
-mosaic.}
+\item{folder_path}{Character scalar. Path to the folder containing the
+raster tiles.}
 
-\item{mask_path}{Character scalar. Path to the vector mask used to crop and
-mask the mosaic.}
+\item{mask_path}{Character scalar. Path to the vector file defining the
+study area used to crop and mask the mosaic.}
 
-\item{raster_pattern}{Character scalar. Pattern used to list candidate raster
-tiles inside \code{folder_path}.}
+\item{raster_pattern}{Character scalar. Filename pattern used to select
+raster tiles within \code{folder_path}. Default:
+\code{"IBERIAN_MinMin_all_year_*.tif"}.}
 
-\item{nodata_value}{Numeric scalar used as NoData when reading and writing
-rasters.}
+\item{nodata_value}{Numeric scalar. Value used to identify missing data when
+reading the tiles and to encode missing data in the output. Default:
+\code{-9999}.}
 
-\item{tol}{Numeric scalar. Tolerance used when checking tile resolution and
-origin alignment.}
+\item{tol}{Numeric scalar. Numerical tolerance used when checking tile
+resolution and grid alignment. Default: \code{1e-07}.}
 
-\item{cap_below}{Logical scalar. Whether values below \code{lower_cap} should be
-replaced by \code{lower_cap}.}
+\item{cap_below}{Logical scalar. Whether to replace values below
+\code{lower_cap} with \code{lower_cap}. Default: \code{TRUE}.}
 
-\item{lower_cap}{Numeric scalar. Lower bound applied when \code{cap_below = TRUE}.}
+\item{lower_cap}{Numeric scalar. Lower bound applied when
+\code{cap_below = TRUE}. Choose a value appropriate for the index and its
+scaling. Default: \code{-1000}.}
 
-\item{method}{Character scalar. Mosaic method. Currently only \code{"merge"} is
-implemented.}
+\item{method}{Character scalar. Method used to combine the tiles.
+Currently, only \code{"merge"} is supported.}
 }
 \value{
-Character scalar with the path to the written mosaic GeoTIFF.
+A character scalar containing the path to the output mosaic
+GeoTIFF.
 }
 \description{
-Build a masked mosaic from raster tiles stored in a folder. The function
-checks that all tiles share CRS, resolution, origin alignment, and band
-count, merges them with \code{terra::merge()}, crops and masks the result to the
-input mask, optionally caps values below a lower bound, writes the final
-GeoTIFF, and returns its path.
+Build a mosaic from raster tiles stored in a folder and mask it to a study
+area. The function checks that the tiles have matching coordinate reference
+systems, spatial resolutions, grid alignment, and band counts. It then
+merges the tiles, crops and masks the mosaic, optionally applies a lower
+bound to pixel values, and writes the resulting GeoTIFF.
+}
+\details{
+The function checks the compatibility of the selected tiles before
+combining them with \code{terra::merge()}. Tiles must have matching coordinate
+reference systems, spatial resolutions, grid alignment, and band counts.
+
+The merged raster is cropped to the extent of the study area and masked to
+its geometry. Cells outside the mask are assigned missing values.
+
+When \code{cap_below = TRUE}, non-missing pixel values below \code{lower_cap} are
+replaced with the lower bound. For example, with \code{lower_cap = -1000}, a
+value of \code{-1500} becomes \code{-1000}. Set \code{cap_below = FALSE} to disable this
+operation.
+
+The filename pattern determines which tiles are included. For an annual
+mosaic, select tiles from a single year, for example with
+\code{"RBR_2020_*.tif"}, or store each year's tiles in a separate folder.
+
+Although the default filename pattern refers to RBR, the function can also
+be used with other raster indices by changing \code{raster_pattern} and, where
+appropriate, \code{lower_cap}. All selected tiles should represent the same
+index and use the same units and scaling.
 }
 \examples{
-# Synthetic example: build a small mosaic from two tiles created on the fly
+# Create a temporary folder for two example tiles
 tmp_dir <- tempfile("mosaic_example_")
 dir.create(tmp_dir)
 
+# Create adjacent raster tiles with matching grids
 tile1 <- terra::rast(
   nrows = 2, ncols = 2,
   xmin = 0, xmax = 2,
@@ -71,46 +99,68 @@ tile2 <- terra::rast(
 
 terra::writeRaster(
   tile1,
-  file.path(tmp_dir, "synthetic_tile_2020_a.tif"),
+  file.path(tmp_dir, "RBR_2020_tile_a.tif"),
+  NAflag = -9999,
   overwrite = TRUE
 )
 terra::writeRaster(
   tile2,
-  file.path(tmp_dir, "synthetic_tile_2020_b.tif"),
+  file.path(tmp_dir, "RBR_2020_tile_b.tif"),
+  NAflag = -9999,
   overwrite = TRUE
 )
 
-mask_path <- file.path(tmp_dir, "synthetic_mask.gpkg")
+# Create a polygon mask covering both tiles
 mask_vect <- terra::vect(
-  matrix(c(
-    0, 0,
-    4, 0,
-    4, 2,
-    0, 2,
-    0, 0
-  ), ncol = 2, byrow = TRUE),
+  matrix(
+    c(
+      0, 0,
+      4, 0,
+      4, 2,
+      0, 2,
+      0, 0
+    ),
+    ncol = 2,
+    byrow = TRUE
+  ),
   type = "polygons",
   crs = "EPSG:3035"
 )
-terra::writeVector(mask_vect, mask_path, overwrite = TRUE)
 
+mask_path <- file.path(tmp_dir, "study_area.gpkg")
+terra::writeVector(
+  mask_vect,
+  mask_path,
+  overwrite = TRUE
+)
+
+# Build the mosaic
 result_path <- mosaic_from_tiles(
   folder_path = tmp_dir,
   mask_path = mask_path,
-  raster_pattern = "synthetic_tile_2020_*.tif",
+  raster_pattern = "RBR_2020_*.tif",
   lower_cap = -1000
 )
 
+# Inspect the output
 result_path
 terra::rast(result_path)
 
 \dontrun{
-# Example with generic user paths
-result <- mosaic_from_tiles(
-  folder_path = "path/to/tiles_directory",
-  mask_path = "path/to/study_area_mask.shp",
-  raster_pattern = "my_tiles_2020_*.tif",
+# Build an annual mosaic from your own raster tiles
+result_path <- mosaic_from_tiles(
+  folder_path = "path/to/raster_tiles",
+  mask_path = "path/to/study_area.gpkg",
+  raster_pattern = "RBR_2020_*.tif",
   lower_cap = -1000
+)
+
+# Build a mosaic without applying a lower bound
+result_path <- mosaic_from_tiles(
+  folder_path = "path/to/raster_tiles",
+  mask_path = "path/to/study_area.gpkg",
+  raster_pattern = "RBR_2020_*.tif",
+  cap_below = FALSE
 )
 }
 }

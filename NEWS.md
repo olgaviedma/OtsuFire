@@ -234,7 +234,8 @@ will not run unchanged.
   `scoring_internal_burned_area()`, `scoring_reference_burned_area()`,
   `scoring_validation_burned_area()`, `segmentation_refinement()` and
   `validation_statistics()`.
-* **The public API is now 43 exported functions** organised as four stages:
+* **The public API is now 43 exports** (36 functions and 7 `OF_*` plotting
+  and threshold constants). The functions are organised as four stages:
   a mosaic stage (`change_index_mosaic()`, `mosaic_from_tiles()`), a
   deterministic Otsu/grow segmentation workflow
   (`build_burned_mapping_config()`, `run_deterministic_pipeline()`), a

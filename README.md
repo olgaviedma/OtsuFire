@@ -22,7 +22,8 @@ is sensor-agnostic and only requires a change-index raster.
 **2.0.0 is not backward compatible with the 0.1.x line.** Of the 19 functions
 exported by 0.1.x, **17 have been removed**. Only `clean_raster_file()` and
 `validate_fire_maps()` survive under their old names, and the public API is now
-43 functions driven by configuration objects rather than long argument lists.
+43 exports (36 functions and 7 constants). Runs are driven by configuration
+objects rather than long argument lists.
 
 Code written against 0.1.x will not run unchanged. If you need the old function
 set, pin the 0.1.4 release from CRAN. See `NEWS.md` for the full list of removed

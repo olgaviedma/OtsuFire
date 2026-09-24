@@ -125,3 +125,4 @@ Optionally:
 - Erases overlaps with a pre-year mask for keep/review outputs.
 - Saves outputs to disk (GPKG or Shapefile).
 }
+\keyword{internal}

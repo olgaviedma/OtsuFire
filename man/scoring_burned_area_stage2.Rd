@@ -146,3 +146,4 @@ Convenience wrapper that:
 2) optionally erases overlaps with a pre-year mask (already included in internal scoring when `preyear_polys` is set),
 3) optionally runs `scoring_validation_burned_area()` if `ref_polys` is provided.
 }
+\keyword{internal}

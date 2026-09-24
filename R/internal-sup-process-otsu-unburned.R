@@ -31,7 +31,6 @@
 #' - Output shapefiles can be in ESRI Shapefile or GeoJSON format.
 #' - Intermediate tile shapefiles and rasters are cleaned after processing.
 #'
-#' @name process_otsu_rasters
 #' @rdname process_otsu_rasters
 #'
 #' @param raster_path Path to a single-band RBR or dNBR raster.
@@ -81,6 +80,7 @@
 #' @importFrom data.table :=
 #' @importFrom stringr str_detect str_replace str_extract
 #' @importFrom glue glue
+#' @keywords internal
 process_otsu_rasters_ <- function(
     raster_path = NULL,
     nbr_pre_path = NULL,

@@ -108,6 +108,7 @@
 #' )
 #' }
 #'
+#' @keywords internal
 score_rbr_keep_classes <- function(
     polys_sf,
     rbr_rast,

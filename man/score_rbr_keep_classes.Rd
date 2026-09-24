@@ -177,3 +177,4 @@ p2 <- score_rbr_keep_classes(
 \seealso{
 \code{\link{scoring_burned_area_stage2}}
 }
+\keyword{internal}

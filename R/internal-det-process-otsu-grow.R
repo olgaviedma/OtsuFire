@@ -229,6 +229,7 @@
 #' @importFrom graphics hist
 #' @importFrom tools file_path_sans_ext
 #' @importFrom utils write.table
+#' @keywords internal
 process_otsu_rasters_grow <- function(
     raster_path = NULL,
     nbr_pre_path = NULL,

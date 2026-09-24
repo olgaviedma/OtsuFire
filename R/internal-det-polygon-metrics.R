@@ -83,6 +83,7 @@
 #'
 #' @return Named list (one element per input) with output paths and in-memory sf objects.
 #'
+#' @keywords internal
 calculate_polygon_metrics2 <- function(
   shapefile_paths,
   output_dir = NULL,

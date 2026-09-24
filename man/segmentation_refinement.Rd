@@ -246,3 +246,4 @@ res <- segmentation_refinement(
 \code{\link[future]{plan}}, \code{\link[future.apply]{future_lapply}},
 \code{\link[progressr]{with_progress}}
 }
+\keyword{internal}

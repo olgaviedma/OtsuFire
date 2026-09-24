@@ -328,3 +328,4 @@ res <- process_otsu_rasters_grow(
 }
 
 }
+\keyword{internal}

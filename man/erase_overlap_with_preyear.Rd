@@ -42,3 +42,4 @@ Notes:
   and keeps non-intersecting polygons unchanged (fast + avoids unnecessary geometry churn).
 - If `post_shave_m > 0`, the result is buffered inward then outward to remove thin slivers.
 }
+\keyword{internal}

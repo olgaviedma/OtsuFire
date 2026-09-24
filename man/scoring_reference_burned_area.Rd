@@ -116,3 +116,4 @@ Unlike `scoring_internal_burned_area()`, this function does not use Stage-1 supp
 to define keep/review. Instead, it focuses on harmonizing per-polygon diagnostics
 and optional domain filtering.
 }
+\keyword{internal}

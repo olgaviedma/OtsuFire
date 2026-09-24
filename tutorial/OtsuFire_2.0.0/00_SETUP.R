@@ -89,7 +89,17 @@ BURNABLE_MASK <- file.path(
 
 # Study area ------------------------------------------------------------------
 PENINSULA_SHP <- file.path(DATA_BASE, "Borders", "Iberian_peninsula.shp")
-STUDY_AREA_MASK <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.shp")
+# STUDY_AREA_MASK is the PROCESSING extent for mosaicking. It is NOT the
+# validation mask: since Reference V2 the two are different objects.
+STUDY_AREA_MASK <- file.path(DATA_BASE, "Borders", "Iberian_Peninsula.shp")
+
+# VALIDATION_MASK is the territory with valid independent reference coverage
+# for TARGET_YEAR. Pre-2000 it is Portugal + the Spanish regions with official
+# cartography that year; 2006+ it is the whole peninsula.
+VALIDATION_MASK <- file.path(
+  DATA_BASE, "Mask_StudyArea_FINAL",
+  sprintf("mask_3035_%d_final.shp", TARGET_YEAR)
+)
 
 # Ecoregions: the deterministic stage runs one Otsu threshold per
 # CORINE x ecoregion unit, not one global threshold.
@@ -115,7 +125,10 @@ PREVIOUS_YEAR_BURNED <- file.path(
 )
 
 # External reference (ground truth for validation) -----------------------------
-# EFFIS summer fires, already clipped to the burnable domain.
+# Reference V2 (authoritative). ERA1 1984-2005: Neves atlas for Portugal +
+# official regional cartography for Spain. ERA2 2006-2025: EFFIS raw.
+# Use the authoritative temporal layer (population_doy / obs_required_doy),
+# NOT start_doy / end_doy, which are kept only for legacy compatibility.
 REFERENCE_BURNED_MAP <- file.path(
   DATA_BASE, "Fires", "Validation_fires_burneable_verano",
   sprintf("Effis_CA_%d_maskKeep_summer.shp", TARGET_YEAR)
@@ -133,6 +146,7 @@ check_inputs <- function() {
     BURNABLE_MASK = BURNABLE_MASK,
     PENINSULA_SHP = PENINSULA_SHP,
     STUDY_AREA_MASK = STUDY_AREA_MASK,
+    VALIDATION_MASK = VALIDATION_MASK,
     TOPO = TOPO,
     REFERENCE_BURNED_MAP = REFERENCE_BURNED_MAP
   )

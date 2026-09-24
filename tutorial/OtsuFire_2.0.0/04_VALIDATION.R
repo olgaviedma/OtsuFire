@@ -154,7 +154,7 @@ cat(sprintf("%d patches kept, %.0f ha\n",
 val <- validate_fire_maps(
   input_shapefile = thresholded_path,
   ref_shapefile   = REFERENCE_BURNED_MAP,
-  mask_shapefile  = STUDY_AREA_MASK,
+  mask_shapefile  = VALIDATION_MASK,
   burnable_raster = BURNABLE_MASK,
   year_target     = TARGET_YEAR,
   validation_dir  = VALIDATION_DIR,

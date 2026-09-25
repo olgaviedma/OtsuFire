@@ -12,12 +12,13 @@ four stages: a **mosaic** stage, an **Otsu-guided segmentation** stage, a
 one-year **probabilistic refinement** stage, and a **workflow-independent
 validation** utility.
 
-The stage names follow the accompanying paper. In the code, the Otsu-guided
-segmentation stage is run with `run_deterministic_pipeline()` (configured with
-`build_burned_mapping_config()`) and writes to `DETERMINISTIC/`; the
-probabilistic refinement stage, which trains a supervised XGBoost model, is run
-with `run_oneyear_supervised_pipeline()` (configured with
-`build_supervised_burned_config()`) and writes to `SUPERVISED/`.
+**Naming convention.** The documentation names each stage by what it does;
+function and folder names describe how it works:
+
+| Stage | Method | Functions and outputs |
+|---|---|---|
+| Otsu-guided segmentation | *deterministic*: fixed rules and thresholds, same result for the same inputs | `build_burned_mapping_config()`, `run_deterministic_pipeline()`, `DETERMINISTIC/` |
+| Probabilistic refinement | *supervised*: a trained XGBoost model | `build_supervised_burned_config()`, `run_oneyear_supervised_pipeline()`, `SUPERVISED/` |
 
 The package itself is sensor-agnostic and only requires a change-index raster.
 The Landsat (through 2016) and Sentinel-2 (from 2017) imagery refers to the

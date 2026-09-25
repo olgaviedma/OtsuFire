@@ -7,11 +7,11 @@
 #' one-year probabilistic refinement workflow, and a shared
 #' workflow-independent validation utility.
 #'
-#' The stage names follow the accompanying paper. In function and folder
-#' names, the Otsu-guided segmentation stage appears as "deterministic"
-#' (`run_deterministic_pipeline()`, `DETERMINISTIC/`) and the probabilistic
-#' refinement stage, which trains a supervised XGBoost model, as "supervised"
-#' (`run_oneyear_supervised_pipeline()`, `SUPERVISED/`).
+#' Stages are named by what they do; function and folder names describe how
+#' they work. Otsu-guided segmentation is \emph{deterministic} (fixed rules and
+#' thresholds): [run_deterministic_pipeline()], `DETERMINISTIC/`. Probabilistic
+#' refinement is \emph{supervised} (a trained XGBoost model):
+#' [run_oneyear_supervised_pipeline()], `SUPERVISED/`.
 #'
 #' @section Workflow entry points:
 #' - [change_index_mosaic()] — annual mosaic of a change index.

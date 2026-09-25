@@ -12,11 +12,11 @@ a mosaic stage, an Otsu-guided segmentation workflow, a
 one-year probabilistic refinement workflow, and a shared
 workflow-independent validation utility.
 
-The stage names follow the accompanying paper. In function and folder
-names, the Otsu-guided segmentation stage appears as "deterministic"
-(\code{run_deterministic_pipeline()}, \verb{DETERMINISTIC/}) and the probabilistic
-refinement stage, which trains a supervised XGBoost model, as "supervised"
-(\code{run_oneyear_supervised_pipeline()}, \verb{SUPERVISED/}).
+Stages are named by what they do; function and folder names describe how
+they work. Otsu-guided segmentation is \emph{deterministic} (fixed rules and
+thresholds): \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}, \verb{DETERMINISTIC/}. Probabilistic
+refinement is \emph{supervised} (a trained XGBoost model):
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, \verb{SUPERVISED/}.
 }
 \section{Workflow entry points}{
 

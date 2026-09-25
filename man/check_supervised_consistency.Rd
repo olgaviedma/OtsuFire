@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-consistency.R
 \name{check_supervised_consistency}
 \alias{check_supervised_consistency}
-\title{Compare deterministic and supervised outputs for one run}
+\title{Check consistency between Otsu-guided patch decisions and supervised outputs}
 \usage{
 check_supervised_consistency(
   deterministic_decisions,
@@ -14,24 +14,28 @@ check_supervised_consistency(
 )
 }
 \arguments{
-\item{deterministic_decisions}{GPKG path to the deterministic
-\code{internal_decisions.gpkg} (must contain layer \code{internal_decisions}).
-\code{sf} objects are not accepted; pass a path.}
+\item{deterministic_decisions}{Character scalar. Path to a GeoPackage
+containing the \code{internal_decisions} layer for the Otsu-guided patches.
+Supply a file path; in-memory \code{sf} objects are not supported by this
+interface.}
 
-\item{final_map}{GPKG path to the supervised final-map file
-(must contain layers \code{final_map_full} and \code{final_map}).}
+\item{final_map}{Character scalar. Path to the supervised map GeoPackage.
+Must contain both \code{final_map_full} and \code{final_map} layers.}
 
-\item{out_dir}{Output folder; defaults to
-\code{config$output_routes$consistency_dir}.}
+\item{out_dir}{Character scalar or \code{NULL}. Output directory for
+consistency-check products. When \code{NULL}, uses
+\code{config$output_routes$consistency_dir}. Supply explicitly when no
+configuration is provided.}
 
-\item{config}{Optional \code{otsufire_supervised_burned_config}. When
-supplied, \code{target_year} and \code{scenario} are taken from it. Otherwise
-supply \code{target_year} and \code{scenario} directly.}
+\item{config}{Optional \code{otsufire_supervised_burned_config} object created by
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies the target year, scenario,
+and default output directory.}
 
-\item{target_year}{Optional integer; ignored when \code{config} is supplied.}
+\item{target_year}{Optional integer scalar. Target year used when
+\code{config = NULL}. Ignored when \code{config} is supplied.}
 
-\item{scenario}{Optional character, the run label used to name the
-output files; ignored when \code{config} is supplied.}
+\item{scenario}{Optional character scalar. Scenario identifier used when
+\code{config = NULL}. Ignored when \code{config} is supplied.}
 }
 \value{
 A list with the paths of the written artefacts
@@ -41,12 +45,84 @@ A list with the paths of the written artefacts
 the one-row summary of the check (\code{NULL} if the check could not run).
 }
 \description{
-Compares the deterministic decisions and the supervised final map of the
-same run and writes per-issue diagnostic artefacts (GPKG, CSV and TXT).
-The same check runs automatically from
-\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} when \code{run_consistency = TRUE}.
+Run the consistency check between the decision layer for Otsu-guided
+patches and the supervised map outputs from the same run.
+
+Use this function after \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}. The same check is
+invoked by \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} when
+\code{run_consistency = TRUE}.
+
+This check compares workflow outputs. To evaluate mapping accuracy against
+external reference fire perimeters, use \code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+}
+\section{Required input layers}{
+
+Supply the decision and supervised output files corresponding to the same
+target year and scenario.\tabular{ll}{
+   Input \tab Required layers \cr
+   \code{deterministic_decisions} \tab \code{internal_decisions} \cr
+   \code{final_map} \tab \code{final_map_full}, \code{final_map} \cr
+}
+
+
+The argument name \code{deterministic_decisions} is retained for API
+compatibility. It refers to the decision layer for Otsu-guided patches.
+
+A GeoPackage containing only thresholded burned polygons is not a
+substitute for the supervised map file required here.
+}
+
+\section{Complete and public map layers}{
+
+The two supervised layers have different purposes:
+\itemize{
+\item \code{final_map_full} contains the complete scored candidate set.
+\item \code{final_map} contains the public output after temporal exclusions and
+public-column selection.
+}
+
+These layers can legitimately have different row counts. A difference in
+counts alone does not establish an inconsistency.
+
+Likewise, agreement between the initial patch decisions and supervised
+results is not a measure of accuracy against independent observations.
+}
+
+\section{Run identifiers and output location}{
+
+When \code{config} is supplied, the function takes the target year and scenario
+from that object. Explicit \code{target_year} and \code{scenario} arguments are
+ignored.
+
+Without a configuration, supply \code{target_year}, \code{scenario}, and \code{out_dir}
+explicitly.
+}
+
+\examples{
+\dontrun{
+# Check outputs using the configuration from the supervised run
+check_supervised_consistency(
+  deterministic_decisions = "data/internal_decisions_2022.gpkg",
+  final_map = "results/supervised_final_map_2022.gpkg",
+  config = cfg
+)
+
+# Alternatively, supply run identifiers and the output directory
+check_supervised_consistency(
+  deterministic_decisions = "data/internal_decisions_2022.gpkg",
+  final_map = "results/supervised_final_map_2022.gpkg",
+  out_dir = "results/consistency_2022",
+  target_year = 2022L,
+  scenario = "balanced"
+)
+}
+
 }
 \seealso{
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, \code{\link[=validate_supervised_execution]{validate_supervised_execution()}},
+\code{\link[=validate_fire_maps]{validate_fire_maps()}}.
+
 Other modular: 
 \code{\link{detect_burned_patches}()},
 \code{\link{validate_fire_maps}()}

@@ -1,535 +1,454 @@
-#' Validate burned-area maps against independent reference fire perimeters
+#' Validate burned-area maps against reference fire perimeters
 #'
 #' @description
-#' `validate_fire_maps()` evaluates one or more burned-area prediction
-#' layers against an independent set of reference fire perimeters.
-#' It is the shared validation entry point in OtsuFire, so it can be
-#' used with outputs from the deterministic workflow, the supervised
-#' workflow, or any external burned-area map supplied as polygons.
+#' Compare one or more burned-area polygon maps with reference fire perimeters
+#' within a common evaluation domain.
 #'
-#' The function compares predicted and reference burned areas within a
-#' common evaluation domain defined by the study-area mask and the
-#' burnable-area raster. Reference polygons are first harmonised to this
-#' domain by filtering them to the target year, clipping them to the
-#' study area, masking them to burnable land, optionally applying a
-#' minimum-area threshold, optionally excluding fires that were not
-#' temporally observable, and optionally dissolving polygons by a
-#' grouping field. Prediction layers are processed against the same
-#' domain so that omission, commission, and agreement are evaluated
-#' consistently.
+#' The function supports maps derived from Otsu-guided patches, supervised
+#' predictions, and external burned-area products. Inputs should contain the
+#' polygons classified as burned. For supervised outputs, apply the selected
+#' score threshold before validation.
 #'
-#' The function can compute two complementary types of validation
-#' output. Pixel-based metrics quantify agreement between burned and
-#' unburned pixels over the burnable domain using a confusion matrix.
-#' Polygon- and area-based metrics quantify whether known reference fires
-#' were detected, how much of their area was recovered, and how much
-#' predicted burned area overlaps the reference data. Optional branches
-#' can also summarise omission and commission by an external polygon
-#' class, compute pixel-level metrics by raster strata, and write the
-#' main outputs to a combined Excel workbook.
+#' The evaluation domain is defined by the study-area boundary and
+#' burnable-area raster. Reference polygons are filtered to the target year
+#' and prepared for comparison within this domain. Optional controls restrict
+#' reference size, assess temporal observability, and dissolve polygons into
+#' grouped features.
 #'
-#' @param input_shapefile Character vector or `sf` object. One or more
-#'   burned-area prediction layers to validate. Each input is processed
-#'   independently and contributes one row to the global output tables.
-#' @param ref_shapefile Character path or `sf` object. Reference
-#'   burned-area polygons.
-#' @param mask_shapefile Character path. Study-area boundary polygon used
-#'   to clip the evaluation domain.
-#' @param burnable_raster Character path. Burnable-domain raster used to
-#'   define the validation domain.
-#' @param year_target Numeric. Target year used to filter the reference
-#'   polygons to the correct fire season.
-#' @param validation_dir Character. Root output directory. A
-#'   `VALIDATION/` subfolder is created inside it, with the outputs
-#'   organised in `01_SUMMARY/`, `02_OBSERVABILITY/`, `03_STRATA/`,
-#'   `04_ERROR_LAYERS/` and `_CACHE/` (see Details).
-#' @param binary_burnable Logical. If `TRUE` (default), the burnable
-#'   raster is treated as binary and cells at or above
-#'   `burnable_threshold` are considered burnable. If `FALSE`,
-#'   `burnable_classes` defines which raster codes are burnable.
-#' @param burnable_classes Optional numeric vector. Raster values treated
-#'   as burnable when `binary_burnable = FALSE`.
-#' @param burnable_threshold Numeric scalar in `[0, 1]`. Threshold used
-#'   when `binary_burnable = TRUE`. Default `0.5`.
-#' @param class_shape Optional character path. Polygon layer used for
-#'   polygon-level omission / commission summaries by class. Requires
+#' Two complementary validation approaches are available:
+#' * \strong{Pixel-based validation}: agreement between predicted and
+#'   reference burned/unburned cells.
+#' * \strong{Polygon- and area-based validation}: reference-fire detection and
+#'   spatial coverage.
+#'
+#' Additional options provide polygon-level error summaries by class,
+#' pixel-level metrics by raster strata, and a combined Excel workbook.
+#'
+#' @param input_shapefile Character vector of polygon-file paths, or an `sf`
+#'   object. Burned-area predictions to validate. Each supplied map is
+#'   evaluated independently. For a GeoPackage containing multiple layers,
+#'   read the intended layer with `sf::st_read()` and pass the resulting
+#'   object.
+#' @param ref_shapefile Polygon-file path or `sf` object containing reference
+#'   fire perimeters.
+#' @param mask_shapefile Character scalar. Path to the study-area boundary
+#'   polygon.
+#' @param burnable_raster Character scalar. Path to the raster defining the
+#'   burnable evaluation domain.
+#' @param year_target Numeric scalar. Target year used to filter reference
+#'   polygons.
+#' @param validation_dir Character scalar. Root output directory. Validation
+#'   products are written under a `VALIDATION` subdirectory.
+#' @param binary_burnable Logical scalar. When `TRUE`, raster values at or
+#'   above `burnable_threshold` are burnable. When `FALSE`, burnable values are
+#'   selected using `burnable_classes`. Default: `TRUE`.
+#' @param burnable_classes Numeric vector of burnable raster codes used when
+#'   `binary_burnable = FALSE`. Default: `NULL`.
+#' @param burnable_threshold Numeric scalar between `0` and `1`.
+#'   Burnable-cell threshold used when `binary_burnable = TRUE`. Default:
+#'   `0.5`.
+#' @param metrics_type Character scalar. `"all"` computes pixel and
+#'   polygon/area metrics; `"pixel"` or `"area"` selects one branch. Default:
+#'   `"all"`.
+#' @param buffer Numeric scalar. Buffer distance in metres applied around
+#'   reference polygons for pixel-based comparison. Default: `0`.
+#' @param threshold_completely_detected Numeric scalar between `0` and `100`.
+#'   Minimum percentage coverage of a reference polygon required to count it
+#'   as completely detected. Default: `90`.
+#' @param threshold_min_detected Numeric scalar between `0` and `100`. Minimum
+#'   percentage coverage of a reference polygon required to count it as
+#'   detected. Default: `10`. Detection thresholds are percentages, whereas
+#'   `observability_min_fraction` is a fraction between `0` and `1`.
+#' @param min_area_reference_ha Optional numeric scalar. Minimum
+#'   reference-polygon area in hectares, measured after restriction to the
+#'   burnable domain. Default: `NULL`.
+#' @param dissolve_ref_by Optional character scalar. Reference attribute used
+#'   to dissolve polygons into grouped features. Default: `NULL`.
+#' @param dissolve_input_by Optional character scalar. Prediction attribute
+#'   used to dissolve polygons into grouped features. Default: `NULL`.
+#' @param observability_raster `terra::SpatRaster`, raster path, or `NULL`.
+#'   Day-of-year raster used to assess whether imagery observations reach the
+#'   required reference-fire date. A single-layer raster is used directly. A
+#'   multi-layer raster must contain a layer named `doy` or with a `_doy` or
+#'   `doy_` name component; the first matching layer is selected. Default:
+#'   `NULL`, disabling this assessment.
+#' @param ref_end_doy_col Character scalar. Reference attribute containing
+#'   fire end day of year. Used as the required date unless another supported
+#'   date rule applies. Default: `"end_doy"`.
+#' @param ref_start_doy_col Character scalar. Reference attribute containing
+#'   fire start day of year. Used as a fallback only under `"legacy_any"` when
+#'   the end date is unavailable. Default: `"start_doy"`.
+#' @param ref_obs_doy_col Optional character scalar. Authoritative reference
+#'   attribute containing the day from which a fire can reasonably be expected
+#'   to appear in the map. Used only under `"wholefire_fraction"`. When
+#'   `NULL`, the required date comes from `ref_end_doy_col`.
+#' @param ref_obs_doy_fallback Character scalar. Treatment of missing values
+#'   in a supplied `ref_obs_doy_col`: `"none"` retains an undetermined date;
+#'   `"end_doy"` allows fallback to `ref_end_doy_col`. Neither option falls
+#'   back to the start date in `"wholefire_fraction"` mode. Default: `"none"`.
+#' @param observability_undetermined_policy Character scalar. Whether fires
+#'   without a valid required date remain in the evaluation: `"evaluate"`
+#'   retains and flags them; `"exclude"` removes their reference geometry and
+#'   corresponding evaluation territory. Applies only under
+#'   `"wholefire_fraction"`. Default: `"evaluate"`.
+#' @param observability_mode Character scalar. `"legacy_any"` requires at
+#'   least one finite observation DOY at or after the required fire date.
+#'   `"wholefire_fraction"` requires a minimum fraction of the fire's
+#'   burnable-domain cells to meet that condition. Default: `"legacy_any"`.
+#' @param observability_min_fraction Numeric scalar between `0` and `1`.
+#'   Minimum temporally observable fraction required under
+#'   `"wholefire_fraction"`. Default: `0.75`. Ignored under `"legacy_any"`.
+#' @param class_shape Optional character path to a polygon classification
+#'   layer used for omission and commission summaries. Requires
 #'   `class_field`.
-#' @param class_field Optional character. Attribute in `class_shape` used
-#'   to group polygon-level errors.
-#' @param buffer Numeric. Buffer distance in metres applied around
-#'   reference polygons before pixel-based comparison. Default `0`.
-#' @param threshold_completely_detected Numeric scalar in `[0, 100]`.
-#'   Minimum percentage of a reference polygon that must be covered by
-#'   detections to count as completely detected. Default `90`.
-#' @param threshold_min_detected Numeric scalar in `[0, 100]`. Minimum
-#'   percentage of a reference polygon that must be covered by detections
-#'   to count as detected at all. This controls `N_Detected_Polygons`.
-#'   Default `10`.
-#' @param min_area_reference_ha Optional numeric. Minimum reference
-#'   polygon area, in hectares after masking to the burnable domain, to
-#'   retain in the analysis. Default `NULL`.
-#' @param observability_raster Optional `SpatRaster`, raster path, or
-#'   `NULL`. When supplied, it is aligned to the validation domain and
-#'   used to exclude reference polygons whose latest observable day of
-#'   year does not reach the reference fire day. A single-layer raster is
-#'   read as the DOY layer. A multi-layer raster (for example a composite
-#'   with `rbr` and `doy` bands) must contain a layer named `doy` or with a
-#'   `_doy` / `doy_` name component; the first such layer is used, and an
-#'   error is raised if there is none.
-#' @param ref_end_doy_col Character. Reference attribute storing the fire
-#'   end day of year. Used first to derive `obs_ref_doy`. Default
-#'   `"end_doy"`.
-#' @param ref_start_doy_col Character. Reference attribute storing the
-#'   fire start day of year. Used as fallback when `ref_end_doy_col` is
-#'   missing for a polygon **only under `observability_mode =
-#'   "legacy_any"`**. Default `"start_doy"`.
-#' @param ref_obs_doy_col Character or `NULL`. Reference attribute holding the
-#'   per-fire day of year from which it is reasonable to require the fire to
-#'   have been mapped. **When supplied it is authoritative**: it is the only
-#'   date column consulted, and a fire with `NA` there is reported as
-#'   `UNDETERMINED_OBS_DATE` rather than falling back to another column (see
-#'   `ref_obs_doy_fallback`). This keeps source-specific date semantics in the
-#'   reference, where they belong, instead of hard-coding them in the
-#'   validator. Used only under `observability_mode = "wholefire_fraction"`.
-#'   Default `NULL`, which leaves the required DOY on `ref_end_doy_col`.
-#' @param ref_obs_doy_fallback Character. What to do when `ref_obs_doy_col` is
-#'   supplied but `NA` for a fire. `"none"` (default) treats the column as
-#'   authoritative and reports the fire as `UNDETERMINED_OBS_DATE`.
-#'   `"end_doy"` falls back to `ref_end_doy_col`, which is appropriate only for
-#'   reference layers whose observability column is deliberately populated for
-#'   some sources and not others (for instance a reference that merges
-#'   sources of which only some carry an observability date). Never falls back to `ref_start_doy_col` under either setting.
-#'   Ignored when `ref_obs_doy_col` is `NULL`.
-#' @param observability_undetermined_policy Character. What to do with fires
-#'   whose observability cannot be verified because the reference carries no
-#'   valid authoritative date (`observability_status ==
-#'   "UNDETERMINED_OBS_DATE"`). **Missing authoritative observability metadata
-#'   is treated separately from evidence of temporal non-observability.** Under
-#'   the default `"evaluate"` policy, fires with `UNDETERMINED_OBS_DATE` remain
-#'   positive reference features in the evaluation domain and are flagged for
-#'   subsequent audit; they contribute TP/FN like any other reference fire and
-#'   can never turn into background or generate commission through a missing
-#'   date. `"exclude"` removes them from the reference and from the evaluation
-#'   domain exactly like a `NOT_OBSERVABLE` fire, and exists only so the two
-#'   treatments can be compared in a sensitivity run. No intermediate policy is
-#'   offered: leaving the territory evaluable while dropping the fire from the
-#'   reference would turn a correct detection into a false positive. No date is
-#'   ever imputed under either policy. Applies only under
-#'   `observability_mode = "wholefire_fraction"`.
-#' @param observability_mode Character. Whole-fire observability rule.
-#'   `"legacy_any"` (default) reproduces earlier releases exactly: a fire is
-#'   observable when the maximum finite DOY inside it is at or after its
-#'   required DOY, which is equivalent to requiring at least one observable
-#'   pixel. `"wholefire_fraction"` requires
-#'   `temporal_observable_fraction >= observability_min_fraction` and removes
-#'   the whole geometry of non-observable fires from the evaluation domain.
-#'   Both rules decide per FIRE; neither trims a fire at pixel level.
-#' @param observability_min_fraction Numeric in `[0, 1]`. Minimum share of the
-#'   burnable-domain pixels of a fire that must carry a composite DOY at or
-#'   after the fire's required DOY for the fire to be evaluated. Default
-#'   `0.75`. Inert under `observability_mode = "legacy_any"`.
-#' @param force_reprocess_ref Logical. If `TRUE`, rebuild the cached
-#'   reference products even if they already exist.
-#' @param force_reprocess_pred Logical. If `TRUE`, rebuild the cached
-#'   prediction products even if they already exist.
-#' @param metrics_type Character. One of `"all"` (default), `"pixel"`, or
-#'   `"area"`.
-#' @param dissolve_ref_by Optional character. Field used to dissolve
-#'   reference polygons before comparison.
-#' @param dissolve_input_by Optional character. Field used to dissolve
-#'   prediction polygons before comparison.
-#' @param strata_raster Optional `SpatRaster`, raster path, or `NULL`.
-#'   When supplied, per-stratum pixel-level confusion matrices and
-#'   derived metrics are computed in addition to the global outputs.
-#' @param strata_lut Optional lookup table for `strata_raster`. Either a
-#'   `data.frame` with columns `id` and `label`, or a CSV / XLSX path
-#'   with the same schema.
-#' @param chunk_rows Integer. Row chunk size used by the per-stratum
-#'   tabulator. Larger values are usually faster but require more memory.
-#'   Default `1024L`.
-#' @param na_strata_as_zero Logical. How to treat `NA` prediction or
-#'   reference pixels inside the strata domain. If `TRUE` (default),
-#'   treat them as unburned (`0`), as earlier releases did. If
-#'   `FALSE`, drop those pixels.
-#' @param write_excel Logical. If `TRUE`, also write a combined Excel
-#'   workbook with the available validation outputs. Requires the
-#'   `openxlsx` package. Default `FALSE`.
-#' @param excel_filename Optional character. Custom Excel filename.
-#'   Defaults to `validation_ALL_<year_target>_res30.xlsx`.
+#' @param class_field Optional character scalar. Attribute in `class_shape`
+#'   identifying the reporting classes.
+#' @param strata_raster `terra::SpatRaster`, raster path, or `NULL`.
+#'   Categorical raster defining strata for pixel-level validation.
+#' @param strata_lut Optional lookup table containing `id` and `label`
+#'   columns. Accepts a `data.frame`, CSV path, or XLSX path.
+#' @param chunk_rows Integer scalar. Number of raster rows processed per chunk
+#'   by the stratified tabulator. Larger values require more memory. Default:
+#'   `1024L`.
+#' @param na_strata_as_zero Logical scalar. Within the eligible strata domain,
+#'   treat missing prediction/reference values as unburned when `TRUE`, or
+#'   omit those cells when `FALSE`. Default: `TRUE`.
+#' @param force_reprocess_ref Logical scalar. Force rebuilding of cached
+#'   reference products. Default: `FALSE`.
+#' @param force_reprocess_pred Logical scalar. Force rebuilding of cached
+#'   prediction products. Default: `FALSE`.
+#' @param write_excel Logical scalar. Also export available validation tables
+#'   to a combined Excel workbook. Requires \pkg{openxlsx}. Default: `FALSE`.
+#' @param excel_filename Optional character scalar. Excel filename. Default:
+#'   `validation_ALL_<year_target>_res30.xlsx`. The filename itself does not
+#'   establish the evaluation resolution.
 #'
-#' @details
-#' \strong{Conceptual workflow}
+#' @section Preparing the evaluation:
+#' The function prepares a common spatial domain from the study-area boundary
+#' and burnable raster.
 #'
-#' `validate_fire_maps()` follows five main steps.
+#' Reference preparation includes target-year filtering, spatial clipping,
+#' restriction to burnable land, and any requested area, observability, or
+#' dissolve operations. Predictions are prepared for comparison within the
+#' same evaluation setup.
 #'
-#' First, it builds a common validation domain. The study-area boundary
-#' defines the spatial extent, and the burnable raster defines where
-#' burned/unburned comparison is meaningful. When
-#' `binary_burnable = TRUE`, cells with values greater than or equal to
-#' `burnable_threshold` are treated as burnable. When
-#' `binary_burnable = FALSE`, the values listed in `burnable_classes`
-#' define the burnable domain.
+#' When several prediction paths are supplied, each map is evaluated
+#' independently against the prepared reference.
 #'
-#' Second, it prepares the reference layer. Reference polygons are
-#' filtered to `year_target`, clipped to the study area, restricted to
-#' the burnable domain and, if requested, filtered by
-#' `min_area_reference_ha`. If `observability_raster` is supplied, the
-#' function also removes reference polygons whose fire date falls after
-#' the latest observable day of year inside the polygon. This avoids
-#' penalising a prediction layer for missing fires that could not be
-#' observed by the input imagery.
+#' Use consistent domain and reference settings when comparing maps. Changing
+#' observability rules, minimum reference area, or grouping can change the
+#' evaluated population as well as the resulting metrics.
 #'
-#' Third, it prepares each prediction layer. The object supplied through
-#' `input_shapefile` may be a single polygon layer, an `sf` object, or a
-#' vector of polygon paths. Each prediction layer is processed
-#' independently against the same reference layer and validation domain,
-#' allowing several candidate maps, thresholds, or scenarios to be
-#' compared in a single call.
+#' @section Pixel-based metrics:
+#' Pixel validation compares rasterised predictions and references within the
+#' evaluation domain.
 #'
-#' Fourth, it computes the requested validation metrics. When
-#' `metrics_type = "pixel"` or `"all"`, the function rasterises the
-#' reference and prediction layers over the burnable domain and computes
-#' the pixel-level confusion matrix: true positives, false positives,
-#' false negatives, and true negatives. From these counts it derives
-#' standard accuracy metrics including precision, recall, F1,
-#' intersection over union, specificity, balanced accuracy, and error
-#' rate. These outputs are useful for quantifying overall spatial
-#' agreement between predicted and reference burned pixels.
+#' | Count | Meaning |
+#' |---|---|
+#' | `TP` | Burned in both prediction and reference. |
+#' | `FP` | Burned in prediction but unburned in reference. |
+#' | `FN` | Unburned in prediction but burned in reference. |
+#' | `TN` | Unburned in both prediction and reference. |
 #'
-#' When `metrics_type = "area"` or `"all"`, the function computes
-#' polygon- and area-based validation summaries. These outputs describe
-#' how many reference fires were detected, how many were completely
-#' detected, how many were missed, and how much reference burned area was
-#' recovered by the predictions. A reference polygon is counted as
-#' detected when its percentage overlap with the prediction is greater
-#' than or equal to `threshold_min_detected`. It is counted as
-#' completely detected when its overlap is greater than or equal to
-#' `threshold_completely_detected`. This makes the detection rule
-#' explicit and avoids treating trivial overlaps as successful detections
-#' unless the user chooses that behaviour.
+#' Derived metrics include `Precision`, `Recall`, `F1`, `IoU`,
+#' `Specificity`, `BalancedAccuracy`, and `ErrorRate`.
 #'
-#' Fifth, the function writes the requested outputs under
-#' `validation_dir/VALIDATION/`:
-#' \itemize{
-#'   \item `01_SUMMARY/` --- the global tables `metrics_summary_<year>.csv`
-#'     and `polygon_summary_<year>.csv`, and the optional Excel workbook;
-#'   \item `02_OBSERVABILITY/` --- the per-fire observability tables and
-#'     audit files, when `observability_raster` is supplied;
-#'   \item `03_STRATA/` --- `pixel_by_stratum_<year>_<input>.csv`,
-#'     `stratum_global_<year>_<input>.csv` and
-#'     `diagnostics_strata_<year>_<input>.csv`, when `strata_raster` is
-#'     supplied;
-#'   \item `04_ERROR_LAYERS/` --- the omission and commission polygon layers;
-#'   \item `_CACHE/` --- cached intermediate reference and prediction
-#'     products.
+#' These measure agreement with the supplied reference. Where reference
+#' coverage is incomplete, apparent commission may include real burns absent
+#' from the reference.
+#'
+#' A non-zero `buffer` changes the reference geometry used for pixel
+#' comparison and therefore changes the interpretation of the resulting
+#' agreement metrics.
+#'
+#' @section Polygon- and area-based metrics:
+#' Reference-fire detection is based on the percentage of each prepared
+#' reference polygon covered by predictions.
+#'
+#' A reference polygon counts as:
+#' * \strong{detected} when coverage meets `threshold_min_detected`;
+#' * \strong{completely detected} when coverage meets
+#'   `threshold_completely_detected`.
+#'
+#' Use a minimum-detection threshold no greater than the complete-detection
+#' threshold.
+#'
+#' With the defaults, a fire needs at least 10% coverage to count as detected
+#' and at least 90% coverage to count as completely detected.
+#'
+#' Main fields include:
+#'
+#' | Field | Meaning |
+#' |---|---|
+#' | `N_Reference_Polygons` | Number of reference polygons evaluated. |
+#' | `N_Detected_Polygons` | Number meeting the minimum detection threshold. |
+#' | `N_Completely_Detected` | Number meeting the complete-detection threshold. |
+#' | `N_Not_Detected` | Number failing the minimum detection threshold. |
+#' | `Area_Reference_ha` | Evaluated reference burned area. |
+#' | `Area_Detected_ha` | Predicted burned area included in the area comparison. |
+#' | `Area_Intersection_ha` | Area shared by predictions and reference. |
+#' | `Recall_Area_percent` | Percentage of reference burned area covered by predictions. |
+#' | `Precision_Area_percent` | Percentage of predicted burned area overlapping the reference. |
+#' | `Detected_Definition` | Recorded rule used to count detected reference polygons. |
+#'
+#' The documented rule uses `coverage_ref >= threshold_min_detected`. A
+#' threshold of zero should therefore not be interpreted as requiring positive
+#' overlap.
+#'
+#' Polygon counts depend on the reference geometry and any dissolve settings.
+#' They represent fire-event counts only when the prepared polygons
+#' correspond to individual events.
+#'
+#' @section Temporal observability:
+#' Temporal observability assesses whether the observation dates extend far
+#' enough to evaluate a reference fire.
+#'
+#' Both modes make a whole-fire decision. A retained fire is evaluated
+#' throughout its burnable-domain geometry; partially observed portions are
+#' not individually removed.
+#'
+#' \strong{Legacy rule.} With `observability_mode = "legacy_any"`:
+#' 1. obtain the required fire date from the end DOY, falling back to the
+#'    start DOY;
+#' 2. find the maximum finite observation DOY within the fire;
+#' 3. retain the fire when that observation reaches or exceeds the required
+#'    date.
+#'
+#' A single qualifying cell is sufficient. Fires lacking a usable reference
+#' date or finite observation data are excluded from the reference set.
+#'
+#' The diagnostics include the maximum observation date, required reference
+#' date, and their difference.
+#'
+#' \strong{Whole-fire fraction rule.} With
+#' `observability_mode = "wholefire_fraction"`, the temporally observable
+#' fraction is:
+#' \preformatted{
+#' Number of burnable-domain cells with observation DOY >= required DOY
+#' --------------------------------------------------------------------
+#'              Total burnable-domain cells in the fire
 #' }
 #'
-#' \strong{Pixel-based validation}
+#' The fire passes when this fraction meets `observability_min_fraction`.
 #'
-#' Pixel-based validation evaluates map agreement cell by cell over the
-#' burnable domain. It is best suited for measuring the spatial match
-#' between predicted and reference burned areas, including both omission
-#' and commission. The main outputs are:
-#' \itemize{
-#'   \item `TP`: pixels mapped as burned in both prediction and
-#'     reference,
-#'   \item `FP`: pixels mapped as burned in the prediction but not in the
-#'     reference,
-#'   \item `FN`: pixels mapped as burned in the reference but missed by
-#'     the prediction,
-#'   \item `TN`: pixels mapped as unburned in both prediction and
-#'     reference.
-#' }
+#' The required date comes from `ref_obs_doy_col` when supplied, or otherwise
+#' from `ref_end_doy_col`. Missing values in the authoritative column use the
+#' end date only when `ref_obs_doy_fallback = "end_doy"` is explicitly
+#' selected.
 #'
-#' The function then derives accuracy metrics such as `Precision`,
-#' `Recall`, `F1`, `IoU`, `Specificity`, `BalancedAccuracy`, and
-#' `ErrorRate`. These metrics are returned in `metrics` and written to
-#' `validation_dir/VALIDATION/01_SUMMARY/metrics_summary_<year>.csv`.
+#' There is no start-date fallback in this mode.
 #'
-#' \strong{Polygon- and area-based validation}
+#' Choose an observability raster whose DOY values represent the observation
+#' timing relevant to the mapped product. This assessment does not establish
+#' that an observation is cloud-free or otherwise suitable unless that
+#' information is already represented in the supplied raster.
 #'
-#' Polygon- and area-based validation evaluates detection at the
-#' fire-event level. This branch answers questions such as: How many
-#' reference fires were detected? How many were missed? How much
-#' reference burned area was recovered? How much predicted area overlaps
-#' reference perimeters?
+#' @section Observability status and evaluation membership:
+#' Under `"wholefire_fraction"`, observability evidence and inclusion in the
+#' evaluation are recorded separately.
 #'
-#' The main outputs include `N_Reference_Polygons`,
-#' `N_Detected_Polygons`, `N_Completely_Detected`, `N_Not_Detected`,
-#' `Area_Reference_ha`, `Area_Detected_ha`, `Area_Intersection_ha`,
-#' `Recall_Area_percent`, `Precision_Area_percent`, and coverage
-#' summaries. The field `Detected_Definition` records the rule used to
-#' count detected polygons, namely
-#' `coverage_ref >= threshold_min_detected`.
+#' | Status | Meaning | Evaluation treatment |
+#' |---|---|---|
+#' | `OUTSIDE_BURNABLE_DOMAIN` | The reference fire contains no burnable-domain cells. | Contributes no evaluated area. |
+#' | `UNDETERMINED_OBS_DATE` | Burnable-domain cells exist, but no valid required reference date is available. | Retained with `"evaluate"`; excluded with `"exclude"`. |
+#' | `NO_OBSERVABILITY_DATA` | A required date exists, but no usable observation data are available within the fire. | Excluded. |
+#' | `NOT_OBSERVABLE` | Observation data exist, but the qualifying fraction is below the required minimum. | Excluded. |
+#' | `OBSERVABLE` | The qualifying fraction meets the minimum. | Retained. |
 #'
-#' By default, `threshold_min_detected = 10`, meaning that at least 10%
-#' of a reference polygon must overlap the prediction to be counted as
-#' detected. To count any non-zero overlap as a detection instead, set
-#' `threshold_min_detected = 0`.
+#' `observable_flag` records whether the status is `OBSERVABLE`.
 #'
-#' \strong{Whole-fire observability rules}
+#' `in_evaluation_domain` records whether the fire is included in validation.
+#' With the default `"evaluate"` policy, this includes fires whose status is
+#' `UNDETERMINED_OBS_DATE`.
 #'
-#' Two whole-fire rules are available through `observability_mode`. In both the
-#' unit of decision is the fire: a fire is either evaluated in full or excluded
-#' in full, and neither rule trims a partially observed fire at pixel level.
+#' A missing authoritative date is not evidence that the fire was temporally
+#' unobservable. Such fires remain positive reference features under the
+#' default policy and are flagged for audit.
 #'
-#' \code{"legacy_any"} (default) is the historical rule described in the next
-#' section, kept bit-for-bit so that previous runs can be reproduced.
+#' When a fire is excluded under `"wholefire_fraction"`, its whole geometry is
+#' removed from the evaluation domain. Predictions within that excluded
+#' territory are not counted as commission, and the territory contributes no
+#' confusion-matrix counts.
 #'
-#' \code{"wholefire_fraction"} replaces the `max()` statistic by a share.
-#' For every reference fire the function counts the burnable-domain pixels
-#' whose composite DOY is at or after the fire's required DOY and divides by
-#' the burnable-domain pixels of the fire, giving
-#' `temporal_observable_fraction`; the fire is observable when that fraction
-#' reaches `observability_min_fraction`. The required DOY comes from
-#' `ref_obs_doy_col` when that argument is supplied and from `ref_end_doy_col`
-#' otherwise, with \emph{no} silent fallback to the start DOY: a fire without a
-#' usable date is reported as `UNDETERMINED_OBS_DATE`. What happens to it is
-#' set by `observability_undetermined_policy`: with the default `"evaluate"`
-#' it stays in the evaluation domain as a positive reference fire (a missing
-#' date is not evidence that the fire was not observable); with `"exclude"`
-#' it is removed like a `NOT_OBSERVABLE` fire.
+#' The supplied source files are not modified by this masking.
 #'
-#' `ref_obs_doy_col` is \strong{authoritative} by default: when supplied, no
-#' other date column is consulted, so a deliberate `NA` in the reference means
-#' `UNDETERMINED` and cannot be silently overridden by a stale `end_doy`. The
-#' intended use is a reference that has already resolved the source-specific
-#' date semantics upstream and exposes one resolved column; the validator
-#' contains no per-source rules of its own.
-#' `ref_obs_doy_fallback = "end_doy"` relaxes this and exists only for
-#' reference layers whose observability column is deliberately populated for
-#' some sources and not others. `undetermined_cause` records which situation
-#' produced each `UNDETERMINED` fire, and a warning reports how many fires are
-#' undetermined and how they are being treated.
+#' Additional diagnostics include `undetermined_cause` and
+#' `observable_flag_legacy_any`, allowing users to inspect missing-date causes
+#' and compare observability rules.
 #'
-#' Under this mode the excluded fires (`NOT_OBSERVABLE`,
-#' `NO_OBSERVABILITY_DATA`, and `UNDETERMINED_OBS_DATE` only under
-#' `observability_undetermined_policy = "exclude"`) additionally have their
-#' whole geometry removed from the evaluation domain: reference, prediction and
-#' strata are all set to `NA` there, so those fires can produce neither false
-#' positives nor false negatives nor true negatives. Territory outside those
-#' geometries is untouched, so commission outside reference fires keeps being
-#' measured exactly as before. The exclusion applies to the rasters used for
-#' the metrics; the reference and prediction layers on disk are never modified.
+#' @section Partial-observability audit:
+#' The function reports partial observability within reference fires,
+#' including cell counts, observable fractions, and affected areas.
 #'
-#' \strong{Evidence and domain membership are separate.} `observable_flag` is
-#' the EVIDENCE flag and means only `observability_status == "OBSERVABLE"`; it
-#' does not decide who is evaluated. `in_evaluation_domain` is the DOMAIN
-#' flag and is what drives the reference subset and the masking. Under
-#' `wholefire_fraction` it is `TRUE` for `OBSERVABLE` and, with the default
-#' `observability_undetermined_policy = "evaluate"`, also for
-#' `UNDETERMINED_OBS_DATE`. Under `legacy_any` the two coincide.
+#' This audit is descriptive. It does not introduce pixel-level trimming
+#' within retained fires or independently change the metrics.
 #'
-#' `observability_status` takes one of, in precedence order:
-#' \describe{
-#'   \item{`OUTSIDE_BURNABLE_DOMAIN`}{the fire has no burnable-domain cell at
-#'     all. A domain fact, not an observability one; it contributes nothing
-#'     whatever the dates say, and it is not a temporal failure.}
-#'   \item{`UNDETERMINED_OBS_DATE`}{there is evaluable surface but no valid
-#'     authoritative date, so observability cannot be verified. \emph{Not}
-#'     evidence of non-observability.}
-#'   \item{`NO_OBSERVABILITY_DATA`}{there is evaluable surface and a date, but
-#'     the composite carries no observation anywhere in the fire. This \emph{is}
-#'     evidence: nothing was seen.}
-#'   \item{`NOT_OBSERVABLE`}{date and observations exist and the measured
-#'     fraction falls below `observability_min_fraction`. Evidence.}
-#'   \item{`OBSERVABLE`}{the fraction reaches the threshold.}
-#' }
-#' `observable_flag_legacy_any` always carries the legacy verdict alongside so
-#' the two rules can be compared from a single run.
+#' The returned `observability_audit` contains:
+#' * `summary`: overall counts and areas;
+#' * `excluded`: excluded-fire records;
+#' * `partial`: records for partially observable fires.
 #'
-#' \strong{`UNDETERMINED_OBS_DATE` means that the reference fire lacks a valid
-#' authoritative date against which temporal observability can be assessed. It
-#' does not necessarily imply that an end date is missing}: under an
-#' authoritative `ref_obs_doy_col` a fire is undetermined whenever that column
-#' is `NA`, however complete `ref_end_doy_col` or `ref_start_doy_col` may be.
-#' `undetermined_cause` records which of the possible situations applied
-#' (`na_in_authoritative_<col>`, `no_obs_doy_and_no_end_doy`, `no_end_doy`, or
-#' `no_end_or_start_doy` under `legacy_any`).
+#' Use these diagnostics to assess how strongly the whole-fire treatment
+#' affects the evaluated reference population.
 #'
-#' \strong{Temporal observability filter (legacy_any)}
+#' @section Polygon classes and raster strata:
+#' `class_shape` and `class_field` provide polygon-level omission and
+#' commission summaries by an external classification, such as vegetation
+#' type or administrative region.
 #'
-#' Observability in `validate_fire_maps()` is defined \emph{temporally} at
-#' the reference-fire level. It assesses whether the available observation
-#' window extends to or beyond the fire date. It is \strong{not} a
-#' pixel-level cloud or valid-data mask: the function never trims partially
-#' observed fires and never introduces per-pixel observability denominators.
+#' `strata_raster` provides pixel-level confusion matrices and metrics within
+#' categorical raster strata.
 #'
-#' Mechanics. When `observability_raster` is supplied (a day-of-year raster;
-#' if multi-band, the band named `doy`, case-insensitive, is auto-selected),
-#' it is aligned to the burnable-domain grid. For each reference polygon the
-#' function computes `obs_doy_max`, the maximum finite observable DOY inside
-#' the polygon (a pixel counts as observable when its DOY is finite), and
-#' `obs_ref_doy`, the fire date taken from `ref_end_doy_col` with fallback to
-#' `ref_start_doy_col`. The margin `obs_doy_margin = obs_doy_max - obs_ref_doy`
-#' drives a single whole-fire decision recorded in `observable_flag` /
-#' `observable_reason`:
-#' \itemize{
-#'   \item `observable` -- both DOYs available and `obs_doy_margin >= 0`; the
-#'     fire is kept \strong{whole} inside the burnable domain;
-#'   \item `missing_reference_doy` -- no usable fire DOY -> excluded;
-#'   \item `no_observability_data` -- no finite observable DOY in the polygon
-#'     -> excluded;
-#'   \item `obs_before_reference_doy` -- the last observation precedes the fire
-#'     (`obs_doy_margin < 0`) -> excluded.
-#' }
+#' These are different reporting units and should not be interpreted
+#' interchangeably.
 #'
-#' Excluded (temporally non-observable) reference fires are removed from the
-#' reference set \strong{before} rasterization, so each contributes 0 TP,
-#' 0 FN and 0 evaluated area and never enters omission, recall, F1, IoU or
-#' per-fire detection. The per-fire diagnostics are returned as
-#' `reference_observability` and written to
-#' `validation_dir/VALIDATION/02_OBSERVABILITY/reference_fires_observability_<year>_<tag>.csv`;
-#' the excluded geometries are written to
-#' `reference_fires_not_observable_<year>_<tag>.gpkg`.
+#' Cells without a stratum identifier are omitted from stratified
+#' aggregation. Within eligible strata, `na_strata_as_zero` controls the
+#' treatment of missing prediction/reference values.
 #'
-#' \strong{Partial-observability audit (informative only)}
+#' The aggregate stratified domain can differ from the global domain where
+#' strata are missing. Consult `diagnostics_strata` when comparing global and
+#' stratified results.
 #'
-#' Within the fires that are kept whole, some burnable-domain pixels may
-#' still lack an observation. This is reported for audit but \strong{never}
-#' modifies the validation (no TP/FP/FN/TN/coverage figure changes,
-#' no per-pixel denominator is introduced). `validate_fire_maps()` returns
-#' `observability_audit` and writes three CSVs to `02_OBSERVABILITY`:
-#' `OBSERVABILITY_AUDIT_<year>.csv` (counts: `n_reference_fires_original`,
-#' `_observable`, `_excluded`, `_partially_observable`,
-#' `excluded_reference_area_ha`, `partial_non_observable_pixels`,
-#' `partial_non_observable_area_ha`), `OBSERVABILITY_EXCLUDED_FIRES_<year>.csv`
-#' and `OBSERVABILITY_PARTIAL_FIRES_<year>.csv` (per partial fire: burnable
-#' area, total / temporally-valid / non-observable pixels, non-observable
-#' area, observable fraction, and a `contract_keeps_whole_fire` confirmation).
+#' @section Caching and reprocessing:
+#' Prepared spatial products are cached under
+#' `<validation_dir>/VALIDATION/_CACHE/`.
 #'
-#' Pixel-level (spatial) observability masking is not implemented: fires are
-#' always kept or removed whole.
+#' Cache identities incorporate relevant input and processing settings,
+#' including the burnable domain, reference preparation, and observability
+#' configuration.
 #'
-#' \strong{Polygon-level omission and commission by class}
+#' File fingerprints use file size and modification time, supplemented by an
+#' MD5 hash for files below 64 MB. In-memory inputs use structural
+#' fingerprints. Consequently, cache identity should not be interpreted as a
+#' complete byte-level comparison of every large input.
 #'
-#' If `class_shape` and `class_field` are supplied, the function
-#' summarises omitted reference polygons and commission polygons by an
-#' external polygon classification. This is useful for diagnosing
-#' whether errors are concentrated in particular vegetation types,
-#' regions, administrative units, or other user-defined classes.
+#' Use `force_reprocess_ref = TRUE` or `force_reprocess_pred = TRUE` when a
+#' rebuild is required, particularly after replacing inputs in place.
 #'
-#' This branch is polygon-based. It does not produce a pixel-level
-#' confusion matrix by class. For pixel-level stratified validation, use
-#' `strata_raster`.
+#' The reference `buffer` is applied downstream of cached reference
+#' preparation.
 #'
-#' \strong{Pixel-level validation by strata}
+#' @section Outputs:
+#' Validation products are stored under `<validation_dir>/VALIDATION/`.
 #'
-#' If `strata_raster` is supplied, the function computes a pixel-level
-#' confusion matrix separately within each raster stratum. This can be
-#' used to evaluate map performance by land-cover class, ecoregion,
-#' vegetation group, or any other categorical raster layer.
+#' Main global tables include:
 #'
-#' The optional `strata_lut` argument can be used to attach
-#' human-readable labels to stratum IDs. Pixels with missing strata are
-#' excluded from the stratified aggregation. Within valid strata,
-#' missing prediction or reference pixels are treated according to
-#' `na_strata_as_zero`: if `TRUE`, they are treated as unburned to match
-#' earlier releases; if `FALSE`, they are dropped from the stratified
-#' calculation.
+#' | File | Contents |
+#' |---|---|
+#' | `metrics_summary_<year>.csv` | Global pixel-based metrics. |
+#' | `polygon_summary_<year>.csv` | Polygon- and area-based metrics. |
 #'
-#' \strong{Caching and reprocessing}
+#' Optional stratified tables include:
+#' * `pixel_by_stratum_<year>_<input>.csv`;
+#' * `stratum_global_<year>_<input>.csv`;
+#' * `diagnostics_strata_<year>_<input>.csv`.
 #'
-#' The function caches intermediate masked reference and prediction
-#' layers in `validation_dir/VALIDATION/_CACHE/`. This avoids repeating
-#' expensive spatial preprocessing when the same validation setup is run
-#' multiple times.
+#' Observability outputs include per-fire diagnostics, excluded-fire
+#' geometries, and annual audit tables. Summary and audit products include:
+#' * `OBSERVABILITY_SUMMARY_<year>.csv`;
+#' * `OBSERVABILITY_UNDETERMINED_<year>.csv`;
+#' * `OBSERVABILITY_AUDIT_<year>.csv`;
+#' * `OBSERVABILITY_EXCLUDED_FIRES_<year>.csv`;
+#' * `OBSERVABILITY_PARTIAL_FIRES_<year>.csv`.
 #'
-#' The cache key is \strong{content-aware}: it is derived from the content
-#' and methodological identity of every input that shapes the cached
-#' reference artifact, not merely a file basename or layer name. The
-#' reference cache filename carries an `obs-<hash>_dom-<hash>_ref-<hash>`
-#' tag and is invalidated automatically when any of the following changes:
-#' the observability raster content, its band/layer or the DOY columns; the
-#' observability rule itself; the burnable raster (including resolution, CRS
-#' and grid/extent); the study-area mask; the burnable thresholding
-#' (`binary_burnable`, `burnable_classes`, `burnable_threshold`); the
-#' reference content; and `min_area_reference_ha` / `dissolve_ref_by`. The
-#' prediction cache additionally folds in the burnable-domain identity. File
-#' content is fingerprinted by size, mtime and (for files below 64 MB) an
-#' md5 of the bytes, with a structural fingerprint for in-memory objects.
-#' `buffer` is deliberately not part of the key: it is applied downstream to
-#' the loaded reference at detection time and never shapes the cached
-#' artifact.
+#' Additional vector outputs describe spatial disagreement. When requested,
+#' an Excel workbook gathers the available validation tables; its location is
+#' returned in `excel_path`.
 #'
-#' Use `force_reprocess_ref = TRUE` to force a full rebuild of the reference
-#' cache regardless of the key (e.g. after mutating an input in place);
-#' `force_reprocess_pred = TRUE` does the same for the cached prediction
-#' products.
+#' @return A named list containing the available outputs.
 #'
-#' @return A named list containing the available validation outputs:
-#' \describe{
-#'   \item{`metrics`}{Global pixel-based metrics, or `NULL` when
-#'     `metrics_type = "area"`.}
-#'   \item{`polygon_summary`}{Global polygon- and area-based metrics, or
-#'     `NULL` when `metrics_type = "pixel"`.}
-#'   \item{`reference_observability`}{Reference-polygon observability
-#'     diagnostics (one row per ORIGINAL reference fire, including the
-#'     per-fire `total_pixels` / `observable_pixels` /
-#'     `non_observable_pixels` / `observable_fraction` audit columns), or
-#'     `NULL` when `observability_raster = NULL`.}
-#'   \item{`observability_audit`}{Informative partial-observability audit
-#'     (`summary`, `excluded`, `partial`), or `NULL` when
-#'     `observability_raster = NULL`. Never affects the metrics.}
-#'   \item{`observability_summary`}{One-row annual summary (counts and areas by
-#'     `observability_status`, plus `Evaluable_Area_ha`), also written to
-#'     `02_OBSERVABILITY/OBSERVABILITY_SUMMARY_<year>.csv`. Fires flagged
-#'     `UNDETERMINED_OBS_DATE` are additionally broken down by source in
-#'     `OBSERVABILITY_UNDETERMINED_<year>.csv`.}
-#'   \item{`observability_settings`}{The observability configuration actually
-#'     used (`mode`, `min_fraction`, `ref_obs_doy_col`, `domain_masked`,
-#'     `evaluable_area_ha`, `domain_removed_ha`, `cache_tag`).}
-#'   \item{`pixel_by_stratum`}{Per-stratum pixel metrics, or `NULL` when
-#'     `strata_raster` is not supplied.}
-#'   \item{`stratum_global`}{Aggregate metrics over the stratified
-#'     validation domain, or `NULL` when `strata_raster` is not
-#'     supplied.}
-#'   \item{`diagnostics_strata`}{Diagnostics for the stratified branch,
-#'     or `NULL` when `strata_raster` is not supplied.}
-#'   \item{`excel_path`}{Path to the combined Excel workbook, or `NULL`
-#'     when `write_excel = FALSE`.}
-#' }
+#' | Field | Contents |
+#' |---|---|
+#' | `metrics` | Global pixel-based metrics, or `NULL` when `metrics_type = "area"`. |
+#' | `polygon_summary` | Global polygon- and area-based metrics, or `NULL` when `metrics_type = "pixel"`. |
+#' | `reference_observability` | Per-reference-fire observability diagnostics, including cell counts and observable fractions. `NULL` when no observability raster is supplied. |
+#' | `observability_audit` | Descriptive audit containing `summary`, `excluded`, and `partial`. `NULL` when no observability raster is supplied. |
+#' | `observability_summary` | Annual counts and areas by observability status, with evaluated area. |
+#' | `observability_settings` | Resolved observability settings and domain information, including mode, fraction threshold, required-date column, evaluated and removed areas, and cache tag. |
+#' | `pixel_by_stratum` | Per-stratum pixel metrics, or `NULL` when raster stratification is not requested. |
+#' | `stratum_global` | Aggregate metrics over the stratified domain, or `NULL` when raster stratification is not requested. |
+#' | `diagnostics_strata` | Stratified-domain diagnostics, or `NULL` when raster stratification is not requested. |
+#' | `excel_path` | Excel workbook path, or `NULL` when `write_excel = FALSE`. |
 #'
-#' @seealso [run_deterministic_pipeline()] for the deterministic
-#'   workflow that commonly produces the prediction layer passed to
-#'   `input_shapefile`; [run_oneyear_supervised_pipeline()] for the
-#'   supervised workflow whose thresholded `final_map.gpkg` is also a
-#'   valid input here. `validate_fire_maps()` performs EXTERNAL,
-#'   POST-RUN cartographic validation of PRODUCED maps against
-#'   independent reference perimeters (e.g. EFFIS); for the
-#'   complementary PRE-RUN validator that audits the supervised
-#'   CONFIGURATION + EXECUTION (CRS / overlap / year / cfg
-#'   contradictions / cache provenance) BEFORE any map is produced, see
+#' @seealso [write_thresholded_burned()], [score_supervised_burned_map()],
+#'   [run_deterministic_pipeline()], [run_oneyear_supervised_pipeline()],
 #'   [validate_supervised_execution()].
+#'
+#'   [validate_supervised_execution()] checks configuration and inputs before
+#'   supervised processing. `validate_fire_maps()` evaluates produced maps
+#'   against reference perimeters.
 #'
 #' @examples
 #' \dontrun{
-#' # Minimal call: global pixel + polygon metrics only.
-#' validate_fire_maps(
-#'   input_shapefile = list.files("shapefiles", pattern = "\\.shp$", full.names = TRUE),
-#'   ref_shapefile   = "ref_polygons_2022.shp",
-#'   mask_shapefile  = "mask_region.shp",
-#'   burnable_raster = "burnable.tif",
-#'   year_target     = 2022,
-#'   validation_dir  = "validation_results"
+#' # Read the specific thresholded prediction layer
+#' predicted <- sf::st_read(
+#'   "results/thresholded_burned.gpkg",
+#'   layer = "thresholded_burned",
+#'   quiet = TRUE
 #' )
 #'
-#' # With pixel-level CORINE stratification + combined Excel workbook.
-#' # Produces 03_STRATA CSVs plus the optional Excel workbook in
-#' # 01_SUMMARY/validation_ALL_2022_res30.xlsx.
-#' validate_fire_maps(
-#'   input_shapefile = "predicted_2022.gpkg",
-#'   ref_shapefile   = "ref_polygons_2022.shp",
-#'   mask_shapefile  = "mask_region.shp",
-#'   burnable_raster = "burnable.tif",
-#'   year_target     = 2022,
-#'   validation_dir  = "validation_results",
-#'   strata_raster   = "strata_CLC_2018_res30.tif",
-#'   strata_lut      = "lut_full_strata8_v1.csv",
-#'   chunk_rows      = 1024L,
-#'   na_strata_as_zero = TRUE,
-#'   write_excel     = TRUE
+#' # Global pixel and polygon/area validation
+#' validation <- validate_fire_maps(
+#'   input_shapefile = predicted,
+#'   ref_shapefile = "data/reference_fires_2022.gpkg",
+#'   mask_shapefile = "data/study_area.gpkg",
+#'   burnable_raster = "data/burnable_mask.tif",
+#'   year_target = 2022,
+#'   validation_dir = "results/validation",
+#'   metrics_type = "all",
+#'   threshold_min_detected = 10,
+#'   threshold_completely_detected = 90
 #' )
+#'
+#' validation$metrics
+#' validation$polygon_summary
+#'
+#' # Whole-fire observability assessment
+#' # The reference must contain the specified obs_required_doy field.
+#' validation_obs <- validate_fire_maps(
+#'   input_shapefile = predicted,
+#'   ref_shapefile = "data/reference_fires_2022.gpkg",
+#'   mask_shapefile = "data/study_area.gpkg",
+#'   burnable_raster = "data/burnable_mask.tif",
+#'   year_target = 2022,
+#'   validation_dir = "results/validation_observability",
+#'   observability_raster = "data/observation_doy_2022.tif",
+#'   observability_mode = "wholefire_fraction",
+#'   observability_min_fraction = 0.75,
+#'   ref_obs_doy_col = "obs_required_doy",
+#'   ref_obs_doy_fallback = "none",
+#'   observability_undetermined_policy = "evaluate"
+#' )
+#'
+#' validation_obs$observability_summary
+#' validation_obs$observability_settings
+#'
+#' table(
+#'   validation_obs$reference_observability$observability_status,
+#'   useNA = "ifany"
+#' )
+#'
+#' # Pixel-level land-cover stratification and Excel export
+#' validation_strata <- validate_fire_maps(
+#'   input_shapefile = predicted,
+#'   ref_shapefile = "data/reference_fires_2022.gpkg",
+#'   mask_shapefile = "data/study_area.gpkg",
+#'   burnable_raster = "data/burnable_mask.tif",
+#'   year_target = 2022,
+#'   validation_dir = "results/validation_strata",
+#'   metrics_type = "all",
+#'   strata_raster = "data/land_cover_strata.tif",
+#'   strata_lut = "data/strata_labels.csv",
+#'   chunk_rows = 1024L,
+#'   na_strata_as_zero = TRUE,
+#'   write_excel = TRUE,
+#'   excel_filename = "validation_2022.xlsx"
+#' )
+#'
+#' validation_strata$pixel_by_stratum
+#' validation_strata$diagnostics_strata
+#' validation_strata$excel_path
 #' }
 #'
 #' @importFrom sf st_read st_write st_crs st_transform st_make_valid st_intersection

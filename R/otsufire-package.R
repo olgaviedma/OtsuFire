@@ -1,18 +1,37 @@
 #' OtsuFire: a self-labelling framework for wall-to-wall burned-area mapping across sensors and decades
 #'
 #' @description
-#' Reproducible multi-year burned-area mapping from change-index rasters.
-#' Provides four layers that can be used together or independently:
-#' a mosaic stage, an Otsu-guided segmentation workflow, a
-#' one-year probabilistic refinement workflow, and a shared
-#' workflow-independent validation utility.
+#' `OtsuFire` is an open-source R package for long-term, wall-to-wall
+#' burned-area reconstruction. It implements a self-labelling, weakly
+#' supervised framework that generates training labels without requiring
+#' prior knowledge of fire locations or reliable target-year reference data.
 #'
-#' Stages are named by what they do; function and folder names describe how
-#' they work. Otsu-guided segmentation is \emph{deterministic} (explicit rules,
-#' with data-adaptive Otsu thresholds; no classifier is fitted):
-#' [run_deterministic_pipeline()], `DETERMINISTIC/`. Probabilistic
-#' refinement is \emph{supervised} (a trained XGBoost model):
-#' [run_oneyear_supervised_pipeline()], `SUPERVISED/`.
+#' The framework separates **supervision generation** from **final
+#' classification**: Otsu-guided segmentation and physically interpretable
+#' rules provide the evidence used to construct training pools, which
+#' then train a probabilistic patch-level classifier.
+#'
+#' The package provides four composable stages:
+#'
+#' 1. **Mosaic preparation:** assemble image tiles into an annual
+#'    change-index raster.
+#'
+#' 2. **Otsu-guided segmentation and rule-based filtering:** delineate
+#'    candidate patches using Otsu thresholds and seed-and-grow
+#'    segmentation, then apply spectral, spatial and contextual filters
+#'    to assign `keep`, `review` or `drop` decisions.
+#'
+#' 3. **Probabilistic refinement:** construct burned and unburned training
+#'    pools, train an XGBoost classifier, and estimate `p_burned` for
+#'    candidate patches to produce the final burned-area map.
+#'
+#' 4. **Independent validation:** compare mapped burned areas with an
+#'    external reference. This utility can also evaluate maps generated
+#'    outside OtsuFire.
+#'
+#' Wall-to-wall coverage describes the mapping domain: the whole study area
+#' is searched for candidate patches. Probabilistic scoring then operates on
+#' those candidate patches.
 #'
 #' \subsection{Package, workflow book and data}{
 #' The OtsuFire package and its source code are available on

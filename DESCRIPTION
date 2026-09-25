@@ -11,7 +11,8 @@ Description: Reproducible multi-year burned-area mapping from change-index
     workflow, a supervised one-year probabilistic workflow, and a shared
     workflow-independent validation utility. 
 License: GPL-3
-URL: https://github.com/olgaviedma/OtsuFire
+URL: https://github.com/olgaviedma/OtsuFire,
+    https://github.com/nataliaquintero/OtsuFire-book
 BugReports: https://github.com/olgaviedma/OtsuFire/issues
 Encoding: UTF-8
 LazyData: true

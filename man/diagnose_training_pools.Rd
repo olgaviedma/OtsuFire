@@ -2,7 +2,6 @@
 % Please edit documentation in R/diagnose-training-pools.R
 \name{diagnose_training_pools}
 \alias{diagnose_training_pools}
-\alias{print.otsufire_pool_diagnostics}
 \title{Diagnose supervised training-pool separability (pre-fit)}
 \usage{
 diagnose_training_pools(
@@ -37,8 +36,6 @@ diagnose_training_pools(
   seed = 123,
   verbose = TRUE
 )
-
-\method{print}{otsufire_pool_diagnostics}(x, ...)
 }
 \arguments{
 \item{pools}{A \code{data.frame}, \code{data.table}, \code{tibble} or \code{sf}
@@ -99,10 +96,6 @@ back to base graphics; never hard-fails).}
 \item{seed}{RNG seed (set once at top, passed to stochastic parts).}
 
 \item{verbose}{Print progress messages.}
-
-\item{x}{An \code{otsufire_pool_diagnostics} object.}
-
-\item{...}{Ignored.}
 }
 \value{
 An object of class \code{otsufire_pool_diagnostics}: a list with
@@ -171,11 +164,6 @@ writes \code{*_15_correlation_high_pairs.csv},
 PNG is added when \code{make_plots} and \pkg{ggplot2} are available.}
 }
 }
-\section{Functions}{
-\itemize{
-\item \code{print(otsufire_pool_diagnostics)}: Print method for pool diagnostics.
-
-}}
 \examples{
 \donttest{
 set.seed(1)

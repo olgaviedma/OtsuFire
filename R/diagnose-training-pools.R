@@ -1317,9 +1317,8 @@ diagnose_training_pools <- function(
   out
 }
 
-#' @describeIn diagnose_training_pools Print method for pool diagnostics.
-#' @param x An \code{otsufire_pool_diagnostics} object.
-#' @param ... Ignored.
+# Print method for pool diagnostics (registered S3 method; like the package's
+# other print methods it has no help page of its own).
 #' @exportS3Method print otsufire_pool_diagnostics
 print.otsufire_pool_diagnostics <- function(x, ...) {
   cs <- attr(x, "console_summary")

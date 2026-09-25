@@ -13,8 +13,9 @@ one-year probabilistic refinement workflow, and a shared
 workflow-independent validation utility.
 
 Stages are named by what they do; function and folder names describe how
-they work. Otsu-guided segmentation is \emph{deterministic} (fixed rules and
-thresholds): \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}, \verb{DETERMINISTIC/}. Probabilistic
+they work. Otsu-guided segmentation is \emph{deterministic} (explicit rules,
+with data-adaptive Otsu thresholds; no classifier is fitted):
+\code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}, \verb{DETERMINISTIC/}. Probabilistic
 refinement is \emph{supervised} (a trained XGBoost model):
 \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, \verb{SUPERVISED/}.
 }

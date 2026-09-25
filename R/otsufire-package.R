@@ -8,8 +8,9 @@
 #' workflow-independent validation utility.
 #'
 #' Stages are named by what they do; function and folder names describe how
-#' they work. Otsu-guided segmentation is \emph{deterministic} (fixed rules and
-#' thresholds): [run_deterministic_pipeline()], `DETERMINISTIC/`. Probabilistic
+#' they work. Otsu-guided segmentation is \emph{deterministic} (explicit rules,
+#' with data-adaptive Otsu thresholds; no classifier is fitted):
+#' [run_deterministic_pipeline()], `DETERMINISTIC/`. Probabilistic
 #' refinement is \emph{supervised} (a trained XGBoost model):
 #' [run_oneyear_supervised_pipeline()], `SUPERVISED/`.
 #'

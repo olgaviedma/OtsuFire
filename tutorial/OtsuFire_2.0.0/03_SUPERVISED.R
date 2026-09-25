@@ -7,7 +7,7 @@
 #   with a burned probability-like value, p_burned.
 #
 # WHY DO THIS AT ALL, IF STAGE 2 ALREADY DECIDED
-#   Stage 2 applies fixed rules. It is transparent but rigid: a patch either
+#   Stage 2 applies explicit rules. It is transparent but rigid: a patch either
 #   clears a threshold or it does not. Stage 3 learns which COMBINATIONS of
 #   severity, persistence, terrain, land cover and thermal evidence actually
 #   mark a fire, and it returns a continuous score instead of a hard label.

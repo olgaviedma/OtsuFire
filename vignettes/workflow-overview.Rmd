@@ -22,7 +22,7 @@ This vignette describes the four stages of the OtsuFire workflow at the
 API level: the mosaic stage, the **Otsu-guided segmentation** stage, the
 **probabilistic refinement** stage and validation. Stages are named by what
 they do; function and folder names describe how they work. Otsu-guided
-segmentation is *deterministic* (fixed rules and thresholds), so its
+segmentation is *deterministic* (explicit rules, with data-adaptive Otsu thresholds), so its
 functions and outputs are `run_deterministic_pipeline()` and
 `DETERMINISTIC/`. Probabilistic refinement is *supervised* (a trained
 XGBoost model), so its functions and outputs are

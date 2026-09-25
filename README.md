@@ -17,7 +17,7 @@ function and folder names describe how it works:
 
 | Stage | Method | Functions and outputs |
 |---|---|---|
-| Otsu-guided segmentation | *deterministic*: fixed rules and thresholds, same result for the same inputs | `build_burned_mapping_config()`, `run_deterministic_pipeline()`, `DETERMINISTIC/` |
+| Otsu-guided segmentation | *deterministic*: explicit algorithms and decision rules, with Otsu thresholds estimated from the data; no classifier is fitted | `build_burned_mapping_config()`, `run_deterministic_pipeline()`, `DETERMINISTIC/` |
 | Probabilistic refinement | *supervised*: a trained XGBoost model | `build_supervised_burned_config()`, `run_oneyear_supervised_pipeline()`, `SUPERVISED/` |
 
 The package itself is sensor-agnostic and only requires a change-index raster.

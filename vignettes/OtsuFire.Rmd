@@ -16,126 +16,281 @@ knitr::opts_chunk$set(
 )
 ```
 
-`OtsuFire` provides a reproducible burned-area mapping pipeline with
-four composable layers:
+`OtsuFire` is an open-source R package for long-term, wall-to-wall
+burned-area reconstruction. It implements a self-labelling, weakly
+supervised framework that generates training labels without requiring
+prior knowledge of fire locations or reliable target-year reference data.
 
-1. A **mosaic** stage that builds an annual change-index raster.
-2. A **deterministic** Otsu / seed-and-grow segmentation workflow.
-3. A **supervised** one-year probabilistic workflow that learns
-   `p_burned` from XGBoost models trained on Otsu-guided segmentation decisions.
-4. A workflow-independent **validation** utility.
+The framework separates **supervision generation** from **final
+classification**: Otsu-guided segmentation and physically interpretable
+rules provide the evidence used to construct training pools, which
+then train a probabilistic patch-level classifier.
 
-This vignette walks through the API surface using synthetic toy data
-that runs in seconds. Operational, full-scale examples live in the
-companion vignette `workflow-overview`.
+The package provides four composable stages:
+
+1. **Mosaic preparation:** assemble image tiles into an annual
+   change-index raster.
+
+2. **Otsu-guided segmentation and rule-based filtering:** delineate
+   candidate patches using Otsu thresholds and seed-and-grow
+   segmentation, then apply spectral, spatial and contextual filters
+   to assign `keep`, `review` or `drop` decisions.
+
+3. **Probabilistic refinement:** construct burned and unburned training
+   pools, train an XGBoost classifier, and estimate `p_burned` for
+   candidate patches to produce the final burned-area map.
+
+4. **Independent validation:** compare mapped burned areas with an
+   external reference. This utility can also evaluate maps generated
+   outside OtsuFire.
+
+Wall-to-wall coverage describes the mapping domain: the whole study area
+is searched for candidate patches. Probabilistic scoring then operates on
+those candidate patches.
+
+## Understanding the function names
+
+Before exploring the code, it helps to clarify two terms used in the API.
+
+**`deterministic`** refers to Otsu-guided segmentation and rule-based
+filtering, as in `run_deterministic_pipeline()`. This stage follows
+explicit algorithms and decision rules without fitting a classifier
+to labelled examples. The thresholds are not necessarily fixed:
+Otsu thresholds are estimated from the input data within the defined
+environmental strata.
+
+**`supervised`** refers to the classifier trained on burned and unburned
+examples, as in `run_oneyear_supervised_pipeline()`. Its labels are
+generated internally from the preceding evidence. This is why the
+overall framework is described as **weakly supervised**: training
+relies on labels inferred from rules and indirect evidence, which
+may contain errors, rather than independently verified labels for
+every example.
+
+The training pools distinguish high-confidence burned patches,
+unburned background, and moderately and strongly burned-like
+unburned surfaces. These last two pools help the classifier learn
+to distinguish burning from confounding changes. All three unburned
+pools share the same unburned class label.
+
+`review` patches are withheld from training but remain available for
+prediction. The classifier scores the complete candidate-patch set
+using descriptors extracted from the underlying data, excluding
+rule-based decisions and their associated support metrics from its
+predictors. The final classification therefore goes beyond simply
+retaining the initial `keep` patches: `keep`, `review` and `drop` are
+rule-based decisions, not the classes of the final map.
+
+## What this vignette covers
+
+Let's start with the public API and a small configuration example
+using synthetic data. These examples introduce the package's building
+blocks without running a full mapping analysis or training a model.
+
+For a complete one-year workflow, including training-pool construction
+and validation, see the companion vignette `workflow-overview`.
 
 ## Public API
 
 ```{r api}
 library(OtsuFire)
 
-# Public exports (see the package NAMESPACE for the authoritative list).
 public_api <- sort(getNamespaceExports("OtsuFire"))
 length(public_api)
 public_api
 ```
 
-The exports cover:
+The exports fall into five groups. The chunk below lists them and checks
+that the groups cover exactly the current exports, so this list cannot
+drift from the package:
 
-* the mosaic stage: `change_index_mosaic`, `mosaic_from_tiles`,
-  `clean_raster_file`;
-* the Otsu-guided segmentation stage: `build_burned_mapping_config`,
-  `detect_burned_patches`, `score_burned_patches`,
-  `run_deterministic_pipeline`, `apply_chain_cleaning` (alias
-  `apply_chain`), `collect_keep_reference_samples`,
-  `build_keep_pool_from_samples`;
-* the probabilistic refinement stage: `build_supervised_burned_config`,
-  `validate_supervised_execution`, `build_supervised_training_pools`,
-  `make_spatial_folds`, `extract_supervised_features`,
-  `run_oof_diagnostics`, `train_final_burned_model`,
-  `score_supervised_burned_map`, `write_thresholded_burned`,
-  `run_oneyear_supervised_pipeline`;
-* training-pool curation: `diagnose_training_pools`,
-  `export_visual_validation_pools`, `apply_visual_validation`,
-  `promote_artifact_hard_negatives`, `subsample_random_background`,
-  `add_pool_shape_features`, `assemble_era_training_pool`;
-* validation and consistency: `validate_fire_maps`,
-  `check_supervised_consistency`.
-
-## A toy probabilistic refinement configuration
-
-The `build_*_config()` builders are pure validators: they normalise
-the inputs into S3 objects without reading rasters or training
-models. They are the safest entry points for exploring the API.
-
-```{r cfg, eval = requireNamespace("sf", quietly = TRUE) && requireNamespace("terra", quietly = TRUE)}
-suppressPackageStartupMessages({
-  library(sf)
-  library(terra)
-})
-
-# Synthetic 8x8 change-index raster + matching burnable mask.
-ci  <- tempfile(fileext = ".tif")
-terra::writeRaster(
-  terra::rast(ncol = 8, nrow = 8, vals = 1:64), ci, overwrite = TRUE
-)
-mask <- tempfile(fileext = ".tif")
-terra::writeRaster(
-  terra::rast(ncol = 8, nrow = 8, vals = rep(1, 64)),
-  mask, overwrite = TRUE
-)
-
-# Synthetic single-polygon "internal_decisions" GPKG.
-decisions <- tempfile(fileext = ".gpkg")
-sf::st_write(
-  sf::st_sf(
-    id = 1L,
-    geometry = sf::st_sfc(
-      sf::st_polygon(list(rbind(c(0,0), c(1,0), c(1,1), c(0,1), c(0,0)))),
-      crs = 3035
-    )
+```{r api-groups}
+api_groups <- list(
+  "Mosaic preparation" = c(
+    "change_index_mosaic", "mosaic_from_tiles", "clean_raster_file"
   ),
-  decisions, quiet = TRUE
+  "Otsu-guided segmentation and rule-based filtering (deterministic API)" = c(
+    "build_burned_mapping_config", "run_deterministic_pipeline",
+    "detect_burned_patches", "score_burned_patches",
+    "apply_chain_cleaning", "apply_chain",
+    "collect_keep_reference_samples", "build_keep_pool_from_samples"
+  ),
+  "Probabilistic refinement (supervised API)" = c(
+    "build_supervised_burned_config", "validate_supervised_execution",
+    "build_supervised_training_pools", "make_spatial_folds",
+    "extract_supervised_features", "run_oof_diagnostics",
+    "train_final_burned_model", "score_supervised_burned_map",
+    "write_thresholded_burned", "run_oneyear_supervised_pipeline"
+  ),
+  "Training-pool curation" = c(
+    "diagnose_training_pools", "export_visual_validation_pools",
+    "apply_visual_validation", "promote_artifact_hard_negatives",
+    "subsample_random_background", "add_pool_shape_features",
+    "assemble_era_training_pool"
+  ),
+  "Validation and consistency" = c(
+    "validate_fire_maps", "check_supervised_consistency"
+  )
 )
+stopifnot(setequal(unlist(api_groups), public_api))
+str(api_groups)
+```
+
+`apply_chain()` is an alias of `apply_chain_cleaning()`: both names refer
+to the same function.
+
+```{r alias}
+identical(apply_chain, apply_chain_cleaning)
+```
+
+The two functions in the last group answer different questions.
+`validate_fire_maps()` assesses accuracy against an **external** reference
+of burned areas. `check_supervised_consistency()` compares the outputs of
+the two mapping stages of the same run; agreement between pipeline stages
+is not independent validation.
+
+## Build your first supervised-stage configuration
+
+We'll start by building a configuration: an object that stores the
+inputs and settings for the supervised stage. Creating this object
+does not train a classifier or produce a burned-area map.
+
+`build_supervised_burned_config()` checks the arguments (types, allowed
+values and the target year), confirms that the optional input files it is
+given exist, and resolves the default settings and output locations. It
+does not read the contents of the rasters or vectors, and it does not
+create any folders; those checks happen in the workflow stages and in
+`validate_supervised_execution()`.
+
+The synthetic inputs below illustrate the configuration only. Their
+values do not represent realistic fire observations. They are written to
+a temporary folder:
+
+* an 8 x 8 change-index raster in a projected CRS (ETRS89-LAEA,
+  EPSG:3035) with an explicit extent;
+* a burnable mask derived from that raster, so both share the same grid;
+* a one-polygon decision layer, in the same CRS and overlapping the
+  raster, stored in a GeoPackage layer named `internal_decisions`.
+
+The decision layer carries a `class_final` column, the label field the
+supervised workflow expects. It is enough for building a configuration,
+but it is not a valid training dataset: the full workflow needs a real
+decision layer produced by the Otsu-guided segmentation stage.
+
+```{r cfg}
+work_dir <- tempfile("otsufire_vignette_")
+dir.create(work_dir)
+
+# Change-index raster: 8 x 8 cells of 100 m in EPSG:3035.
+ci <- terra::rast(
+  nrows = 8, ncols = 8,
+  xmin = 3000000, xmax = 3000800,
+  ymin = 2000000, ymax = 2000800,
+  crs = "EPSG:3035"
+)
+terra::values(ci) <- seq(0, 630, by = 10)
+ci_path <- file.path(work_dir, "change_index.tif")
+terra::writeRaster(ci, ci_path, overwrite = TRUE)
+
+# Burnable mask on the same grid (1 = burnable).
+burnable <- terra::ifel(is.na(ci), 0, 1)
+burnable_path <- file.path(work_dir, "burnable_mask.tif")
+terra::writeRaster(burnable, burnable_path, overwrite = TRUE)
+
+# One candidate patch inside the raster extent, same CRS.
+decisions <- sf::st_sf(
+  poly_id = 1L,
+  class_final = "keep",
+  geometry = sf::st_sfc(
+    sf::st_polygon(list(rbind(
+      c(3000200, 2000200), c(3000600, 2000200),
+      c(3000600, 2000600), c(3000200, 2000600),
+      c(3000200, 2000200)
+    ))),
+    crs = 3035
+  )
+)
+decisions_path <- file.path(work_dir, "internal_decisions.gpkg")
+sf::st_write(decisions, decisions_path,
+             layer = "internal_decisions", quiet = TRUE)
 
 cfg_sup <- build_supervised_burned_config(
   run_label          = "balanced",
-  internal_decisions = decisions,
-  change_index       = ci,
+  internal_decisions = decisions_path,
+  change_index       = ci_path,
+  burnable_mask      = burnable_path,
   target_year        = 2020L,
-  output_dir         = tempdir()
+  output_dir         = file.path(work_dir, "results")
 )
-print(cfg_sup)
 ```
 
-## Modular building blocks
+The printed configuration shows the resolved settings and inputs. To keep
+the output readable, the temporary-folder prefix of the paths is displayed
+as `<tempdir>`; this substitution affects the display only, not the paths
+stored in `cfg_sup`.
 
-The probabilistic refinement workflow is decomposed into modular helpers that each
-take a config (or relevant subset) and return either an `sf` object
-or a path to an output file. They share the same validator pattern:
-calling them with no arguments returns an informative error rather
-than a low-level traceback.
-
-```{r modular, error = TRUE}
-build_supervised_training_pools()
-make_spatial_folds()
-extract_supervised_features()
-run_oof_diagnostics()
-train_final_burned_model()
-score_supervised_burned_map()
-check_supervised_consistency()
+```{r cfg-print}
+printed <- capture.output(print(cfg_sup))
+tmp_prefixes <- unique(c(
+  normalizePath(tempdir(), winslash = "/", mustWork = FALSE),
+  gsub("\\\\", "/", tempdir())
+))
+for (p in tmp_prefixes) printed <- gsub(p, "<tempdir>", printed, fixed = TRUE)
+cat(printed, sep = "\n")
 ```
 
-These messages document what each function expects without
-triggering any heavy computation.
+## Explore the individual workflow steps
+
+The supervised workflow can also be run step by step: construct training
+pools, create spatial folds, extract predictors, inspect out-of-fold
+diagnostics, fit the final model, and score candidate patches. The
+function reference describes the inputs and outputs of each step.
+
+The calls below intentionally omit required arguments to illustrate the
+input checks. They do not execute the workflow or demonstrate model
+performance. Each error is caught locally and its message is printed.
+
+```{r modular}
+show_input_check <- function(expr) {
+  tryCatch(
+    {
+      force(expr)
+      message("No error raised.")
+    },
+    error = function(e) cat("Error:", conditionMessage(e), "\n")
+  )
+}
+
+show_input_check(build_supervised_training_pools())
+show_input_check(make_spatial_folds())
+show_input_check(extract_supervised_features())
+show_input_check(run_oof_diagnostics())
+show_input_check(train_final_burned_model())
+show_input_check(score_supervised_burned_map())
+show_input_check(check_supervised_consistency())
+```
+
+```{r cleanup, include = FALSE}
+unlink(work_dir, recursive = TRUE)
+```
 
 ## Where to go next
 
-* `vignette("workflow-overview", package = "OtsuFire")` — explains
-  how the four stages combine into a full one-year run, the training
-  pools, and the difference between the internal (OOF) and external
-  (`validate_fire_maps()`) validations.
-* The function reference (for example
-  `?OtsuFire::run_oneyear_supervised_pipeline`) documents every exported
-  function with parameter-level detail.
-* `NEWS.md` summarises what changed in each release.
+* `vignette("workflow-overview", package = "OtsuFire")` walks through a
+  complete one-year run: training-pool construction, the supervised stage
+  and validation.
+* The function reference documents every exported function with
+  parameter-level detail; start with `?OtsuFire` or, for example,
+  `?run_oneyear_supervised_pipeline`.
+* `NEWS.md`, also available with `news(package = "OtsuFire")`, summarises
+  what changed in each release.
+
+When you evaluate results, keep two kinds of assessment apart:
+
+* **Internal out-of-fold diagnostics** evaluate predictions on held-out,
+  internally generated labels. They measure how well the classifier
+  reproduces those labels; they do not verify the true burned status of
+  the training labels.
+* **External validation** with `validate_fire_maps()` compares the
+  resulting map against an independent burned-area reference, within the
+  area where that reference provides valid coverage.

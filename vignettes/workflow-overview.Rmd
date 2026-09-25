@@ -8,40 +8,44 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-# eval = FALSE silences knitting. purl = FALSE is set per-chunk below
-# instead of globally — opts_chunk$set(purl=FALSE) is not honoured by
-# knitr::purl() because the setup chunk is extracted as text, not
-# evaluated, during the R CMD check "running R code from vignettes"
-# stage.
+# eval = FALSE silences knitting: the examples need full-scale data.
 knitr::opts_chunk$set(
   collapse = TRUE, comment = "#>", eval = FALSE
 )
 ```
 
-This vignette describes the four stages of the OtsuFire workflow at the
-API level: the mosaic stage, the **Otsu-guided segmentation** stage, the
-**probabilistic refinement** stage and validation. Stages are named by what
-they do; function and folder names describe how they work. Otsu-guided
-segmentation is *deterministic* (explicit rules, with data-adaptive Otsu thresholds), so its
-functions and outputs are `run_deterministic_pipeline()` and
-`DETERMINISTIC/`. Probabilistic refinement is *supervised* (a trained
-XGBoost model), so its functions and outputs are
-`run_oneyear_supervised_pipeline()` and `SUPERVISED/`.
+OtsuFire combines four stages: **mosaic preparation**, **Otsu-guided
+segmentation and rule-based filtering**, **probabilistic refinement**,
+and **independent validation**.
 
-Code chunks are shown but **not evaluated**, because the Otsu-guided
-segmentation and probabilistic refinement workflows operate on full-scale
-annual mosaics that are too large to ship with a CRAN package. The toy
-examples in `vignette("OtsuFire", package = "OtsuFire")` cover the API
-without external data.
+The workflow separates training-label generation from final
+classification. Segmentation and filtering provide the evidence used
+to construct training pools; an XGBoost classifier then learns from
+these pools to estimate a burned score for each candidate patch.
+This internally generated supervision makes OtsuFire a
+**weakly supervised** framework.
 
-## 1. Mosaic stage
+In the API, `deterministic` identifies the segmentation and filtering
+stage, which follows explicit algorithms and rules, including
+data-adaptive Otsu thresholds. `supervised` identifies the classifier
+trained on the resulting labels.
 
-`change_index_mosaic()` builds an annual change-index raster (for example
-RBR or dNBR) from raster tiles. The output is a single GeoTIFF per year,
-which becomes the `change_index` input of the Otsu-guided segmentation and probabilistic refinement
-configurations.
+This vignette summarises how the stages connect. For the step-by-step
+tutorial, including data preparation, configuration and interpretation
+of results, see the
+[OtsuFire book](https://github.com/nataliaquintero/OtsuFire-book).
 
-```{r mosaic, purl = FALSE}
+The examples below are **not evaluated** and require your own data
+and paths. For a small synthetic configuration example, see
+`vignette("OtsuFire", package = "OtsuFire")`.
+
+## 1. Prepare the mosaic
+
+`change_index_mosaic()` combines change-index tiles, such as RBR or
+dNBR, into a single annual raster. This becomes the `change_index`
+input for the following stages.
+
+```{r mosaic, eval=FALSE}
 library(OtsuFire)
 
 mosaic_res <- change_index_mosaic(
@@ -59,71 +63,49 @@ mosaic_res <- change_index_mosaic(
 mosaic_path <- mosaic_res$mosaic_path
 ```
 
-## 2. Otsu-guided segmentation stage
+Use a folder containing the intended input tiles, and set
+`raster_pattern` to match their file names. See `?change_index_mosaic`
+for file-selection and mosaicking options.
 
-The Otsu-guided segmentation workflow estimates Otsu thresholds per land-cover and
-ecoregion unit, grows seed-supported candidate patches, applies rule-based
-filters, and writes a decision layer (`internal_decisions.gpkg`) in which
-every candidate patch is classified as `keep`, `review` or `drop`.
+## 2. Generate and filter candidate patches
 
-```{r det, purl = FALSE}
+Otsu-guided segmentation identifies seed pixels and grows candidate
+patches. Rule-based filters then assess spectral, spatial and contextual
+evidence, assigning each candidate to `keep`, `review` or `drop`.
+
+The main output is `internal_decisions.gpkg`, which links candidate
+geometry to the filtering decisions used in training-pool construction.
+
+```{r segmentation, eval=FALSE}
 det_cfg <- build_burned_mapping_config(
   change_index   = mosaic_path,
   vegetation_map = "/path/to/vegetation_classes.tif",
   burnable_mask  = "/path/to/burnable_mask.tif",
   target_year    = 2020L,
   output_dir     = "/path/to/results",
-  run_name       = "rbr_2020_custom",
-  detect_params = list(
-    seed_threshold = 310,
-    growth_delta = 90,
-    minimum_growth_threshold = 240,
-    minimum_seed_pixels = 30L
-  ),
-  refine_params = list(
-    aoi_buffer_m = 5000,
-    minimum_detected_area_m2 = 10,
-    merge_overlaps = TRUE
-  ),
-  scoring_params = list(
-    support_buffer_m = 0,
-    previous_fire_exclusion_buffer_m = 90,
-    previous_fire_cleanup_buffer_m = 90,
-    minimum_remaining_area_m2 = 20000,
-    reference_buffer_m = 90
-  )
+  run_name       = "rbr_2020"
 )
 
 det_run <- run_deterministic_pipeline(det_cfg)
-det_run$result_paths$internal_decisions
+
+decisions_path <- det_run$result_paths$internal_decisions
 ```
 
-The detection, refinement and scoring settings are passed through
-`detect_params`, `refine_params` and `scoring_params`. Use the
-`*_by_vegetation` keys when seed or growth behaviour must differ by
-land-cover class; see `?build_burned_mapping_config` for the
-vegetation-class table and the meaning of each parameter.
+This example shows the main connection between stages. Configure
+additional spatial inputs and detection, refinement and scoring
+settings for your study area using `?build_burned_mapping_config`
+and the book.
 
-For step-by-step control, the Otsu-guided segmentation stage can also be run as two
-separate steps:
+## 3. Refine the classification
 
-```{r det-modular, purl = FALSE}
-patches <- detect_burned_patches(det_cfg)
-scored  <- score_burned_patches(patches$refined_patches_path, det_cfg)
-# scored$internal_decisions is an sf with class_final, filter_1..3, etc.
-```
+The supervised stage constructs training pools, extracts predictors,
+runs out-of-fold diagnostics, and fits an XGBoost classifier. It then
+scores the complete candidate-patch set.
 
-## 3. One-year probabilistic refinement stage
-
-The probabilistic refinement stage trains an XGBoost model on labels derived from the
-Otsu-guided segmentation decisions, runs out-of-fold (OOF) diagnostics, and writes a
-`final_map.gpkg` whose `p_burned` field is the per-patch burned **model
-score**.
-
-```{r sup, purl = FALSE}
+```{r supervised, eval=FALSE}
 sup_cfg <- build_supervised_burned_config(
   run_label          = "balanced",
-  internal_decisions = det_run$result_paths$internal_decisions,
+  internal_decisions = decisions_path,
   change_index       = mosaic_path,
   hotspots           = "/path/to/hotspots_2020.gpkg",
   target_year        = 2020L,
@@ -135,97 +117,65 @@ sup_cfg <- build_supervised_burned_config(
 )
 
 sup_run <- run_oneyear_supervised_pipeline(
-  config           = sup_cfg,
-  run_consistency  = TRUE,
-  overwrite        = FALSE
+  config          = sup_cfg,
+  run_consistency = TRUE,
+  overwrite       = FALSE
 )
 ```
 
-**Training pools.** The burned training pool comprises the deterministic
-keep patches and is hereafter referred to as *burned*. Unburned labels
-come from up to three differentiated pools that distinguish generic
-burnable-background conditions from moderately and strongly burned-like
-confounding surfaces (internal pool names in brackets):
+The configuration above illustrates the API connection; it does not
+specify every setting used in the manuscript. See the book for the
+complete configuration and `?build_supervised_burned_config` for
+supported inputs and defaults.
 
-* **Burnable background** (`random`) — low-ambiguity unburned cells drawn
-  from the burnable domain with a weak immediate change-index response
-  (values at or below the 50th percentile of their distribution within the
-  sampling domain) and located outside a 500-m exclusion zone around all
-  Otsu-guided candidate patches (keep, review and drop).
-* **Moderately burned-like** (`otsu`) — candidate patches segmented by Otsu
-  as potentially burned but assigned to the drop class by the rule-based
-  filters, with `S_PATCH_PA <= 0.15`: the lower end of the burned-like
-  confounder spectrum.
-* **Strongly burned-like** (`artifact_hard`) — drop patches with a stronger
-  burned-like response (high `rbr_med`, low persistence), and therefore
-  greater potential to generate commission errors. This pool is **off by
-  default** (`negative_pool_params$artifact_hard$enabled = FALSE`). When a
-  visual validation is applied with `apply_visual_validation()`, only the
-  visually confirmed patches (`VISUAL = 1`) enter training.
+### Training pools at a glance
 
-Review patches are withheld from training and remain in the complete
-candidate-patch universe for subsequent scoring. To control class
-imbalance, the burnable-background and moderately burned-like pools are
-capped relative to the size of the burned pool
-(`negative_pool_params$caps = c(random = 1.0, otsu = 1.0)` by default; an
-`Inf` cap disables it), whereas all eligible strongly burned-like patches
-are retained and balanced by weight
-(`negative_pool_params$artifact_hard$total_weight_ratio`) rather than
-capped. The background sample is drawn with the seed `random_seed`, and a
-location that is both a background cell and an Otsu patch is kept only
-once, as an Otsu patch.
+The burned pool comes from high-confidence `keep` patches. Depending
+on the configuration, unburned examples come from three sources:
 
-Training uses explicit labels only: a patch becomes a negative only when it
-belongs to one of the unburned pools above. Review patches and rows with
-missing or unknown labels never become negatives by default. The OOF
-diagnostics and the final model use the same eligibility rules, the same
-caps and the same feature recipe, so the diagnostics describe the model
-that is finally fitted.
+| Pool | Internal name | Purpose |
+|------|---------------|---------|
+| Burnable background | `random` | Represent low-ambiguity unburned conditions. |
+| Moderately burned-like | `otsu` | Represent rejected candidates that resemble burns. |
+| Strongly burned-like | `artifact_hard` | Represent more challenging burned-like confounders. |
 
-Both the OOF models and the final model are trained the same way: the
-number of boosting rounds is selected with an inner validation split and
-early stopping, and the model is then refitted on all available training
-data at that number of rounds.
+All three negative pools receive the same unburned class label.
+Pool selection, sampling and balancing are configurable.
 
-`p_burned` (and the temporally adjusted `p_burned_current_year`) is a
-model score, not a calibrated probability.
+`review` patches are excluded from training but remain available for
+prediction. The final classification can therefore differ from the
+initial rule-based decisions.
 
-Each probabilistic refinement stage can also be run on its own:
-`build_supervised_training_pools()`, `make_spatial_folds()`,
-`extract_supervised_features()`, `run_oof_diagnostics()`,
-`train_final_burned_model()` and `score_supervised_burned_map()`. See
-`?build_supervised_burned_config` for all settings.
+Burned scores should not be interpreted as independently calibrated
+probabilities. The selected score field and classification threshold
+must be consistent with the intended final product.
 
-## 4. Validation and consistency
+## 4. Assess the results
 
-There are two distinct validations, against two different references.
+OtsuFire provides three complementary checks:
 
-**Internal validation (OOF).** The out-of-fold diagnostics (`05_OOF`)
-measure how well the model reproduces the labels derived from the
-Otsu-guided segmentation decisions, using spatial block folds. Each held-out fold is
-predicted by a model that never saw it: the outer test fold is not used for
-imputation, feature selection, early stopping or fitting. OOF AUC / PR-AUC
-are **not ground truth**: the labels are derived from the deterministic
-decisions, not from field observations.
+| Assessment | What it measures |
+|------------|------------------|
+| Internal OOF diagnostics | Performance on held-out, internally generated labels. |
+| External validation | Agreement with an independent burned-area reference. |
+| Consistency checks | Differences between the segmentation/filtering and supervised outputs. |
 
-**External validation.** `validate_fire_maps()` is independent of the
-workflow: threshold `p_burned` (or `p_burned_current_year`) into a
-burned-area layer and compare it with an external reference, such as
-EFFIS. It reports omission, commission, F1 and IoU.
+OOF diagnostics assess learning from the generated labels; they do not
+independently establish whether those labels are correct. Consistency
+between stages also does not establish mapping accuracy.
 
-`validate_fire_maps()` works on an already-thresholded layer, so the scored
-map is cut first. The operating threshold is a per-year decision; `0.5`
-below is only a placeholder.
+### External validation
 
-```{r validate, purl = FALSE}
-fm <- sf::st_read(sup_run$final_map_gpkg, layer = "final_map_full", quiet = TRUE)
-burned <- fm[is.finite(fm$p_burned_model) & fm$p_burned_model >= 0.5, ]
+`validate_fire_maps()` compares an already-thresholded burned-area map
+with an external reference within the validation domain. It reports
+metrics including omission, commission, F1 and IoU.
 
-thresholded_gpkg <- "/path/to/results/thresholded_burned.gpkg"
-sf::st_write(burned, thresholded_gpkg, layer = "thresholded_burned", quiet = TRUE)
+Prepare the binary burned-area layer using the score and threshold
+selected for your run before calling this function.
 
+```{r validation, eval=FALSE}
 val <- validate_fire_maps(
-  input_shapefile = thresholded_gpkg,
+  input_shapefile = "/path/to/thresholded_burned_2020.gpkg",
   ref_shapefile   = "/path/to/reference_fires_2020.gpkg",
   mask_shapefile  = "/path/to/validation_mask_2020.gpkg",
   burnable_raster = "/path/to/burnable_mask.tif",
@@ -240,96 +190,58 @@ val <- validate_fire_maps(
 val$metrics
 ```
 
-External metrics are computed against a *different reference* than the
-OOF metrics. They are **not comparable** with OOF AUC / PR-AUC; keep the
-two evaluations distinct.
+**Temporal observability** checks whether the imagery could capture
+each reference fire. The example uses `wholefire_fraction`, which
+assesses the fraction of each fire with suitable observation dates.
+Observability is handled at the reference-fire level rather than
+by trimming individual pixels within retained fires.
 
-**Temporal observability.** When an `observability_raster` (a day-of-year
-raster) is supplied, observability is assessed **per reference fire**: a
-fire is either evaluated in full or excluded in full, and it is never
-trimmed at pixel level. Two rules are available through
-`observability_mode`.
+Choose the date fields, required observable fraction and missing-date
+policy to match your reference data. See `?validate_fire_maps` and the
+book for these settings and the associated audit outputs.
 
-`"legacy_any"` (the default) excludes a fire whose date falls after the
-last observation inside it, or that has no valid observable DOY. Because
-the rule compares the fire date with the *maximum* DOY in the perimeter, a
-single observable pixel is enough: a fire observed on 1 % of its area is
-kept whole. Excluded fires are removed from the reference before
-rasterisation, so they contribute no TP or FN, but their territory stays in
-the evaluation domain as unburned reference; a correct detection over such
-a fire is therefore scored as commission.
+### Consistency between stages
 
-`"wholefire_fraction"` requires `temporal_observable_fraction >=
-observability_min_fraction` (default `0.75`): the share of the fire's
-burnable-domain pixels whose composite DOY is at or after the fire's
-required DOY. The required DOY is taken from `ref_obs_doy_col` when that
-argument is supplied and from `ref_end_doy_col` otherwise, with **no**
-fallback to the start DOY; a fire with no usable date is reported as
-`UNDETERMINED_OBS_DATE`.
+`check_supervised_consistency()` compares the rule-based decisions
+with the supervised outputs from the same run.
 
-`ref_obs_doy_col` is **authoritative**: when supplied it is the only date
-column consulted, so an `NA` there means "undetermined" and is not
-replaced by `end_doy`. `ref_obs_doy_fallback = "end_doy"` allows that
-fallback, for reference layers whose observability column is filled for
-some sources and not others. `undetermined_cause` records why each fire is
-undetermined, and a warning reports how many fires are affected.
-
-A missing date is not evidence that a fire was not observable. With the
-default `observability_undetermined_policy = "evaluate"`, fires with
-`UNDETERMINED_OBS_DATE` stay in the evaluation as positive reference fires
-and are flagged for audit; no date is imputed. `"exclude"` removes them
-like a non-observable fire, for sensitivity analyses.
-
-Fires that are not observable (`NOT_OBSERVABLE`, below the threshold, and
-`NO_OBSERVABILITY_DATA`, with no observation inside) are removed from the
-evaluation domain entirely, so they produce neither omission nor
-commission. `OUTSIDE_BURNABLE_DOMAIN` marks fires with no burnable-domain
-cell at all. Territory outside these fires is evaluated normally.
-`observability_summary` and `OBSERVABILITY_SUMMARY_<year>.csv` report the
-counts, the areas by status and the resulting `Evaluable_Area_ha`.
-
-Two CSVs in `02_OBSERVABILITY/` give the per-fire audit trail:
-`REFERENCE_FIRES_DETECTION_<year>_<input>.csv` and, for undetermined fires
-only, `UNDETERMINED_FIRES_DETECTION_<year>_<input>.csv`. Each row puts the
-observability verdict next to what the prediction did on that fire
-(reference, detected and omitted cells and area, TP and FN, fire-level
-recall), so an individual fire can be revisited without recomputing the
-validation.
-
-Partial observability inside kept fires is reported for audit
-(`observability_audit`, `OBSERVABILITY_*` CSVs) but never changes the
-metrics. Cached reference products are rebuilt automatically when a
-relevant input or setting changes; use `force_reprocess_ref = TRUE` to
-force a rebuild.
-
-`check_supervised_consistency()` compares the Otsu-guided segmentation and probabilistic refinement
-outputs of the same run and writes diagnostic GPKG, CSV and TXT files:
-
-```{r consistency, purl = FALSE}
+```{r consistency, eval=FALSE}
 cons <- check_supervised_consistency(
-  deterministic_decisions = det_run$result_paths$internal_decisions,
+  deterministic_decisions = decisions_path,
   final_map               = sup_run$final_map_gpkg,
   config                  = sup_cfg
 )
 ```
 
-The same check runs automatically when
-`run_oneyear_supervised_pipeline(..., run_consistency = TRUE)` is called
-and `options$data_base` is supplied in the configuration.
+This comparison helps inspect how probabilistic refinement changes
+the initial decisions. It is separate from external validation.
 
-## Outputs
+## Main outputs
 
-A one-year probabilistic refinement run writes, under
-`<output_dir>/<target_year>/<run_name>/SUPERVISED/<run_label>/`:
+The workflow produces:
 
-* `01_POOLS/...gpkg` — burned and unburned training pools.
-* `02_FOLDS/...gpkg` — spatial folds for OOF.
-* `03_FEATURES/features_geometry.gpkg` — full feature table.
-* `04_MATRIX/...rds` — XGBoost design-matrix snapshot.
-* `05_OOF/..._oof_agg.csv` — out-of-fold diagnostics.
-* `07_FINAL_MODEL_V2/..._final_model.rds` — trained model.
-* `09_FINAL_MAP/..._final_map.gpkg` — final per-patch `p_burned` map.
-* `11_CONSISTENCY_CHECKS/...` — consistency files, when enabled.
+- Candidate patches and their `keep`, `review` or `drop` decisions.
+- Burned and unburned training pools.
+- Spatial folds, extracted predictors and OOF diagnostics.
+- A fitted classifier and scored candidate patches.
+- A final burned-area map after thresholding.
+- Validation metrics and diagnostic files when requested.
 
-The Otsu-guided segmentation stage writes its outputs under the parallel
-`DETERMINISTIC/<run_name>/` tree.
+The `DETERMINISTIC/` and `SUPERVISED/` output folders retain the API
+terminology explained above. Use the paths returned by the pipeline
+functions to locate the products of each run.
+
+## Continue with the step-by-step tutorial
+
+The [OtsuFire book](https://github.com/nataliaquintero/OtsuFire-book)
+provides the step-by-step workflow, from preparing inputs and selecting
+settings to inspecting and validating the final maps.
+
+For individual arguments and return values, consult:
+
+```{r help, eval=FALSE}
+?change_index_mosaic
+?build_burned_mapping_config
+?build_supervised_burned_config
+?validate_fire_maps
+```

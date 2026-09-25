@@ -14,24 +14,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Package, workflow book and data
-
-The OtsuFire package and its source code are available on
-[GitHub](https://github.com/olgaviedma/OtsuFire).
-
-For step-by-step guidance on implementing and using OtsuFire, see the
-[OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
-The companion repository also includes the Google Earth Engine scripts
-used for image selection, masking and compositing.
-
-Burned-area maps for the full time series are available on
-[Zenodo](https://doi.org/10.5281/zenodo.22893763).
-
-Tables S13–S15 of the accompanying manuscript's supplementary material
-describe the functions included in the package.
-
-## Introduction
-
 OtsuFire combines four stages: **mosaic preparation**, **Otsu-guided
 segmentation and rule-based filtering**, **probabilistic refinement**,
 and **independent validation**.
@@ -48,13 +30,26 @@ stage, which follows explicit algorithms and rules, including
 data-adaptive Otsu thresholds. `supervised` identifies the classifier
 trained on the resulting labels.
 
-This vignette summarises how the stages connect; the workflow book above
+This vignette summarises how the stages connect; the workflow book linked below
 covers data preparation, configuration and interpretation of results
 step by step.
 
 The examples below are **not evaluated** and require your own data
 and paths. For a small synthetic configuration example, see
 `vignette("OtsuFire", package = "OtsuFire")`.
+
+## Package, workflow book and data
+
+The OtsuFire package and its source code are available on
+[GitHub](https://github.com/olgaviedma/OtsuFire).
+
+For step-by-step guidance on implementing and using OtsuFire, see the
+[OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
+The companion repository also includes the Google Earth Engine scripts
+used for image selection, masking and compositing.
+
+Burned-area maps for the full time series are available on
+[Zenodo](https://doi.org/10.5281/zenodo.22893763).
 
 ## 1. Prepare the mosaic
 

@@ -16,24 +16,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Package, workflow book and data
-
-The OtsuFire package and its source code are available on
-[GitHub](https://github.com/olgaviedma/OtsuFire).
-
-For step-by-step guidance on implementing and using OtsuFire, see the
-[OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
-The companion repository also includes the Google Earth Engine scripts
-used for image selection, masking and compositing.
-
-Burned-area maps for the full time series are available on
-[Zenodo](https://doi.org/10.5281/zenodo.22893763).
-
-Tables S13–S15 of the accompanying manuscript's supplementary material
-describe the functions included in the package.
-
-## Introduction
-
 `OtsuFire` is an open-source R package for long-term, wall-to-wall
 burned-area reconstruction. It implements a self-labelling, weakly
 supervised framework that generates training labels without requiring
@@ -65,6 +47,19 @@ The package provides four composable stages:
 Wall-to-wall coverage describes the mapping domain: the whole study area
 is searched for candidate patches. Probabilistic scoring then operates on
 those candidate patches.
+
+## Package, workflow book and data
+
+The OtsuFire package and its source code are available on
+[GitHub](https://github.com/olgaviedma/OtsuFire).
+
+For step-by-step guidance on implementing and using OtsuFire, see the
+[OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
+The companion repository also includes the Google Earth Engine scripts
+used for image selection, masking and compositing.
+
+Burned-area maps for the full time series are available on
+[Zenodo](https://doi.org/10.5281/zenodo.22893763).
 
 ## Understanding the function names
 

@@ -6,22 +6,6 @@
 \alias{OtsuFire}
 \title{OtsuFire: a self-labelling framework for wall-to-wall burned-area mapping across sensors and decades}
 \description{
-\subsection{Package, workflow book and data}{
-The OtsuFire package and its source code are available on
-\href{https://github.com/olgaviedma/OtsuFire}{GitHub}.
-
-For step-by-step guidance on implementing and using OtsuFire, see the
-\href{https://github.com/nataliaquintero/OtsuFire-book}{OtsuFire workflow book}.
-The companion repository also includes the Google Earth Engine scripts
-used for image selection, masking and compositing.
-
-Burned-area maps for the full time series are available on
-\href{https://doi.org/10.5281/zenodo.22893763}{Zenodo}.
-
-Tables S13–S15 of the accompanying manuscript's supplementary material
-describe the functions included in the package.
-}
-
 Reproducible multi-year burned-area mapping from change-index rasters.
 Provides four layers that can be used together or independently:
 a mosaic stage, an Otsu-guided segmentation workflow, a
@@ -34,6 +18,19 @@ with data-adaptive Otsu thresholds; no classifier is fitted):
 \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}}, \verb{DETERMINISTIC/}. Probabilistic
 refinement is \emph{supervised} (a trained XGBoost model):
 \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}, \verb{SUPERVISED/}.
+
+\subsection{Package, workflow book and data}{
+The OtsuFire package and its source code are available on
+\href{https://github.com/olgaviedma/OtsuFire}{GitHub}.
+
+For step-by-step guidance on implementing and using OtsuFire, see the
+\href{https://github.com/nataliaquintero/OtsuFire-book}{OtsuFire workflow book}.
+The companion repository also includes the Google Earth Engine scripts
+used for image selection, masking and compositing.
+
+Burned-area maps for the full time series are available on
+\href{https://doi.org/10.5281/zenodo.22893763}{Zenodo}.
+}
 }
 \section{Workflow entry points}{
 

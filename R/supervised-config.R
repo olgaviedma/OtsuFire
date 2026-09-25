@@ -954,7 +954,7 @@ build_supervised_burned_config <- function(
 #' @export
 print.otsufire_supervised_burned_config <- function(x, ...) {
   cat("<otsufire_supervised_burned_config>\n")
-  cat("  scenario        :", x$scenario, "\n")
+  cat("  run_label       :", x$scenario, "\n")
   cat("  target_year     :", x$target_year, "\n")
   cat("  run_name        :", x$run_name, "\n")
   cat("  output_dir      :", x$output_dir, "\n")

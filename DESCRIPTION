@@ -1,7 +1,7 @@
 Package: OtsuFire
 Title: A Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and Decades
-Version: 2.3.0
-Date: 2026-08-19
+Version: 2.0.0
+Date: 2026-09-25
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
              person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
              person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),

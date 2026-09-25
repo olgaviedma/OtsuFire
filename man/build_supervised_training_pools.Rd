@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-pools.R
 \name{build_supervised_training_pools}
 \alias{build_supervised_training_pools}
-\title{Build training and scoring pools for supervised burned-area mapping}
+\title{Build training and scoring pools for probabilistic refinement}
 \usage{
 build_supervised_training_pools(
   config,
@@ -72,7 +72,7 @@ to the optional \code{artifact_hard} training bucket solely because of its name.
 }
 \description{
 Build the burned, unburned, review, and scoring pools used by the
-supervised OtsuFire workflow.
+probabilistic refinement workflow.
 
 The function reads the decision layer for Otsu-guided patches, applies
 quality checks to the initial labels, constructs negative examples, and
@@ -208,7 +208,7 @@ the full directory structure.
 
 \examples{
 \dontrun{
-# Configure the supervised workflow
+# Configure the probabilistic refinement workflow
 config <- build_supervised_burned_config(
   run_label = "balanced",
   internal_decisions = "data/internal_decisions_2022.gpkg",

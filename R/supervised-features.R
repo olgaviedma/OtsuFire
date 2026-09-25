@@ -9,7 +9,7 @@
 #'
 #' Run this stage after [make_spatial_folds()] and before out-of-fold
 #' diagnostics and final model training. The resulting feature layers are
-#' used by the subsequent supervised stages.
+#' used by the subsequent probabilistic refinement stages.
 #'
 #' @param train_with_folds `sf` polygon object or GeoPackage path containing
 #'   the labelled training polygons and fold assignments. Must contain
@@ -54,7 +54,7 @@
 #'
 #' Feature extraction does not train a model or select the final predictor
 #' subset. Model-level feature selection and weighting are controlled through
-#' the supervised configuration and applied during training.
+#' the probabilistic refinement configuration and applied during training.
 #'
 #' @section Raster inputs:
 #' The supporting raster layers include:
@@ -159,7 +159,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure the supervised workflow
+#' # Configure the probabilistic refinement workflow
 #' config <- build_supervised_burned_config(
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
 #'   change_index = "data/RBR_2022.tif",

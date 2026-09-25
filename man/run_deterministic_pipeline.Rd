@@ -2,7 +2,7 @@
 % Please edit documentation in R/deterministic-run.R
 \name{run_deterministic_pipeline}
 \alias{run_deterministic_pipeline}
-\title{Run the deterministic burned-area mapping workflow}
+\title{Run the Otsu-guided segmentation workflow}
 \usage{
 run_deterministic_pipeline(
   config,
@@ -75,9 +75,9 @@ Scoring evaluates the candidates using the following sequence:\tabular{ll}{
 
 These assessments are combined into a final decision for each candidate:\tabular{ll}{
    Decision \tab Interpretation \cr
-   \code{"keep"} \tab Retained as a burned-area candidate by the deterministic rules. \cr
+   \code{"keep"} \tab Retained as a burned-area candidate by the rule-based filters. \cr
    \code{"review"} \tab Flagged for further assessment. \cr
-   \code{"drop"} \tab Rejected by the deterministic rules. \cr
+   \code{"drop"} \tab Rejected by the rule-based filters. \cr
 }
 
 

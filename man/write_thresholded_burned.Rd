@@ -153,7 +153,7 @@ res$n_in
 res$n_kept
 res$path
 
-# Select a specific layer from a supervised final-map GeoPackage
+# Select a specific layer from a probabilistic refinement final-map GeoPackage
 public_map <- sf::st_read(
   "path/to/final_map.gpkg",
   layer = "final_map",

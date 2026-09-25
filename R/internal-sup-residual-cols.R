@@ -62,8 +62,8 @@
 #'     fold-assignment metadata consumed by the OOF wrapper. They must
 #'     survive in the GPKG but must NOT enter the model matrix.
 #'   * No ecoregion features (`eco_*`) in this build. Ecoregions were
-#'     removed entirely from the supervised phase on 2026-06-05; they
-#'     belong to the deterministic delineation stage only.
+#'     removed entirely from the probabilistic refinement phase on 2026-06-05; they
+#'     belong to the Otsu-guided segmentation stage only.
 #'   * Hotspot block (12 columns): `hotspot_available` is a real
 #'     structural flag (0 = no MODIS hotspot data for this year, 1 =
 #'     available) and is ALWAYS observed (never NA). When the year has

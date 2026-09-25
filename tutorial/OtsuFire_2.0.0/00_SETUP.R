@@ -81,7 +81,7 @@ VEGETATION_MAP <- file.path(
 )
 
 # Binary 0/1 raster: which pixels can burn at all. It bounds the search and,
-# in the supervised stage, bounds where negatives may be drawn from.
+# in the probabilistic refinement stage, bounds where negatives may be drawn from.
 BURNABLE_MASK <- file.path(
   DATA_BASE, "Corine_Masks",
   sprintf("burnable_mask_binary_corine_%d_ETRS89.tif", CORINE_YEAR)
@@ -101,7 +101,7 @@ VALIDATION_MASK <- file.path(
   sprintf("mask_3035_%d_final.shp", TARGET_YEAR)
 )
 
-# Ecoregions: the deterministic stage runs one Otsu threshold per
+# Ecoregions: the Otsu-guided segmentation stage runs one Otsu threshold per
 # CORINE x ecoregion unit, not one global threshold.
 ECOREGION_SHP <- file.path(DATA_BASE, "Ecoregions", "ecoregions_iberia.shp")
 

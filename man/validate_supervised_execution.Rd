@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-validate-execution.R
 \name{validate_supervised_execution}
 \alias{validate_supervised_execution}
-\title{Check supervised workflow inputs and settings before execution}
+\title{Check probabilistic refinement workflow inputs and settings before execution}
 \usage{
 validate_supervised_execution(
   config,
@@ -66,7 +66,7 @@ The report is returned visibly with \code{strict = FALSE} and invisibly with
 in strict mode, the function stops with an aggregated error.
 }
 \description{
-Check the configuration and inputs for a supervised OtsuFire run before
+Check the configuration and inputs for a probabilistic refinement run before
 starting pool generation, feature extraction, or model training.
 
 The function checks spatial metadata, input compatibility, year
@@ -214,7 +214,7 @@ Some checks may still be skipped or not verifiable.
 
 \examples{
 \dontrun{
-# Configure a supervised workflow
+# Configure a probabilistic refinement workflow
 config <- build_supervised_burned_config(
   internal_decisions = "data/internal_decisions_2022.gpkg",
   change_index = "data/RBR_2022.tif",

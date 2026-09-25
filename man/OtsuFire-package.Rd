@@ -8,21 +8,27 @@
 \description{
 Reproducible multi-year burned-area mapping from change-index rasters.
 Provides four layers that can be used together or independently:
-a mosaic stage, a deterministic Otsu/grow segmentation workflow, a
-supervised one-year probabilistic workflow, and a shared
+a mosaic stage, an Otsu-guided segmentation workflow, a
+one-year probabilistic refinement workflow, and a shared
 workflow-independent validation utility.
+
+The stage names follow the accompanying paper. In function and folder
+names, the Otsu-guided segmentation stage appears as "deterministic"
+(\code{run_deterministic_pipeline()}, \verb{DETERMINISTIC/}) and the probabilistic
+refinement stage, which trains a supervised XGBoost model, as "supervised"
+(\code{run_oneyear_supervised_pipeline()}, \verb{SUPERVISED/}).
 }
 \section{Workflow entry points}{
 
 \itemize{
 \item \code{\link[=change_index_mosaic]{change_index_mosaic()}} — annual mosaic of a change index.
 \item \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}} + \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}} —
-deterministic workflow.
+Otsu-guided segmentation workflow.
 \item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} +
-\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} — one-year supervised workflow.
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} — one-year probabilistic refinement workflow.
 \item \code{\link[=validate_fire_maps]{validate_fire_maps()}} — shared workflow-independent validation
-utility; usable inside the deterministic pipeline and directly on
-any compatible burned-area prediction layer (including supervised
+utility; usable inside the Otsu-guided segmentation pipeline and directly on
+any compatible burned-area prediction layer (including probabilistic refinement
 outputs after thresholding \code{p_burned}).
 }
 }

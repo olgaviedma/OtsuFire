@@ -5,7 +5,7 @@
 #' orchestrator.
 #'
 #' @details
-#'   Ecoregions belong exclusively to the deterministic delineation phase
+#'   Ecoregions belong exclusively to the Otsu-guided segmentation stage
 #'   and are not part of the supervised feature set (2026-06-05).
 #' @keywords internal
 #' @noRd

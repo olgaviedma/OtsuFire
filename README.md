@@ -8,9 +8,16 @@
 
 Reproducible multi-year burned-area mapping from change-index rasters. OtsuFire
 takes annual RBR/dNBR composites and produces per-patch burned-area maps through
-four stages: a **mosaic** stage, a **deterministic** Otsu/grow segmentation
-workflow, a **supervised** one-year probabilistic workflow, and a
-**workflow-independent validation** utility.
+four stages: a **mosaic** stage, an **Otsu-guided segmentation** stage, a
+one-year **probabilistic refinement** stage, and a **workflow-independent
+validation** utility.
+
+The stage names follow the accompanying paper. In the code, the Otsu-guided
+segmentation stage is run with `run_deterministic_pipeline()` (configured with
+`build_burned_mapping_config()`) and writes to `DETERMINISTIC/`; the
+probabilistic refinement stage, which trains a supervised XGBoost model, is run
+with `run_oneyear_supervised_pipeline()` (configured with
+`build_supervised_burned_config()`) and writes to `SUPERVISED/`.
 
 The package itself is sensor-agnostic and only requires a change-index raster.
 The Landsat (through 2016) and Sentinel-2 (from 2017) imagery refers to the
@@ -28,7 +35,7 @@ and runs are driven by configuration objects rather than long argument lists.
 Code written against 0.1.x will not run unchanged. 0.1.4 is currently the
 release on CRAN, for anyone who needs it.
 
-The supervised stage — training pools, spatial folds, out-of-fold diagnostics
+The probabilistic refinement stage — training pools, spatial folds, out-of-fold diagnostics
 and gradient-boosted scoring — is entirely new in 2.0.0 and has no counterpart
 in 0.1.x.
 
@@ -52,7 +59,7 @@ install.packages("OtsuFire")
   workflow's negative-pool construction, which shells out to
   `gdal_polygonize.py` and `ogr2ogr`.
 - **WhiteboxTools**, through the R package `whitebox` — required by the
-  deterministic stage, which uses it to label seed-supported candidate
+  Otsu-guided segmentation stage, which uses it to label seed-supported candidate
   components. Its location can be given with `options$whitebox_exe` in
   `build_burned_mapping_config()`.
 
@@ -87,7 +94,7 @@ mosaic <- change_index_mosaic(
 mosaic_path <- mosaic$mosaic_path
 ```
 
-### 2. Deterministic stage
+### 2. Otsu-guided segmentation stage
 
 Otsu thresholding per land-cover and ecoregion unit, growth of seed-supported
 candidate patches, rule-based filtering, and a decision layer
@@ -124,7 +131,7 @@ class — see `?build_burned_mapping_config`.
 For step-by-step access the stage decomposes into `detect_burned_patches()` and
 `score_burned_patches()`.
 
-### 3. Supervised one-year stage
+### 3. One-year probabilistic refinement stage
 
 Trains a gradient-boosted model on labels derived from the deterministic
 decisions, runs out-of-fold diagnostics, and writes a `final_map.gpkg` whose
@@ -173,7 +180,7 @@ There are **two distinct validations, against two different references, and they
 are not comparable.**
 
 **Internal (OOF).** Out-of-fold diagnostics measure how well the model
-reproduces the *deterministic decision* labels using spatial block folds. OOF
+reproduces the *Otsu-guided segmentation decision* labels using spatial block folds. OOF
 AUC / PR-AUC are **not ground truth** — the labels are decisions, not field
 observations.
 
@@ -207,14 +214,14 @@ date, and a fire that fails is removed from both the reference and the
 evaluation domain. This is *not* a pixel-level cloud mask — fires are kept or
 removed whole.
 
-`check_supervised_consistency()` compares the deterministic and supervised
+`check_supervised_consistency()` compares the Otsu-guided segmentation and probabilistic refinement
 outputs of the same run and writes per-issue diagnostic artefacts.
 
 ---
 
 ## Outputs
 
-A supervised one-year run writes under
+A one-year probabilistic refinement run writes under
 `<output_dir>/<target_year>/<run_name>/SUPERVISED/<run_label>/`:
 
 | Directory | Contents |
@@ -228,7 +235,7 @@ A supervised one-year run writes under
 | `09_FINAL_MAP/` | final per-patch `p_burned` map |
 | `11_CONSISTENCY_CHECKS/` | consistency artefacts, when enabled |
 
-The deterministic stage writes to the parallel `DETERMINISTIC/<run_name>/` tree.
+The Otsu-guided segmentation stage writes to the parallel `DETERMINISTIC/<run_name>/` tree.
 
 ---
 
@@ -237,12 +244,12 @@ The deterministic stage writes to the parallel `DETERMINISTIC/<run_name>/` tree.
 **Mosaic and rasters** — `change_index_mosaic()`, `mosaic_from_tiles()`,
 `clean_raster_file()`
 
-**Deterministic stage** — `build_burned_mapping_config()`,
+**Otsu-guided segmentation stage** — `build_burned_mapping_config()`,
 `run_deterministic_pipeline()`, `detect_burned_patches()`,
 `score_burned_patches()`, `apply_chain_cleaning()` (also exported under the
 short alias `apply_chain()`)
 
-**Supervised stage** — `build_supervised_burned_config()`,
+**Probabilistic refinement stage** — `build_supervised_burned_config()`,
 `run_oneyear_supervised_pipeline()`, `build_supervised_training_pools()`,
 `make_spatial_folds()`, `extract_supervised_features()`, `run_oof_diagnostics()`,
 `train_final_burned_model()`, `score_supervised_burned_map()`,
@@ -264,7 +271,7 @@ vignette("OtsuFire", package = "OtsuFire")           # API tour, toy data
 vignette("workflow-overview", package = "OtsuFire")  # four-layer workflow
 ```
 
-The workflow vignette is not evaluated: the deterministic and supervised stages
+The workflow vignette is not evaluated: the Otsu-guided segmentation and probabilistic refinement stages
 operate on full-scale annual mosaics (Iberian Peninsula, 90 m) that are too
 large to ship with the package. The `OtsuFire` vignette covers the API surface
 on synthetic data with no external downloads.

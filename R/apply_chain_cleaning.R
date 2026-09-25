@@ -64,7 +64,7 @@
 #' does not reconnect separated patches. Existing detection outputs can be
 #' reused without repeating region growing or refinement.
 #'
-#' The standard deterministic pipeline does not automatically run this
+#' The standard Otsu-guided segmentation pipeline does not automatically run this
 #' optional step.
 #'
 #' @section Candidate selection:

@@ -139,7 +139,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure the supervised workflow
+#' # Configure the probabilistic refinement workflow
 #' config <- build_supervised_burned_config(
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
 #'   change_index = "data/RBR_2022.tif",

@@ -80,7 +80,7 @@ Public fields include: \code{target_year}, \code{inputs}, \code{run_name},
 \code{rescue_params}, \code{options}, \code{engine_root}, \code{deterministic_seed},
 \code{tool_paths}.
 
-Pass this object to the deterministic workflow functions. Use the
+Pass this object to the Otsu-guided segmentation workflow functions. Use the
 documented constructor arguments to configure the workflow rather than
 modifying internal fields directly.
 }
@@ -97,7 +97,7 @@ This function prepares the configuration only. It does not detect,
 refine, or score burned-area patches.
 }
 \details{
-The deterministic workflow has three stages:
+The Otsu-guided segmentation workflow has three stages:
 \enumerate{
 \item \strong{Detection}: identify seed pixels and grow candidate burned
 patches.
@@ -249,7 +249,7 @@ An explicitly supplied same-year \code{keep_pool} is not supported. Use
 These references are used to calculate spectral-support metrics. They are
 separate from \code{reference_burned_map}, which is used for map validation.
 
-The deterministic scoring workflow does not read external burned-area
+The Otsu-guided scoring workflow does not read external burned-area
 registries. Supplying \code{options$registry_path} raises an error.
 }
 

@@ -1,4 +1,4 @@
-#' Run the deterministic burned-area mapping workflow
+#' Run the Otsu-guided segmentation workflow
 #'
 #' @description
 #' Run burned-area detection, scoring, and optional validation for one year
@@ -47,9 +47,9 @@
 #'
 #' | Decision | Interpretation |
 #' |---|---|
-#' | `"keep"` | Retained as a burned-area candidate by the deterministic rules. |
+#' | `"keep"` | Retained as a burned-area candidate by the rule-based filters. |
 #' | `"review"` | Flagged for further assessment. |
-#' | `"drop"` | Rejected by the deterministic rules. |
+#' | `"drop"` | Rejected by the rule-based filters. |
 #'
 #' The scoring results retain the information used to reach these decisions.
 #'

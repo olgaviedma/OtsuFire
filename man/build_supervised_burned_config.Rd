@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-config.R
 \name{build_supervised_burned_config}
 \alias{build_supervised_burned_config}
-\title{Configure the supervised burned-area mapping workflow}
+\title{Configure the probabilistic refinement workflow}
 \usage{
 build_supervised_burned_config(
   run_label = "balanced",
@@ -195,12 +195,12 @@ Use the constructor arguments to configure the workflow rather than
 editing internal fields directly.
 }
 \description{
-Create a configuration object for the supervised OtsuFire workflow. The
+Create a configuration object for the probabilistic refinement workflow. The
 function collects and validates the decision layer for Otsu-guided
 patches, raster inputs, training-pool settings, feature controls, model
 parameters, and output locations.
 
-Pass the resulting configuration to the individual supervised workflow
+Pass the resulting configuration to the individual probabilistic refinement workflow
 functions or to \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 
 This function prepares the configuration only. It does not build training
@@ -504,7 +504,7 @@ and \code{scripts_root} are no longer used.
 
 \examples{
 \dontrun{
-# Configure a supervised run with explicit input paths
+# Configure a probabilistic refinement run with explicit input paths
 cfg <- build_supervised_burned_config(
   run_label = "balanced",
   internal_decisions = "data/internal_decisions_2022.gpkg",
@@ -574,7 +574,7 @@ cfg_hard_negatives <- build_supervised_burned_config(
   )
 )
 
-# Run the supervised workflow
+# Run the probabilistic refinement workflow
 result <- run_oneyear_supervised_pipeline(cfg_hard_negatives)
 
 # Inspect the consolidated layer at its reported output location

@@ -1,4 +1,4 @@
-#' Score Otsu-guided patches and export supervised burned-area outputs
+#' Score Otsu-guided patches and export probabilistic refinement burned-area outputs
 #'
 #' @description
 #' Apply a trained supervised model to the Otsu-guided patches in the scoring

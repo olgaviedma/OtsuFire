@@ -1,7 +1,7 @@
 #' Score candidate burned patches and assign final decisions
 #'
 #' @description
-#' Evaluate candidate burned patches using the deterministic OtsuFire scoring
+#' Evaluate candidate burned patches using the Otsu-guided segmentation scoring
 #' rules and assign each patch a final decision: `"keep"`, `"review"`, or
 #' `"drop"`.
 #'
@@ -153,9 +153,9 @@
 #'
 #' | Value | Interpretation |
 #' |---|---|
-#' | `"keep"` | High-confidence burned candidate under the deterministic rules. |
+#' | `"keep"` | High-confidence burned candidate under the rule-based filters. |
 #' | `"review"` | Ambiguous candidate or candidate with incomplete or conflicting support. |
-#' | `"drop"` | Candidate rejected by the deterministic rules. |
+#' | `"drop"` | Candidate rejected by the rule-based filters. |
 #'
 #' If exactly one active filter assigns drop and all remaining active filters
 #' assign keep, the final decision is softened to review.
@@ -170,7 +170,7 @@
 #' |---|---|
 #' | `internal_decisions` | Main candidate decision layer, containing filter outcomes, support metrics, temporal diagnostics, decision reasons, and `class_final`. |
 #' | `internal_decisions_path` | Path to the written candidate decision layer. |
-#' | `reference_decisions` | Reference-side deterministic decision layer, when available. |
+#' | `reference_decisions` | Reference-side Otsu-guided segmentation decision layer, when available. |
 #' | `reference_decisions_path` | Path to the written reference-side decision layer, when available. |
 #' | `keep_pool_summary` | Summary of the spectral-support reference used during scoring. |
 #' | `scoring_diagnostics` | Additional diagnostics and scoring metadata. |

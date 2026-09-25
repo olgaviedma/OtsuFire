@@ -1,12 +1,12 @@
-#' Configure the supervised burned-area mapping workflow
+#' Configure the probabilistic refinement workflow
 #'
 #' @description
-#' Create a configuration object for the supervised OtsuFire workflow. The
+#' Create a configuration object for the probabilistic refinement workflow. The
 #' function collects and validates the decision layer for Otsu-guided
 #' patches, raster inputs, training-pool settings, feature controls, model
 #' parameters, and output locations.
 #'
-#' Pass the resulting configuration to the individual supervised workflow
+#' Pass the resulting configuration to the individual probabilistic refinement workflow
 #' functions or to [run_oneyear_supervised_pipeline()].
 #'
 #' This function prepares the configuration only. It does not build training
@@ -419,7 +419,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure a supervised run with explicit input paths
+#' # Configure a probabilistic refinement run with explicit input paths
 #' cfg <- build_supervised_burned_config(
 #'   run_label = "balanced",
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
@@ -489,7 +489,7 @@
 #'   )
 #' )
 #'
-#' # Run the supervised workflow
+#' # Run the probabilistic refinement workflow
 #' result <- run_oneyear_supervised_pipeline(cfg_hard_negatives)
 #'
 #' # Inspect the consolidated layer at its reported output location
@@ -1280,7 +1280,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' FIXED internal negative-pool defaults (GATE 6.7) -- NOT public, NOT settable.
 #'
 #' The lower-level negative-pool / Otsu-residual engine knobs that are pinned to
-#' validated operational constants (mirroring the deterministic engine's fixed
+#' validated operational constants (mirroring the Otsu-guided engine's fixed
 #' settings). They MAY enter the methodological fingerprint (they affect the
 #' pool) but are NOT user-settable and NOT part of the public block. The clean
 #' public names in `negative_pool_params` map onto the historical
@@ -1623,14 +1623,14 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' Single shared accessor for the supervised-input subsystem: returns the
 #' normalized on-disk PATH of `config$inputs[[name]]` when that input is a
 #' `type = "path"` spec, else `NULL` (the input is absent, in-memory, or the
-#' config itself is NULL). Every supervised stage that needs an input's file
+#' config itself is NULL). Every probabilistic refinement stage that needs an input's file
 #' path (orchestrator, pool builder, feature extractor) consumes the input
 #' THROUGH this accessor, so `cfg$inputs` is the single source of truth and no
 #' stage reconstructs an input path by filename convention behind the cfg's
 #' back. A `NULL` return lets the caller apply its documented optional-input
 #' behaviour (skip / convention-fallback for the standalone-script path).
 #'
-#' @param config supervised config S3 object, or `NULL`.
+#' @param config probabilistic refinement config S3 object, or `NULL`.
 #' @param name character scalar input name (a key of `cfg$inputs`).
 #' @return character path or `NULL`.
 #'

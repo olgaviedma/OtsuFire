@@ -1,7 +1,7 @@
-#' Run the supervised burned-area mapping workflow for one year
+#' Run the probabilistic refinement workflow for one year
 #'
 #' @description
-#' Run the supervised OtsuFire workflow for one target year using a
+#' Run the probabilistic refinement workflow for one target year using a
 #' configuration created with [build_supervised_burned_config()].
 #'
 #' The function builds training pools from classified Otsu-guided patches and
@@ -10,7 +10,7 @@
 #' polygons.
 #'
 #' Optional consistency checks compare the classifications of Otsu-guided
-#' patches with the supervised results.
+#' patches with the probabilistic refinement results.
 #'
 #' The function returns output paths, configuration information, and run
 #' summaries. External map validation is performed separately with
@@ -21,7 +21,7 @@
 #'   sampling settings, feature controls, model parameters, and output
 #'   locations.
 #' @param run_consistency Logical scalar. Whether to compare the
-#'   classifications of Otsu-guided patches with the supervised results.
+#'   classifications of Otsu-guided patches with the probabilistic refinement results.
 #'   Default: `TRUE`. These checks do not replace external map validation.
 #' @param overwrite Logical scalar. Whether existing stage outputs may be
 #'   regenerated and replaced. With `FALSE`, existing outputs are reused or
@@ -101,7 +101,7 @@
 #' | Out-of-fold diagnostics | Evaluate predictions for spatially held-out labelled observations. |
 #' | Final model training | Select the number of boosting rounds and fit the final model. |
 #' | Scoring | Apply the final model to candidate polygons. |
-#' | Consistency checks | Optionally compare supervised results with the original classifications of Otsu-guided patches. |
+#' | Consistency checks | Optionally compare probabilistic refinement results with the original classifications of Otsu-guided patches. |
 #'
 #' This function runs a single-year workflow. It does not perform
 #' leave-one-year-out evaluation or coordinate multi-year training.
@@ -250,7 +250,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure a supervised run from classified Otsu-guided patches
+#' # Configure a probabilistic refinement run from classified Otsu-guided patches
 #' config <- build_supervised_burned_config(
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
 #'   change_index = "data/RBR_2022.tif",

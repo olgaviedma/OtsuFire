@@ -4,9 +4,9 @@
 #' Compare one or more burned-area polygon maps with reference fire perimeters
 #' within a common evaluation domain.
 #'
-#' The function supports maps derived from Otsu-guided patches, supervised
+#' The function supports maps derived from Otsu-guided patches, probabilistic refinement
 #' predictions, and external burned-area products. Inputs should contain the
-#' polygons classified as burned. For supervised outputs, apply the selected
+#' polygons classified as burned. For probabilistic refinement outputs, apply the selected
 #' score threshold before validation.
 #'
 #' The evaluation domain is defined by the study-area boundary and
@@ -376,7 +376,7 @@
 #'   [validate_supervised_execution()].
 #'
 #'   [validate_supervised_execution()] checks configuration and inputs before
-#'   supervised processing. `validate_fire_maps()` evaluates produced maps
+#'   probabilistic refinement processing. `validate_fire_maps()` evaluates produced maps
 #'   against reference perimeters.
 #'
 #' @examples

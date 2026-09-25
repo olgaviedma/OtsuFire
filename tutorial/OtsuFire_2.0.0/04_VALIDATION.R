@@ -11,7 +11,7 @@
 #   different questions. Do not compare their numbers.
 #
 #     INTERNAL (out-of-fold, stage 3, 05_OOF)
-#       Question: does the model reproduce the DETERMINISTIC DECISIONS?
+#       Question: does the model reproduce the Otsu-guided segmentation DECISIONS?
 #       Reference: stage 2's keep/drop labels - which are rules, not truth.
 #       Use it to detect leakage and overfitting.
 #
@@ -206,7 +206,7 @@ write.csv(val$metrics,
 # -----------------------------------------------------------------------------
 # 6) Consistency between stages 2 and 3
 # -----------------------------------------------------------------------------
-# A different question again: do the deterministic and supervised outputs of
+# A different question again: do the Otsu-guided segmentation and probabilistic refinement outputs of
 # the same run agree with each other? Useful when a run looks odd and you need
 # to know which stage introduced the problem.
 

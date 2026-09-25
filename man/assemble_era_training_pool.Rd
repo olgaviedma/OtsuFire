@@ -33,7 +33,7 @@ A list with \code{pool} (the merged \code{sf} training pool),
 \code{NULL}) and \code{summary} (per-year row counts).
 }
 \description{
-Merges several years of visually-validated supervised pools into one
+Merges several years of visually validated training pools into one
 trainable cross-year pool. Use it when you want to train a single model
 across multiple fire years instead of one model per year.
 

@@ -19,17 +19,24 @@ knitr::opts_chunk$set(
 ```
 
 This vignette describes the four stages of the OtsuFire workflow at the
-API level. Code chunks are shown but **not evaluated**, because the
-deterministic and supervised workflows operate on full-scale annual
-mosaics that are too large to ship with a CRAN package. The toy examples
-in `vignette("OtsuFire", package = "OtsuFire")` cover the API without
-external data.
+API level: the mosaic stage, the **Otsu-guided segmentation** stage, the
+**probabilistic refinement** stage and validation. In the code, the
+Otsu-guided segmentation stage is run with `run_deterministic_pipeline()`
+and writes to `DETERMINISTIC/`; the probabilistic refinement stage, which
+trains a supervised XGBoost model, is run with
+`run_oneyear_supervised_pipeline()` and writes to `SUPERVISED/`.
+
+Code chunks are shown but **not evaluated**, because the Otsu-guided
+segmentation and probabilistic refinement workflows operate on full-scale
+annual mosaics that are too large to ship with a CRAN package. The toy
+examples in `vignette("OtsuFire", package = "OtsuFire")` cover the API
+without external data.
 
 ## 1. Mosaic stage
 
 `change_index_mosaic()` builds an annual change-index raster (for example
 RBR or dNBR) from raster tiles. The output is a single GeoTIFF per year,
-which becomes the `change_index` input of the deterministic and supervised
+which becomes the `change_index` input of the Otsu-guided segmentation and probabilistic refinement
 configurations.
 
 ```{r mosaic, purl = FALSE}
@@ -50,9 +57,9 @@ mosaic_res <- change_index_mosaic(
 mosaic_path <- mosaic_res$mosaic_path
 ```
 
-## 2. Deterministic stage
+## 2. Otsu-guided segmentation stage
 
-The deterministic workflow estimates Otsu thresholds per land-cover and
+The Otsu-guided segmentation workflow estimates Otsu thresholds per land-cover and
 ecoregion unit, grows seed-supported candidate patches, applies rule-based
 filters, and writes a decision layer (`internal_decisions.gpkg`) in which
 every candidate patch is classified as `keep`, `review` or `drop`.
@@ -95,7 +102,7 @@ The detection, refinement and scoring settings are passed through
 land-cover class; see `?build_burned_mapping_config` for the
 vegetation-class table and the meaning of each parameter.
 
-For step-by-step control, the deterministic stage can also be run as two
+For step-by-step control, the Otsu-guided segmentation stage can also be run as two
 separate steps:
 
 ```{r det-modular, purl = FALSE}
@@ -104,10 +111,10 @@ scored  <- score_burned_patches(patches$refined_patches_path, det_cfg)
 # scored$internal_decisions is an sf with class_final, filter_1..3, etc.
 ```
 
-## 3. Supervised one-year stage
+## 3. One-year probabilistic refinement stage
 
-The supervised stage trains an XGBoost model on labels derived from the
-deterministic decisions, runs out-of-fold (OOF) diagnostics, and writes a
+The probabilistic refinement stage trains an XGBoost model on labels derived from the
+Otsu-guided segmentation decisions, runs out-of-fold (OOF) diagnostics, and writes a
 `final_map.gpkg` whose `p_burned` field is the per-patch burned **model
 score**.
 
@@ -142,7 +149,7 @@ confounding surfaces (internal pool names in brackets):
   from the burnable domain with a weak immediate change-index response
   (values at or below the 50th percentile of their distribution within the
   sampling domain) and located outside a 500-m exclusion zone around all
-  deterministic candidate patches (keep, review and drop).
+  Otsu-guided candidate patches (keep, review and drop).
 * **Moderately burned-like** (`otsu`) — candidate patches segmented by Otsu
   as potentially burned but assigned to the drop class by the rule-based
   filters, with `S_PATCH_PA <= 0.15`: the lower end of the burned-like
@@ -181,7 +188,7 @@ data at that number of rounds.
 `p_burned` (and the temporally adjusted `p_burned_current_year`) is a
 model score, not a calibrated probability.
 
-Each supervised stage can also be run on its own:
+Each probabilistic refinement stage can also be run on its own:
 `build_supervised_training_pools()`, `make_spatial_folds()`,
 `extract_supervised_features()`, `run_oof_diagnostics()`,
 `train_final_burned_model()` and `score_supervised_burned_map()`. See
@@ -193,7 +200,7 @@ There are two distinct validations, against two different references.
 
 **Internal validation (OOF).** The out-of-fold diagnostics (`05_OOF`)
 measure how well the model reproduces the labels derived from the
-deterministic decisions, using spatial block folds. Each held-out fold is
+Otsu-guided segmentation decisions, using spatial block folds. Each held-out fold is
 predicted by a model that never saw it: the outer test fold is not used for
 imputation, feature selection, early stopping or fitting. OOF AUC / PR-AUC
 are **not ground truth**: the labels are derived from the deterministic
@@ -293,7 +300,7 @@ metrics. Cached reference products are rebuilt automatically when a
 relevant input or setting changes; use `force_reprocess_ref = TRUE` to
 force a rebuild.
 
-`check_supervised_consistency()` compares the deterministic and supervised
+`check_supervised_consistency()` compares the Otsu-guided segmentation and probabilistic refinement
 outputs of the same run and writes diagnostic GPKG, CSV and TXT files:
 
 ```{r consistency, purl = FALSE}
@@ -310,7 +317,7 @@ and `options$data_base` is supplied in the configuration.
 
 ## Outputs
 
-A supervised one-year run writes, under
+A one-year probabilistic refinement run writes, under
 `<output_dir>/<target_year>/<run_name>/SUPERVISED/<run_label>/`:
 
 * `01_POOLS/...gpkg` — burned and unburned training pools.
@@ -322,5 +329,5 @@ A supervised one-year run writes, under
 * `09_FINAL_MAP/..._final_map.gpkg` — final per-patch `p_burned` map.
 * `11_CONSISTENCY_CHECKS/...` — consistency files, when enabled.
 
-The deterministic stage writes its outputs under the parallel
+The Otsu-guided segmentation stage writes its outputs under the parallel
 `DETERMINISTIC/<run_name>/` tree.

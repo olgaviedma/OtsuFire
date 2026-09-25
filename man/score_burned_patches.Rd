@@ -41,7 +41,7 @@ diagnostics.\tabular{ll}{
    Field \tab Description \cr
    \code{internal_decisions} \tab Main candidate decision layer, containing filter outcomes, support metrics, temporal diagnostics, decision reasons, and \code{class_final}. \cr
    \code{internal_decisions_path} \tab Path to the written candidate decision layer. \cr
-   \code{reference_decisions} \tab Reference-side deterministic decision layer, when available. \cr
+   \code{reference_decisions} \tab Reference-side Otsu-guided segmentation decision layer, when available. \cr
    \code{reference_decisions_path} \tab Path to the written reference-side decision layer, when available. \cr
    \code{keep_pool_summary} \tab Summary of the spectral-support reference used during scoring. \cr
    \code{scoring_diagnostics} \tab Additional diagnostics and scoring metadata. \cr
@@ -53,7 +53,7 @@ The reference-side decision outputs do not constitute external map
 validation.
 }
 \description{
-Evaluate candidate burned patches using the deterministic OtsuFire scoring
+Evaluate candidate burned patches using the Otsu-guided segmentation scoring
 rules and assign each patch a final decision: \code{"keep"}, \code{"review"}, or
 \code{"drop"}.
 
@@ -204,9 +204,9 @@ Legacy objects of the form \code{list(keep_pool = summary)} are also accepted.
 
 Filter outcomes are integrated into the \code{class_final} field.\tabular{ll}{
    Value \tab Interpretation \cr
-   \code{"keep"} \tab High-confidence burned candidate under the deterministic rules. \cr
+   \code{"keep"} \tab High-confidence burned candidate under the rule-based filters. \cr
    \code{"review"} \tab Ambiguous candidate or candidate with incomplete or conflicting support. \cr
-   \code{"drop"} \tab Candidate rejected by the deterministic rules. \cr
+   \code{"drop"} \tab Candidate rejected by the rule-based filters. \cr
 }
 
 

@@ -22,7 +22,7 @@ four composable layers:
 1. A **mosaic** stage that builds an annual change-index raster.
 2. A **deterministic** Otsu / seed-and-grow segmentation workflow.
 3. A **supervised** one-year probabilistic workflow that learns
-   `p_burned` from XGBoost models trained on deterministic decisions.
+   `p_burned` from XGBoost models trained on Otsu-guided segmentation decisions.
 4. A workflow-independent **validation** utility.
 
 This vignette walks through the API surface using synthetic toy data
@@ -44,12 +44,12 @@ The exports cover:
 
 * the mosaic stage: `change_index_mosaic`, `mosaic_from_tiles`,
   `clean_raster_file`;
-* the deterministic stage: `build_burned_mapping_config`,
+* the Otsu-guided segmentation stage: `build_burned_mapping_config`,
   `detect_burned_patches`, `score_burned_patches`,
   `run_deterministic_pipeline`, `apply_chain_cleaning` (alias
   `apply_chain`), `collect_keep_reference_samples`,
   `build_keep_pool_from_samples`;
-* the supervised stage: `build_supervised_burned_config`,
+* the probabilistic refinement stage: `build_supervised_burned_config`,
   `validate_supervised_execution`, `build_supervised_training_pools`,
   `make_spatial_folds`, `extract_supervised_features`,
   `run_oof_diagnostics`, `train_final_burned_model`,
@@ -62,7 +62,7 @@ The exports cover:
 * validation and consistency: `validate_fire_maps`,
   `check_supervised_consistency`.
 
-## A toy supervised configuration
+## A toy probabilistic refinement configuration
 
 The `build_*_config()` builders are pure validators: they normalise
 the inputs into S3 objects without reading rasters or training
@@ -110,7 +110,7 @@ print(cfg_sup)
 
 ## Modular building blocks
 
-The supervised workflow is decomposed into modular helpers that each
+The probabilistic refinement workflow is decomposed into modular helpers that each
 take a config (or relevant subset) and return either an `sf` object
 or a path to an output file. They share the same validator pattern:
 calling them with no arguments returns an informative error rather

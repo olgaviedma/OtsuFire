@@ -30,11 +30,11 @@
   )
 }
 
-#' Build training and scoring pools for supervised burned-area mapping
+#' Build training and scoring pools for probabilistic refinement
 #'
 #' @description
 #' Build the burned, unburned, review, and scoring pools used by the
-#' supervised OtsuFire workflow.
+#' probabilistic refinement workflow.
 #'
 #' The function reads the decision layer for Otsu-guided patches, applies
 #' quality checks to the initial labels, constructs negative examples, and
@@ -211,7 +211,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure the supervised workflow
+#' # Configure the probabilistic refinement workflow
 #' config <- build_supervised_burned_config(
 #'   run_label = "balanced",
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",

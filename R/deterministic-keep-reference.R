@@ -53,10 +53,10 @@
 #'
 #' @description
 #' Collect high-confidence historical \emph{keep}-like polygons from one
-#' or more previously written deterministic decision layers, using a
+#' or more previously written Otsu-guided segmentation decision layers, using a
 #' single fixed selection rule (\code{"strict_hotspot"}).
 #'
-#' In the public deterministic workflow, this helper is meant for
+#' In the public Otsu-guided segmentation workflow, this helper is meant for
 #' building explicit \emph{external} reference pools from trusted years
 #' other than the year currently being scored. The selected samples are
 #' intended to feed
@@ -72,7 +72,7 @@
 #'
 #' \strong{Explicit helper workflow.} Neither this function nor
 #' \code{build_keep_pool_from_samples()} is called automatically by the
-#' deterministic pipeline. They are standalone helpers. If you choose to
+#' Otsu-guided segmentation pipeline. They are standalone helpers. If you choose to
 #' use them, the resulting \code{keep_pool} can then be passed
 #' explicitly to
 #' \code{score_burned_patches(..., keep_pool = ...)} or
@@ -101,7 +101,7 @@
 #' \code{run_name}, then \code{scenario}, otherwise \code{NA_character_}.
 #'
 #' @param decision_paths Character vector of existing paths to
-#'   deterministic decision files. This argument is required; the helper
+#'   Otsu-guided segmentation decision files. This argument is required; the helper
 #'   does not search for files automatically.
 #' @param target_year Optional scalar year. When supplied, polygons with
 #'   \code{year == target_year} are excluded. This is the recommended

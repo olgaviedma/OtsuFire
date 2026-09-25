@@ -205,7 +205,7 @@
 #' Internal ENGINE: run the 10 semantic/spatial checks, return a report.
 #'
 #' @description
-#' The SINGLE implementation of the 10 supervised pre-run checks. It NEVER
+#' The SINGLE implementation of the 10 probabilistic refinement pre-run checks. It NEVER
 #' stop()s on a failing check (the foreign-cache check may still `warning()`
 #' in the non-blocking branch, preserving the Gate 1C.4 behaviour); each check
 #' appends one record to a structured report. Both the public wrapper
@@ -876,10 +876,10 @@
   report
 }
 
-#' Check supervised workflow inputs and settings before execution
+#' Check probabilistic refinement workflow inputs and settings before execution
 #'
 #' @description
-#' Check the configuration and inputs for a supervised OtsuFire run before
+#' Check the configuration and inputs for a probabilistic refinement run before
 #' starting pool generation, feature extraction, or model training.
 #'
 #' The function checks spatial metadata, input compatibility, year
@@ -1047,7 +1047,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure a supervised workflow
+#' # Configure a probabilistic refinement workflow
 #' config <- build_supervised_burned_config(
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
 #'   change_index = "data/RBR_2022.tif",
@@ -1252,7 +1252,7 @@ validate_supervised_execution <- function(config,
 #' Reproducible cfg-run fingerprint (cfg isolation; NO timestamps).
 #'
 #' @description
-#' Deterministic identity of a supervised RUN, derived from the cfg fields that
+#' Deterministic identity of a probabilistic refinement RUN, derived from the cfg fields that
 #' DETERMINE its outputs, with the EXPLICIT guarantee that it folds in NO
 #' timestamp and NO wall-clock / session state. Two equivalent cfgs fingerprinted
 #' at different times produce the IDENTICAL checksum; any consequential cfg field

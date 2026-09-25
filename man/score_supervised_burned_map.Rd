@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-score-map.R
 \name{score_supervised_burned_map}
 \alias{score_supervised_burned_map}
-\title{Score Otsu-guided patches and export supervised burned-area outputs}
+\title{Score Otsu-guided patches and export probabilistic refinement burned-area outputs}
 \usage{
 score_supervised_burned_map(
   scoring_features,

@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-consistency.R
 \name{check_supervised_consistency}
 \alias{check_supervised_consistency}
-\title{Check consistency between Otsu-guided patch decisions and supervised outputs}
+\title{Check consistency between Otsu-guided patch decisions and probabilistic refinement outputs}
 \usage{
 check_supervised_consistency(
   deterministic_decisions,
@@ -19,7 +19,7 @@ containing the \code{internal_decisions} layer for the Otsu-guided patches.
 Supply a file path; in-memory \code{sf} objects are not supported by this
 interface.}
 
-\item{final_map}{Character scalar. Path to the supervised map GeoPackage.
+\item{final_map}{Character scalar. Path to the probabilistic refinement map GeoPackage.
 Must contain both \code{final_map_full} and \code{final_map} layers.}
 
 \item{out_dir}{Character scalar or \code{NULL}. Output directory for
@@ -46,7 +46,7 @@ the one-row summary of the check (\code{NULL} if the check could not run).
 }
 \description{
 Run the consistency check between the decision layer for Otsu-guided
-patches and the supervised map outputs from the same run.
+patches and the probabilistic refinement map outputs from the same run.
 
 Use this function after \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}. The same check is
 invoked by \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} when
@@ -57,7 +57,7 @@ external reference fire perimeters, use \code{\link[=validate_fire_maps]{validat
 }
 \section{Required input layers}{
 
-Supply the decision and supervised output files corresponding to the same
+Supply the decision and probabilistic refinement output files corresponding to the same
 target year and scenario.\tabular{ll}{
    Input \tab Required layers \cr
    \code{deterministic_decisions} \tab \code{internal_decisions} \cr
@@ -69,12 +69,12 @@ The argument name \code{deterministic_decisions} is retained for API
 compatibility. It refers to the decision layer for Otsu-guided patches.
 
 A GeoPackage containing only thresholded burned polygons is not a
-substitute for the supervised map file required here.
+substitute for the probabilistic refinement map file required here.
 }
 
 \section{Complete and public map layers}{
 
-The two supervised layers have different purposes:
+The two probabilistic refinement layers have different purposes:
 \itemize{
 \item \code{final_map_full} contains the complete scored candidate set.
 \item \code{final_map} contains the public output after temporal exclusions and
@@ -84,7 +84,7 @@ public-column selection.
 These layers can legitimately have different row counts. A difference in
 counts alone does not establish an inconsistency.
 
-Likewise, agreement between the initial patch decisions and supervised
+Likewise, agreement between the initial patch decisions and probabilistic refinement
 results is not a measure of accuracy against independent observations.
 }
 
@@ -100,7 +100,7 @@ explicitly.
 
 \examples{
 \dontrun{
-# Check outputs using the configuration from the supervised run
+# Check outputs using the configuration from the probabilistic refinement run
 check_supervised_consistency(
   deterministic_decisions = "data/internal_decisions_2022.gpkg",
   final_map = "results/supervised_final_map_2022.gpkg",

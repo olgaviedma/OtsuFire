@@ -1,8 +1,8 @@
-#' Check consistency between Otsu-guided patch decisions and supervised outputs
+#' Check consistency between Otsu-guided patch decisions and probabilistic refinement outputs
 #'
 #' @description
 #' Run the consistency check between the decision layer for Otsu-guided
-#' patches and the supervised map outputs from the same run.
+#' patches and the probabilistic refinement map outputs from the same run.
 #'
 #' Use this function after [score_supervised_burned_map()]. The same check is
 #' invoked by [run_oneyear_supervised_pipeline()] when
@@ -15,7 +15,7 @@
 #'   containing the `internal_decisions` layer for the Otsu-guided patches.
 #'   Supply a file path; in-memory `sf` objects are not supported by this
 #'   interface.
-#' @param final_map Character scalar. Path to the supervised map GeoPackage.
+#' @param final_map Character scalar. Path to the probabilistic refinement map GeoPackage.
 #'   Must contain both `final_map_full` and `final_map` layers.
 #' @param out_dir Character scalar or `NULL`. Output directory for
 #'   consistency-check products. When `NULL`, uses
@@ -30,7 +30,7 @@
 #'   `config = NULL`. Ignored when `config` is supplied.
 #'
 #' @section Required input layers:
-#' Supply the decision and supervised output files corresponding to the same
+#' Supply the decision and probabilistic refinement output files corresponding to the same
 #' target year and scenario.
 #'
 #' | Input | Required layers |
@@ -42,10 +42,10 @@
 #' compatibility. It refers to the decision layer for Otsu-guided patches.
 #'
 #' A GeoPackage containing only thresholded burned polygons is not a
-#' substitute for the supervised map file required here.
+#' substitute for the probabilistic refinement map file required here.
 #'
 #' @section Complete and public map layers:
-#' The two supervised layers have different purposes:
+#' The two probabilistic refinement layers have different purposes:
 #' * `final_map_full` contains the complete scored candidate set.
 #' * `final_map` contains the public output after temporal exclusions and
 #'   public-column selection.
@@ -53,7 +53,7 @@
 #' These layers can legitimately have different row counts. A difference in
 #' counts alone does not establish an inconsistency.
 #'
-#' Likewise, agreement between the initial patch decisions and supervised
+#' Likewise, agreement between the initial patch decisions and probabilistic refinement
 #' results is not a measure of accuracy against independent observations.
 #'
 #' @section Run identifiers and output location:
@@ -76,7 +76,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Check outputs using the configuration from the supervised run
+#' # Check outputs using the configuration from the probabilistic refinement run
 #' check_supervised_consistency(
 #'   deterministic_decisions = "data/internal_decisions_2022.gpkg",
 #'   final_map = "results/supervised_final_map_2022.gpkg",

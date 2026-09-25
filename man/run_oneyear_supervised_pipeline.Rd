@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-run.R
 \name{run_oneyear_supervised_pipeline}
 \alias{run_oneyear_supervised_pipeline}
-\title{Run the supervised burned-area mapping workflow for one year}
+\title{Run the probabilistic refinement workflow for one year}
 \usage{
 run_oneyear_supervised_pipeline(
   config,
@@ -34,7 +34,7 @@ sampling settings, feature controls, model parameters, and output
 locations.}
 
 \item{run_consistency}{Logical scalar. Whether to compare the
-classifications of Otsu-guided patches with the supervised results.
+classifications of Otsu-guided patches with the probabilistic refinement results.
 Default: \code{TRUE}. These checks do not replace external map validation.}
 
 \item{overwrite}{Logical scalar. Whether existing stage outputs may be
@@ -130,7 +130,7 @@ The \code{final_map_gpkg} output is a scored layer. A score threshold is needed
 to derive a binary burned-area map.
 }
 \description{
-Run the supervised OtsuFire workflow for one target year using a
+Run the probabilistic refinement workflow for one target year using a
 configuration created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
 
 The function builds training pools from classified Otsu-guided patches and
@@ -139,7 +139,7 @@ out-of-fold diagnostics, trains the final model, and scores candidate
 polygons.
 
 Optional consistency checks compare the classifications of Otsu-guided
-patches with the supervised results.
+patches with the probabilistic refinement results.
 
 The function returns output paths, configuration information, and run
 summaries. External map validation is performed separately with
@@ -173,7 +173,7 @@ The function runs the following stages:\tabular{ll}{
    Out-of-fold diagnostics \tab Evaluate predictions for spatially held-out labelled observations. \cr
    Final model training \tab Select the number of boosting rounds and fit the final model. \cr
    Scoring \tab Apply the final model to candidate polygons. \cr
-   Consistency checks \tab Optionally compare supervised results with the original classifications of Otsu-guided patches. \cr
+   Consistency checks \tab Optionally compare probabilistic refinement results with the original classifications of Otsu-guided patches. \cr
 }
 
 
@@ -310,7 +310,7 @@ feature tables, model training, and other workflow objects.
 
 \examples{
 \dontrun{
-# Configure a supervised run from classified Otsu-guided patches
+# Configure a probabilistic refinement run from classified Otsu-guided patches
 config <- build_supervised_burned_config(
   internal_decisions = "data/internal_decisions_2022.gpkg",
   change_index = "data/RBR_2022.tif",

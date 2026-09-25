@@ -6,7 +6,7 @@
 #'
 #' Each held-out fold is scored by a model fitted without that fold. The
 #' function returns out-of-fold predictions, diagnostic metrics, threshold
-#' summaries, and the design-matrix bundle used by the supervised workflow.
+#' summaries, and the design-matrix bundle used by the probabilistic refinement workflow.
 #'
 #' Run this stage after [extract_supervised_features()] and before
 #' [train_final_burned_model()].
@@ -255,7 +255,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Configure the supervised workflow
+#' # Configure the probabilistic refinement workflow
 #' config <- build_supervised_burned_config(
 #'   internal_decisions = "data/internal_decisions_2022.gpkg",
 #'   change_index = "data/RBR_2022.tif",

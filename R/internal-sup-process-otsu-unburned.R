@@ -7,9 +7,9 @@
 #' - CORINE land cover classes (`corine_raster_path`)
 #'
 #' Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / CORINE × ecoregion
-#' stratification was removed (it was never wired into any supervised run; the
+#' stratification was removed (it was never wired into any probabilistic refinement run; the
 #' canonical supervised negative-pool Otsu mode is `burnable_only`). The
-#' CORINE × ecoregion stratified Otsu lives in the DETERMINISTIC delineation
+#' CORINE × ecoregion stratified Otsu lives in the Otsu-guided segmentation
 #' stage (`process_otsu_rasters_grow()`), which is unaffected.
 #'
 #' ## Key features:

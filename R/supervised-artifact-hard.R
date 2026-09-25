@@ -31,7 +31,7 @@
 #' @param train_features sf / data.frame. The extracted supervised training
 #'   features (the \code{train_features} layer). Must carry \code{class} and the
 #'   model feature columns.
-#' @param scoring_features sf / data.frame. The deterministic scoring set (the
+#' @param scoring_features sf / data.frame. The Otsu-guided scoring set (the
 #'   \code{scoring_features} layer). Used as the source of artifact_hard
 #'   candidates. Returned unchanged.
 #' @param config An \code{otsufire_supervised_burned_config} (or any list
@@ -49,7 +49,7 @@
 #'       unchanged.
 #'     \item \code{artifact_hard} -- the promoted rows (0-row frame when none /
 #'       disabled).
-#'     \item \code{artifact_uncertain} -- the non-promoted deterministic drops
+#'     \item \code{artifact_uncertain} -- the non-promoted Otsu-guided drop patches
 #'       (audit only; never trained).
 #'     \item \code{audit} -- the per-clause selection audit (or an empty frame
 #'       when disabled).

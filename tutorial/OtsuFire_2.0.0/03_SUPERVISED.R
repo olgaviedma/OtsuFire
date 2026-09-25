@@ -3,7 +3,7 @@
 # =============================================================================
 #
 # GOAL
-#   Learn from the deterministic decisions, then score every candidate patch
+#   Learn from the Otsu-guided segmentation decisions, then score every candidate patch
 #   with a burned probability-like value, p_burned.
 #
 # WHY DO THIS AT ALL, IF STAGE 2 ALREADY DECIDED
@@ -37,7 +37,7 @@ source("00_SETUP.R")
 
 
 # -----------------------------------------------------------------------------
-# 1) Point at the deterministic output
+# 1) Point at the Otsu-guided output
 # -----------------------------------------------------------------------------
 # Either reuse the object from stage 2:
 #   INTERNAL_DECISIONS <- det$result_paths$internal_decisions
@@ -137,7 +137,7 @@ sup_cfg <- build_supervised_burned_config(
 
 
 # -----------------------------------------------------------------------------
-# 4) Run the whole supervised stage
+# 4) Run the whole probabilistic refinement stage
 # -----------------------------------------------------------------------------
 # This is the long one: pools, spatial folds, feature extraction, out-of-fold
 # diagnostics, final model, scoring. Budget an hour or more for a full year.

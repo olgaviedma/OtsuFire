@@ -11,7 +11,8 @@
 #'   study area used to crop and mask the mosaic.
 #' @param raster_pattern Character scalar. Filename pattern used to select
 #'   raster tiles within `folder_path`. Default:
-#'   `"IBERIAN_MinMin_all_year_*.tif"`.
+#'   `"*.tif"` (all GeoTIFF files in the folder); set a narrower pattern if
+#'   the folder contains other rasters.
 #' @param nodata_value Numeric scalar. Value used to identify missing data when
 #'   reading the tiles and to encode missing data in the output. Default:
 #'   `-9999`.
@@ -138,7 +139,7 @@
 mosaic_from_tiles <- function(
     folder_path,
     mask_path,
-    raster_pattern = "IBERIAN_MinMin_all_year_*.tif",
+    raster_pattern = "*.tif",
     nodata_value = -9999,
     tol = 1e-7,
     cap_below = TRUE,

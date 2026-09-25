@@ -16,7 +16,8 @@
 #'   If `NULL`, the function tries to infer it from `folder_path` or from the
 #'   first tile name.
 #' @param raster_pattern Character. Pattern used to list candidate tiles inside
-#'   `folder_path`.
+#'   `folder_path`. Default: `"*.tif"` (all GeoTIFF files in the folder); set a
+#'   narrower pattern if the folder contains other rasters.
 #' @param output_dir Character. Directory where the final mosaic will be written.
 #'   Defaults to `folder_path`.
 #' @param mosaic_name Optional character scalar. Stable output name to use for
@@ -50,7 +51,7 @@ change_index_mosaic <- function(
     folder_path,
     mask,
     year = NULL,
-    raster_pattern = "IBERIAN_MinMin_all_year_*.tif",
+    raster_pattern = "*.tif",
     output_dir = folder_path,
     mosaic_name = NULL,
     nodata_value = -9999,

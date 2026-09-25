@@ -8,7 +8,7 @@ change_index_mosaic(
   folder_path,
   mask,
   year = NULL,
-  raster_pattern = "IBERIAN_MinMin_all_year_*.tif",
+  raster_pattern = "*.tif",
   output_dir = folder_path,
   mosaic_name = NULL,
   nodata_value = -9999,
@@ -31,7 +31,8 @@ If \code{NULL}, the function tries to infer it from \code{folder_path} or from t
 first tile name.}
 
 \item{raster_pattern}{Character. Pattern used to list candidate tiles inside
-\code{folder_path}.}
+\code{folder_path}. Default: \code{"*.tif"} (all GeoTIFF files in the folder); set a
+narrower pattern if the folder contains other rasters.}
 
 \item{output_dir}{Character. Directory where the final mosaic will be written.
 Defaults to \code{folder_path}.}

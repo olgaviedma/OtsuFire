@@ -84,7 +84,7 @@ VEGETATION_MAP <- file.path(
 # in the probabilistic refinement stage, bounds where negatives may be drawn from.
 BURNABLE_MASK <- file.path(
   DATA_BASE, "Corine_Masks",
-  sprintf("burnable_mask_binary_corine_%d_ETRS89.tif", CORINE_YEAR)
+  sprintf("burneable_mask_binary_corine_%d_ETRS89.tif", CORINE_YEAR)
 )
 
 # Study area ------------------------------------------------------------------

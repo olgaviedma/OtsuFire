@@ -28,8 +28,7 @@ source("00_SETUP.R")
 # -----------------------------------------------------------------------------
 # 1) The three parameter blocks
 # -----------------------------------------------------------------------------
-# In 2.0.0 there are no closed scenario presets any more. You pass the
-# ecological controls explicitly, in three blocks.
+# You pass the ecological controls explicitly, in three blocks.
 
 # --- detect_params: where a patch starts and how far it grows ----------------
 #

@@ -76,7 +76,7 @@ supported public mode; for same-year scoring, use the native local
 fallback (\code{keep_pool = NULL}).
 }
 \details{
-\strong{Current helper design.} The caller supplies exact raster paths
+\strong{Inputs.} The caller supplies exact raster paths
 in \code{change_index_paths}, which must be a \emph{named} list or
 vector keyed by year (for example
 \code{list(`2010` = "...", `2011` = "...")}). There is no

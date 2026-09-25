@@ -123,8 +123,8 @@
 #' @examples
 #' \dontrun{
 #' era <- assemble_era_training_pool(list(
-#'   list(year = 1985, base_dir = ".../1985/SUPERVISED/1985_balanced_keepPool"),
-#'   list(year = 1988, base_dir = ".../1988/SUPERVISED/1988_balanced_keepPool")))
+#'   list(year = 2020, base_dir = "results/2020/SUPERVISED/balanced"),
+#'   list(year = 2021, base_dir = "results/2021/SUPERVISED/balanced")))
 #' nrow(era$pool); nrow(era$omissions)
 #' }
 #' @export

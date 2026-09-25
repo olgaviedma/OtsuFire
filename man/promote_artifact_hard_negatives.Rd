@@ -46,21 +46,24 @@ when disabled).
 }
 }
 \description{
-Mines "artifact_hard" negatives from the deterministic-drop set and adds them
-to the supervised training features, so the model learns from confusing
-near-misses. The promoted rows are added to \code{train_features}; they also stay
-in the scoring set, so \code{scoring_features} is returned unchanged.
+Selects the strongly burned-like negatives (\code{artifact_hard}): drop patches
+with a strong burned-like response that are likely artefacts rather than
+fires, and adds them to the supervised training features as unburned
+examples. Training on these difficult cases helps the model avoid
+commission errors. The promoted rows are added to \code{train_features}; they
+also stay in the scoring set, so \code{scoring_features} is returned unchanged.
 
-Run it AFTER feature extraction and the spatial folds, and BEFORE the OOF /
-final-model stages. It selects candidates from \code{scoring_features} (which only
-exists post-extraction), so it cannot run before \code{\link[=make_spatial_folds]{make_spatial_folds()}}.
+Run it after feature extraction and the spatial folds, and before the OOF
+and final-model stages. It selects candidates from \code{scoring_features},
+which only exists after feature extraction, so it cannot run before
+\code{\link[=make_spatial_folds]{make_spatial_folds()}}.
 Promoted rows receive synthetic per-repeat folds plus a unique
 \code{block_id}/\code{fire_uid} (assigned by \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} after promotion);
 \code{\link[=make_spatial_folds]{make_spatial_folds()}} is not re-run. This way the promoted rows still appear
 in the out-of-fold predictions and are trained on by the final model.
 
-This step is additive and off by default. When the \code{artifact_hard} option is
-disabled, the function is a strict no-op: it returns \code{train_features}
+This step is optional and off by default. When the \code{artifact_hard} option is
+disabled, the function does nothing: it returns \code{train_features}
 unchanged (same rows, columns and order) and an empty audit, so the training
 population, folds, predictions, model and scoring are all unaffected.
 }

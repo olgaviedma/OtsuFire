@@ -36,7 +36,7 @@ A list with class \code{"otsufire_visual_validation"}:
 \item{\code{pool}}{the full input with three added traceability columns:
 \code{visual_value} (parsed integer), \code{visual_action} (factor),
 \code{used_for_training} (logical).}
-\item{\code{training}}{the CLEAN subset where \code{used_for_training} is
+\item{\code{training}}{the clean subset where \code{used_for_training} is
 \code{TRUE} (ready for training; geometry preserved when the input was
 \code{sf}).}
 \item{\code{omissions}}{candidate rows rejected as real fires
@@ -62,26 +62,26 @@ candidate (column \code{eligible_col}, default
 \code{artifact_hard_eligible == TRUE}) or an ordinary positive/background row:
 \itemize{
 \item \code{VISUAL = NA} (blank, unreviewed): positives & background are
-KEPT as training rows; artifact_hard candidates are NOT promoted (a
+kept as training rows; artifact_hard candidates are not promoted (a
 candidate enters only when explicitly confirmed).
 \item \code{VISUAL = 0} (visually rejected): a positive/background row is
-DROPPED from training; an \code{artifact_hard} candidate is read as a
-REAL FIRE among the drops, so it is excluded from training and routed to
+dropped from training; an \code{artifact_hard} candidate is read as a
+real fire among the drops, so it is excluded from training and routed to
 \code{$omissions} (\code{visual_action == "omitted_real_fire"}).
 \item \code{VISUAL = 1} (visually confirmed): an \code{artifact_hard}
-candidate is PROMOTED to a hard-negative and enters training; a
+candidate is promoted to a hard negative and enters training; a
 positive/background row is confirmed (kept).
 }
 In short, for artifact_hard candidates \code{VISUAL = 1} means
 "confirmed false positive -> usable as a hard negative", while
-\code{VISUAL = 0} means "actually a real fire -> must NOT be a negative".
+\code{VISUAL = 0} means "actually a real fire -> must not be a negative".
 Values outside \{NA, 0, 1\} are handled per \code{on_invalid}.
 }
 \examples{
 \dontrun{
-# Use a visually-validated pool as a FIXED training input (no rebuild):
+# Use a visually validated pool as a fixed training input (no rebuild):
 vv <- apply_visual_validation(
-  "1985/.../supervised_training_pool.gpkg")
+  "results/2020/SUPERVISED/balanced/01_POOLS/supervised_training_pool.gpkg")
 nrow(vv$training)          # clean pool ready for training
 vv$summary                 # audit: how many kept / dropped / promoted / omitted
 table(vv$pool$used_for_training)

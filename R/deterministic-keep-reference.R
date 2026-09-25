@@ -79,7 +79,7 @@
 #' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 #'
 #' @details
-#' \strong{Current helper design.} The caller supplies the exact decision
+#' \strong{Inputs.} The caller supplies the exact decision
 #' layer paths in \code{decision_paths}. There is no autodiscovery, and
 #' the selection rule described below is fixed in the public helper.
 #'
@@ -416,7 +416,7 @@ collect_keep_reference_samples <- function(decision_paths,
 #' fallback (\code{keep_pool = NULL}).
 #'
 #' @details
-#' \strong{Current helper design.} The caller supplies exact raster paths
+#' \strong{Inputs.} The caller supplies exact raster paths
 #' in \code{change_index_paths}, which must be a \emph{named} list or
 #' vector keyed by year (for example
 #' \code{list(`2010` = "...", `2011` = "...")}). There is no

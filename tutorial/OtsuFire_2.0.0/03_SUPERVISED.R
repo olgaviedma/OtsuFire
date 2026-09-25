@@ -23,8 +23,8 @@
 #       moderately burned-like (otsu) - drop patches with S_PATCH_PA <= 0.15
 #       strongly burned-like          - drop patches with a stronger
 #         (artifact_hard)               burned-like response; off by default,
-#                                       visually validated with
-#                                       apply_visual_validation() in the paper
+#                                       optionally filtered by visual
+#                                       validation (apply_visual_validation())
 #     The first two are capped relative to the burned pool; strongly
 #     burned-like patches are all kept and balanced by weight. Review patches
 #     are withheld from training and scored afterwards. A row that is neither

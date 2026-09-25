@@ -106,7 +106,7 @@ explicitly to
 \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 }
 \details{
-\strong{Current helper design.} The caller supplies the exact decision
+\strong{Inputs.} The caller supplies the exact decision
 layer paths in \code{decision_paths}. There is no autodiscovery, and
 the selection rule described below is fixed in the public helper.
 

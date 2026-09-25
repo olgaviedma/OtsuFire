@@ -40,18 +40,27 @@ length(public_api)
 public_api
 ```
 
-The exports cover the mosaic stage (`change_index_mosaic`,
-`mosaic_from_tiles`, `clean_raster_file`), the deterministic stage
-(`build_burned_mapping_config`, `detect_burned_patches`,
-`score_burned_patches`, `run_deterministic_pipeline`,
-`collect_keep_reference_samples`, `build_keep_pool_from_samples`), the
-supervised stage (`build_supervised_burned_config`,
-`build_supervised_training_pools`, `make_spatial_folds`,
-`extract_supervised_features`, `run_oof_diagnostics`,
-`train_final_burned_model`, `score_supervised_burned_map`,
-`check_supervised_consistency`, `validate_supervised_execution`,
-`run_oneyear_supervised_pipeline`), and the shared validation utility
-(`validate_fire_maps`).
+The exports cover:
+
+* the mosaic stage: `change_index_mosaic`, `mosaic_from_tiles`,
+  `clean_raster_file`;
+* the deterministic stage: `build_burned_mapping_config`,
+  `detect_burned_patches`, `score_burned_patches`,
+  `run_deterministic_pipeline`, `apply_chain_cleaning` (alias
+  `apply_chain`), `collect_keep_reference_samples`,
+  `build_keep_pool_from_samples`;
+* the supervised stage: `build_supervised_burned_config`,
+  `validate_supervised_execution`, `build_supervised_training_pools`,
+  `make_spatial_folds`, `extract_supervised_features`,
+  `run_oof_diagnostics`, `train_final_burned_model`,
+  `score_supervised_burned_map`, `write_thresholded_burned`,
+  `run_oneyear_supervised_pipeline`;
+* training-pool curation: `diagnose_training_pools`,
+  `export_visual_validation_pools`, `apply_visual_validation`,
+  `promote_artifact_hard_negatives`, `subsample_random_background`,
+  `add_pool_shape_features`, `assemble_era_training_pool`;
+* validation and consistency: `validate_fire_maps`,
+  `check_supervised_consistency`.
 
 ## A toy supervised configuration
 
@@ -123,12 +132,10 @@ triggering any heavy computation.
 ## Where to go next
 
 * `vignette("workflow-overview", package = "OtsuFire")` — explains
-  how the four layers compose into a full one-year run, including the
-  internal (OOF) vs external (`validate_fire_maps()`) validation
-  distinction, the shared feature recipe / `_isNA` indicators, and the
-  scientific defaults.
-* The function reference (run `?OtsuFire::run_oneyear_supervised_pipeline`)
-  documents every exported function with parameter-level detail.
-* `NEWS.md` records the design decisions, the corrected OOF/FINAL
-  `_isNA` defect, and the validated baselines behind the current
-  defaults.
+  how the four stages combine into a full one-year run, the training
+  pools, and the difference between the internal (OOF) and external
+  (`validate_fire_maps()`) validations.
+* The function reference (for example
+  `?OtsuFire::run_oneyear_supervised_pipeline`) documents every exported
+  function with parameter-level detail.
+* `NEWS.md` summarises what changed in each release.

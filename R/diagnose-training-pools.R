@@ -973,7 +973,7 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
 #'   \item{C. Z-score fingerprint}{global-scaled median z per group x feature
 #'     (+ feature family grouping), optional heatmap.}
 #'   \item{D. PCA (diagnostic only)}{scaled features with \strong{median
-#'     imputation} of missing values (documented choice); returns scores,
+#'     imputation} of missing values; returns scores,
 #'     loadings, explained variance, top PC1/PC2 loadings, and centroid distances
 #'     between groups in PC1-PC2 and in the full scaled space. Never feeds the
 #'     final model.}

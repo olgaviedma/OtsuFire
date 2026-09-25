@@ -81,14 +81,14 @@ NOT use it as a negative; it goes to the omissions set.
 \dontrun{
 # 1) Export for review:
 ex <- export_visual_validation_pools(
-  "1985/.../supervised_training_pool.gpkg",
-  out_path = "C:/of_tmp/1985_pool_visual.gpkg", overwrite = TRUE)
+  "results/2020/SUPERVISED/balanced/01_POOLS/supervised_training_pool.gpkg",
+  out_path = "results/pool_visual_review.gpkg", overwrite = TRUE)
 ex$summary$by_bucket
 
 # 2) ...edit VISUAL in QGIS on the all_tagged layer...
 
 # 3) Re-feed the edited pool:
-edited <- sf::st_read("C:/of_tmp/1985_pool_visual.gpkg", layer = "all_tagged")
+edited <- sf::st_read("results/pool_visual_review.gpkg", layer = "all_tagged")
 vv <- apply_visual_validation(edited)
 vv$summary
 }

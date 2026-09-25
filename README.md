@@ -51,8 +51,10 @@ install.packages("OtsuFire")
 - **Python** (>= 3.8) with GDAL bindings — required only by the supervised
   workflow's negative-pool construction, which shells out to
   `gdal_polygonize.py` and `ogr2ogr`.
-- **WhiteboxTools** — optional, only used when `grow_engine = "whitebox"` in the
-  deterministic stage.
+- **WhiteboxTools**, through the R package `whitebox` — required by the
+  deterministic stage, which uses it to label seed-supported candidate
+  components. Its location can be given with `options$whitebox_exe` in
+  `build_burned_mapping_config()`.
 
 Install GDAL into a Python environment with conda and point OtsuFire at the
 executables:
@@ -69,32 +71,36 @@ gdal_polygonize_script <- "C:/ProgramData/anaconda3/Scripts/gdal_polygonize.py"
 ### 1. Mosaic stage
 
 `change_index_mosaic()` builds an annual change-index raster (RBR or dNBR) from
-per-tile inputs — one GeoTIFF per year, which becomes the `change_index`
-argument to both downstream configs.
+raster tiles — one GeoTIFF per year, which becomes the `change_index` input of
+both downstream configurations.
 
 ```r
 library(OtsuFire)
 
-mosaic_path <- change_index_mosaic(
-  input_dir   = "/path/to/yearly/tiles",
-  output_dir  = "/path/to/Composites_90m/Min_Min",
-  target_year = 2020L,
-  index_type  = "RBR"
+mosaic <- change_index_mosaic(
+  folder_path    = "/path/to/yearly/tiles",
+  mask           = "/path/to/study_area.gpkg",
+  year           = 2020L,
+  raster_pattern = "RBR_2020_*.tif",
+  output_dir     = "/path/to/mosaics"
 )
+mosaic_path <- mosaic$mosaic_path
 ```
 
 ### 2. Deterministic stage
 
-Otsu segmentation per CORINE × ecoregion unit, growth of seed-supported
-components, multi-stage filtering, and an `internal_decisions.gpkg` output.
+Otsu thresholding per land-cover and ecoregion unit, growth of seed-supported
+candidate patches, rule-based filtering, and a decision layer
+(`internal_decisions.gpkg`) that classifies each patch as `keep`, `review` or
+`drop`.
 
 ```r
 det_cfg <- build_burned_mapping_config(
   change_index   = mosaic_path,
-  vegetation_map = "/path/to/Corine_Masks/CLC_2018_peninsula.tif",
-  burnable_mask  = "/path/to/Corine_Masks/burnable_mask_binary.tif",
+  vegetation_map = "/path/to/vegetation_classes.tif",
+  burnable_mask  = "/path/to/burnable_mask.tif",
   target_year    = 2020L,
-  output_dir     = "/path/to/Results",
+  output_dir     = "/path/to/results",
   run_name       = "rbr_2020_custom",
   detect_params = list(
     seed_threshold           = 310,
@@ -107,11 +113,11 @@ det_cfg <- build_burned_mapping_config(
 )
 
 det_run <- run_deterministic_pipeline(det_cfg)
-det_run$internal_decisions_gpkg
+det_run$result_paths$internal_decisions
 ```
 
-There are no closed scenario presets: ecological controls are passed explicitly
-through `detect_params`, `refine_params` and `scoring_params`. Use the
+Detection, refinement and scoring settings are passed through
+`detect_params`, `refine_params` and `scoring_params`. Use the
 `*_by_vegetation` keys when seed or growth behaviour must differ by land-cover
 class — see `?build_burned_mapping_config`.
 
@@ -120,22 +126,21 @@ For step-by-step access the stage decomposes into `detect_burned_patches()` and
 
 ### 3. Supervised one-year stage
 
-Trains a gradient-boosted model on the deterministic decisions plus a
-burnable-only unburned negative pool, runs out-of-fold diagnostics, and emits a
-`final_map.gpkg` whose `p_burned` field is the per-patch burned model score.
+Trains a gradient-boosted model on labels derived from the deterministic
+decisions, runs out-of-fold diagnostics, and writes a `final_map.gpkg` whose
+`p_burned` field is the per-patch burned model score.
 
 ```r
 sup_cfg <- build_supervised_burned_config(
   run_label          = "balanced",
-  internal_decisions = det_run$internal_decisions_gpkg,
+  internal_decisions = det_run$result_paths$internal_decisions,
   change_index       = mosaic_path,
-  hotspots           = "/path/to/Hotspots/hotspots_iberia_2020.geojson",
+  hotspots           = "/path/to/hotspots_2020.gpkg",
   target_year        = 2020L,
-  output_dir         = "/path/to/Results",
+  output_dir         = "/path/to/results",
   options = list(
-    data_base      = "/path/to/Data",
-    composite_base = "/path/to/Imagery/Composites_90m",
-    result_name    = "Min_Min"
+    data_base      = "/path/to/data",
+    composite_base = "/path/to/composites"
   )
 )
 
@@ -149,14 +154,12 @@ Two points that matter methodologically:
   response, outside a 500-m exclusion zone around all candidate patches), a
   *moderately burned-like* pool (drop patches with `S_PATCH_PA <= 0.15`) and an
   optional *strongly burned-like* pool (drop patches with a stronger
-  burned-like response; off by default, visually validated with
-  `apply_visual_validation()` in the paper configuration). The first two are
-  capped relative to the burned count; all eligible strongly burned-like
-  patches are kept and balanced by weight. Review patches are withheld from
-  training and scored afterwards. Training eligibility is defined by
-  *explicit class, never by negation*:
-  review/keep/`NA`/unknown rows can never silently become negatives, and an
-  unresolvable row is a hard error.
+  burned-like response; off by default, and optionally filtered by visual
+  validation with `apply_visual_validation()`). The first two are capped
+  relative to the burned count; all eligible strongly burned-like patches are
+  kept and balanced by weight. Review patches are withheld from training and
+  scored afterwards. Training uses explicit labels only: review, keep, `NA` or
+  unknown rows never become negatives.
 - **`p_burned` is a model score, not a calibrated probability.** Do not treat it
   as one without an explicit calibration step.
 
@@ -185,12 +188,12 @@ sf::st_write(burned, "/path/to/thresholded_burned.gpkg", quiet = TRUE)
 
 val <- validate_fire_maps(
   input_shapefile = "/path/to/thresholded_burned.gpkg",
-  ref_shapefile   = "/path/to/Validation_fires_burneable_verano_FINAL/Effis_CA_2020_maskKeep_summer.gpkg",
-  mask_shapefile  = "/path/to/Mask_StudyArea_FINAL/mask_3035_2020_final.shp",
-  burnable_raster = "/path/to/burnable_mask_binary.tif",
+  ref_shapefile   = "/path/to/reference_fires_2020.gpkg",
+  mask_shapefile  = "/path/to/validation_mask_2020.gpkg",
+  burnable_raster = "/path/to/burnable_mask.tif",
   year_target     = 2020L,
-  validation_dir  = "/path/to/VALIDATION",
-  observability_raster = "/path/to/MinMin_2020_mosaic_res90m.tif",  # "doy" band
+  validation_dir  = "/path/to/validation",
+  observability_raster = "/path/to/observation_doy_2020.tif",
   observability_mode   = "wholefire_fraction",
   ref_obs_doy_col      = "obs_required_doy"
 )

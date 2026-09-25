@@ -36,10 +36,10 @@ Imports:
     utils,
     tools,
     graphics,
-    grDevices
+    grDevices,
+    whitebox
 Suggests:
     OtsuSeg,
-    whitebox,
     gdalUtilities,
     lwgeom,
     Matrix,
@@ -55,11 +55,11 @@ Suggests:
     withr,
     knitr,
     rmarkdown
-SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,
-    only used when grow_engine = "whitebox" in the deterministic stage);
-    Python (>= 3.8) with GDAL bindings (optional, only required by the
-    supervised one-year workflow's negative-pool construction, which shells
-    out to gdal_polygonize.py and ogr2ogr).
+SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools, used by the
+    Otsu-guided segmentation stage (install it once with
+    whitebox::install_whitebox()); Python (>= 3.8) with GDAL bindings,
+    required by the training-pool construction of the probabilistic
+    refinement stage, which calls gdal_polygonize.py and ogr2ogr.
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)

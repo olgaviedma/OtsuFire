@@ -56,13 +56,14 @@ install.packages("OtsuFire")
 ## System requirements
 
 - **GDAL** (>= 3.0) and **PROJ** (>= 6.0).
-- **Python** (>= 3.8) with GDAL bindings — required only by the supervised
-  workflow's negative-pool construction, which shells out to
+- **Python** (>= 3.8) with GDAL bindings — required by the training-pool
+  construction of the probabilistic refinement stage, which calls
   `gdal_polygonize.py` and `ogr2ogr`.
-- **WhiteboxTools**, through the R package `whitebox` — required by the
-  Otsu-guided segmentation stage, which uses it to label seed-supported candidate
-  components. Its location can be given with `options$whitebox_exe` in
-  `build_burned_mapping_config()`.
+- **WhiteboxTools**, through the R package `whitebox` (installed with
+  OtsuFire) — required by the Otsu-guided segmentation stage, which uses it to
+  label seed-supported candidate components. Install the WhiteboxTools binary
+  once with `whitebox::install_whitebox()`; its location can also be given with
+  `options$whitebox_exe` in `build_burned_mapping_config()`.
 
 Install GDAL into a Python environment with conda and point OtsuFire at the
 executables:

@@ -1,6 +1,22 @@
 #' OtsuFire: a self-labelling framework for wall-to-wall burned-area mapping across sensors and decades
 #'
 #' @description
+#' \subsection{Package, workflow book and data}{
+#' The OtsuFire package and its source code are available on
+#' [GitHub](https://github.com/olgaviedma/OtsuFire).
+#'
+#' For step-by-step guidance on implementing and using OtsuFire, see the
+#' [OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
+#' The companion repository also includes the Google Earth Engine scripts
+#' used for image selection, masking and compositing.
+#'
+#' Burned-area maps for the full time series are available on
+#' [Zenodo](https://doi.org/10.5281/zenodo.22893763).
+#'
+#' Tables S13–S15 of the accompanying manuscript's supplementary material
+#' describe the functions included in the package.
+#' }
+#'
 #' Reproducible multi-year burned-area mapping from change-index rasters.
 #' Provides four layers that can be used together or independently:
 #' a mosaic stage, an Otsu-guided segmentation workflow, a

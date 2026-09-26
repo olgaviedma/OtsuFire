@@ -46,36 +46,36 @@ scoring_internal_burned_area(
 
 \item{burnable_corine}{Burnable mask. Either a terra::SpatRaster (CORINE-like) or an sf layer.}
 
-\item{burnable_classes}{Numeric/integer vector of burnable classes when `burnable_corine` is categorical.
-If `NULL`, the raster must be binary-like (values in \{0,1\}).}
+\item{burnable_classes}{Numeric/integer vector of burnable classes when \code{burnable_corine} is categorical.
+If \code{NULL}, the raster must be binary-like (values in \{0,1\}).}
 
-\item{rbr_rast}{Optional terra::SpatRaster. If provided and `compute_median=TRUE`, median RBR is computed.}
+\item{rbr_rast}{Optional terra::SpatRaster. If provided and \code{compute_median=TRUE}, median RBR is computed.}
 
 \item{support_buffer_m}{Numeric. Buffer (meters) applied to Stage-1 support before intersects.}
 
-\item{max_corine_na_frac}{Numeric or `NULL`. If set, polygons with NA fraction greater than this
-are re-flagged as `"drop_corine_na"`.}
+\item{max_corine_na_frac}{Numeric or \code{NULL}. If set, polygons with NA fraction greater than this
+are re-flagged as \code{"drop_corine_na"}.}
 
 \item{corine_na_scope}{Character. Where to compute CORINE NA fraction. One of:
-`"nohit_stage1"`, `"keep"`, `"keep_nohit"`, `"all"`.}
+\code{"nohit_stage1"}, \code{"keep"}, \code{"keep_nohit"}, \code{"all"}.}
 
-\item{support_method}{Character. `"raster"` (fast if burnable_corine is raster) or `"vector"`.}
+\item{support_method}{Character. \code{"raster"} (fast if burnable_corine is raster) or \code{"vector"}.}
 
-\item{touches}{Logical. If `TRUE`, terra::rasterize uses touches=TRUE to reduce boundary gaps.}
+\item{touches}{Logical. If \code{TRUE}, terra::rasterize uses touches=TRUE to reduce boundary gaps.}
 
-\item{make_valid}{Character. `"auto"`, `"always"`, or `"none"` for validity fixing during intermediate steps.}
+\item{make_valid}{Character. \code{"auto"}, \code{"always"}, or \code{"none"} for validity fixing during intermediate steps.}
 
-\item{na_exact}{Logical. If `TRUE`, compute CORINE NA fraction using exact extraction (slower).}
+\item{na_exact}{Logical. If \code{TRUE}, compute CORINE NA fraction using exact extraction (slower).}
 
-\item{burnable_exact}{Logical. If `TRUE`, compute burnable check using exact extraction (slower).}
+\item{burnable_exact}{Logical. If \code{TRUE}, compute burnable check using exact extraction (slower).}
 
-\item{clip_to_burnable}{Logical. If `TRUE`, clip Stage-2 polygons to burnable mask (raster required).}
+\item{clip_to_burnable}{Logical. If \code{TRUE}, clip Stage-2 polygons to burnable mask (raster required).}
 
 \item{clip_mask_buffer_m}{Numeric. Optional dilation buffer (meters) on burnable mask during clipping.}
 
 \item{clip_min_piece_area_m2}{Numeric. Drop clipped slivers smaller than this area.}
 
-\item{clip_keep_largest_piece}{Logical. If `TRUE`, keep only largest clipped piece per original polygon.}
+\item{clip_keep_largest_piece}{Logical. If \code{TRUE}, keep only largest clipped piece per original polygon.}
 
 \item{preyear_polys}{Optional sf. Pre-year polygons to erase from outputs.}
 
@@ -85,43 +85,50 @@ are re-flagged as `"drop_corine_na"`.}
 
 \item{erase_min_area_m2}{Numeric. Drop erased fragments smaller than this area.}
 
-\item{compute_median}{Logical. If `TRUE` and `rbr_rast` is provided, compute median RBR.}
+\item{compute_median}{Logical. If \code{TRUE} and \code{rbr_rast} is provided, compute median RBR.}
 
 \item{median_colname}{Character. Name of the median column to create/fill.}
 
 \item{median_chunk_size}{Integer. Chunk size for polygon extraction.}
 
-\item{save_outputs}{Logical. If `TRUE`, write outputs and a summary file.}
+\item{save_outputs}{Logical. If \code{TRUE}, write outputs and a summary file.}
 
-\item{out_dir}{Character. Output directory used when `save_outputs=TRUE`.}
+\item{out_dir}{Character. Output directory used when \code{save_outputs=TRUE}.}
 
 \item{prefix}{Character. Prefix for output filenames when saving.}
 
-\item{driver}{Character. `"GPKG"` or `"ESRI Shapefile"`.}
+\item{driver}{Character. \code{"GPKG"} or \code{"ESRI Shapefile"}.}
 
 \item{overwrite}{Logical. Overwrite outputs when saving.}
 
-\item{quiet}{Logical. If `TRUE`, suppress messages in sf::st_write.}
+\item{quiet}{Logical. If \code{TRUE}, suppress messages in sf::st_write.}
 
-\item{save_splits}{Logical. If `TRUE`, also save keep-only and review-only layers.}
+\item{save_splits}{Logical. If \code{TRUE}, also save keep-only and review-only layers.}
 
-\item{suppress_sf_warnings}{Logical. If `TRUE`, suppress common sf warnings (recommended).}
+\item{suppress_sf_warnings}{Logical. If \code{TRUE}, suppress common sf warnings (recommended).}
 }
 \value{
 A list with:
-- stage2_flagged, stage2_flagged_clean, stage2_keep_review, stage2_keep_review_clean, stage2_dropped, stage2_keep_only, stage2_keep_only_clean, stage2_review_only, stage2_review_only_clean
-- stage2_keep_review_erased, stage2_keep_only_erased, stage2_review_only_erased (if preyear_polys provided)
-- out_paths (if save_outputs=TRUE)
+\itemize{
+\item stage2_flagged, stage2_flagged_clean, stage2_keep_review, stage2_keep_review_clean, stage2_dropped, stage2_keep_only, stage2_keep_only_clean, stage2_review_only, stage2_review_only_clean
+\item stage2_keep_review_erased, stage2_keep_only_erased, stage2_review_only_erased (if preyear_polys provided)
+\item out_paths (if save_outputs=TRUE)
+}
 }
 \description{
-Flags Stage-2 polygons as `keep`, `review`, or `drop_*` using:
-1) intersection with Stage-1 support (seeds): keep vs nohit_stage1
-2) burnable mask check for no-hit polygons: review vs drop_unburnable
+Flags Stage-2 polygons as \code{keep}, \code{review}, or \verb{drop_*} using:
+\enumerate{
+\item intersection with Stage-1 support (seeds): keep vs nohit_stage1
+\item burnable mask check for no-hit polygons: review vs drop_unburnable
+}
 }
 \details{
 Optionally:
-- Computes a CORINE NA fraction diagnostic (`corine_na_frac`) and can re-flag polygons above a threshold.
-- Computes per-polygon median values from an RBR raster (default: `median_rbr`) for keep/review outputs.
-- Erases overlaps with a pre-year mask for keep/review outputs.
-- Saves outputs to disk (GPKG or Shapefile).
+\itemize{
+\item Computes a CORINE NA fraction diagnostic (\code{corine_na_frac}) and can re-flag polygons above a threshold.
+\item Computes per-polygon median values from an RBR raster (default: \code{median_rbr}) for keep/review outputs.
+\item Erases overlaps with a pre-year mask for keep/review outputs.
+\item Saves outputs to disk (GPKG or Shapefile).
 }
+}
+\keyword{internal}

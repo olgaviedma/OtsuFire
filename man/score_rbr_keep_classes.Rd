@@ -120,9 +120,9 @@ values with \code{fill_na_corine_value}.}
 \value{
 A list with:
 \itemize{
-  \item \code{scored_sf}: input polygons with scoring fields appended.
-  \item \code{keep_pool}: list describing the keep pool (can be reused).
-  \item \code{out_paths}: list with output paths (if \code{save_outputs = TRUE}).
+\item \code{scored_sf}: input polygons with scoring fields appended.
+\item \code{keep_pool}: list describing the keep pool (can be reused).
+\item \code{out_paths}: list with output paths (if \code{save_outputs = TRUE}).
 }
 }
 \description{
@@ -143,16 +143,15 @@ Outputs can be written to a GeoPackage (\code{driver = "GPKG"}) or Shapefile
 is normalized to improve ArcGIS compatibility (valid geometries, MULTIPOLYGON, Z/M dropped,
 optional reprojection to \code{output_epsg}).
 
-
 Per-polygon fields added include:
 \describe{
-  \item{\code{n_pix}}{Number of extracted pixels.}
-  \item{\code{median_rbr}}{Median RBR within the polygon.}
-  \item{\code{p_above_keep_q25}}{Proportion of pixels above keep-pool Q25.}
-  \item{\code{p_above_keep_ref}}{Proportion of pixels above \code{qref_keep}.}
-  \item{\code{percentile_in_keep}}{ECDF percentile of \code{median_rbr} within keep medians.}
-  \item{\code{keep_like}}{0/1 decision.}
-  \item{\code{flag_rbr}}{\code{"keep"} or \code{"review"} based on \code{keep_like}.}
+\item{\code{n_pix}}{Number of extracted pixels.}
+\item{\code{median_rbr}}{Median RBR within the polygon.}
+\item{\code{p_above_keep_q25}}{Proportion of pixels above keep-pool Q25.}
+\item{\code{p_above_keep_ref}}{Proportion of pixels above \code{qref_keep}.}
+\item{\code{percentile_in_keep}}{ECDF percentile of \code{median_rbr} within keep medians.}
+\item{\code{keep_like}}{0/1 decision.}
+\item{\code{flag_rbr}}{\code{"keep"} or \code{"review"} based on \code{keep_like}.}
 }
 }
 \examples{
@@ -177,3 +176,4 @@ p2 <- score_rbr_keep_classes(
 \seealso{
 \code{\link{scoring_burned_area_stage2}}
 }
+\keyword{internal}

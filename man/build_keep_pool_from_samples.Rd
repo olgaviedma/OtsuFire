@@ -35,14 +35,14 @@ of sample polygons required. Default \code{25L}.}
 }
 \value{
 An object of class \code{c("otsufire_keep_pool", "list")} with
-  fields \code{min_area_ha}, \code{min_pix}, \code{promote_percentile},
-  \code{promote_p_above_ref}, \code{qref_prob}, \code{qref_keep},
-  \code{q25_keep}, \code{pixel_area_ha}, \code{keep_medians}, and
-  \code{metadata} (\code{n_samples}, \code{n_years}, \code{years_used},
-  \code{n_pixels_used}, \code{year_col}, \code{sample_id_col},
-  \code{change_index_paths}). The first nine fields match the
-  \code{keep_pool} contract consumed by
-  \code{\link[=score_burned_patches]{score_burned_patches()}}.
+fields \code{min_area_ha}, \code{min_pix}, \code{promote_percentile},
+\code{promote_p_above_ref}, \code{qref_prob}, \code{qref_keep},
+\code{q25_keep}, \code{pixel_area_ha}, \code{keep_medians}, and
+\code{metadata} (\code{n_samples}, \code{n_years}, \code{years_used},
+\code{n_pixels_used}, \code{year_col}, \code{sample_id_col},
+\code{change_index_paths}). The first nine fields match the
+\code{keep_pool} contract consumed by
+\code{\link[=score_burned_patches]{score_burned_patches()}}.
 }
 \description{
 Build a reusable spectral-support \code{keep_pool} object from clean
@@ -55,10 +55,10 @@ already accepted by
 
 This is the second of a two-step explicit workflow:
 \enumerate{
-  \item \strong{Select} reliable historical samples
-    (\code{collect_keep_reference_samples()}).
-  \item \strong{Build} a reusable \code{keep_pool} from those samples
-    (this function).
+\item \strong{Select} reliable historical samples
+(\code{collect_keep_reference_samples()}).
+\item \strong{Build} a reusable \code{keep_pool} from those samples
+(this function).
 }
 
 \strong{Explicit helper workflow.} This function is not called
@@ -76,7 +76,7 @@ supported public mode; for same-year scoring, use the native local
 fallback (\code{keep_pool = NULL}).
 }
 \details{
-\strong{Current helper design.} The caller supplies exact raster paths
+\strong{Inputs.} The caller supplies exact raster paths
 in \code{change_index_paths}, which must be a \emph{named} list or
 vector keyed by year (for example
 \code{list(`2010` = "...", `2011` = "...")}). There is no
@@ -90,7 +90,7 @@ pixel values are extracted per polygon, finite values are accumulated
 to derive reference quantiles, and a per-polygon median is accumulated
 into \code{keep_medians}. Non-finite values are ignored.
 
-\strong{Fixed V1 internal parameters} (not exposed): \code{qref_prob =
+\strong{Fixed internal parameters} (not exposed): \code{qref_prob =
 0.05}, \code{promote_p_above_ref = 0.50}, \code{promote_percentile =
 0.10}, \code{min_area_ha = 10}. \code{min_pix} is also not exposed but
 is \emph{derived} (not \code{NULL}) using the exact same logic as the

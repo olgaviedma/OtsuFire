@@ -52,7 +52,7 @@ The B4 random-background bucket computes its change-index percentile **and** dra
 
 ### Content-aware pool fingerprint
 
-Every negative pool is summarised by a deterministic, content-aware fingerprint (`neg_pool_fingerprint`, written as `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`). It folds in the B4 burnable-domain decision, the aligned burnable-mask hash, the percentile configuration and its computed value, the RNG seeds, the exclusions/buffers, and the relevant inputs. Any cache or pool whose fingerprint predates the burnable-domain restriction is **invalidated** rather than silently reused.
+Every negative pool is summarised by a deterministic, content-aware fingerprint (`neg_pool_fingerprint`, written as `01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt`). It folds in the B4 burnable-domain decision, the aligned burnable-mask hash, the percentile configuration and its computed value, the RNG seeds, the exclusions/buffers, and the relevant inputs. Any cache or pool whose fingerprint predates the burnable-domain restriction is **invalidated** rather than silently reused.
 
 ### Otsu > random spatial dedup
 

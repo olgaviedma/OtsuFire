@@ -1,191 +1,151 @@
-#' @title Detect candidate burned patches from an annual change-index raster
+#' Detect candidate burned patches from an annual change-index raster
 #'
 #' @description
-#' Run the detection stage of the deterministic OtsuFire workflow on an
-#' annual change-index raster.
+#' Detect candidate burned patches from an annual change-index raster using a
+#' configuration created with [build_burned_mapping_config()].
 #'
-#' This function takes an
-#' [otsufire_burned_mapping_config][build_burned_mapping_config] object
-#' and produces the candidate burned-patch outputs later used by
-#' [score_burned_patches()].
-#' It is the "find candidate fires" step, not the final burned-map step.
+#' The function estimates Otsu-based thresholds, identifies seed pixels,
+#' grows candidate patches, and refines and merges the resulting polygons.
+#' These candidates can then be evaluated with [score_burned_patches()] to
+#' assign final `"keep"`, `"review"`, or `"drop"` decisions.
 #'
-#' Conceptually, this stage includes:
-#' \enumerate{
-#'   \item Otsu-based threshold estimation,
-#'   \item seed generation,
-#'   \item seed-supported region growing,
-#'   \item segmentation refinement,
-#'   \item candidate merging.
-#' }
+#' @param config An object of class `otsufire_burned_mapping_config`, created
+#'   with [build_burned_mapping_config()]. Contains the spatial inputs,
+#'   detection and refinement settings, output locations, and runtime
+#'   options. A change-index raster is required for detection.
+#' @param aoi Reserved argument. Must be `NULL`, the default. Supplying
+#'   another value raises an error. To restrict detection to a study area,
+#'   prepare the spatial inputs for that area before running the function.
+#'   See \strong{Spatial extent} below.
+#' @param write_outputs Logical scalar. Whether to write detection products to
+#'   disk. Default: `TRUE`.
+#' @param overwrite Logical scalar. Whether existing output files may be
+#'   replaced when `write_outputs = TRUE`. Default: `FALSE`.
 #'
-#' In practice, the wrapper validates inputs, prepares the runtime
-#' context, rejects unsupported `aoi` input explicitly, and then calls
-#' the internal detection engine.
+#' @section Detection workflow:
+#' The function converts a continuous change-index raster into candidate
+#' burned patches through five steps:
+#' 1. Estimate seed thresholds using Otsu-based thresholding and
+#'    vegetation-specific settings where applicable.
+#' 2. Identify seed pixels showing strong spectral change.
+#' 3. Expand seed-supported patches into neighbouring pixels that meet the
+#'    growth criteria.
+#' 4. Refine candidate polygons and apply the configured filtering and size
+#'    constraints.
+#' 5. Merge detections according to the refinement settings.
 #'
-#' Given the same inputs and parameter settings, this stage is
-#' deterministic and reproducible.
+#' The outputs represent potential burned areas. Their reliability and final
+#' decisions are assessed separately by [score_burned_patches()].
 #'
-#' @param config An `otsufire_burned_mapping_config` object generated with
-#'   [build_burned_mapping_config()]. This object contains validated
-#'   workflow inputs, methodological parameters, output routes, and
-#'   runtime options.
-#' @param aoi NOT YET IMPLEMENTED — must be `NULL`. The parameter is
-#'   reserved for a future release in which detection can be spatially
-#'   restricted to an AOI. The current detection engine does not propagate
-#'   the AOI to the underlying grow/refine stages, so a non-`NULL` value
-#'   is rejected with an explicit error rather than silently ignored.
-#'   Pass `aoi = NULL` (the default) to run detection over the full valid
-#'   extent of the change-index raster.
-#' @param write_outputs Logical scalar. Whether the detection products
-#'   should be written to disk. Defaults to `TRUE` because this stage is
-#'   commonly inspected visually during workflow development and QA/QC.
-#' @param overwrite Logical scalar. Whether existing outputs may be
-#'   replaced when `write_outputs = TRUE`. Defaults to `FALSE`.
+#' @section Detection and refinement settings:
+#' Detection behaviour is controlled through two parameter lists supplied to
+#' [build_burned_mapping_config()]:
 #'
-#' @details
-#' \strong{Workflow overview}
+#' | Parameter list | Controls |
+#' |---|---|
+#' | `detect_params` | Seed thresholds, vegetation-specific constraints, region-growing thresholds, and minimum seed size. |
+#' | `refine_params` | Refinement buffers, minimum detected polygon area, and overlap merging. |
 #'
-#' The detection stage transforms a continuous annual change-index raster
-#' into spatially coherent candidate burned patches.
+#' See [build_burned_mapping_config()] for the accepted parameters and their
+#' defaults.
 #'
-#' The workflow proceeds conceptually as follows:
-#' \enumerate{
-#'   \item estimate vegetation-aware seed thresholds from the
-#'     change-index distribution,
-#'   \item identify high-confidence burned seed pixels,
-#'   \item expand seeds into neighbouring burned-like pixels using
-#'     constrained region growing,
-#'   \item refine and filter candidate polygons,
-#'   \item merge overlapping or fragmented detections where appropriate.
-#' }
+#' Change-index thresholds must match the index and its numerical scaling.
+#' The ground area represented by a minimum pixel count depends on raster
+#' resolution.
 #'
-#' The resulting outputs are candidate burned patches, not final burned
-#' decisions. Reliability assessment and final `keep` / `review` /
-#' `drop` assignment happen later in [score_burned_patches()].
-#'
-#' The detection stage operates exclusively on the deterministic
-#' candidate-generation workflow and does not perform probabilistic
-#' classification or supervised scoring.
-#'
-#' Detection behaviour is controlled through the parameter blocks stored
-#' inside `config`, particularly:
-#' \itemize{
-#'   \item `detect_params`
-#'   \item `refine_params`
-#' }
-#'
-#' Key methodological controls include:
-#' \itemize{
-#'   \item seed-generation thresholds,
-#'   \item vegetation-specific constraints,
-#'   \item region-growing permissiveness,
-#'   \item minimum patch size,
-#'   \item overlap-merging behaviour.
-#' }
-#'
-#' Before delegating to the internal engine, the function also validates
-#' that the required inputs exist on disk and runs the configured
-#' `change_index` sanity check through [clean_raster_inmem()] with
+#' @section Input validation:
+#' Before detection, the function checks the required inputs and evaluates
+#' the change-index raster using [clean_raster_inmem()] with
 #' `action = "fail"`.
 #'
-#' \strong{Current AOI limitation and what to do instead}
+#' The raster checks are controlled by `config$options$change_index_validation`.
 #'
-#' At the moment, `aoi` is intentionally rejected rather than partially
-#' applied. The current detection engine still runs through the full grow
-#' and refine machinery without a true AOI-aware execution path, so
-#' allowing `aoi` now would be misleading.
+#' Detection stops if the raster fails an enabled check. Resolve the reported
+#' issue before running the function again.
 #'
-#' If you need an AOI-limited run today, you must guarantee that the
-#' workflow inputs have already been prepared externally for that AOI
-#' before calling `detect_burned_patches()`. In practice, this means that
-#' the files on disk should already be cropped or masked to the intended
-#' AOI for at least:
-#' \itemize{
-#'   \item `change_index`,
-#'   \item `vegetation_map`,
-#'   \item `burnable_mask`,
-#'   \item and any supporting spatial layers used later in the workflow,
-#'     especially the study-area boundary and ecoregion layers referenced
-#'     through `config$options`.
-#' }
+#' @section Spatial extent:
+#' The `aoi` argument is not currently supported. Detection uses the valid
+#' extent of the change-index raster, subject to the configured masks and
+#' spatial constraints.
 #'
-#' If later deterministic stages should also remain AOI-limited, the same
-#' external preparation principle should be applied consistently to other
-#' relevant spatial inputs, such as hotspot layers or previous-year
-#' burned maps.
+#' To restrict the workflow to a study area, crop or mask the relevant inputs
+#' before running detection:
+#' * the change-index raster;
+#' * the vegetation layer, when supplied;
+#' * the burnable mask;
+#' * supporting study-area and ecoregion layers referenced through
+#'   `config$options`.
 #'
-#' The planned future implementation is the deeper engine-level approach:
-#' `aoi` will be propagated through the underlying grow and refine stages
-#' so that detection can be restricted internally, instead of relying
-#' only on user-managed pre-cropped inputs.
+#' Prepare these layers consistently for the intended study area. If
+#' subsequent scoring must use the same spatial restriction, prepare its
+#' supporting inputs consistently, including hotspots and previous-year
+#' burned-area maps where applicable.
 #'
-#' \strong{Why this stage matters}
+#' Use `aoi = NULL` with the prepared inputs.
 #'
-#' Many burned-area mapping errors start during candidate generation,
-#' before scoring ever begins.
+#' @return A named list containing detection output paths, diagnostics, and
+#'   reserved object fields.
 #'
-#' The deterministic detection stage is designed to:
-#' \itemize{
-#'   \item maximise spatial coherence,
-#'   \item reduce obvious false positives early,
-#'   \item preserve low-severity burned edges where possible,
-#'   \item produce a traceable candidate universe for later scoring.
-#' }
+#' | Field | Current contents |
+#' |---|---|
+#' | `otsu_raster` | Reserved field. Currently `NULL`. |
+#' | `seed_raster` | Reserved field. Currently `NULL`. |
+#' | `grown_patches` | Reserved field. Currently `NULL`. |
+#' | `grown_patches_path` | Path to the grown-patch output. |
+#' | `refined_patches` | Reserved field. Currently `NULL`. |
+#' | `refined_patches_path` | Path to the refined candidate-patch output. |
+#' | `detection_diagnostics` | Diagnostics returned by the detection stage. |
 #'
-#' Keeping candidate generation separate from scoring makes the workflow
-#' easier to inspect, explain, and reproduce.
+#' The main populated outputs are `grown_patches_path`,
+#' `refined_patches_path`, and `detection_diagnostics`. When products are
+#' written, use the returned paths to load the spatial layers.
 #'
-#' @return Returns a named list containing the main detection products and
-#'   their associated file paths.
+#' The reserved object fields do not currently provide in-memory alternatives
+#' to the written products.
 #'
-#'   Stable public fields currently include:
-#'   \itemize{
-#'     \item `otsu_raster`
-#'     \item `seed_raster`
-#'     \item `grown_patches`
-#'     \item `grown_patches_path`
-#'     \item `refined_patches`
-#'     \item `refined_patches_path`
-#'     \item `detection_diagnostics`
-#'   }
-#'
-#'   In the current public wrapper, `grown_patches_path`,
-#'   `refined_patches_path`, and `detection_diagnostics` are the main
-#'   populated outputs. The object placeholders `otsu_raster`,
-#'   `seed_raster`, `grown_patches`, and `refined_patches` are kept for
-#'   contract stability and currently return `NULL`.
-#'
-#'   The exact internal implementation should not be relied upon beyond
-#'   these stable public outputs.
+#' @seealso [build_burned_mapping_config()], [score_burned_patches()],
+#'   [run_deterministic_pipeline()], [clean_raster_inmem()].
 #'
 #' @examples
 #' \dontrun{
+#' # Configure detection from an annual RBR raster
 #' config <- build_burned_mapping_config(
-#'   change_index = "MinMin_2022_mosaic_res90m.tif",
-#'   vegetation_map = "CLC_2018_peninsula.tif",
-#'   burnable_mask = "burnable_mask_binary_corine_2018_ETRS89.tif",
-#'   hotspots = "hotspots_2022.gpkg",
-#'   target_year = 2022,
-#'   output_dir = "results/",
-#'   run_name = "balanced_2022"
+#'   change_index = "data/RBR_2022.tif",
+#'   vegetation_map = "data/vegetation_classes.tif",
+#'   burnable_mask = "data/burnable_mask.tif",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022"
 #' )
 #'
-#' detection <- detect_burned_patches(config)
+#' # Detect candidate patches and write the outputs
+#' detection <- detect_burned_patches(
+#'   config = config,
+#'   write_outputs = TRUE,
+#'   overwrite = FALSE
+#' )
 #'
-#' detection$refined_patches_path
-#' refined <- sf::st_read(detection$refined_patches_path, quiet = TRUE)
+#' # Inspect detection diagnostics
+#' detection$detection_diagnostics
+#'
+#' # Load and plot the refined candidate patches
+#' refined <- sf::st_read(
+#'   detection$refined_patches_path,
+#'   quiet = TRUE
+#' )
 #' plot(sf::st_geometry(refined))
-#' }
 #'
-#' @seealso
-#' Related deterministic workflow functions:
-#' \itemize{
-#'   \item [build_burned_mapping_config()]
-#'   \item [score_burned_patches()]
-#'   \item [run_deterministic_pipeline()]
-#'   \item [validate_fire_maps()]
-#'   \item [build_supervised_burned_config()]
+#' # Pass the refined candidates to the scoring stage
+#' scored <- score_burned_patches(
+#'   burned_candidates = detection$refined_patches_path,
+#'   config = config
+#' )
+#'
+#' # Summarise final decisions
+#' table(
+#'   scored$internal_decisions$class_final,
+#'   useNA = "ifany"
+#' )
 #' }
 #'
 #' @family modular

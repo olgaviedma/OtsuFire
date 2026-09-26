@@ -31,7 +31,7 @@
 #'
 #' Fixed thresholds and the class-level/colour vectors that define the
 #' candidate-first omission taxonomy (7 classes) and the commission taxonomy
-#' (4 classes). These are the single source of truth used by
+#' (4 classes). They are the values used by
 #' \code{\link{of_classify}} and \code{\link{of_classify_commission}}.
 #'
 #' \describe{
@@ -47,15 +47,15 @@
 #'
 #' @format Numeric scalars / named numeric / character / named-character vectors.
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_WEAK <- 175
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_SLIVER <- 0.01   # ha; below this a candidate overlap is treated as none
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_SEED_THR <- c(very_permissive = 285, permissive = 300, balanced = 310,
                  conservative = 400, very_conservative = 430)
 
@@ -64,7 +64,7 @@ OF_SEED_THR <- c(very_permissive = 285, permissive = 300, balanced = 310,
 # method-limit miss, then the physical/reference floors.
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_LEVELS <- c(
   "Candidate in review (recoverable)",
   "Candidate dropped (rejected as unburned)",
@@ -75,7 +75,7 @@ OF_LEVELS <- c(
   "No candidate: non-burnable (masked)")
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_COLORS <- c(
   "Candidate in review (recoverable)"              = "#E6A700",  # amber  (review)
   "Candidate dropped (rejected as unburned)"       = "#B5524A",  # brick  (drop)
@@ -91,7 +91,7 @@ OF_COLORS <- c(
 # candidate-first branch applies.
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_COM_LEVELS <- c(
   "Likely real burn (absent from reference)",  # RBR >= seed
   "Borderline signal (RBR < seed)",            # WEAK <= RBR < seed
@@ -99,7 +99,7 @@ OF_COM_LEVELS <- c(
   "Non-burnable")                              # CORINE not burnable
 
 #' @rdname omission_taxonomy_constants
-#' @export
+#' @keywords internal
 OF_COM_COLORS <- c(
   "Likely real burn (absent from reference)" = "#3A8459",  # green
   "Borderline signal (RBR < seed)"           = "#9970AB",  # purple
@@ -113,9 +113,9 @@ OF_CLC <- data.frame(code = 1:11, burnable = c(rep(TRUE, 7), rep(FALSE, 4)))
 
 #' Classify omission sources (candidate-first 7-class taxonomy)
 #'
-#' THE omission classifier. For each omitted fire, candidate presence is
-#' evaluated FIRST: when the total candidate overlap is below \code{OF_SLIVER}
-#' the fire has NO final candidate and is classified by the physical
+#' Classifies the source of each omitted fire. Candidate presence is
+#' evaluated first: when the total candidate overlap is below \code{OF_SLIVER}
+#' the fire has no final candidate and is classified by the physical
 #' RBR/burnability cascade; otherwise it takes the dominant of its
 #' keep/review/drop footprints. Every no-candidate class depends only on
 #' \code{(burnable, rbr, seed)} and is invariant between models.
@@ -129,7 +129,7 @@ OF_CLC <- data.frame(code = 1:11, burnable = c(rep(TRUE, 7), rep(FALSE, 4)))
 #' @param seed Numeric. Per-preset Otsu seed; length-1 is recycled.
 #' @return An ordered \code{factor} with levels \code{OF_LEVELS}.
 #' @seealso \code{\link{of_classify_commission}}, \code{\link{of_decompose}}
-#' @export
+#' @keywords internal
 of_classify <- function(keep_ha, review_ha, drop_ha, candidate_ha, burnable, rbr, seed) {
   n <- length(candidate_ha)
   seed <- rep_len(seed, n)
@@ -161,7 +161,7 @@ of_classify <- function(keep_ha, review_ha, drop_ha, candidate_ha, burnable, rbr
 #' @param seed Numeric. Per-preset Otsu seed; length-1 is recycled.
 #' @return An ordered \code{factor} with levels \code{OF_COM_LEVELS}.
 #' @seealso \code{\link{of_classify}}
-#' @export
+#' @keywords internal
 of_classify_commission <- function(burnable, rbr, seed) {
   n <- length(rbr)
   seed <- rep_len(seed, n)
@@ -181,7 +181,7 @@ of_classify_commission <- function(burnable, rbr, seed) {
 #' Make valid, drop empties and project to ETRS89-LAEA (EPSG:3035)
 #' @param x An \code{sf} object.
 #' @return The cleaned \code{sf} in EPSG:3035.
-#' @export
+#' @keywords internal
 of_g3 <- function(x) {
   x <- suppressWarnings(sf::st_make_valid(x))
   x <- x[!sf::st_is_empty(x), ]
@@ -196,7 +196,7 @@ of_g3 <- function(x) {
 #' @param polys An \code{sf} of polygons.
 #' @param rbr_rast A \code{SpatRaster} of RBR (first layer used if multi-layer).
 #' @return A data.frame with columns \code{median} and \code{p90}.
-#' @export
+#' @keywords internal
 of_rbr_stats <- function(polys, rbr_rast) {
   rr <- rbr_rast; if (terra::nlyr(rr) > 1) rr <- rr[[1]]
   pp <- sf::st_transform(polys, terra::crs(rr))
@@ -209,7 +209,7 @@ of_rbr_stats <- function(polys, rbr_rast) {
 #' @param polys An \code{sf} of polygons.
 #' @param corine_rast A \code{SpatRaster} of CORINE reclass codes (1-11).
 #' @return A logical vector (TRUE = burnable) aligned to \code{polys}.
-#' @export
+#' @keywords internal
 of_burnable <- function(polys, corine_rast) {
   rc <- corine_rast; if (terra::nlyr(rc) > 1) rc <- rc[[1]]
   cc <- as.integer(round(.of_vc(exactextractr::exact_extract(
@@ -230,7 +230,7 @@ of_burnable <- function(polys, corine_rast) {
 #' @return \code{omitted} with added \code{keep_ha}, \code{review_ha},
 #'   \code{drop_ha}, \code{candidate_ha} columns.
 #' @seealso \code{\link{of_classify}}
-#' @export
+#' @keywords internal
 of_decompose <- function(omitted, internal, class_field = "class_final") {
   prev_s2 <- sf::sf_use_s2()
   suppressMessages(sf::sf_use_s2(FALSE))

@@ -1,4 +1,4 @@
-#' Canonical empty-geometry-safe polygon sanitiser (supervised phase).
+#' Canonical empty-geometry-safe polygon sanitiser (probabilistic refinement phase).
 #'
 #' @description
 #' The ONE canonical polygon-sanitisation routine used across the supervised

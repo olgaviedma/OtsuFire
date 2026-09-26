@@ -1,5 +1,5 @@
 
-#' Score the deterministic universe with the FINAL supervised model and export
+#' Score the Otsu-guided universe with the FINAL supervised model and export
 #' the final map.
 #'
 #' SCORING CONTRACT (Gate 1C.3, 2026-06-08) — implemented in the internal
@@ -36,7 +36,7 @@
 #' filter), not a silent loss.
 #' \itemize{
 #'   \item \strong{`deterministic_scored`} and \strong{`final_map_full`}
-#'     (IDENTICAL content): the COMPLETE scored deterministic universe — EVERY
+#'     (IDENTICAL content): the COMPLETE scored Otsu-guided universe — EVERY
 #'     candidate the FINAL model scored, exactly one row per input polygon, ALL
 #'     IDs / geometries preserved, carrying `p_burned`, `p_burned_model`,
 #'     `p_burned_current_year`, `temporal_penalty`, `temporal_conflict_flag` and

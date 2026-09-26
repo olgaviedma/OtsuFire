@@ -43,19 +43,19 @@ OF_COM_COLORS
 \description{
 Fixed thresholds and the class-level/colour vectors that define the
 candidate-first omission taxonomy (7 classes) and the commission taxonomy
-(4 classes). These are the single source of truth used by
+(4 classes). They are the values used by
 \code{\link{of_classify}} and \code{\link{of_classify_commission}}.
 }
 \details{
 \describe{
-  \item{\code{OF_WEAK}}{RBR floor (175); below it the reference burn signal is
-    considered too weak to be a real omission.}
-  \item{\code{OF_SLIVER}}{Minimum candidate overlap (ha); below it a fire is
-    treated as having NO final candidate.}
-  \item{\code{OF_SEED_THR}}{Per-preset Otsu seed thresholds (named numeric).}
-  \item{\code{OF_LEVELS}/\code{OF_COLORS}}{7-class omission levels + colours.}
-  \item{\code{OF_COM_LEVELS}/\code{OF_COM_COLORS}}{4-class commission levels +
-    colours.}
+\item{\code{OF_WEAK}}{RBR floor (175); below it the reference burn signal is
+considered too weak to be a real omission.}
+\item{\code{OF_SLIVER}}{Minimum candidate overlap (ha); below it a fire is
+treated as having NO final candidate.}
+\item{\code{OF_SEED_THR}}{Per-preset Otsu seed thresholds (named numeric).}
+\item{\code{OF_LEVELS}/\code{OF_COLORS}}{7-class omission levels + colours.}
+\item{\code{OF_COM_LEVELS}/\code{OF_COM_COLORS}}{4-class commission levels +
+colours.}
 }
 }
-\keyword{datasets}
+\keyword{internal}

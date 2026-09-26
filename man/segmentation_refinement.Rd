@@ -108,16 +108,16 @@ if FALSE, drops unknown keys silently.}
 \value{
 A list with:
 \itemize{
-  \item \code{selected_detected}: sf. Detections selected for refinement (in \code{target_crs}).
-  \item \code{aois}: sf. AOI polygons (in \code{target_crs}), possibly merged.
-  \item \code{results}: list. Per-AOI outputs from \code{process_fun} (same order as \code{aois}).
-  Elements are \code{NULL} when an AOI errors, and also \code{NULL} when skipped due to an existing \code{DONE.ok}.
+\item \code{selected_detected}: sf. Detections selected for refinement (in \code{target_crs}).
+\item \code{aois}: sf. AOI polygons (in \code{target_crs}), possibly merged.
+\item \code{results}: list. Per-AOI outputs from \code{process_fun} (same order as \code{aois}).
+Elements are \code{NULL} when an AOI errors, and also \code{NULL} when skipped due to an existing \code{DONE.ok}.
 }
 }
 \description{
 Builds axis-aligned AOIs (bounding boxes) around selected detected polygons,
 optionally merges overlapping AOIs, and runs a user-supplied processing
-function (`process_fun`) independently for each AOI (typically in parallel).
+function (\code{process_fun}) independently for each AOI (typically in parallel).
 Each AOI run is restartable via per-folder DONE/RUNNING/ERROR markers.
 }
 \details{
@@ -129,40 +129,40 @@ external reference polygons.
 
 The workflow is:
 \enumerate{
-  \item \strong{Load detections}. Provide `detected_polys` (sf or path), or
-  derive detections from `binary_final_raster` (0/1).
-  \item \strong{CRS harmonization}. Detected (and reference, if provided)
-  polygons are transformed to `target_crs` (must be projected; meters).
-  \item \strong{Select detections to refine}.
-  \itemize{
-    \item If `reference_polys` is \code{NULL}: select the \code{top_n_if_no_ref}
-    detections by area (after filtering by \code{min_detected_area_m2}).
-    \item If `reference_polys` is provided: compute an omission layer as
-    \code{reference - union(detected)}, optionally buffer it by
-    \code{omission_buffer_m}, then select detections intersecting the omission.
-    If omission is empty or no intersections occur, fall back to
-    \code{top_n_if_no_ref} by area.
-  }
-  \item \strong{Build AOIs}. For each selected detection, build a bbox expanded
-  by \code{aoi_buffer_m}. If \code{clip_aois_to_raster_extent=TRUE}, AOIs are
-  numerically clamped to the raster bbox (in \code{target_crs}).
-  \item \strong{Merge overlaps (optional)}. If \code{merge_overlaps=TRUE}, AOIs
-  intersecting (optionally after a small \code{merge_overlaps_buffer_m} applied
-  only for grouping) are dissolved to reduce the number of AOI tasks.
-  \item \strong{Per-AOI execution}. For each AOI:
-  crop/mask \code{raster_path} in source CRS, project the crop to
-  \code{target_crs} (optionally at \code{rescue_args$resolution}), align an
-  optional CORINE raster to the projected template, clip optional ecoregions to
-  the AOI, then call \code{process_fun(...)}. Progress is reported via
-  \pkg{progressr}.
+\item \strong{Load detections}. Provide \code{detected_polys} (sf or path), or
+derive detections from \code{binary_final_raster} (0/1).
+\item \strong{CRS harmonization}. Detected (and reference, if provided)
+polygons are transformed to \code{target_crs} (must be projected; meters).
+\item \strong{Select detections to refine}.
+\itemize{
+\item If \code{reference_polys} is \code{NULL}: select the \code{top_n_if_no_ref}
+detections by area (after filtering by \code{min_detected_area_m2}).
+\item If \code{reference_polys} is provided: compute an omission layer as
+\code{reference - union(detected)}, optionally buffer it by
+\code{omission_buffer_m}, then select detections intersecting the omission.
+If omission is empty or no intersections occur, fall back to
+\code{top_n_if_no_ref} by area.
+}
+\item \strong{Build AOIs}. For each selected detection, build a bbox expanded
+by \code{aoi_buffer_m}. If \code{clip_aois_to_raster_extent=TRUE}, AOIs are
+numerically clamped to the raster bbox (in \code{target_crs}).
+\item \strong{Merge overlaps (optional)}. If \code{merge_overlaps=TRUE}, AOIs
+intersecting (optionally after a small \code{merge_overlaps_buffer_m} applied
+only for grouping) are dissolved to reduce the number of AOI tasks.
+\item \strong{Per-AOI execution}. For each AOI:
+crop/mask \code{raster_path} in source CRS, project the crop to
+\code{target_crs} (optionally at \code{rescue_args$resolution}), align an
+optional CORINE raster to the projected template, clip optional ecoregions to
+the AOI, then call \code{process_fun(...)}. Progress is reported via
+\pkg{progressr}.
 }
 
 \strong{Restartability and markers}
 \itemize{
-  \item Each AOI uses a dedicated folder: \code{base_output_dir/AOI_###/}.
-  \item \code{RUNNING.ok} is created at start; removed on success or error.
-  \item \code{DONE.ok} is created on success; completed AOIs are skipped on re-runs.
-  \item \code{ERROR.txt} stores the error message when an AOI fails.
+\item Each AOI uses a dedicated folder: \code{base_output_dir/AOI_###/}.
+\item \code{RUNNING.ok} is created at start; removed on success or error.
+\item \code{DONE.ok} is created on success; completed AOIs are skipped on re-runs.
+\item \code{ERROR.txt} stores the error message when an AOI fails.
 }
 
 \strong{How \code{process_fun} is called}
@@ -246,3 +246,4 @@ res <- segmentation_refinement(
 \code{\link[future]{plan}}, \code{\link[future.apply]{future_lapply}},
 \code{\link[progressr]{with_progress}}
 }
+\keyword{internal}

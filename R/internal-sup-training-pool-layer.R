@@ -106,7 +106,7 @@
 #' @param train_features sf. The AUGMENTED labelled training universe (positives
 #'   + random + otsu + any promoted artifact_hard rows), AFTER feature extraction
 #'   and fold assignment. One row per available training example.
-#' @param scoring_features sf / data.frame, or NULL. The deterministic scoring
+#' @param scoring_features sf / data.frame, or NULL. The Otsu-guided scoring
 #'   universe. Used to compute the artifact_hard ELIGIBLE candidate set ALWAYS
 #'   (the selection rule, independent of `enabled`): when `enabled = FALSE` the
 #'   eligible candidates are APPENDED to the layer as candidate-only rows
@@ -126,7 +126,7 @@
 #' @param promo The `promote_artifact_hard_negatives()` result (or NULL when the
 #'   feature is OFF). Used only as a fallback source of the per-row branch /
 #'   threshold when those columns are not already carried on `train_features`.
-#' @param config The resolved supervised config (for source_weights +
+#' @param config The resolved probabilistic refinement config (for source_weights +
 #'   artifact_hard$total_weight_ratio, re-resolved identically to the engine).
 #' @param target_year integer scalar stamped into the `year` column.
 #' @param id_col character; the stable per-example id (default "fire_uid").

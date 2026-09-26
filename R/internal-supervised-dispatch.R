@@ -130,7 +130,7 @@
   )
 }
 
-#' Internal adapter: runs the full validated supervised chain for one year.
+#' Internal adapter: runs the full validated probabilistic refinement chain for one year.
 #'
 #' OtsuFire 0.5.0 (2026-05-09): the dispatcher forwards the supervised
 #' final-model sampling caps, the new `feature_whitelist_override` and

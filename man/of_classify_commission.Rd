@@ -24,3 +24,4 @@ then RBR vs the \code{OF_WEAK} floor and the per-preset seed.
 \seealso{
 \code{\link{of_classify}}
 }
+\keyword{internal}

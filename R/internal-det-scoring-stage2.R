@@ -156,6 +156,7 @@
 #' @param suppress_sf_warnings logical. If `TRUE`, suppress common sf warnings.
 #'
 #' @return sf. Same attributes as `stage2_sf`, possibly with rows expanded or removed after erase.
+#' @keywords internal
 erase_overlap_with_preyear <- function(
     stage2_sf,
     preyear_sf,
@@ -328,6 +329,7 @@ erase_overlap_with_preyear <- function(
 #' - stage2_keep_review_erased, stage2_keep_only_erased, stage2_review_only_erased (if preyear_polys provided)
 #' - out_paths (if save_outputs=TRUE)
 #'
+#' @keywords internal
 scoring_internal_burned_area <- function(
   polys_stage2,
   polys_stage1,
@@ -990,6 +992,7 @@ scoring_internal_burned_area <- function(
 #' - ref_kept, ref_kept_clean, ref_dropped
 #' - ref_kept_erased (NULL if no erase was performed)
 #' - out_paths (paths when saved)
+#' @keywords internal
 scoring_reference_burned_area <- function(
   ref_polys,
   burnable_corine,
@@ -1529,6 +1532,7 @@ scoring_reference_burned_area <- function(
 #' @param suppress_sf_warnings logical. Suppress sf warnings.
 #'
 #' @return list with `ref_flagged`, `internal_flagged`, and `out_paths` (if saved).
+#' @keywords internal
 scoring_validation_burned_area <- function(
   internal_polys,
   ref_polys,
@@ -1656,6 +1660,7 @@ scoring_validation_burned_area <- function(
 #' - reference: output of `scoring_reference_burned_area()` (or NULL if `ref_polys` is NULL or `score_ref_polys=FALSE`)
 #' - validation: output of `scoring_validation_burned_area()` (or NULL if `ref_polys` is NULL)
 #'
+#' @keywords internal
 scoring_burned_area_stage2 <- function(
   polys_stage2,
   polys_stage1,

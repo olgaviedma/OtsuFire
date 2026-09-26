@@ -951,7 +951,7 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
 #' (e.g. \code{pool_source} or \code{training_label}) are coherent and separable
 #' across the numeric features the supervised model will later use, \emph{before}
 #' any model is fit. It is a \strong{diagnostic only}: it never trains or calls
-#' the final supervised model (no \code{train_supervised_model} / \code{xgboost}).
+#' the final supervised model (no \code{xgboost}).
 #' The optional probe classifier (module G) is an explicitly-labelled separability
 #' probe (LDA), not the production model, and its predictions are never used
 #' downstream.
@@ -965,7 +965,7 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
 #'   \item{B. Univariate separability}{per-feature Kruskal-Wallis across the group
 #'     column with BH-FDR. Effect sizes use \code{effectsize::rank_epsilon_squared}
 #'     (epsilon^2 = H/(n-1)) and \code{effectsize::rank_eta_squared}
-#'     (eta^2[H] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
+#'     (eta^2\[H\] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
 #'     quantities are computed manually and reported under the SAME column names
 #'     (\code{epsilon_squared}, \code{eta_squared}). Features ranked primarily by
 #'     epsilon^2. If \code{run_pairwise}, pairwise Wilcoxon between categories with
@@ -973,7 +973,7 @@ utils::globalVariables(c("group", "value", "feature", "median_z", "PC1", "PC2",
 #'   \item{C. Z-score fingerprint}{global-scaled median z per group x feature
 #'     (+ feature family grouping), optional heatmap.}
 #'   \item{D. PCA (diagnostic only)}{scaled features with \strong{median
-#'     imputation} of missing values (documented choice); returns scores,
+#'     imputation} of missing values; returns scores,
 #'     loadings, explained variance, top PC1/PC2 loadings, and centroid distances
 #'     between groups in PC1-PC2 and in the full scaled space. Never feeds the
 #'     final model.}
@@ -1317,9 +1317,8 @@ diagnose_training_pools <- function(
   out
 }
 
-#' @describeIn diagnose_training_pools Print method for pool diagnostics.
-#' @param x An \code{otsufire_pool_diagnostics} object.
-#' @param ... Ignored.
+# Print method for pool diagnostics (registered S3 method; like the package's
+# other print methods it has no help page of its own).
 #' @exportS3Method print otsufire_pool_diagnostics
 print.otsufire_pool_diagnostics <- function(x, ...) {
   cs <- attr(x, "console_summary")

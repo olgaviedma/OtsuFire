@@ -3,7 +3,7 @@
 \name{apply_chain_cleaning}
 \alias{apply_chain_cleaning}
 \alias{apply_chain}
-\title{Optional chain/bridge cleaning of refined deterministic candidates}
+\title{Remove narrow connections from refined candidate burned patches}
 \usage{
 apply_chain_cleaning(
   refine_path,
@@ -40,116 +40,272 @@ apply_chain(
 )
 }
 \arguments{
-\item{refine_path}{Character. Path to \code{02_REFINE/BA_<year>_REFINE_MERGED_*.gpkg}.}
+\item{refine_path}{Character scalar. Path to the refined candidate
+GeoPackage, typically \verb{02_REFINE/BA_<year>_REFINE_MERGED_*.gpkg}. Use the
+\code{refined_patches_path} returned by \code{\link[=detect_burned_patches]{detect_burned_patches()}}.}
 
-\item{out_dir}{Character or NULL. Deterministic run directory under which
-\code{CHAIN/dechain_<N>m/} is created. If NULL, inferred as the parent of the
-\code{02_REFINE} folder (\code{dirname(dirname(refine_path))}).}
+\item{out_dir}{Character scalar or \code{NULL}. Run directory under which
+\verb{CHAIN/dechain_<N>m/} is created. When \code{NULL}, uses
+\code{dirname(dirname(refine_path))}, assuming the input is inside a
+\verb{02_REFINE} folder.}
 
-\item{year}{Integer or NULL. Target year; if NULL it is parsed from the file name.}
+\item{year}{Integer scalar or \code{NULL}. Target year. When \code{NULL}, the year is
+extracted from the input filename.}
 
-\item{dechain_distance_m}{Numeric. Cleaning intensity in metres (neck width to cut).
-Default 180. Typical: 90 / 180 / 270.}
+\item{dechain_distance_m}{Numeric scalar. Morphological opening radius in
+metres, converted to pixels using \code{pixel_size_m}. Larger values produce
+stronger cleaning. Default: \code{180}.}
 
-\item{pixel_size_m}{Numeric. Pixel size used for rasterisation. Default 90.}
+\item{pixel_size_m}{Numeric scalar. Grid-cell size in metres used to
+rasterise selected candidates. Default: \code{90}.}
 
-\item{inflation_thr}{Numeric. Only candidates with \code{1/sqrt(compact_pp) >}
-this value are de-chained. Default 22.135.}
+\item{inflation_thr}{Numeric scalar. Shape-complexity threshold used to
+select candidates for cleaning. Candidates are selected when
+\code{1 / sqrt(compact_pp)} exceeds this value. Default: \code{22.135}.}
 
-\item{min_area_ha}{Numeric or NULL. Optional extra requirement: only de-chain
-flagged candidates with \code{area_ha >= min_area_ha}. Default NULL (no minimum).}
+\item{min_area_ha}{Numeric scalar or \code{NULL}. Optional minimum candidate
+area, in hectares, for selection. When supplied, candidates must also
+satisfy \code{area_ha >= min_area_ha}. Default: \code{NULL}, meaning no additional
+area requirement.}
 
-\item{marker}{Character. "connected" (default) or "seeds" (see Details).}
+\item{marker}{Character scalar. Component-retention mode: \code{"connected"} or
+\code{"seeds"}. Default: \code{"connected"}. See \strong{Component retention}
+below.}
 
-\item{keep_noseed_fragments}{Logical. With \code{marker = "seeds"}, keep (TRUE) or
-drop (FALSE) split pieces that contain no seed. Default TRUE.}
+\item{keep_noseed_fragments}{Logical scalar. With \code{marker = "seeds"},
+whether to retain fragments containing no seed pixels. Default: \code{TRUE}.}
 
-\item{change_index, vegetation_map}{Character or NULL. Rasters needed only when
-\code{marker = "seeds"} (RBR change index and CORINE vegetation classes).}
+\item{change_index}{Character scalar or \code{NULL}. Path to the RBR
+change-index raster used to identify seeds when \code{marker = "seeds"}.}
 
-\item{seed_threshold_by_vegetation}{Named numeric or NULL. Per-vegetation seed
-thresholds (the same used by the grow), needed only for \code{marker = "seeds"}.}
+\item{vegetation_map}{Character scalar or \code{NULL}. Path to the
+CORINE-compatible vegetation-class raster used when \code{marker = "seeds"}.}
 
-\item{overwrite}{Logical. Overwrite an existing \code{CHAIN/dechain_<N>m/} output.
-Default FALSE.}
+\item{seed_threshold_by_vegetation}{Named numeric vector or \code{NULL}.
+Vegetation-specific seed thresholds matching those used during candidate
+generation. Required when \code{marker = "seeds"}.}
 
-\item{verbose}{Logical. Print progress. Default TRUE.}
+\item{overwrite}{Logical scalar. Whether existing chain-cleaning outputs may
+be replaced. The original refined layer is preserved. Default: \code{FALSE}.}
+
+\item{verbose}{Logical scalar. Whether to display progress messages.
+Default: \code{TRUE}.}
 }
 \value{
-A list with: \code{output_path}, \code{audit_path}, \code{params_path},
-  \code{n_candidates_before}, \code{n_candidates_after}, \code{n_chained_flagged},
-  \code{area_before_ha}, \code{area_after_ha}, \code{area_removed_ha},
-  \code{opening_px}, \code{dechain_distance_m}.
+A named list containing output locations, processing settings, and
+before-and-after summaries.\tabular{ll}{
+   Field \tab Description \cr
+   \code{output_path} \tab Path to the cleaned candidate layer. \cr
+   \code{audit_path} \tab Path to the cleaning audit output. \cr
+   \code{params_path} \tab Path to the saved cleaning parameters. \cr
+   \code{n_candidates_before} \tab Number of candidates before cleaning. \cr
+   \code{n_candidates_after} \tab Number of candidates after cleaning. \cr
+   \code{n_chained_flagged} \tab Number of candidates flagged for cleaning. \cr
+   \code{area_before_ha} \tab Candidate area before cleaning, in hectares. \cr
+   \code{area_after_ha} \tab Candidate area after cleaning, in hectares. \cr
+   \code{area_removed_ha} \tab Reported area removed by cleaning, in hectares. \cr
+   \code{opening_px} \tab Opening radius used, in pixels. \cr
+   \code{dechain_distance_m} \tab Cleaning-distance setting, in metres. \cr
+}
+
+
+Candidate counts may increase when a polygon is split into several
+components.
 }
 \description{
-\code{apply_chain_cleaning()} (alias \code{apply_chain()}) is an \strong{optional}
-stage of the deterministic workflow that removes "chaining" artefacts: thin
-bridges/necks produced by region growing that connect genuinely separate burned
-cores (and bright-soil false positives) into a single fractal blob. It operates
-on the \strong{already refined} candidates written by the refine stage
-(\code{02_REFINE/BA_<year>_REFINE_MERGED_*.gpkg}) and writes a new, separate
-candidate layer under \code{CHAIN/dechain_<N>m/}, ready to be consumed by the
-scoring/decision stages WITHOUT re-running grow or refine.
+Optionally clean narrow connections between parts of refined candidate
+burned patches. These connections can arise during region growing and join
+otherwise separate patches.
+
+The function identifies candidates with unusually complex shapes, applies
+morphological opening to those candidates, and writes a separate layer for
+subsequent scoring. Candidates not selected for cleaning are retained
+without rasterisation or morphological processing.
+
+Run this function after \code{\link[=detect_burned_patches]{detect_burned_patches()}} and pass the cleaned
+output to \code{\link[=score_burned_patches]{score_burned_patches()}}. The original refined candidate layer
+is preserved.
+
+\code{apply_chain()} is an alias for \code{apply_chain_cleaning()}.
 }
-\details{
-\strong{Where it sits in the deterministic flow:}
+\section{Position in the workflow}{
+
+Chain cleaning is an optional step between refinement and scoring:
+\enumerate{
+\item Generate refined candidates with \code{\link[=detect_burned_patches]{detect_burned_patches()}}.
+\item Clean selected candidates with \code{apply_chain_cleaning()}.
+\item Score the cleaned layer with \code{\link[=score_burned_patches]{score_burned_patches()}}.
+}
+
+Cleaning is applied after refinement so that the refinement merging step
+does not reconnect separated patches. Existing detection outputs can be
+reused without repeating region growing or refinement.
+
+The standard Otsu-guided segmentation pipeline does not automatically run this
+optional step.
+}
+
+\section{Candidate selection}{
+
+Candidates are selected using a shape-complexity measure derived from
+Polsby-Popper compactness:
 \preformatted{
-  01_GROW -> 02_REFINE -> [apply_chain_cleaning()] -> 03_SCORE_PHASE1 ->
-  03_SCORE_PHASE2 -> 05_DECISIONS
+compact_pp = 4 * pi * A / P^2
+inflation  = 1 / sqrt(compact_pp)
 }
-It is placed AFTER refine (not inside grow) so that the refine \code{merge_overlaps}
-step cannot re-bridge cut necks, and so existing \code{01_GROW}/\code{02_REFINE}
-outputs can be reused. Scores and keep/review/drop decisions are therefore computed
-on the already-cleaned geometry.
+Here, \code{A} is polygon area and \code{P} is perimeter, expressed in consistent
+units.
 
-\strong{Method (selective, do-no-harm).} Only candidates flagged as chained are
-touched; everything else passes through byte-for-byte. A candidate is chained when
-its Polsby-Popper inflation \code{1/sqrt(compact_pp)} (with
-\code{compact_pp = 4*pi*A/P^2}, the package convention) exceeds \code{inflation_thr}
-(default 22.135, the geometric-sanity-gate threshold), optionally also requiring
-\code{area_ha >= min_area_ha}. Flagged candidates are rasterised on a
-\code{pixel_size_m} grid and a morphological \strong{opening} (erosion then
-dilation with a disk of radius \code{opening_px}) severs necks narrower than the
-opening diameter; the result is split into connected components and re-polygonised.
-Untouched candidates are NOT rasterised (no resampling loss).
+A candidate is selected when \code{inflation > inflation_thr}. If \code{min_area_ha}
+is supplied, the candidate must also satisfy \code{area_ha >= min_area_ha}.
 
-\strong{Distance to pixels.} \code{opening_px = dechain_distance_m / pixel_size_m}.
-With \code{pixel_size_m = 90}: 90 m = 1 px, 180 m = 2 px, 270 m = 3 px. If the ratio
-is not an integer a warning is emitted and it is rounded to the nearest integer
-(\code{round()}); a value below 1 is an error.
+Shape complexity identifies candidates for inspection and cleaning; it
+does not establish that a narrow connection is an artefact.
 
-\strong{Markers.} \code{marker = "connected"} (default, validated) keeps every
-connected component after opening. \code{marker = "seeds"} additionally anchors
-pieces to the grow seeds and requires \code{change_index}, \code{vegetation_map} and
-\code{seed_threshold_by_vegetation}; pieces with no seed are dropped when
-\code{keep_noseed_fragments = FALSE}. If "seeds" is requested without those inputs
-the function warns and falls back to "connected".
-
-\strong{This function:} is opt-in and does nothing unless you call it; does NOT
-change the standard pipeline; does NOT re-run grow/refine; does NOT train models;
-does NOT touch the supervised phase; and never overwrites the original
-\code{REFINE_MERGED}.
-
-\strong{Caveat.} Too aggressive a \code{dechain_distance_m} (or a non-selective
-threshold) can fragment real fires or erode small cores and raise omission. Always
-validate the output visually (e.g. in QGIS) before using it downstream.
+\code{min_area_ha} controls which input candidates are processed. It is not a
+minimum-area filter for the resulting fragments.
 }
-\section{Continuing to scoring}{
 
-Feed \code{output_path} to the scoring stage as the burned candidates, e.g.
-\code{score_burned_patches(burned_candidates = res$output_path, config = cfg, ...)},
-so \code{03_SCORE_PHASE1}, \code{03_SCORE_PHASE2} and \code{05_DECISIONS} are computed
-on the cleaned geometry. Grow and refine are not repeated.
+\section{Morphological cleaning}{
+
+Selected candidates are:
+\enumerate{
+\item rasterised at \code{pixel_size_m};
+\item processed by morphological opening, consisting of erosion followed by
+dilation with a disk-shaped structuring element;
+\item separated into connected components;
+\item converted back to polygons.
+}
+
+Opening can remove narrow connections and small protrusions. It can also
+remove small components or alter boundaries within selected candidates.
+
+Candidates not selected for cleaning are retained without rasterisation or
+morphological processing.
+}
+
+\section{Distance and pixel size}{
+
+The opening radius in pixels is calculated as
+\code{opening_px = dechain_distance_m / pixel_size_m}.
+
+For a grid-cell size of 90 m:\tabular{lll}{
+   \code{dechain_distance_m} \tab Opening radius in pixels \tab Nominal opening diameter \cr
+   90 \tab 1 \tab 180 m \cr
+   180 \tab 2 \tab 360 m \cr
+   270 \tab 3 \tab 540 m \cr
+}
+
+
+The opening diameter is not an exact cutoff for connection width. Results
+depend on connection shape, orientation, and rasterisation.
+
+If the distance-to-pixel ratio is not an integer, the function issues a
+warning and rounds it using \code{round()}. An opening radius below one pixel
+is rejected.
+}
+
+\section{Component retention}{
+\tabular{ll}{
+   Mode \tab Behaviour \cr
+   \code{"connected"} \tab Retain every connected component remaining after opening. \cr
+   \code{"seeds"} \tab Use seed support to assess the resulting fragments. Requires \code{change_index}, \code{vegetation_map}, and \code{seed_threshold_by_vegetation}. \cr
+}
+
+
+With \code{marker = "seeds"}:
+\itemize{
+\item \code{keep_noseed_fragments = TRUE} retains fragments without seed support;
+\item \code{keep_noseed_fragments = FALSE} removes fragments without seed support.
+}
+
+If seed mode is requested without the required inputs, the function issues
+a warning and falls back to \code{"connected"} mode.
+}
+
+\section{Output location}{
+
+Cleaned outputs are written under \verb{<out_dir>/CHAIN/dechain_<N>m/}.
+
+The original \code{REFINE_MERGED} input is preserved. To control the output
+location explicitly, supply \code{out_dir}, particularly when the input is
+outside the standard run-folder structure.
+}
+
+\section{Choosing cleaning settings}{
+
+Larger opening radii can separate genuine parts of a fire or remove small
+burned patches. Lowering \code{inflation_thr} selects more candidates for
+processing.
+
+Inspect the cleaned geometries and compare candidate counts and areas
+before using the output for scoring. Area removed by cleaning should not
+automatically be interpreted as corrected false-positive area.
 }
 
 \examples{
 \dontrun{
-refine <- file.path("1_DATA/Results/1985/DETERMINISTIC/1985_very_permissive",
-                    "02_REFINE/BA_1985_REFINE_MERGED_otsu285_d115_seed12_whitebox.gpkg")
-# cut necks up to 180 m wide on chained blobs only:
-res <- apply_chain_cleaning(refine, dechain_distance_m = 180)
-res$output_path   # -> .../CHAIN/dechain_180m/BA_1985_REFINE_MERGED_dechain180m.gpkg
-# compare a gentler level:
-res90 <- apply_chain_cleaning(refine, dechain_distance_m = 90)
+# Configure an annual RBR workflow
+config <- build_burned_mapping_config(
+  change_index = "data/RBR_2022.tif",
+  vegetation_map = "data/vegetation_classes.tif",
+  burnable_mask = "data/burnable_mask.tif",
+  hotspots = "data/hotspots_2022.gpkg",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022"
+)
+
+# Generate refined candidates
+detection <- detect_burned_patches(
+  config = config,
+  write_outputs = TRUE
+)
+
+# Clean selected candidates using a two-pixel opening radius
+cleaned <- apply_chain_cleaning(
+  refine_path = detection$refined_patches_path,
+  year = 2022L,
+  dechain_distance_m = 180,
+  pixel_size_m = 90
+)
+
+# Inspect changes in candidate counts and area
+cleaned$n_chained_flagged
+cleaned$n_candidates_before
+cleaned$n_candidates_after
+cleaned$area_removed_ha
+
+# Load the cleaned layer for visual inspection
+cleaned_patches <- sf::st_read(
+  cleaned$output_path,
+  quiet = TRUE
+)
+plot(sf::st_geometry(cleaned_patches))
+
+# Compare a smaller opening radius using the same original input
+cleaned_90 <- apply_chain_cleaning(
+  refine_path = detection$refined_patches_path,
+  year = 2022L,
+  dechain_distance_m = 90,
+  pixel_size_m = 90
+)
+
+# After inspection, score the selected cleaned output
+scored <- score_burned_patches(
+  burned_candidates = cleaned$output_path,
+  config = config,
+  write_outputs = TRUE
+)
+
+table(
+  scored$internal_decisions$class_final,
+  useNA = "ifany"
+)
 }
+
+}
+\seealso{
+\code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}}, \code{\link[=detect_burned_patches]{detect_burned_patches()}},
+\code{\link[=score_burned_patches]{score_burned_patches()}}.
 }

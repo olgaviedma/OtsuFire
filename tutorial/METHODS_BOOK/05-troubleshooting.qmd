@@ -27,7 +27,7 @@ Before debugging a specific stage, confirm five basics.
 | Supervised run aborts with a feature-schema parity error | The OOF, FINAL, and scoring feature spaces diverged — the runtime parity guard (Gate 1E) refuses to deploy a model whose schema differs from the one OOF evaluated | The `_feature_schema_parity.txt` manifest in the run output and the per-fold fingerprint sidecar |
 | Supervised run aborts on an empty Otsu legacy negative pool | The Otsu current-year residual pool is empty after sanitisation; degrading to deterministic-direct semantics would change the negative pool, so the default errors (D4a) | Set `options$allow_empty_otsu_pool = TRUE` only if the degraded pool is acceptable; otherwise check the Otsu inputs |
 | A stale `negative_pool_policy` / `otsu_unburned_generation` option errors at config build | These knobs were removed on 2026-06-05; the pipeline is always `all_sources` | Remove the option from the `build_supervised_burned_config(options = ...)` call (`negative_pool_policy = "all_sources"` is accepted as a no-op) |
-| A cached negative pool is rebuilt unexpectedly | The content-aware `neg_pool_fingerprint` changed (e.g. the B4 burnable-domain restriction, mask, percentile, seed, or inputs differ), so the stale pool is invalidated rather than reused | `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt` |
+| A cached negative pool is rebuilt unexpectedly | The content-aware `neg_pool_fingerprint` changed (e.g. the B4 burnable-domain restriction, mask, percentile, seed, or inputs differ), so the stale pool is invalidated rather than reused | `01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt` |
 
 ## Files Worth Checking First
 
@@ -37,7 +37,7 @@ When a run looks wrong, these files are usually the highest-value first checks.
 |---|---|---|
 | Mosaic | Annual mosaic GeoTIFF and returned diagnostics | Confirms the common raster base for all later stages |
 | Deterministic | `05_DECISIONS/internal_decisions.gpkg` | Canonical annual deterministic state |
-| Supervised pools | `01_POOLS/<year>_<scenario>_pools.gpkg` | Shows the actual burned, unburned, review, and scoring pools |
+| Supervised pools | `01_POOLS/<year>_<run_label>_pools.gpkg` | Shows the actual burned, unburned, review, and scoring pools |
 | Supervised folds | `02_FOLDS/<year>_train_with_folds_<blocksize>m.gpkg` | Confirms fold assignment and training geometry |
 | Features | `03_FEATURES/features_geometry.gpkg` | Confirms feature extraction completed on the intended polygons |
 | OOF | `05_OOF/*_oof_agg.csv` and `*_oof_best_thresholds.csv` | Confirms same-year diagnostic behavior |

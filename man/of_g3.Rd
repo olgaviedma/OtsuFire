@@ -15,3 +15,4 @@ The cleaned \code{sf} in EPSG:3035.
 \description{
 Make valid, drop empties and project to ETRS89-LAEA (EPSG:3035)
 }
+\keyword{internal}

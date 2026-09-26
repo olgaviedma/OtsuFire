@@ -17,3 +17,4 @@ A data.frame with columns \code{median} and \code{p90}.
 \description{
 Per-polygon RBR statistics (median and p90)
 }
+\keyword{internal}

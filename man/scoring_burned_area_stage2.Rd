@@ -53,36 +53,36 @@ scoring_burned_area_stage2(
 
 \item{burnable_corine}{Burnable mask. Either a terra::SpatRaster (CORINE-like) or an sf layer.}
 
-\item{burnable_classes}{Numeric/integer vector of burnable classes when `burnable_corine` is categorical.
-If `NULL`, the raster must be binary-like (values in \{0,1\}).}
+\item{burnable_classes}{Numeric/integer vector of burnable classes when \code{burnable_corine} is categorical.
+If \code{NULL}, the raster must be binary-like (values in \{0,1\}).}
 
-\item{rbr_rast}{Optional terra::SpatRaster. If provided and `compute_median=TRUE`, median RBR is computed.}
+\item{rbr_rast}{Optional terra::SpatRaster. If provided and \code{compute_median=TRUE}, median RBR is computed.}
 
 \item{support_buffer_m}{Numeric. Buffer (meters) applied to Stage-1 support before intersects.}
 
-\item{max_corine_na_frac}{Numeric or `NULL`. If set, polygons with NA fraction greater than this
-are re-flagged as `"drop_corine_na"`.}
+\item{max_corine_na_frac}{Numeric or \code{NULL}. If set, polygons with NA fraction greater than this
+are re-flagged as \code{"drop_corine_na"}.}
 
 \item{corine_na_scope}{Character. Where to compute CORINE NA fraction. One of:
-`"nohit_stage1"`, `"keep"`, `"keep_nohit"`, `"all"`.}
+\code{"nohit_stage1"}, \code{"keep"}, \code{"keep_nohit"}, \code{"all"}.}
 
-\item{support_method}{Character. `"raster"` (fast if burnable_corine is raster) or `"vector"`.}
+\item{support_method}{Character. \code{"raster"} (fast if burnable_corine is raster) or \code{"vector"}.}
 
-\item{touches}{Logical. If `TRUE`, terra::rasterize uses touches=TRUE to reduce boundary gaps.}
+\item{touches}{Logical. If \code{TRUE}, terra::rasterize uses touches=TRUE to reduce boundary gaps.}
 
-\item{make_valid}{Character. `"auto"`, `"always"`, or `"none"` for validity fixing during intermediate steps.}
+\item{make_valid}{Character. \code{"auto"}, \code{"always"}, or \code{"none"} for validity fixing during intermediate steps.}
 
-\item{na_exact}{Logical. If `TRUE`, compute CORINE NA fraction using exact extraction (slower).}
+\item{na_exact}{Logical. If \code{TRUE}, compute CORINE NA fraction using exact extraction (slower).}
 
-\item{burnable_exact}{Logical. If `TRUE`, compute burnable check using exact extraction (slower).}
+\item{burnable_exact}{Logical. If \code{TRUE}, compute burnable check using exact extraction (slower).}
 
-\item{clip_to_burnable}{Logical. If `TRUE`, clip Stage-2 polygons to burnable mask (raster required).}
+\item{clip_to_burnable}{Logical. If \code{TRUE}, clip Stage-2 polygons to burnable mask (raster required).}
 
 \item{clip_mask_buffer_m}{Numeric. Optional dilation buffer (meters) on burnable mask during clipping.}
 
 \item{clip_min_piece_area_m2}{Numeric. Drop clipped slivers smaller than this area.}
 
-\item{clip_keep_largest_piece}{Logical. If `TRUE`, keep only largest clipped piece per original polygon.}
+\item{clip_keep_largest_piece}{Logical. If \code{TRUE}, keep only largest clipped piece per original polygon.}
 
 \item{preyear_polys}{Optional sf. Pre-year polygons to erase from outputs.}
 
@@ -92,7 +92,7 @@ are re-flagged as `"drop_corine_na"`.}
 
 \item{erase_min_area_m2}{Numeric. Drop erased fragments smaller than this area.}
 
-\item{compute_median}{Logical. If `TRUE` and `rbr_rast` is provided, compute median RBR.}
+\item{compute_median}{Logical. If \code{TRUE} and \code{rbr_rast} is provided, compute median RBR.}
 
 \item{median_colname}{Character. Name of the median column to create/fill.}
 
@@ -105,44 +105,49 @@ are re-flagged as `"drop_corine_na"`.}
 \item{internal_keep_value}{Character vector. Internal keep label(s) used in validation (default "keep").}
 
 \item{validate_use_clean}{Logical. If TRUE (default), validation is performed on the final keep/review geometry
-delivered for analysis by using `stage2_keep_review_clean` (i.e., `stage2_keep_review_erased` when available).
-If FALSE, validation uses the raw keep/review layer (`stage2_keep_review`).}
+delivered for analysis by using \code{stage2_keep_review_clean} (i.e., \code{stage2_keep_review_erased} when available).
+If FALSE, validation uses the raw keep/review layer (\code{stage2_keep_review}).}
 
-\item{score_ref_polys}{Logical. If TRUE (default) and `ref_polys` is provided, the wrapper
-also runs `scoring_reference_burned_area()` to harmonize reference outputs (burnable/NA diagnostics,
+\item{score_ref_polys}{Logical. If TRUE (default) and \code{ref_polys} is provided, the wrapper
+also runs \code{scoring_reference_burned_area()} to harmonize reference outputs (burnable/NA diagnostics,
 optional median RBR, and optional preyear erase).}
 
-\item{validate_ref_use_clean}{Logical. Only used when `score_ref_polys=TRUE`. If TRUE (default),
-validation uses the cleaned reference geometry (`ref_kept_clean` or `ref_flagged_clean`) when available.}
+\item{validate_ref_use_clean}{Logical. Only used when \code{score_ref_polys=TRUE}. If TRUE (default),
+validation uses the cleaned reference geometry (\code{ref_kept_clean} or \code{ref_flagged_clean}) when available.}
 
-\item{validate_ref_use_kept}{Logical. Only used when `score_ref_polys=TRUE`. If TRUE (default),
-validation uses the kept reference layer (`ref_kept*`) rather than the full flagged reference layer.}
+\item{validate_ref_use_kept}{Logical. Only used when \code{score_ref_polys=TRUE}. If TRUE (default),
+validation uses the kept reference layer (\verb{ref_kept*}) rather than the full flagged reference layer.}
 
-\item{save_outputs}{Logical. If `TRUE`, write outputs and a summary file.}
+\item{save_outputs}{Logical. If \code{TRUE}, write outputs and a summary file.}
 
-\item{out_dir}{Character. Output directory used when `save_outputs=TRUE`.}
+\item{out_dir}{Character. Output directory used when \code{save_outputs=TRUE}.}
 
 \item{prefix}{Character. Prefix for output filenames when saving.}
 
-\item{driver}{Character. `"GPKG"` or `"ESRI Shapefile"`.}
+\item{driver}{Character. \code{"GPKG"} or \code{"ESRI Shapefile"}.}
 
 \item{overwrite}{Logical. Overwrite outputs when saving.}
 
-\item{quiet}{Logical. If `TRUE`, suppress messages in sf::st_write.}
+\item{quiet}{Logical. If \code{TRUE}, suppress messages in sf::st_write.}
 
-\item{save_splits}{Logical. If `TRUE`, also save keep-only and review-only layers.}
+\item{save_splits}{Logical. If \code{TRUE}, also save keep-only and review-only layers.}
 
-\item{suppress_sf_warnings}{Logical. If `TRUE`, suppress common sf warnings (recommended).}
+\item{suppress_sf_warnings}{Logical. If \code{TRUE}, suppress common sf warnings (recommended).}
 }
 \value{
 A list with:
-- internal: output of `scoring_internal_burned_area()`
-- reference: output of `scoring_reference_burned_area()` (or NULL if `ref_polys` is NULL or `score_ref_polys=FALSE`)
-- validation: output of `scoring_validation_burned_area()` (or NULL if `ref_polys` is NULL)
+\itemize{
+\item internal: output of \code{scoring_internal_burned_area()}
+\item reference: output of \code{scoring_reference_burned_area()} (or NULL if \code{ref_polys} is NULL or \code{score_ref_polys=FALSE})
+\item validation: output of \code{scoring_validation_burned_area()} (or NULL if \code{ref_polys} is NULL)
+}
 }
 \description{
 Convenience wrapper that:
-1) runs `scoring_internal_burned_area()` (Stage-2 flagged using Stage-1 support + burnable mask),
-2) optionally erases overlaps with a pre-year mask (already included in internal scoring when `preyear_polys` is set),
-3) optionally runs `scoring_validation_burned_area()` if `ref_polys` is provided.
+\enumerate{
+\item runs \code{scoring_internal_burned_area()} (Stage-2 flagged using Stage-1 support + burnable mask),
+\item optionally erases overlaps with a pre-year mask (already included in internal scoring when \code{preyear_polys} is set),
+\item optionally runs \code{scoring_validation_burned_area()} if \code{ref_polys} is provided.
 }
+}
+\keyword{internal}

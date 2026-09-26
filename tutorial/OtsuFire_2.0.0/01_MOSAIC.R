@@ -143,7 +143,7 @@ if (FALSE) {
 #   NoData declared and outliers capped.
 #
 #   Repeat this stage for the autumn-winter composite as well if you have it:
-#   the supervised stage uses it as the "delayed change index".
+#   the probabilistic refinement stage uses it as the "delayed change index".
 #
 # NEXT: 02_DETERMINISTIC.R
 # =============================================================================

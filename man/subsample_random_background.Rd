@@ -41,8 +41,7 @@ artifact_hard rows are left intact. The selection is reproducible under
 \code{seed}. If the random bucket is already at or below the target, the pool
 is returned unchanged.
 
-The default \code{seed = 42L} is the project's canonical seed. It is
-deliberately different from the seed used by
+The default \code{seed = 42L} is deliberately different from the seed used by
 \code{\link{add_pool_shape_features}}; the two operations are independent and
 keep their own seeds.
 }

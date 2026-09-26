@@ -29,11 +29,11 @@ assemble_era_training_pool(
 }
 \value{
 A list with \code{pool} (the merged \code{sf} training pool),
-  \code{omissions} (\code{sf} of \code{VISUAL = 0} real fires, or
-  \code{NULL}) and \code{summary} (per-year row counts).
+\code{omissions} (\code{sf} of \code{VISUAL = 0} real fires, or
+\code{NULL}) and \code{summary} (per-year row counts).
 }
 \description{
-Merges several years of visually-validated supervised pools into one
+Merges several years of visually validated training pools into one
 trainable cross-year pool. Use it when you want to train a single model
 across multiple fire years instead of one model per year.
 
@@ -49,8 +49,8 @@ decisions are read through \code{\link{apply_visual_validation}}.
 \examples{
 \dontrun{
 era <- assemble_era_training_pool(list(
-  list(year = 1985, base_dir = ".../1985/SUPERVISED/1985_balanced_keepPool"),
-  list(year = 1988, base_dir = ".../1988/SUPERVISED/1988_balanced_keepPool")))
+  list(year = 2020, base_dir = "results/2020/SUPERVISED/balanced"),
+  list(year = 2021, base_dir = "results/2021/SUPERVISED/balanced")))
 nrow(era$pool); nrow(era$omissions)
 }
 }

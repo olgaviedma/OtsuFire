@@ -37,30 +37,30 @@ validation result (defaults \code{"VISUAL"}, \code{"artifact_hard_eligible"},
 }
 \value{
 Invisibly, a list with:
-  \describe{
-    \item{\code{layers}}{a named list of \code{sf} layers:
-      \code{all_tagged}, \code{keep}, \code{otsu_residual},
-      \code{random_background}, \code{artifact_hard}.}
-    \item{\code{summary}}{a list of count tables: \code{by_bucket},
-      \code{by_visual}, \code{by_action}, \code{by_training} and
-      \code{bucket_x_action}.}
-    \item{\code{path}}{the output path (or \code{NULL}).}
-    \item{\code{n}}{total row count of \code{all_tagged}.}
-  }
+\describe{
+\item{\code{layers}}{a named list of \code{sf} layers:
+\code{all_tagged}, \code{keep}, \code{otsu_residual},
+\code{random_background}, \code{artifact_hard}.}
+\item{\code{summary}}{a list of count tables: \code{by_bucket},
+\code{by_visual}, \code{by_action}, \code{by_training} and
+\code{bucket_x_action}.}
+\item{\code{path}}{the output path (or \code{NULL}).}
+\item{\code{n}}{total row count of \code{all_tagged}.}
+}
 }
 \description{
-A REVIEW EXPORTER (not a model step). It takes a supervised training pool,
-resolves the VISUAL decisions through \code{\link{apply_visual_validation}}
-and writes/returns the pool split by \code{review_bucket} so it is easy to
-inspect in QGIS. It NEVER trains a model, NEVER scores and NEVER rebuilds the
-pool; the input object is not modified.
+Prepares a supervised training pool for visual review. It resolves the
+VISUAL decisions through \code{\link{apply_visual_validation}} and
+writes/returns the pool split by \code{review_bucket} so it is easy to
+inspect in QGIS. It is a review step, not a model step: it does not train,
+score or rebuild the pool, and the input object is not modified.
 }
 \details{
 Typical loop: (1) export with this function, (2) open the GPKG in QGIS and
 edit the \code{VISUAL} column (\code{0}/\code{1}/blank) on the rows you
 review, (3) read the edited \code{all_tagged} layer back and pass it to
 \code{\link{apply_visual_validation}} to get the clean training set. The
-\code{all_tagged} layer is the canonical RE-ENTRY layer: it carries
+\code{all_tagged} layer is the one to edit and read back: it carries
 \code{VISUAL} and \code{artifact_hard_eligible}, so editing \code{VISUAL}
 there and re-reading preserves the full semantics. The per-bucket layers
 carry the same columns and the same semantics; they are a convenience for
@@ -70,25 +70,25 @@ visual review only.
 \code{VISUAL = 1} confirms; \code{VISUAL = 0} rejects; blank/\code{NA} is
 unreviewed. For the \code{artifact_hard} family the meaning is special:
 \itemize{
-  \item \code{VISUAL = 1}: promote the candidate as a HARD-NEGATIVE (it is a
-    confirmed false positive, usable as a negative).
-  \item \code{VISUAL = 0}: treat the candidate as an OMITTED REAL FIRE -- do
-    NOT use it as a negative; it goes to the omissions set.
-  \item \code{VISUAL = NA}: not reviewed / not promoted.
+\item \code{VISUAL = 1}: promote the candidate as a HARD-NEGATIVE (it is a
+confirmed false positive, usable as a negative).
+\item \code{VISUAL = 0}: treat the candidate as an OMITTED REAL FIRE -- do
+NOT use it as a negative; it goes to the omissions set.
+\item \code{VISUAL = NA}: not reviewed / not promoted.
 }
 }
 \examples{
 \dontrun{
 # 1) Export for review:
 ex <- export_visual_validation_pools(
-  "1985/.../supervised_training_pool.gpkg",
-  out_path = "C:/of_tmp/1985_pool_visual.gpkg", overwrite = TRUE)
+  "results/2020/SUPERVISED/balanced/01_POOLS/supervised_training_pool.gpkg",
+  out_path = "results/pool_visual_review.gpkg", overwrite = TRUE)
 ex$summary$by_bucket
 
 # 2) ...edit VISUAL in QGIS on the all_tagged layer...
 
 # 3) Re-feed the edited pool:
-edited <- sf::st_read("C:/of_tmp/1985_pool_visual.gpkg", layer = "all_tagged")
+edited <- sf::st_read("results/pool_visual_review.gpkg", layer = "all_tagged")
 vv <- apply_visual_validation(edited)
 vv$summary
 }

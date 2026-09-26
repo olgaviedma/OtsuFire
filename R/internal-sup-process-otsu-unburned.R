@@ -7,9 +7,9 @@
 #' - CORINE land cover classes (`corine_raster_path`)
 #'
 #' Gate 1B PIECE 4 (2026-06-08): the supervised ecoregion / CORINE × ecoregion
-#' stratification was removed (it was never wired into any supervised run; the
+#' stratification was removed (it was never wired into any probabilistic refinement run; the
 #' canonical supervised negative-pool Otsu mode is `burnable_only`). The
-#' CORINE × ecoregion stratified Otsu lives in the DETERMINISTIC delineation
+#' CORINE × ecoregion stratified Otsu lives in the Otsu-guided segmentation
 #' stage (`process_otsu_rasters_grow()`), which is unaffected.
 #'
 #' ## Key features:
@@ -26,12 +26,11 @@
 #'   - Threshold log files
 #'
 #' @details
-#' - Raster values are internally rescaled to [0, 255] before Otsu thresholding.
+#' - Raster values are internally rescaled to \[0, 255\] before Otsu thresholding.
 #' - Histogram smoothing and variance curves are used for enhanced threshold detection.
 #' - Output shapefiles can be in ESRI Shapefile or GeoJSON format.
 #' - Intermediate tile shapefiles and rasters are cleaned after processing.
 #'
-#' @name process_otsu_rasters
 #' @rdname process_otsu_rasters
 #'
 #' @param raster_path Path to a single-band RBR or dNBR raster.
@@ -81,6 +80,7 @@
 #' @importFrom data.table :=
 #' @importFrom stringr str_detect str_replace str_extract
 #' @importFrom glue glue
+#' @keywords internal
 process_otsu_rasters_ <- function(
     raster_path = NULL,
     nbr_pre_path = NULL,

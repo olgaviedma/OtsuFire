@@ -194,6 +194,7 @@
 #' @importFrom progressr with_progress progressor
 #' @importFrom parallelly availableCores
 #' @importFrom tools file_path_sans_ext
+#' @keywords internal
 segmentation_refinement <- function(
     n_workers = 6,
     raster_path,

@@ -27,7 +27,7 @@ mk_cfg_m <- function() {
 # -> QA relabel via audit_deterministic_pools() -> burned/review/scoring pools
 # -> BOTH all_sources unburned builders (deterministic drops + random burnable
 # background, and the Otsu/legacy current-year residual patches) -> merge
-# train_labeled -> write 01_POOLS/<year>_<scenario>_pools.gpkg). A faithful
+# train_labeled -> write 01_POOLS/<year>_<run_label>_pools.gpkg). A faithful
 # happy-path fixture would require a deterministic decisions GPKG with the
 # expected QA columns, the full composite/mask raster stack for the target year
 # AND the external GDAL/Python tool binaries the legacy Otsu builder shells out
@@ -458,6 +458,27 @@ test_that("check_supervised_consistency validates required inputs", {
     config = cfg
   )
   expect_true("consistency_summary_csv" %in% names(out))
+})
+
+test_that("check_supervised_consistency accepts run_label without a config", {
+  expect_error(
+    check_supervised_consistency(
+      deterministic_decisions = mk_tmp_gpkg_m(),
+      final_map = mk_tmp_gpkg_m(),
+      out_dir = tempdir(),
+      target_year = 2020L
+    ),
+    regexp = "run_label"
+  )
+  out <- check_supervised_consistency(
+    deterministic_decisions = mk_tmp_gpkg_m(),
+    final_map = mk_tmp_gpkg_m(),
+    out_dir = tempdir(),
+    target_year = 2020L,
+    run_label = "demo"
+  )
+  expect_identical(basename(out$consistency_summary_csv),
+                   "2020_demo_consistency_summary.csv")
 })
 
 test_that("run_oneyear_supervised_pipeline validates config and flags", {

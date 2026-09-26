@@ -25,10 +25,10 @@ merge_aoi_shapefiles(
 \item{base_output_dir}{Character. Existing directory to scan recursively.}
 
 \item{pattern}{Character or NULL. Optional regex to filter filenames (matched
-against `basename(file)` with `ignore.case = TRUE`). If NULL, only the file
+against \code{basename(file)} with \code{ignore.case = TRUE}). If NULL, only the file
 extension filter is applied.}
 
-\item{out_path}{Character. Output path ending in `.shp` or `.gpkg`.}
+\item{out_path}{Character. Output path ending in \code{.shp} or \code{.gpkg}.}
 
 \item{dissolve}{Logical. If TRUE, dissolves all geometries into a single
 (multi)polygon feature (attributes are dropped).}
@@ -41,41 +41,41 @@ originating file.}
 
 \item{source_field}{Character. Name of the source field to add.}
 
-\item{keep_full_path}{Logical. If TRUE, stores full paths in `source_field`,
-otherwise stores `basename(file)`.}
+\item{keep_full_path}{Logical. If TRUE, stores full paths in \code{source_field},
+otherwise stores \code{basename(file)}.}
 
 \item{verbose}{Logical. If TRUE, prints progress messages.}
 
 \item{strip_ecoregion}{Logical. If TRUE, drops ecoregion-related columns
-from outputs based on `ecoregion_field` and `drop_pattern`.}
+from outputs based on \code{ecoregion_field} and \code{drop_pattern}.}
 
 \item{ecoregion_field}{Character or NULL. Explicit ecoregion column name
-to drop, in addition to `drop_pattern` matches.}
+to drop, in addition to \code{drop_pattern} matches.}
 
 \item{drop_pattern}{Character. Case-insensitive regex applied to column
-names; matching columns are dropped when `strip_ecoregion=TRUE`.}
+names; matching columns are dropped when \code{strip_ecoregion=TRUE}.}
 
 \item{drop_cols}{Character vector or NULL. Additional explicit column
 names to drop.}
 
-\item{overwrite}{Logical. If `TRUE`, an existing `out_path` is removed
-before writing. If `FALSE` (default) and `out_path` already exists,
+\item{overwrite}{Logical. If \code{TRUE}, an existing \code{out_path} is removed
+before writing. If \code{FALSE} (default) and \code{out_path} already exists,
 the function stops with an explicit error instead of silently
 replacing the destination. P1-DET-02 contract.}
 }
 \value{
-The `out_path` (invisibly). Stops with an error if nothing is found
-  or if all inputs are empty/invalid.
+The \code{out_path} (invisibly). Stops with an error if nothing is found
+or if all inputs are empty/invalid.
 }
 \description{
-Recursively scans an AOI output root folder (e.g., `REFINE_AOI_5pix/`) and
+Recursively scans an AOI output root folder (e.g., \verb{REFINE_AOI_5pix/}) and
 merges all matching vector files into a single output file. Designed to be
-run *after* AOI processing finishes (independent of the refinement function).
+run \emph{after} AOI processing finishes (independent of the refinement function).
 }
 \details{
-Supported inputs: ESRI Shapefile (`.shp`), GeoPackage (`.gpkg`), GeoJSON
-(`.geojson`/`.json`), and FlatGeobuf (`.fgb`). The output can be `.shp` or
-`.gpkg` (chosen by `out_path` extension).
+Supported inputs: ESRI Shapefile (\code{.shp}), GeoPackage (\code{.gpkg}), GeoJSON
+(\code{.geojson}/\code{.json}), and FlatGeobuf (\code{.fgb}). The output can be \code{.shp} or
+\code{.gpkg} (chosen by \code{out_path} extension).
 }
 \examples{
 \dontrun{
@@ -88,3 +88,4 @@ merge_aoi_shapefiles(
 )
 }
 }
+\keyword{internal}

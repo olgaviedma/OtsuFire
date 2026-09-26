@@ -53,10 +53,10 @@
 #'
 #' @description
 #' Collect high-confidence historical \emph{keep}-like polygons from one
-#' or more previously written deterministic decision layers, using a
+#' or more previously written Otsu-guided segmentation decision layers, using a
 #' single fixed selection rule (\code{"strict_hotspot"}).
 #'
-#' In the public deterministic workflow, this helper is meant for
+#' In the public Otsu-guided segmentation workflow, this helper is meant for
 #' building explicit \emph{external} reference pools from trusted years
 #' other than the year currently being scored. The selected samples are
 #' intended to feed
@@ -72,14 +72,14 @@
 #'
 #' \strong{Explicit helper workflow.} Neither this function nor
 #' \code{build_keep_pool_from_samples()} is called automatically by the
-#' deterministic pipeline. They are standalone helpers. If you choose to
+#' Otsu-guided segmentation pipeline. They are standalone helpers. If you choose to
 #' use them, the resulting \code{keep_pool} can then be passed
 #' explicitly to
 #' \code{score_burned_patches(..., keep_pool = ...)} or
 #' \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 #'
 #' @details
-#' \strong{Current helper design.} The caller supplies the exact decision
+#' \strong{Inputs.} The caller supplies the exact decision
 #' layer paths in \code{decision_paths}. There is no autodiscovery, and
 #' the selection rule described below is fixed in the public helper.
 #'
@@ -101,7 +101,7 @@
 #' \code{run_name}, then \code{scenario}, otherwise \code{NA_character_}.
 #'
 #' @param decision_paths Character vector of existing paths to
-#'   deterministic decision files. This argument is required; the helper
+#'   Otsu-guided segmentation decision files. This argument is required; the helper
 #'   does not search for files automatically.
 #' @param target_year Optional scalar year. When supplied, polygons with
 #'   \code{year == target_year} are excluded. This is the recommended
@@ -416,7 +416,7 @@ collect_keep_reference_samples <- function(decision_paths,
 #' fallback (\code{keep_pool = NULL}).
 #'
 #' @details
-#' \strong{Current helper design.} The caller supplies exact raster paths
+#' \strong{Inputs.} The caller supplies exact raster paths
 #' in \code{change_index_paths}, which must be a \emph{named} list or
 #' vector keyed by year (for example
 #' \code{list(`2010` = "...", `2011` = "...")}). There is no
@@ -430,7 +430,7 @@ collect_keep_reference_samples <- function(decision_paths,
 #' to derive reference quantiles, and a per-polygon median is accumulated
 #' into \code{keep_medians}. Non-finite values are ignored.
 #'
-#' \strong{Fixed V1 internal parameters} (not exposed): \code{qref_prob =
+#' \strong{Fixed internal parameters} (not exposed): \code{qref_prob =
 #' 0.05}, \code{promote_p_above_ref = 0.50}, \code{promote_percentile =
 #' 0.10}, \code{min_area_ha = 10}. \code{min_pix} is also not exposed but
 #' is \emph{derived} (not \code{NULL}) using the exact same logic as the

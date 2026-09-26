@@ -46,7 +46,7 @@ The companion repository also includes the Google Earth Engine scripts
 used for image selection, masking and compositing.
 
 Burned-area maps for the full time series are available on
-\href{https://doi.org/10.5281/zenodo.22893763}{Zenodo}.
+Zenodo (\doi{10.5281/zenodo.22893763}).
 }
 }
 \section{Workflow entry points}{

@@ -43,7 +43,7 @@
 #' used for image selection, masking and compositing.
 #'
 #' Burned-area maps for the full time series are available on
-#' [Zenodo](https://doi.org/10.5281/zenodo.22893763).
+#' Zenodo (\doi{10.5281/zenodo.22893763}).
 #' }
 #'
 #' @section Workflow entry points:

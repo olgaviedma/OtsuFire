@@ -155,7 +155,7 @@
 #'   (area_ha >= params$area_ha_min & doy_iqr <= params$doy_iqr_max) )
 #' }
 #'
-#' @param scoring_features sf / data.frame: the deterministic scoring universe.
+#' @param scoring_features sf / data.frame: the Otsu-guided scoring universe.
 #' @param reference_rbr_med numeric vector of the REFERENCE pool's rbr_med, used
 #'   ONLY to derive the runtime `rbr_med` quantile floor (the
 #'   `rbr_med >= quantile(reference_rbr_med, rbr_med_min_q)` gate). The reference

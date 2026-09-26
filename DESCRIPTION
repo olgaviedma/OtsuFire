@@ -1,7 +1,7 @@
 Package: OtsuFire
-Title: Otsu-Based Burned-Area Mapping with Rule-Based Unsupervised Filters and Supervised Classification
+Title: A Self-Labelling Framework for Wall-to-Wall Burned-Area Mapping Across Sensors and Decades
 Version: 2.0.0
-Date: 2026-08-02
+Date: 2026-09-25
 Authors@R: c(person("Natalia", "Quintero", email = "natalia.quintero@alu.uclm.es", role = c("aut")),
              person("Olga", "Viedma", email = "olga.viedma@uclm.es", role = c("aut", "cre")),
              person("Hammadi", "Achour", email = "hammadi.achour@gmail.com", role = "ctb"),
@@ -11,7 +11,8 @@ Description: Reproducible multi-year burned-area mapping from change-index
     workflow, a supervised one-year probabilistic workflow, and a shared
     workflow-independent validation utility. 
 License: GPL-3
-URL: https://github.com/olgaviedma/OtsuFire
+URL: https://github.com/olgaviedma/OtsuFire,
+    https://github.com/nataliaquintero/OtsuFire-book
 BugReports: https://github.com/olgaviedma/OtsuFire/issues
 Encoding: UTF-8
 LazyData: true
@@ -36,10 +37,10 @@ Imports:
     utils,
     tools,
     graphics,
-    grDevices
+    grDevices,
+    whitebox
 Suggests:
     OtsuSeg,
-    whitebox,
     gdalUtilities,
     lwgeom,
     Matrix,
@@ -55,11 +56,12 @@ Suggests:
     withr,
     knitr,
     rmarkdown
-SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools (optional,
-    only used when grow_engine = "whitebox" in the deterministic stage);
-    Python (>= 3.8) with GDAL bindings (optional, only required by the
-    supervised one-year workflow's negative-pool construction, which shells
-    out to gdal_polygonize.py and ogr2ogr).
+SystemRequirements: GDAL (>= 3.0), PROJ (>= 6.0); WhiteboxTools, used by the
+    Otsu-guided segmentation stage (install it once with
+    whitebox::install_whitebox()); Python (>= 3.8) with GDAL bindings,
+    required by the training-pool construction of the probabilistic
+    refinement stage, which calls gdal_polygonize.py and ogr2ogr.
 Config/testthat/edition: 3
 VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2

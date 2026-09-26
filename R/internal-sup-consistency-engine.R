@@ -132,7 +132,7 @@
     )
 }
 
-#' Internal: per-run deterministic-vs-supervised consistency check.
+#' Internal: per-run Otsu-guided segmentation-vs-probabilistic refinement consistency check.
 #'
 #' All inputs are explicit; the function does not consult getwd(),
 #' PROJECT_PATHS.R, or any 00_USAGE/ script. Mirrors the per-run logic
@@ -143,7 +143,7 @@
 #' @param scenario Scenario name (e.g. "balanced").
 #' @param internal_decisions_gpkg Path to the deterministic
 #'   `internal_decisions.gpkg` (must contain layer `internal_decisions`).
-#' @param final_map_gpkg Path to the supervised final-map GPKG
+#' @param final_map_gpkg Path to the probabilistic refinement final-map GPKG
 #'   (must contain layers `final_map_full` and `final_map`).
 #' @param out_dir Directory where consistency artefacts are written;
 #'   created if missing.

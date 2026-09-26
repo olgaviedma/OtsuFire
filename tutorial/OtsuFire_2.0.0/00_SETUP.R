@@ -81,17 +81,27 @@ VEGETATION_MAP <- file.path(
 )
 
 # Binary 0/1 raster: which pixels can burn at all. It bounds the search and,
-# in the supervised stage, bounds where negatives may be drawn from.
+# in the probabilistic refinement stage, bounds where negatives may be drawn from.
 BURNABLE_MASK <- file.path(
   DATA_BASE, "Corine_Masks",
-  sprintf("burnable_mask_binary_corine_%d_ETRS89.tif", CORINE_YEAR)
+  sprintf("burneable_mask_binary_corine_%d_ETRS89.tif", CORINE_YEAR)
 )
 
 # Study area ------------------------------------------------------------------
 PENINSULA_SHP <- file.path(DATA_BASE, "Borders", "Iberian_peninsula.shp")
-STUDY_AREA_MASK <- file.path(DATA_BASE, "Mask_StudyArea", "mask_Peninsula_3035.shp")
+# STUDY_AREA_MASK is the PROCESSING extent for mosaicking. It is NOT the
+# validation mask: since Reference V2 the two are different objects.
+STUDY_AREA_MASK <- file.path(DATA_BASE, "Borders", "Iberian_Peninsula.shp")
 
-# Ecoregions: the deterministic stage runs one Otsu threshold per
+# VALIDATION_MASK is the territory with valid independent reference coverage
+# for TARGET_YEAR. Pre-2000 it is Portugal + the Spanish regions with official
+# cartography that year; 2006+ it is the whole peninsula.
+VALIDATION_MASK <- file.path(
+  DATA_BASE, "Mask_StudyArea_FINAL",
+  sprintf("mask_3035_%d_final.shp", TARGET_YEAR)
+)
+
+# Ecoregions: the Otsu-guided segmentation stage runs one Otsu threshold per
 # CORINE x ecoregion unit, not one global threshold.
 ECOREGION_SHP <- file.path(DATA_BASE, "Ecoregions", "ecoregions_iberia.shp")
 
@@ -115,10 +125,15 @@ PREVIOUS_YEAR_BURNED <- file.path(
 )
 
 # External reference (ground truth for validation) -----------------------------
-# EFFIS summer fires, already clipped to the burnable domain.
+# Reference V2 (authoritative). ERA1 1984-2005: Neves atlas for Portugal +
+# official regional cartography for Spain. ERA2 2006-2025: EFFIS raw.
+# Use the authoritative temporal layer (population_doy / obs_required_doy),
+# NOT start_doy / end_doy, which are kept only for legacy compatibility.
+# The burnable domain is NOT applied to this layer: validate_fire_maps()
+# intersects VALIDATION_MASK with BURNABLE_MASK itself.
 REFERENCE_BURNED_MAP <- file.path(
-  DATA_BASE, "Fires", "Validation_fires_burneable_verano",
-  sprintf("Effis_CA_%d_maskKeep_summer.shp", TARGET_YEAR)
+  DATA_BASE, "Fires", "Validation_fires_burneable_verano_FINAL",
+  sprintf("Effis_CA_%d_maskKeep_summer.gpkg", TARGET_YEAR)
 )
 
 
@@ -133,6 +148,7 @@ check_inputs <- function() {
     BURNABLE_MASK = BURNABLE_MASK,
     PENINSULA_SHP = PENINSULA_SHP,
     STUDY_AREA_MASK = STUDY_AREA_MASK,
+    VALIDATION_MASK = VALIDATION_MASK,
     TOPO = TOPO,
     REFERENCE_BURNED_MAP = REFERENCE_BURNED_MAP
   )

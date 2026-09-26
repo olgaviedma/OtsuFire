@@ -15,7 +15,7 @@ of_decompose(omitted, internal, class_field = "class_final")
 }
 \value{
 \code{omitted} with added \code{keep_ha}, \code{review_ha},
-  \code{drop_ha}, \code{candidate_ha} columns.
+\code{drop_ha}, \code{candidate_ha} columns.
 }
 \description{
 Builds hierarchical (non-overlapping) keep > review > drop footprints from an
@@ -26,3 +26,4 @@ omission layer). Toggles s2 off locally and restores it on exit.
 \seealso{
 \code{\link{of_classify}}
 }
+\keyword{internal}

@@ -1,219 +1,312 @@
-#' Run the complete one-year supervised burned-area workflow
+#' Run the probabilistic refinement workflow for one year
 #'
 #' @description
-#' Top-level one-year supervised orchestrator defined by
-#' `SUPERVISED_ONEYEAR_PUBLIC_FUNCTION_CONTRACTS.csv`. Chains pool
-#' generation, spatial folds, feature extraction, OOF diagnostics, final
-#' model training, scoring, and optional consistency checks for a single
-#' target year and scenario.
+#' Run the probabilistic refinement workflow for one target year using a
+#' configuration created with [build_supervised_burned_config()].
 #'
-#' Delegates the heavy numerical chain to the validated supervised engine
-#' (`run_supervised_pipeline()` inside `03_PATCH_LEVEL_PIPELINE_2.R`) via
-#' the internal dispatcher, with configuration injected. Mirrors the
-#' Block 2b deterministic dispatcher pattern.
+#' The function builds training pools from classified Otsu-guided patches and
+#' background samples, assigns spatial folds, extracts features, generates
+#' out-of-fold diagnostics, trains the final model, and scores candidate
+#' polygons.
 #'
-#' The generic multi-year `run_supervised_pipeline()` is intentionally
-#' NOT exported in 0.2.x and is deferred until LOYO is rebuilt.
+#' Optional consistency checks compare the classifications of Otsu-guided
+#' patches with the probabilistic refinement results.
 #'
-#' Thresholded `p_burned` outputs from the returned `final_map_gpkg` may
-#' be passed to [validate_fire_maps()] for external validation.
+#' The function returns output paths, configuration information, and run
+#' summaries. External map validation is performed separately with
+#' [validate_fire_maps()] after selecting a threshold for `p_burned`.
 #'
-#' @param config `otsufire_supervised_burned_config` object from
-#'   [build_supervised_burned_config()].
-#' @param run_consistency Logical. Whether to execute the
-#'   deterministic-vs-supervised consistency block.
-#' @param overwrite Logical. Default `FALSE`: existing on-disk stage
-#'   outputs are skipped/reused instead of being clobbered (the flag is
-#'   forwarded to the unburned builder and the OOF / final-model
-#'   wrappers). Set `TRUE` to regenerate/clobber every stage output. (The
-#'   default is `FALSE` so an interrupted run can resume without
-#'   recomputing completed stages. Before 2026-06-05 this flag was
-#'   cosmetic: it was validated but never threaded, and the engine always
-#'   behaved as if `overwrite = TRUE`.)
-#' @param random_to_burned_ratio Numeric. Cap on
-#'   random-burnable-background negatives for the FINAL model, as a
-#'   multiple of `n_burned`. Default `1.0` (historical behaviour).
-#' @param otsu_unburned_to_burned_ratio Numeric. Cap on Otsu current-year
-#'   unburned-patch negatives for the FINAL model, as a multiple of
-#'   `n_burned`. Default `1.0` (historical behaviour).
-#' @param feature_whitelist_override Character vector. Optional subset
-#'   of the canonical `.supervised_feature_cols` whitelist that the
-#'   supervised stages (OOF + final model) are allowed to see. Names
-#'   not in `.supervised_feature_cols` are rejected with an error: the
-#'   canonical list is fixed and this argument can only RESTRICT it,
-#'   never extend it. Default `NULL` reproduces the canonical 50-feature
-#'   behaviour. The OOF wrapper and the final model both consume the
-#'   same active whitelist, so OOF metrics and final-model behaviour
-#'   stay symmetric. Phase B Exp4b example: pass
-#'   `setdiff(OtsuFire:::.supervised_feature_cols,
-#'           c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`
-#'   to drop the four hotspot-presence features.
-#' @param feature_weights Named numeric vector forwarded to xgboost via
-#'   the `xgb.DMatrix` `feature_weights` info on every per-fold OOF
-#'   dtrain/dtest and on the final-model dtrain/dval. Names must
-#'   correspond to columns of the supervised design matrix
-#'   (i.e. members of the active whitelist or their `_isNA`
-#'   companions). Names that do not appear in the active feature space
-#'   trigger a warning and are silently dropped; features the caller
-#'   does not name implicitly receive weight 1.0. Values must be
-#'   finite and >= 0; values in (0, 1) attenuate, > 1 boost. Default
-#'   `NULL` reproduces the canonical uniform-1.0 behaviour. Phase B
-#'   Exp5a example: pass
-#'   `setNames(rep(0.05, length(hs_cols)), hs_cols)` for the 13
-#'   hotspot columns to attenuate them by 20x.
+#' @param config An object of class `otsufire_supervised_burned_config`,
+#'   created with [build_supervised_burned_config()]. Contains the inputs,
+#'   sampling settings, feature controls, model parameters, and output
+#'   locations.
+#' @param run_consistency Logical scalar. Whether to compare the
+#'   classifications of Otsu-guided patches with the probabilistic refinement results.
+#'   Default: `TRUE`. These checks do not replace external map validation.
+#' @param overwrite Logical scalar. Whether existing stage outputs may be
+#'   regenerated and replaced. With `FALSE`, existing outputs are reused or
+#'   skipped where supported. Default: `FALSE`.
+#' @param reuse_upstream Logical scalar. Whether to skip pool generation,
+#'   spatial-fold assignment, and feature extraction and use existing outputs
+#'   from those stages. Default: `FALSE`. See \strong{Reusing previous
+#'   outputs}.
+#' @param ... Reserved for detecting unsupported or removed arguments.
+#'   Additional arguments are rejected. The removed arguments
+#'   `additional_drop_cols` and `extra_drop_cols` produce a migration message
+#'   directing users to `feature_whitelist_override`.
+#' @param random_to_burned_ratio Compatibility argument: cap on background
+#'   negatives relative to the burned-label count. Preferred configuration
+#'   setting: `negative_pool_params = list(caps = c(random = ..., otsu = ...))`.
+#'   See \strong{Compatibility arguments}.
+#' @param otsu_unburned_to_burned_ratio Compatibility argument: cap on
+#'   Otsu-based negatives relative to the burned-label count. Preferred
+#'   configuration setting:
+#'   `negative_pool_params = list(caps = c(random = ..., otsu = ...))`.
+#' @param feature_whitelist_override Compatibility argument: restrict the
+#'   permitted predictor set. Preferred configuration setting:
+#'   `feature_whitelist_override`.
+#' @param feature_weights Compatibility argument: supply named per-feature
+#'   weights. Preferred configuration setting: `feature_weights`.
+#' @param oof_nrounds_max Compatibility argument: maximum boosting rounds.
+#'   Preferred configuration setting: `nrounds_max`.
+#' @param oof_early_stop Compatibility argument: early-stopping patience.
+#'   Preferred configuration setting: `early_stop`.
+#' @param oof_seed_base Compatibility argument: random seed for out-of-fold
+#'   training. Preferred configuration setting: `oof_seed_base`.
+#' @param final_sampling_seed Compatibility argument: random seed for final
+#'   negative-pool sampling. Preferred configuration setting:
+#'   `final_sampling_seed`.
+#' @param final_seed Compatibility argument: random seed for the final split
+#'   and model training. Preferred configuration setting: `final_seed`.
+#' @param final_val_frac Compatibility argument: inner validation fraction.
+#'   Preferred configuration setting: `val_frac`.
+#' @param final_group_col Compatibility argument: grouping column for the
+#'   inner train/validation split. Preferred configuration setting:
+#'   `group_col`.
+#' @param final_nrounds_max Compatibility argument: maximum boosting rounds.
+#'   Preferred configuration setting: `nrounds_max`.
+#' @param final_early_stopping_rounds Compatibility argument: early-stopping
+#'   patience. Preferred configuration setting: `early_stop`.
+#' @param final_impute_numeric Compatibility argument: numeric imputation
+#'   rule, `"median"` or `"zero"`. Preferred configuration setting:
+#'   `impute_numeric`.
+#' @param final_impute_factor_missing Compatibility argument: category used
+#'   for missing factor values. Preferred configuration setting:
+#'   `impute_factor_missing`.
 #'
-#' @param reuse_upstream Logical. When `TRUE`, skip STEP A (pools),
-#'   STEP B1-B2 (folds), and STEP B3 (features), and consume pre-existing
-#'   upstream artefacts from disk instead. Requires an existing baseline
-#'   run with `01_POOLS/<year>_<scenario>_pools.gpkg`,
-#'   `02_FOLDS/<year>_train_with_folds_<size>m.gpkg`, and
-#'   `03_FEATURES/features_geometry.gpkg` already present. Default
-#'   `FALSE` reproduces the historical behaviour.
+#' @section Compatibility arguments:
+#' The arguments `random_to_burned_ratio`, `otsu_unburned_to_burned_ratio`,
+#' `feature_whitelist_override`, `feature_weights` and the `oof_*` /
+#' `final_*` arguments are retained for compatibility. Their default value is
+#' `NULL`, meaning that the resolved configuration value is used.
 #'
-#' @param oof_nrounds_max Integer. Maximum xgboost boosting rounds for the OOF
-#'   per-fold models. Default `4000`. FRENTE 1 (2026-06-05): UNIFIED with the
-#'   FINAL-model default (was `3000`). Threaded to [run_oof_diagnostics()].
-#' @param oof_early_stop Integer. xgboost early-stopping patience for the OOF
-#'   per-fold models. Default `80`. FRENTE 1: UNIFIED with the FINAL stage
-#'   (was `75`).
-#' @param oof_seed_base Integer. Base RNG seed for the repeated block-CV OOF
-#'   runs. Default `42`. The canonical seed shared with the FINAL stage.
-#' @param final_sampling_seed Integer. RNG seed for the FINAL-model
-#'   negative-pool sampling. Default `42`. FRENTE 1: UNIFIED with the OOF
-#'   canonical seed (was `999`). Threaded to [train_final_burned_model()].
-#' @param final_seed Integer. RNG seed for the FINAL-model train/val split and
-#'   xgboost training. Default `42`. FRENTE 1: UNIFIED with the OOF canonical
-#'   seed (was `999`).
-#' @param final_val_frac Numeric in (0, 1). Validation fraction for the
-#'   FINAL-model train/val split. Default `0.15`.
-#' @param final_group_col Character or `NULL`. Grouping column for the
-#'   FINAL-model grouped train/val split. Default `"block_id"`.
-#' @param final_nrounds_max Integer. Maximum xgboost boosting rounds for the
-#'   FINAL model. Default `4000`. FRENTE 1 (2026-06-05): now UNIFIED with
-#'   `oof_nrounds_max`.
-#' @param final_early_stopping_rounds Integer. xgboost early-stopping patience
-#'   for the FINAL model. Default `80`. FRENTE 1: now UNIFIED with
-#'   `oof_early_stop`.
-#' @param final_impute_numeric Character. Numeric-imputation rule for the
-#'   FINAL model: `"median"` (default) or `"zero"`.
-#' @param final_impute_factor_missing Character. Sentinel level for missing
-#'   factor/character values in the FINAL model. Default `"MISSING"`.
-#' @details
-#' OOF uses the same capped negative-sampling policy as the final model, applied
-#' independently within each training fold. The OOF and FINAL stages share one
-#' internal core — medians and `scale_pos_weight` are fit on the training rows
-#' only, an inner validation split is the sole early-stopping set, and a fresh
-#' model is refit on all training rows at the selected `best_iteration` before
-#' deployment.
+#' For new code, supply the corresponding setting to
+#' [build_supervised_burned_config()].
 #'
-#' Training eligibility is defined by EXPLICIT class, never by negation: only
-#' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training;
-#' review / keep / `NA` / unknown rows never become negatives. Both stages route
-#' through one internal eligibility resolver and one shared capping helper.
+#' The shared configuration controls keep out-of-fold and final training
+#' settings aligned. Historical argument prefixes such as `oof_` and `final_`
+#' should not be used to define separate training procedures.
 #'
-#' @section Deprecated function-level parameter shims (Precision 1, 2026-06-07):
-#' The methodological / training-control arguments of this function (the two
-#' `*_to_burned_ratio` caps, `feature_whitelist_override`, `feature_weights`, the
-#' `oof_*` / `final_*` training knobs) are
-#' DEPRECATED COMPATIBILITY SHIMS. The CANONICAL way to set every supervised
-#' methodological parameter is [build_supervised_burned_config()]
-#' (`cfg$train_control` / `cfg$model_params`, the Gate 1B single source of
-#' truth). The shims are resolved ONLY at this public boundary and the resolved
-#' scalars are what flow downstream.
+#' See \strong{Compatibility and parameter conflicts} for how non-`NULL`
+#' compatibility arguments are resolved.
 #'
-#' Behaviour of a non-`NULL` function-level override:
-#' \itemize{
-#'   \item over a CANONICAL DEFAULT field -> the override is applied and a
-#'     deprecation warning of stable class `"otsufire_deprecated_param"` is
-#'     emitted, naming the parameter and pointing at the builder;
-#'   \item over an EXPLICIT builder-user value that DIFFERS -> a hard error
-#'     (two explicit, incompatible sources are never silently reconciled);
-#'   \item equal to the cfg value -> applied silently.
+#' @section Workflow stages:
+#' The function runs the following stages:
+#'
+#' | Stage | Purpose |
+#' |---|---|
+#' | Training pools | Build burned and unburned training pools and the candidate pool to be scored. |
+#' | Spatial folds | Assign spatial cross-validation folds. |
+#' | Feature extraction | Compute predictor variables for training and scoring polygons. |
+#' | Out-of-fold diagnostics | Evaluate predictions for spatially held-out labelled observations. |
+#' | Final model training | Select the number of boosting rounds and fit the final model. |
+#' | Scoring | Apply the final model to candidate polygons. |
+#' | Consistency checks | Optionally compare probabilistic refinement results with the original classifications of Otsu-guided patches. |
+#'
+#' This function runs a single-year workflow. It does not perform
+#' leave-one-year-out evaluation or coordinate multi-year training.
+#'
+#' @section Training eligibility and negative sampling:
+#' Training uses explicit burned and unburned labels. Otsu-guided patches
+#' classified as `"keep"` provide the initial burned pool after label
+#' preparation.
+#'
+#' Unburned training examples must belong to a supported negative pool. The
+#' standard pools are background negatives (`random`) and moderately
+#' burned-like negatives (`otsu`). Additional strongly burned-like negatives
+#' (`artifact_hard`) are included when enabled and eligible under the
+#' configuration.
+#'
+#' Review-class candidates and rows with missing or unknown labels do not
+#' automatically become negatives.
+#'
+#' The same negative-sampling policy is used for out-of-fold and final
+#' training. Background and Otsu-based caps are applied within the relevant
+#' training subset. Optional hard-negative weighting follows the settings in
+#' `config$negative_pool_params`.
+#'
+#' @section Out-of-fold and final training:
+#' Both stages use an inner validation split to select the number of boosting
+#' rounds through early stopping. A fresh model is then fitted on the
+#' available training observations using the selected number of rounds.
+#'
+#' During out-of-fold evaluation, this procedure is repeated within each
+#' spatial training fold. The outer held-out fold is reserved for prediction
+#' and evaluation.
+#'
+#' Preprocessing statistics and class-balance settings are derived from the
+#' relevant training observations. Consequently, quantities such as
+#' imputation medians and `scale_pos_weight` may differ between folds and the
+#' final model.
+#'
+#' Out-of-fold diagnostics measure agreement with the internally derived
+#' labels. They do not provide an independent assessment of map accuracy.
+#'
+#' @section Feature controls:
+#' Configure the permitted feature set through `feature_whitelist_override`
+#' in [build_supervised_burned_config()].
+#'
+#' The whitelist restricts the package-supported feature set; it does not
+#' introduce arbitrary new predictors. Optional shape-feature availability is
+#' controlled separately through `include_shape_features` in the
+#' configuration.
+#'
+#' `feature_weights` supplies named, finite, non-negative weights for
+#' design-matrix columns. Unspecified features receive a weight of 1. Names
+#' outside the active feature space generate a warning and are excluded.
+#'
+#' These are predictor weights passed to XGBoost, not training-example
+#' weights or direct multipliers of feature values.
+#'
+#' @section Scores and external validation:
+#' The scored map includes `p_burned`. This is a model score and is not
+#' necessarily a calibrated probability.
+#'
+#' To create a binary burned-area map, select a score threshold. The
+#' thresholded output can then be evaluated against an external reference
+#' with [validate_fire_maps()].
+#'
+#' Setting `run_consistency = TRUE` enables internal comparisons with
+#' Otsu-guided patch classifications. It does not run external map
+#' validation.
+#'
+#' @section Reusing previous outputs:
+#' `overwrite` and `reuse_upstream` control different aspects of execution.
+#'
+#' | Setting | Behaviour |
+#' |---|---|
+#' | `overwrite = FALSE` | Reuse or skip existing stage outputs where supported. Useful for resuming an interrupted run with compatible settings. |
+#' | `overwrite = TRUE` | Allow stage outputs to be regenerated and replaced. |
+#' | `reuse_upstream = TRUE` | Explicitly skip pool generation, fold assignment, and feature extraction, and load their existing outputs. |
+#'
+#' Explicit upstream reuse requires the expected files under the configured
+#' output routes, including `01_POOLS/<year>_<run_label>_pools.gpkg`,
+#' `02_FOLDS/<year>_train_with_folds_<size>m.gpkg` and
+#' `03_FEATURES/features_geometry.gpkg`.
+#'
+#' Reused products must be compatible with the current inputs and settings.
+#' Changes to labels, sampling rules, spatial folds, or extracted feature
+#' requirements may require rebuilding the affected stages.
+#'
+#' With `reuse_upstream = TRUE`, upstream generation remains skipped even
+#' when later outputs are regenerated.
+#'
+#' @section Compatibility and parameter conflicts:
+#' Methodological and training settings should be defined in
+#' [build_supervised_burned_config()]. The corresponding function-level
+#' arguments are deprecated compatibility options.
+#'
+#' A non-`NULL` compatibility value is handled as follows:
+#'
+#' | Situation | Behaviour |
+#' |---|---|
+#' | The configuration field uses a package default and the requested value differs | Apply the compatibility value and emit an `otsufire_deprecated_param` warning. |
+#' | The configuration contains an explicit user value that differs from the requested value | Stop with an error because two explicit settings conflict. |
+#' | The requested value equals the configuration value | Accept it without a deprecation warning. |
+#'
+#' Parameter resolution is recorded in `resolved_params_provenance`.
+#' Provenance for individual XGBoost parameters is returned separately in
+#' `model_params_provenance`.
+#'
+#' Migrate calls to the configuration builder to avoid relying on these
+#' compatibility arguments.
+#'
+#' @section Memory settings:
+#' During execution, the function temporarily sets the terra memory ceiling,
+#' `memmax`, to 16 GB and restores the previous setting on exit.
+#'
+#' This setting controls terra processing; it is not a limit on the total
+#' memory used by the R process. Available memory must also accommodate
+#' feature tables, model training, and other workflow objects.
+#'
+#' @return A named list of class `otsufire_supervised_run`.
+#'
+#' | Field | Contents |
+#' |---|---|
+#' | `config` | Configuration used for the run, including resolved settings. |
+#' | `result_dir` | Main result directory. |
+#' | `pools_gpkg` | Path to the pool GeoPackage. |
+#' | `train_with_folds_gpkg` | Path to the training layer with spatial-fold assignments. |
+#' | `features_geometry_gpkg` | Path to the feature layer with geometries. |
+#' | `oof_agg_csv` | Path to the aggregated out-of-fold output. |
+#' | `final_model_rds` | Path to the saved final-model RDS file. |
+#' | `final_map_gpkg` | Path to the scored candidate map, including `p_burned`. |
+#' | `burned_like_gpkg` | Path to the burned-like output layer. |
+#' | `timing_csv` | Path to the execution-time summary. |
+#' | `consistency_*` | Fields associated with the optional consistency checks. |
+#' | `resolved_params_provenance` | Record of configuration and compatibility-argument resolution. |
+#' | `model_params_provenance` | Per-parameter provenance for the resolved XGBoost settings. |
+#' | `legacy_run_summary` | Run summary retained for compatibility. |
+#' | `legacy_consistency_summary` | Consistency summary retained for compatibility. |
+#'
+#' The `final_map_gpkg` output is a scored layer. A score threshold is needed
+#' to derive a binary burned-area map.
+#'
+#' @seealso [build_supervised_burned_config()],
+#'   [build_supervised_training_pools()], [make_spatial_folds()],
+#'   [extract_supervised_features()], [run_oof_diagnostics()],
+#'   [train_final_burned_model()], [score_supervised_burned_map()],
+#'   [check_supervised_consistency()], [validate_fire_maps()].
+#'
+#' @examples
+#' \dontrun{
+#' # Configure a probabilistic refinement run from classified Otsu-guided patches
+#' config <- build_supervised_burned_config(
+#'   internal_decisions = "data/internal_decisions_2022.gpkg",
+#'   change_index = "data/RBR_2022.tif",
+#'   delayed_change_index = "data/RBR_delayed_2022.tif",
+#'   hotspots = "data/hotspots_2022.gpkg",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_2022.tif",
+#'   burnable_mask = "data/burnable_mask_2022.tif",
+#'   reference_burned_map = "data/reference_burned_2022.gpkg",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022",
+#'   negative_pool_params = list(
+#'     caps = c(random = 1.0, otsu = 1.0)
+#'   ),
+#'   nrounds_max = 4000L,
+#'   early_stop = 80L,
+#'   oof_seed_base = 42L,
+#'   final_sampling_seed = 42L,
+#'   final_seed = 42L,
+#'   random_seed = 42L
+#' )
+#'
+#' # Run the complete single-year workflow
+#' result <- run_oneyear_supervised_pipeline(
+#'   config = config,
+#'   run_consistency = TRUE,
+#'   overwrite = FALSE
+#' )
+#'
+#' # Inspect output locations
+#' result$result_dir
+#' result$final_model_rds
+#' result$final_map_gpkg
+#' result$timing_csv
+#'
+#' # Load the scored candidate map
+#' scored_map <- sf::st_read(
+#'   result$final_map_gpkg,
+#'   quiet = TRUE
+#' )
+#' summary(scored_map$p_burned)
+#'
+#' # Inspect how parameters were resolved
+#' result$resolved_params_provenance
+#' result$model_params_provenance
+#'
+#' # Rerun downstream stages using compatible existing pools,
+#' # spatial folds, and extracted features
+#' result_reused <- run_oneyear_supervised_pipeline(
+#'   config = config,
+#'   reuse_upstream = TRUE,
+#'   overwrite = TRUE,
+#'   run_consistency = TRUE
+#' )
 #' }
-#' Each resolution is recorded (cfg value / requested override / resolved value /
-#' provenance label) on `cfg$resolved_params_provenance` and in the returned run
-#' object's `resolved_params_provenance` field. The PER-FIELD `cfg$model_params`
-#' provenance (the builder folds a PARTIAL xgb override onto the canonical block,
-#' so each xgb field carries canonical / requested / resolved / provenance) is
-#' surfaced separately on the run object's `model_params_provenance` field.
-#'
-#' REMOVAL PLAN: these shims are DEPRECATED now (warn), and will be REMOVED in a
-#' future minor version. Migrate callers to
-#' `build_supervised_burned_config(<param>=...)`; the warning-free canonical
-#' path is the builder.
-#'
-#' @section Gate 1B (2026-06-07) cfg single source of truth:
-#' The supervised methodological / training-control parameters now live in
-#' exactly ONE place: the cfg object built by
-#' [build_supervised_burned_config()] (`cfg$model_params` and
-#' `cfg$train_control`). Every methodological argument of this function (the
-#' two `*_to_burned_ratio` caps — `random_to_burned_ratio` /
-#' `otsu_unburned_to_burned_ratio` — `feature_whitelist_override`,
-#' `feature_weights`, the `oof_*` / `final_*` training knobs)
-#' now DEFAULTS TO `NULL`, meaning "use the value resolved on
-#' the cfg". Passing a non-`NULL` value OVERRIDES the cfg value (precedence:
-#' explicit argument > cfg) and is written through to BOTH the OOF and FINAL
-#' stages identically. The canonical numeric defaults are no longer duplicated in
-#' this function; change them once, at the builder, and the whole chain follows.
-#'
-#' @section D1 training knobs (2026-06-05) + FRENTE 1 unification:
-#' The `oof_*` and `final_*` arguments expose the OOF and final-model training
-#' hyperparameters that were previously hardcoded at the engine defaults. They
-#' remain fully user-overridable. FRENTE 1 (2026-06-05) UNIFIED the OOF and
-#' FINAL hyperparameters to a single CANONICAL set: the XGBoost params block
-#' (objective/eval_metric/eta/max_depth/min_child_weight/subsample/
-#' colsample_bytree/gamma/lambda/alpha) now comes from one source of truth
-#' [.of_canonical_xgb_params()] used by BOTH stages, and the training controls
-#' were aligned (`oof_nrounds_max` 3000 -> 4000, `oof_early_stop` 75 -> 80,
-#' `final_sampling_seed`/`final_seed` 999 -> 42 to match `oof_seed_base`). This
-#' is RESULT-AFFECTING (the FINAL model changes vs the historical baseline) and
-#' was signed off by Natalia; it is first evaluated in the 2017 run. Only
-#' `scale_pos_weight` differs between the two stages, because each computes it
-#' from its own training labels.
-#'
-#' @param ... Migration trap for removed arguments. Reserved for
-#'   detecting calls that still pass the OtsuFire 0.4.x deny-list
-#'   arguments `additional_drop_cols` / `extra_drop_cols`, which were
-#'   removed in 0.5.0; such calls error with a migration message
-#'   pointing at `feature_whitelist_override`. Any other named argument
-#'   passed here is also rejected with an "Unused arguments" error
-#'   (never silently ignored).
-#'
-#' @section Phase B sampling caps and feature space:
-#' The pass-through hooks above support the Phase B experiment matrix
-#' (`random_to_burned_ratio`  in  \{0.25, 1.0, Inf\} x
-#' hotspot-feature variants \{All, L1, L2, None\}) and the eventual mass
-#' re-training (10 years x 3 scenarios). All defaults reproduce the
-#' historical behaviour byte-for-byte; a caller that does not pass
-#' them obtains exactly the same final model as before.
-#'
-#' OtsuFire 0.5.0 (2026-05-09): the deprecated `additional_drop_cols`
-#' deny-list was removed. Callers that pass it now get a hard error
-#' with a migration message pointing at `feature_whitelist_override`.
-#' Phase B Exp4b is reproduced by passing
-#' `feature_whitelist_override = setdiff(.supervised_feature_cols,
-#' c("hs_in_poly","hs_in_buffer","hs_min_dist_m","hs_support_present"))`;
-#' Phase B Exp5a is reproduced by passing a `feature_weights` vector
-#' that sets the 13 hotspot columns to 0.05.
-#'
-#' @section terra memory ceiling:
-#' On entry the function lifts `terra::terraOptions(memmax)` to 16 GB
-#' and restores the previous value on exit (`on.exit()`), so the
-#' caller's R session is not contaminated. The default terra ceiling
-#' (~1 GB) forces per-feature processing on large mosaics and was
-#' exhausting RAM inside `extract_features()` and downstream raster
-#' stages when the annual mosaic carried ~16k polygons (e.g. 2025).
-#' The 16 GB ceiling assumes the host has at least that much free
-#' RAM available; the package was developed on a 64 GB machine.
-#'
-#' @return A named list of class `otsufire_supervised_run` with fields:
-#'   `config`, `result_dir`, `pools_gpkg`, `train_with_folds_gpkg`,
-#'   `features_geometry_gpkg`, `oof_agg_csv`, `final_model_rds`,
-#'   `final_map_gpkg`, `burned_like_gpkg`, `timing_csv`,
-#'   `consistency_*`, `resolved_params_provenance`,
-#'   `model_params_provenance` (per-field cfg$model_params provenance table),
-#'   `legacy_run_summary`, `legacy_consistency_summary`.
 #'
 #' @family workflow
 #' @export
@@ -273,9 +366,9 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
     stop(
       "`additional_drop_cols` / `extra_drop_cols` were removed in ",
       "OtsuFire 0.5.0. Use `feature_whitelist_override` instead. ",
-      "Pass a subset of `.supervised_feature_cols` (e.g., the ",
-      "current whitelist minus the columns you want to drop). ",
-      "See NEWS.md and the migration note in HANDOFF Section N+20.",
+      "Pass the subset of package features you want to keep ",
+      "(the current whitelist minus the columns to drop). ",
+      "See ?build_supervised_burned_config.",
       call. = FALSE
     )
   }
@@ -284,9 +377,10 @@ run_oneyear_supervised_pipeline <- function(config, run_consistency = TRUE,
     stop(
       "`cap_contextual` / `contextual_exclusion_to_burned_ratio` were removed in ",
       "OtsuFire (GATE 6.5): the contextual (deterministic-drop) negative bucket ",
-      "no longer exists. A deterministic drop is NOT a training negative. The ",
-      "negative architecture is two sources only (random background + Otsu ",
-      "residual); use cap_random / cap_otsu.",
+      "no longer exists: drop patches enter training only through the ",
+      "moderately burned-like (`otsu`) and strongly burned-like ",
+      "(`artifact_hard`) pools. Set the caps with ",
+      "negative_pool_params$caps = c(random = , otsu = ).",
       call. = FALSE
     )
   }

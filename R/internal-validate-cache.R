@@ -27,15 +27,30 @@
 # (predicate for a valid observability pixel, the obs_doy_max / ref_doy
 # comparison, or the observable_flag definition). It is folded into the
 # observability fingerprint so a rule change invalidates every reference cache.
-.VFM_OBS_RULE_VERSION <- "obsrule-1:temporal-wholefire:obs_doy_margin>=0"
+# obsrule-2 (0.11.1, 2026-08-19): the observability rule became selectable.
+# The FAMILY of rules changed (a second whole-fire rule and a second required-
+# DOY cascade were added, and the cached table gained v2 columns), so the
+# family version is bumped once here; the per-run choice of mode / threshold /
+# observability DOY column is folded separately in
+# .vfm_observability_fingerprint() below.
+.VFM_OBS_RULE_VERSION <- "obsrule-3:wholefire{legacy_any|fraction}+undetpolicy"
 
 # Bump this whenever the SCHEMA of the cached reference artifact changes (e.g.
 # new columns on the cached reference_observability table). It is folded into the
 # reference cache key so a schema change rebuilds the cache instead of serving a
 # structurally incompatible one. v2 adds the per-fire partial-observability
 # audit columns (total_pixels / observable_pixels / non_observable_pixels /
-# observable_fraction).
-.VFM_REF_CACHE_SCHEMA <- "refschema-2"
+# observable_fraction). v3 adds the whole-fire v2 columns
+# (fire_required_doy / required_doy_source / observability_status /
+# observability_mode / observability_min_fraction / observable_flag_legacy_any /
+# data_coverage_fraction / n_temporally_observable /
+# temporal_observable_fraction / no_data_fraction /
+# pre_fire_or_too_early_fraction / post_fire_observable_fraction). v4 renames
+# the observability state UNDETERMINED_END_DATE -> UNDETERMINED_OBS_DATE and
+# adds `undetermined_cause`; bumping it guarantees that no table written with
+# the 2.1.x vocabulary can ever be read back by this version, so there is no
+# code path on which the two vocabularies could mix.
+.VFM_REF_CACHE_SCHEMA <- "refschema-5"
 
 .vfm_cache_safe_tag <- function(x) {
   x <- paste(x, collapse = "_")
@@ -167,10 +182,21 @@
   paste0("in-", .vfm_short_cache_hash(.vfm_cache_safe_tag(.vfm_vector_token(x))))
 }
 
-# "obs-XXXX": observability raster content + layer + DOY columns + rule version.
+# "obs-XXXX": observability raster content + layer + DOY columns + rule version
+# + the per-run rule configuration (mode, threshold, observability DOY column).
+#
+# `observability_min_fraction` is folded ONLY under the fraction mode: under
+# "legacy_any" the threshold is inert, and folding it there would invalidate
+# caches for a parameter that cannot change the result. `ref_obs_doy_col` is
+# folded whenever it is set, because it changes the required DOY cascade.
 .vfm_observability_fingerprint <- function(observability_raster,
                                            ref_end_doy_col,
-                                           ref_start_doy_col) {
+                                           ref_start_doy_col,
+                                           observability_mode = "legacy_any",
+                                           observability_min_fraction = 0.75,
+                                           ref_obs_doy_col = NULL,
+                                           ref_obs_doy_fallback = "none",
+                                           observability_undetermined_policy = "evaluate") {
   if (is.null(observability_raster)) return("obs-none")
   layer_id <- tryCatch({
     if (inherits(observability_raster, "SpatRaster")) {
@@ -182,11 +208,29 @@
       class(observability_raster)[1]
     }
   }, error = function(e) "layer-na")
+  frac_tag <- if (identical(observability_mode, "legacy_any")) {
+    "minfrac-inert"
+  } else {
+    paste0("minfrac", format(observability_min_fraction, scientific = FALSE))
+  }
   paste0("obs-", .vfm_short_cache_hash(
     .vfm_raster_token(observability_raster),
     .vfm_cache_safe_tag(layer_id),
     .vfm_cache_safe_tag(ref_end_doy_col),
     .vfm_cache_safe_tag(ref_start_doy_col),
+    paste0("mode-", .vfm_cache_safe_tag(observability_mode)),
+    frac_tag,
+    paste0("obsdoycol-", if (is.null(ref_obs_doy_col)) "none" else
+      .vfm_cache_safe_tag(ref_obs_doy_col)),
+    # The authoritative-vs-fallback policy changes which fires end up
+    # UNDETERMINED, so it must bust the reference cache. Inert when no
+    # observability column is supplied.
+    paste0("obsdoyfb-", if (is.null(ref_obs_doy_col)) "inert" else
+      .vfm_cache_safe_tag(ref_obs_doy_fallback)),
+    # The undetermined policy decides which fires stay in the evaluation
+    # domain, so it reshapes the cached reference artifact. Inert under legacy.
+    paste0("undet-", if (identical(observability_mode, "legacy_any")) "inert" else
+      .vfm_cache_safe_tag(observability_undetermined_policy)),
     .VFM_OBS_RULE_VERSION
   ))
 }

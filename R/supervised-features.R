@@ -1,125 +1,231 @@
-#' Extract predictor features for labelled and scoring polygons
+#' Extract predictor features for training and scoring polygons
 #'
 #' @description
-#' Computes the per-polygon predictor features the burned-area model is trained
-#' and scored on, for both the labelled training polygons and the deterministic
-#' scoring universe. This is the feature-extraction stage of the supervised
-#' pipeline; its `features_geometry.gpkg` output then feeds the OOF and
-#' final-model stages.
+#' Extract polygon-level predictor features for the labelled training pool
+#' and the Otsu-guided patches prepared for supervised scoring.
 #'
-#' Run it after the folds stage and before [run_oof_diagnostics()]. Pass the
-#' train-with-folds layer, the scoring pool, and the configuration from
-#' [build_supervised_burned_config()]. Calling this function directly produces
-#' the same `03_FEATURES` outputs as the equivalent stage of the full pipeline
-#' [run_oneyear_supervised_pipeline()].
+#' The function loads and aligns the supporting rasters, computes features for
+#' both polygon sets, and optionally includes hotspot and shape features.
 #'
-#' @section What it does:
-#' \enumerate{
-#'   \item Loads and aligns the supervised raster support stack (RBR summer,
-#'     post-fire DOY, autumn-winter RBR, DEM, slope, CORINE) to the
-#'     change-index master template.
-#'   \item Optionally loads the target-year hotspot layer.
-#'   \item Runs the patch-level feature engine [extract_features()] on the
-#'     labelled and scoring polygons with the pipeline's standard settings.
-#'   \item Optionally appends shape/size features (see `use_shape`).
-#'   \item Writes `features_geometry.gpkg` (carrying the `train_features` and
-#'     `scoring_features` layers) plus `train_features.rds` and
-#'     `scoring_features.rds`, and returns the in-memory objects.
-#' }
+#' Run this stage after [make_spatial_folds()] and before out-of-fold
+#' diagnostics and final model training. The resulting feature layers are
+#' used by the subsequent probabilistic refinement stages.
 #'
-#' @details
-#' \strong{Self-contained raster loading.} The aligned raster stack, hotspot
-#' layer and CORINE group lookup are used only by this stage. When called
-#' standalone the function resolves the raster input paths from
-#' `config$options$data_base` / `composite_base` / `result_name` and runs the
-#' alignment itself. When the orchestrator delegates to this function it passes
-#' its already-built objects through the internal arguments `.aligned_rasters` /
-#' `.hotspots_sf` / `.cor_groups`, so no raster is loaded or aligned twice.
+#' @param train_with_folds `sf` polygon object or GeoPackage path containing
+#'   the labelled training polygons and fold assignments. Must contain
+#'   `fire_uid` and `class`. When a path is supplied, the function reads the
+#'   `train_with_folds` layer.
+#' @param scoring_pool `sf` polygon object or GeoPackage path containing the
+#'   Otsu-guided patches prepared for scoring. When a path is supplied, the
+#'   function reads the `scoring_pool` layer.
+#' @param config Required object of class `otsufire_supervised_burned_config`,
+#'   created with [build_supervised_burned_config()]. Supplies raster inputs,
+#'   the change-index template, optional supporting data, feature settings,
+#'   and output locations.
+#' @param use_hotspots Logical scalar. When `FALSE`, hotspot features are
+#'   disabled. When `TRUE`, they are enabled only if the loaded hotspot layer
+#'   contains observations and has a usable CRS. Default: `FALSE`.
+#' @param use_shape Logical scalar. Set to `TRUE` to enable shape-feature
+#'   extraction. With `FALSE`, shape features may still be enabled through
+#'   `config$train_control$include_shape_features` or
+#'   `config$options$use_shape`. Default: `FALSE`.
+#' @param out_dir Character scalar or `NULL`. Output directory. When `NULL`,
+#'   uses `config$output_routes$features_dir`, normally the run's
+#'   `03_FEATURES` folder.
+#' @param write_outputs Logical scalar. Whether to write the feature
+#'   GeoPackage and RDS files. Default: `TRUE`.
+#' @param .aligned_rasters Internal argument. Optional named list of already
+#'   aligned rasters supplied by the pipeline. Leave as `NULL` for standalone
+#'   use.
+#' @param .hotspots_sf Internal argument. Optional preloaded hotspot layer
+#'   supplied by the pipeline. Leave as `NULL` for standalone use.
+#' @param .cor_groups Internal argument. Optional CORINE group lookup supplied
+#'   by the pipeline. When `NULL`, uses the package lookup.
 #'
-#' \strong{Staleness rebuild.} When `features_geometry.gpkg` already exists it
-#' is rebuilt when it is older than the pools / folds inputs, when it is missing
-#' the `train_features` / `scoring_features` layers, or when its layer row
-#' counts do not match the train-with-folds / scoring-pool row counts; otherwise
-#' it is reused.
+#' @section Feature-extraction workflow:
+#' The function:
+#' 1. Loads the configured raster inputs and aligns them to the main
+#'    change-index template.
+#' 2. Loads hotspot observations when available.
+#' 3. Runs `extract_features()` for the training and scoring polygons.
+#' 4. Adds shape features when enabled.
+#' 5. Writes the feature layers and RDS files when requested.
+#' 6. Returns the training and scoring feature objects.
 #'
-#' \strong{Hotspots.} The engine's hotspot block is enabled only when the loaded
-#' hotspot layer has rows with a usable CRS. Setting `use_hotspots = FALSE`
-#' (the default) forces the block off regardless of the loaded layer.
+#' Feature extraction does not train a model or select the final predictor
+#' subset. Model-level feature selection and weighting are controlled through
+#' the probabilistic refinement configuration and applied during training.
 #'
-#' @param train_with_folds sf POLYGON layer OR a single GPKG path. The labelled
-#'   training layer with fold columns produced by the folds stage (the
-#'   `train_with_folds` object / the `train_with_folds` layer of
-#'   `02_FOLDS/<year>_train_with_folds_<bs>m.gpkg`). Must carry `fire_uid` and
-#'   `class`. When a path is supplied the `train_with_folds` layer is read.
-#' @param scoring_pool sf POLYGON layer OR a single GPKG path. The deterministic
-#'   scoring universe produced by the pools stage (the `scoring_pool` object /
-#'   the `scoring_pool` layer of `01_POOLS/<year>_<scenario>_pools.gpkg`). When
-#'   a path is supplied the `scoring_pool` layer is read.
-#' @param config Required `otsufire_supervised_burned_config` (from
-#'   [build_supervised_burned_config()]). Used to derive `out_dir` (the
-#'   `03_FEATURES` folder), the raster INPUT paths
-#'   (`config$options$data_base` / `composite_base` / `result_name`), the
-#'   change-index master template, and `target_year` / `scenario`.
-#' @param use_hotspots Logical. When `FALSE` (default) the hotspot feature block
-#'   is forced off. When `TRUE` the block is enabled if and only if the loaded
-#'   hotspot layer has rows with a usable CRS (the orchestrator's runtime
-#'   `use_hotspots_flag`). Default `FALSE`.
-#' @param use_shape Logical. Optional shape/size feature block, off by default
-#'   (`FALSE`). When `TRUE` the engine computes four geometric columns
-#'   (`log_area`, `perim_m`, `compactness`, `elongation`; `area_ha` / `n_pix`
-#'   already ride along as pool-builder columns) and left-joins them onto both
-#'   the train and scoring feature layers. When left at its `FALSE` default it
-#'   is driven from the config (`cfg$train_control$include_shape_features` or
-#'   the convenience `options$use_shape`); an explicit `TRUE` always wins. With
-#'   the block off no join runs and the extraction output is unchanged. See the
-#'   sampling-bias note in [build_supervised_burned_config()].
-#' @param out_dir Character or `NULL`. Output folder for the `03_FEATURES`
-#'   outputs. Defaults to `config$output_routes$features_dir`.
-#' @param write_outputs Logical. Whether to write the `features_geometry.gpkg`
-#'   and `*_features.rds` outputs. Default `TRUE`.
-#' @param .aligned_rasters Internal. Named list of already-aligned SpatRasters
-#'   (`rbr_summer`, `doy_post`, `rbr_aw`, `dem_r`, `slope_r`, `corine_r`) the
-#'   orchestrator passes for byte-identical delegation without double-loading.
-#'   `NULL` (default) triggers self-contained loading + alignment from config.
-#' @param .hotspots_sf Internal. The already-loaded hotspot sf the orchestrator
-#'   passes (its `hotspots_sf_base`). `NULL` (default) triggers self-contained
-#'   loading from config.
-#' @param .cor_groups Internal. The CORINE group LUT list the orchestrator
-#'   passes. `NULL` (default) uses the package-level `cor_groups`.
+#' @section Raster inputs:
+#' The supporting raster layers include:
 #'
-#' @return A named list with both the objects and the written paths:
-#'   \itemize{
-#'     \item `train_features` — the labelled training features (sf), the
-#'       `train_features` layer contents.
-#'     \item `scoring_features` — the scoring-universe features (sf), the
-#'       `scoring_features` layer contents.
-#'     \item `features_geometry_gpkg` — written path of `features_geometry.gpkg`.
-#'     \item `train_features_rds`, `scoring_features_rds` — written RDS paths.
-#'   }
+#' | Layer | Purpose |
+#' |---|---|
+#' | Summer RBR | Immediate spectral-response features. |
+#' | Post-fire day of year | Timing features. |
+#' | Autumn-winter RBR | Delayed-response and persistence features. |
+#' | Elevation | Topographic features. |
+#' | Slope | Topographic features. |
+#' | CORINE land cover | Land-cover features. |
 #'
-#' @seealso
-#' [build_supervised_burned_config()], [make_spatial_folds()],
-#' [run_oof_diagnostics()], [train_final_burned_model()],
-#' [score_supervised_burned_map()], [validate_supervised_execution()],
-#' [run_oneyear_supervised_pipeline()]
+#' The main change-index raster defines the alignment template.
 #'
-#' @family workflow
-#' @export
+#' Inputs are resolved from the configuration, including conventional paths
+#' where applicable. Feature availability depends on the supplied inputs; see
+#' [build_supervised_burned_config()] for optional-input behaviour.
+#'
+#' When called directly, the function loads and aligns its supporting data.
+#' The full pipeline can supply preloaded objects through the internal
+#' arguments to avoid repeating those operations.
+#'
+#' @section Hotspot features:
+#' For direct calls, hotspot extraction requires both:
+#' * `use_hotspots = TRUE`;
+#' * a loaded hotspot layer containing observations and a usable CRS.
+#'
+#' Supplying `hotspots` in the configuration alone does not enable this
+#' feature block in a direct call. The default `use_hotspots = FALSE` forces
+#' it off.
+#'
+#' Extracted hotspot features are available for modelling only if they are
+#' also permitted by the active model feature whitelist.
+#'
+#' @section Shape and size features:
+#' When enabled, the function computes and joins four geometric features to
+#' both feature layers: `log_area`, `perim_m`, `compactness` and
+#' `elongation`.
+#'
+#' The associated `area_ha` and `n_pix` fields are carried forward from the
+#' pool-building stage.
+#'
+#' Shape extraction is enabled by `use_shape = TRUE` or by the corresponding
+#' configuration settings. To keep this block disabled, leave
+#' `use_shape = FALSE` and ensure that the configuration settings are also
+#' disabled.
+#'
+#' For consistent extraction and model eligibility, configure shape features
+#' through `include_shape_features = TRUE` in
+#' [build_supervised_burned_config()].
+#'
+#' Shape and size can reflect how training examples were sampled. For
+#' example, small background cells may differ systematically from burned
+#' polygons. Evaluate this feature block against independent map references
+#' as well as out-of-fold diagnostics.
+#'
+#' @section Existing feature outputs:
+#' An existing `features_geometry.gpkg` is rebuilt when:
+#' * it is older than the pool or fold input files;
+#' * either the `train_features` or `scoring_features` layer is missing;
+#' * its layer row counts differ from the corresponding input polygon counts.
+#'
+#' Otherwise, it is reused.
+#'
+#' These checks do not establish that every raster input, geometry, or
+#' feature setting is unchanged. When changing supporting rasters, hotspot
+#' settings, or shape-feature settings, use a separate output directory or
+#' ensure that outdated feature products are regenerated.
+#'
+#' @section Output files:
+#' When `write_outputs = TRUE`, the function writes the following files under
+#' `out_dir`:
+#'
+#' | File | Contents |
+#' |---|---|
+#' | `features_geometry.gpkg` | Spatial feature layers named `train_features` and `scoring_features`. |
+#' | `train_features.rds` | Training feature object. |
+#' | `scoring_features.rds` | Scoring feature object. |
+#'
+#' The default output directory is the configured `03_FEATURES` folder.
+#'
+#' @return A named list containing feature objects and output paths.
+#'
+#' | Field | Contents |
+#' |---|---|
+#' | `train_features` | Labelled training features as an `sf` object. |
+#' | `scoring_features` | Features for the candidate scoring pool as an `sf` object. |
+#' | `features_geometry_gpkg` | Path to the feature GeoPackage when written. |
+#' | `train_features_rds` | Path to the training-feature RDS file when written. |
+#' | `scoring_features_rds` | Path to the scoring-feature RDS file when written. |
+#'
+#' Use the returned feature objects directly when working in memory. With
+#' `write_outputs = FALSE`, do not assume that the returned output locations
+#' contain newly written files.
+#'
+#' @seealso [build_supervised_burned_config()],
+#'   [build_supervised_training_pools()], [make_spatial_folds()],
+#'   `extract_features()`, [run_oof_diagnostics()],
+#'   [train_final_burned_model()], [score_supervised_burned_map()],
+#'   [validate_supervised_execution()], [run_oneyear_supervised_pipeline()].
 #'
 #' @examples
 #' \dontrun{
-#' cfg <- build_supervised_burned_config(
-#'   run_label = "balanced", internal_decisions = "decisions.gpkg",
-#'   change_index = "rbr.tif", target_year = 2017L,
-#'   options = list(data_base = "D:/FIRE", composite_base = "D:/FIRE/Composites")
+#' # Configure the probabilistic refinement workflow
+#' config <- build_supervised_burned_config(
+#'   internal_decisions = "data/internal_decisions_2022.gpkg",
+#'   change_index = "data/RBR_2022.tif",
+#'   delayed_change_index = "data/RBR_delayed_2022.tif",
+#'   hotspots = "data/hotspots_2022.gpkg",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_2022.tif",
+#'   burnable_mask = "data/burnable_mask_2022.tif",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022",
+#'   include_shape_features = FALSE
 #' )
-#' feats <- extract_supervised_features(
-#'   train_with_folds = "02_FOLDS/2017_train_with_folds_2000m.gpkg",
-#'   scoring_pool     = "01_POOLS/2017_balanced_pools.gpkg",
-#'   config = cfg
+#'
+#' # Build training and scoring pools
+#' pools <- build_supervised_training_pools(
+#'   config = config,
+#'   write_outputs = TRUE
 #' )
-#' feats$features_geometry_gpkg
+#'
+#' # Assign spatial folds
+#' folds <- make_spatial_folds(
+#'   train_labelled = pools$pools_gpkg,
+#'   config = config
+#' )
+#'
+#' # Review the partition before continuing
+#' if (!isTRUE(folds$selected$ok)) {
+#'   stop("Review the fallback partition before continuing.")
 #' }
+#'
+#' # Extract features, explicitly enabling hotspot features
+#' features <- extract_supervised_features(
+#'   train_with_folds = folds$train_with_folds_gpkg,
+#'   scoring_pool = pools$pools_gpkg,
+#'   config = config,
+#'   use_hotspots = TRUE,
+#'   write_outputs = TRUE
+#' )
+#'
+#' # Inspect the training feature columns
+#' names(features$train_features)
+#'
+#' # Inspect the scoring feature table
+#' head(sf::st_drop_geometry(features$scoring_features))
+#'
+#' # Locate the written feature GeoPackage
+#' features$features_geometry_gpkg
+#'
+#' # Extract a separate version without hotspot features
+#' # A separate directory avoids reusing the previous feature file.
+#' features_no_hotspots <- extract_supervised_features(
+#'   train_with_folds = folds$train_with_folds,
+#'   scoring_pool = pools$scoring_pool,
+#'   config = config,
+#'   use_hotspots = FALSE,
+#'   out_dir = file.path(
+#'     config$output_routes$features_dir,
+#'     "no_hotspots"
+#'   ),
+#'   write_outputs = TRUE
+#' )
+#' }
+#'
+#' @family workflow
+#' @export
 extract_supervised_features <- function(train_with_folds, scoring_pool, config,
                                         use_hotspots = FALSE,
                                         use_shape = FALSE,

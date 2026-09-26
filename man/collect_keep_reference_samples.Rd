@@ -17,7 +17,7 @@ collect_keep_reference_samples(
 }
 \arguments{
 \item{decision_paths}{Character vector of existing paths to
-deterministic decision files. This argument is required; the helper
+Otsu-guided segmentation decision files. This argument is required; the helper
 does not search for files automatically.}
 
 \item{target_year}{Optional scalar year. When supplied, polygons with
@@ -51,17 +51,17 @@ the strict rule. Default \code{100}.}
 }
 \value{
 An object of class
-  \code{c("otsufire_keep_reference_samples", "list")} with fields:
+\code{c("otsufire_keep_reference_samples", "list")} with fields:
 \describe{
-  \item{\code{samples}}{\code{sf} of selected polygons (original useful
-    columns preserved, plus \code{run_label} and \code{decision_path}).}
-  \item{\code{summary}}{list with \code{n_files_input},
-    \code{n_polygons_input}, \code{n_polygons_selected},
-    \code{years_used}, \code{run_labels_used},
-    \code{target_year_excluded}, \code{min_area_ha}, \code{rule}.}
-  \item{\code{exclusion_counts}}{auditable \code{data.frame} with
-    columns \code{rule} and \code{n} (stable schema; see Details).}
-  \item{\code{decision_paths}}{the input paths.}
+\item{\code{samples}}{\code{sf} of selected polygons (original useful
+columns preserved, plus \code{run_label} and \code{decision_path}).}
+\item{\code{summary}}{list with \code{n_files_input},
+\code{n_polygons_input}, \code{n_polygons_selected},
+\code{years_used}, \code{run_labels_used},
+\code{target_year_excluded}, \code{min_area_ha}, \code{rule}.}
+\item{\code{exclusion_counts}}{auditable \code{data.frame} with
+columns \code{rule} and \code{n} (stable schema; see Details).}
+\item{\code{decision_paths}}{the input paths.}
 }
 
 The \code{exclusion_counts} schema is stable and always contains, in
@@ -80,10 +80,10 @@ polygons passing every predicate.
 }
 \description{
 Collect high-confidence historical \emph{keep}-like polygons from one
-or more previously written deterministic decision layers, using a
+or more previously written Otsu-guided segmentation decision layers, using a
 single fixed selection rule (\code{"strict_hotspot"}).
 
-In the public deterministic workflow, this helper is meant for
+In the public Otsu-guided segmentation workflow, this helper is meant for
 building explicit \emph{external} reference pools from trusted years
 other than the year currently being scored. The selected samples are
 intended to feed
@@ -92,36 +92,36 @@ which turns them into a reusable spectral-support \code{keep_pool}.
 
 This is the first of a two-step explicit workflow:
 \enumerate{
-  \item \strong{Select} reliable historical samples (this function).
-  \item \strong{Build} a reusable \code{keep_pool} from those samples
-    (\code{build_keep_pool_from_samples()}).
+\item \strong{Select} reliable historical samples (this function).
+\item \strong{Build} a reusable \code{keep_pool} from those samples
+(\code{build_keep_pool_from_samples()}).
 }
 
 \strong{Explicit helper workflow.} Neither this function nor
 \code{build_keep_pool_from_samples()} is called automatically by the
-deterministic pipeline. They are standalone helpers. If you choose to
+Otsu-guided segmentation pipeline. They are standalone helpers. If you choose to
 use them, the resulting \code{keep_pool} can then be passed
 explicitly to
 \code{score_burned_patches(..., keep_pool = ...)} or
 \code{run_deterministic_pipeline(..., keep_pool = ...)}.
 }
 \details{
-\strong{Current helper design.} The caller supplies the exact decision
+\strong{Inputs.} The caller supplies the exact decision
 layer paths in \code{decision_paths}. There is no autodiscovery, and
 the selection rule described below is fixed in the public helper.
 
 \strong{Fixed \code{strict_hotspot} rule.} A polygon is selected only
 when \emph{all} of the following hold:
 \itemize{
-  \item \code{class_final == "keep"};
-  \item \code{filter_1 == "keep"};
-  \item \code{filter_2 == "keep"};
-  \item \code{filter_3 == "keep"};
-  \item \code{area_ha >= min_area_ha};
-  \item \code{conf_area == "ok"};
-  \item \code{conf_pix == "ok"};
-  \item if a \code{preyear_action} column exists,
-    \code{preyear_action != "drop"}.
+\item \code{class_final == "keep"};
+\item \code{filter_1 == "keep"};
+\item \code{filter_2 == "keep"};
+\item \code{filter_3 == "keep"};
+\item \code{area_ha >= min_area_ha};
+\item \code{conf_area == "ok"};
+\item \code{conf_pix == "ok"};
+\item if a \code{preyear_action} column exists,
+\code{preyear_action != "drop"}.
 }
 
 \code{run_label} is derived per polygon as the first available of

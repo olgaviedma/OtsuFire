@@ -2,7 +2,7 @@
 % Please edit documentation in R/supervised-pools.R
 \name{build_supervised_training_pools}
 \alias{build_supervised_training_pools}
-\title{Build burned and negative training pools for supervised learning}
+\title{Build training and scoring pools for probabilistic refinement}
 \usage{
 build_supervised_training_pools(
   config,
@@ -12,114 +12,266 @@ build_supervised_training_pools(
 )
 }
 \arguments{
-\item{config}{Required `otsufire_supervised_burned_config` (from
-[build_supervised_burned_config()]). Source of every input path, output
-route, `UNB_*` parameter and tool path used by the stage.}
+\item{config}{Required object of class \code{otsufire_supervised_burned_config},
+created with \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies the inputs,
+negative-pool settings, random seeds, tool paths, and output locations.}
 
-\item{deterministic_decisions}{Optional sf, SpatVector, or single GPKG path
-to the deterministic decisions (layer `internal_decisions`). When `NULL`
-(default) the `config$inputs$internal_decisions` path is used.}
+\item{deterministic_decisions}{Optional \code{sf} polygon object, polygon
+\code{terra::SpatVector}, or GeoPackage path containing the decision layer for
+Otsu-guided patches. For a GeoPackage, the expected layer is
+\code{internal_decisions}. When \code{NULL}, uses \code{config$inputs$internal_decisions}.}
 
-\item{write_outputs}{Logical. Whether to write the pools GPKG + QA files.
-Default `TRUE`.}
+\item{write_outputs}{Logical scalar. Whether to write the pool GeoPackage
+and quality-assurance files. Default: \code{TRUE}.}
 
-\item{overwrite}{Logical. Forwarded to the deterministic-decisions unburned
-builder (`overwrite_output`). Default `FALSE`.}
+\item{overwrite}{Logical scalar. Passed to the unburned-pool builder to
+control replacement of existing outputs. Default: \code{FALSE}.}
 }
 \value{
-A named list with both the objects and the written paths:
-  \itemize{
-    \item `burned_pool`, `unburned_pool`, `review_pool`, `scoring_pool` —
-      the four pool sf objects.
-    \item `train_labeled` — the merged labelled training set
-      (`burned + unburned`), consumed by [make_spatial_folds()].
-    \item `pools_gpkg` — written path of
-      `01_POOLS/<year>_<scenario>_pools.gpkg` (consumed by the folds and
-      feature stages).
-    \item `audited_internal_gpkg`, `qa_summary_csv`, `qa_transitions_csv`,
-      `qa_reasons_csv` — the QA audit file paths.
-    \item `unburned_hard`, `unburned_random`, `unburned_final_raw`,
-      `exclusion_buffer` — the auxiliary unburned sub-pools.
-    \item `b4_audit` — audit record for the random burnable background: cell
-      accounting at each stage (valid index, burnable, per-rule exclusions),
-      the percentile domain and value, eligible cells, finally selected
-      observations, and confirmation that no selected observation falls
-      outside the burnable domain.
-    \item `neg_pool_fingerprint` — deterministic `list(text, checksum)`
-      identity of the negative pool. It folds in the burnable-domain
-      decision, the aligned-mask hash, the percentile config and value, the
-      RNG seeds, the exclusions and the relevant inputs, so any cached pool
-      whose fingerprint no longer matches is invalidated rather than reused.
-      Also written as a sidecar
-      `01_POOLS/<year>_<scenario>_neg_pool_fingerprint.txt`.
-    \item `otsu_random_dedup_audit` — Otsu-over-random spatial-dedup record:
-      `random_before`, `random_removed_by_otsu`, `random_final`,
-      `area_removed` and `removed_ids_hash`.
-  }
+A named list containing pool objects, output paths, and audit
+information.
+
+\strong{Pool objects}\tabular{ll}{
+   Field \tab Contents \cr
+   \code{burned_pool} \tab Burned training pool as an \code{sf} object. \cr
+   \code{unburned_pool} \tab Unburned training pool as an \code{sf} object. \cr
+   \code{review_pool} \tab Review candidates as an \code{sf} object. \cr
+   \code{scoring_pool} \tab Candidate scoring pool as an \code{sf} object. \cr
+   \code{train_labeled} \tab Combined labelled training set containing burned and unburned examples. \cr
+}
+
+
+\strong{Output paths}\tabular{ll}{
+   Field \tab Contents \cr
+   \code{pools_gpkg} \tab Path to the pool GeoPackage used by subsequent stages. \cr
+   \code{audited_internal_gpkg} \tab Path to the audited input decision layer. \cr
+   \code{qa_summary_csv} \tab Path to the quality-assurance summary. \cr
+   \code{qa_transitions_csv} \tab Path to the record of label transitions during quality checks. \cr
+   \code{qa_reasons_csv} \tab Path to the quality-assurance reason summary. \cr
+}
+
+
+\strong{Auxiliary outputs and audits}\tabular{ll}{
+   Field \tab Contents \cr
+   \code{unburned_hard} \tab Auxiliary hard-negative output from unburned-pool construction. \cr
+   \code{unburned_random} \tab Auxiliary random-background negative pool. \cr
+   \code{unburned_final_raw} \tab Auxiliary combined unburned output before final pool assembly. \cr
+   \code{exclusion_buffer} \tab Spatial exclusion buffer used during negative-pool construction. \cr
+   \code{b4_audit} \tab Background-sampling audit, including cell counts, exclusions, percentile information, selected observations, and burnable-domain checks. \cr
+   \code{neg_pool_fingerprint} \tab List with \code{text} and \code{checksum}, identifying the negative-pool inputs and settings. \cr
+   \code{otsu_random_dedup_audit} \tab Record of random-background examples removed because they intersect Otsu negatives. \cr
+}
+
+
+\code{otsu_random_dedup_audit} includes \code{random_before},
+\code{random_removed_by_otsu}, \code{random_final}, \code{area_removed} and
+\code{removed_ids_hash}.
+
+The auxiliary field \code{unburned_hard} should not be assumed to be identical
+to the optional \code{artifact_hard} training bucket solely because of its name.
 }
 \description{
-Builds the labelled training pools for the supervised burned-area pipeline:
-the burned (positive) pool, the negative (unburned) pool, and the review and
-scoring pools. This is the pools stage of the pipeline; its `train_labeled`
-output feeds [make_spatial_folds()] and the feature stage.
+Build the burned, unburned, review, and scoring pools used by the
+probabilistic refinement workflow.
 
-Run it first, before folds and feature extraction. Pass the configuration
-from [build_supervised_burned_config()]. Calling this function directly
-produces the same `01_POOLS` outputs as the equivalent stage of the full
-pipeline [run_oneyear_supervised_pipeline()].
+The function reads the decision layer for Otsu-guided patches, applies
+quality checks to the initial labels, constructs negative examples, and
+assembles the labelled training set.
+
+Run this stage before spatial-fold assignment and feature extraction. The
+returned \code{train_labeled} object contains the training examples, while the
+written pool GeoPackage can be passed to subsequent workflow stages.
+
+This function is also called as part of
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
 }
-\details{
-Every parameter the stage needs is resolved straight from `config`: the
-negative-pool (`UNB_*`) parameters from `config$options`, the external tool
-paths (`python_exe`, `gdal_polygonize_script`, `gdalwarp_path`,
-`ogr2ogr_exe`) from `config$tool_paths`, the input imagery roots, and the
-`01_POOLS` output folder and `pools.gpkg` path from `config$output_routes`.
+\section{Workflow}{
 
-Determinism: the random burnable-background sampling uses a fixed seed and
-the two unburned builders run in a fixed order (deterministic decisions
-first, Otsu negative second), so the sampled negatives are reproducible. The
-Otsu negative builder passes its full valid drop pool forward; the per-bucket
-cap `cap_otsu` (`otsu_unburned_to_burned_ratio`) is the sole seeded Otsu
-selector.
-
-The random burnable-background bucket computes its change-index percentile
-and draws its sample only within the aligned burnable domain, so no selected
-cell falls outside burnable land. A location never enters the negative pool
-as both a random background cell and an Otsu residual patch: any random row
-whose polygon intersects an Otsu patch is removed (Otsu has priority) before
-capping and before the training set is assembled.
-}
-\section{What it does}{
-
+The function performs the following steps:
 \enumerate{
-  \item Reads the deterministic `internal_decisions` layer and runs the
-    conservative QA relabelling ([audit_deterministic_pools()]).
-  \item Assembles the burned, review and scoring pools.
-  \item Builds the negative (unburned) pool from two sources: the
-    deterministic drops plus a random burnable background
-    ([build_unburned_from_deterministic_decisions()]) and the Otsu
-    current-year residual patches ([build_otsu_negative_pipeline()]).
-  \item Merges the labelled training set (`burned + unburned`).
-  \item Writes the canonical `01_POOLS/<year>_<scenario>_pools.gpkg` and the
-    QA audit files.
+\item Read the decision layer for Otsu-guided patches.
+\item Apply conservative quality-assurance checks and relabelling through
+\code{audit_deterministic_pools()}.
+\item Assemble the burned, review, and scoring pools.
+\item Build negative examples from the decision-layer workflow, random
+burnable-background samples, and Otsu residual patches.
+\item Remove spatial duplication between background samples and Otsu
+negatives.
+\item Combine burned and unburned examples into \code{train_labeled}.
+\item Write the pool GeoPackage and audit files when \code{write_outputs = TRUE}.
 }
+
+The initial labels are derived from Otsu-guided patch classifications.
+They are not independent ground-truth observations.
+}
+
+\section{Pool roles}{
+\tabular{ll}{
+   Pool \tab Purpose \cr
+   \code{burned_pool} \tab Positive training examples retained after quality checks. \cr
+   \code{unburned_pool} \tab Negative training examples assembled from the supported unburned sources. \cr
+   \code{review_pool} \tab Ambiguous candidates retained separately from the labelled training set. \cr
+   \code{scoring_pool} \tab Candidate polygons prepared for subsequent supervised scoring. \cr
+   \code{train_labeled} \tab Combined burned and unburned training examples. \cr
+}
+
+
+Review candidates are not automatically assigned unburned labels.
+}
+
+\section{Negative-pool construction}{
+
+Negative-pool construction uses \code{build_unburned_from_deterministic_decisions()}
+and \code{build_otsu_negative_pipeline()}.
+
+The first builder uses classifications of Otsu-guided patches and random
+burnable-background sampling. The second supplies current-year Otsu
+residual negatives.
+
+A patch classified as \code{"drop"} must satisfy the applicable selection rules
+to enter the negative pool. Rejection from the burned pool alone does not
+establish an unburned training label.
+
+User-configurable negative-pool settings are supplied through
+\code{config$negative_pool_params}, with random seeds and runtime controls
+resolved by \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.
+}
+
+\section{Burnable-background sampling}{
+
+The background change-index percentile is calculated within the aligned
+burnable domain. Eligible cells and random samples are selected from that
+same domain.
+
+The sampling audit records the domain, exclusions, percentile threshold,
+eligible-cell counts, and selected observations. It also records whether
+any selected observation falls outside burnable land.
+
+Sampling uses the configured random seed. Reproducing a sample requires the
+same inputs, settings, and sampling domain.
+}
+
+\section{Spatial deduplication}{
+
+Otsu residual patches take priority over random-background examples.
+
+Any random-background polygon that intersects an Otsu negative patch is
+removed before capping and training-set assembly. This prevents the same
+location from entering these two negative sources simultaneously.
+
+The removal is recorded in \code{otsu_random_dedup_audit}.
+}
+
+\section{Sampling caps}{
+
+Background and Otsu-negative caps are configured through
+\code{config$negative_pool_params$caps}.
+
+Each cap is expressed as a multiple of the burned-label count. The resolved
+caps are also available in \code{config$train_control$caps}.
+
+The Otsu negative builder passes its valid drop pool forward for
+subsequent selection under this policy. Configure caps through
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} rather than using legacy cap arguments.
+
+The returned labelled pool should not be interpreted as the exact set of
+observations used by every fitted model. Subsequent training stages apply
+eligibility checks and sampling to their respective training subsets.
+}
+
+\section{Cache provenance}{
+
+The function returns a negative-pool fingerprint containing a text
+description and checksum.
+
+The fingerprint records relevant inputs and settings, including the aligned
+burnable mask, percentile configuration and value, random seeds, and
+exclusions. A cached pool with a different fingerprint is invalidated
+rather than reused.
+
+Matching the target year alone is insufficient to establish that a cached
+pool is compatible.
+}
+
+\section{Output files}{
+
+When outputs are written, the pool GeoPackage uses the following path
+relative to the configured run directory:
+\verb{01_POOLS/<year>_<run_label>_pools.gpkg}.
+
+The function also writes quality-assurance outputs and a fingerprint
+sidecar: \verb{01_POOLS/<year>_<run_label>_neg_pool_fingerprint.txt}.
+
+Use the returned paths to locate the products instead of reconstructing
+the full directory structure.
 }
 
 \examples{
 \dontrun{
-cfg <- build_supervised_burned_config(
-  run_label = "balanced", internal_decisions = "decisions.gpkg",
-  change_index = "rbr.tif", target_year = 2017L,
-  options = list(data_base = "D:/FIRE", composite_base = "D:/FIRE/Composites")
+# Configure the probabilistic refinement workflow
+config <- build_supervised_burned_config(
+  run_label = "balanced",
+  internal_decisions = "data/internal_decisions_2022.gpkg",
+  change_index = "data/RBR_2022.tif",
+  delayed_change_index = "data/RBR_delayed_2022.tif",
+  topo = "data/elevation_slope.tif",
+  corine_raster = "data/land_cover_2022.tif",
+  burnable_mask = "data/burnable_mask_2022.tif",
+  target_year = 2022L,
+  output_dir = "results",
+  run_name = "RBR_2022",
+  random_seed = 42L,
+  negative_pool_params = list(
+    random = list(
+      n_cells = 1500L,
+      rbr_quantile = 0.50
+    ),
+    caps = c(
+      random = 1.0,
+      otsu = 1.0
+    )
+  )
 )
-pools <- build_supervised_training_pools(cfg)
+
+# Build and write the pools
+pools <- build_supervised_training_pools(
+  config = config,
+  write_outputs = TRUE,
+  overwrite = FALSE
+)
+
+# Inspect pool sizes
+c(
+  burned = nrow(pools$burned_pool),
+  unburned = nrow(pools$unburned_pool),
+  review = nrow(pools$review_pool),
+  scoring = nrow(pools$scoring_pool)
+)
+
+# Inspect sampling and deduplication audits
+pools$b4_audit
+pools$otsu_random_dedup_audit
+
+# Inspect the negative-pool fingerprint
+pools$neg_pool_fingerprint
+
+# Locate the written pool GeoPackage
 pools$pools_gpkg
-folds <- make_spatial_folds(pools$pools_gpkg, config = cfg)
+
+# Continue with spatial-fold assignment
+folds <- make_spatial_folds(
+  pools$pools_gpkg,
+  config = config
+)
 }
+
 }
 \seealso{
-[build_supervised_burned_config()], [make_spatial_folds()],
-[extract_supervised_features()], [run_oneyear_supervised_pipeline()]
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}},
+\code{audit_deterministic_pools()},
+\code{build_unburned_from_deterministic_decisions()},
+\code{build_otsu_negative_pipeline()}.
 
 Other workflow: 
 \code{\link{build_burned_mapping_config}()},

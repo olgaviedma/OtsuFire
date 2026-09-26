@@ -16,55 +16,153 @@
 # Champion threshold = 0.50, score column = "p_burned_model".
 # =============================================================================
 
-#' Threshold a scored supervised candidate set and write thresholded_burned.gpkg
+#' Apply a score threshold and export burned-area polygons
 #'
 #' @description
-#' Takes candidates already scored by the supervised model (a \code{scored_all}
-#' set carrying a per-row probability column) and writes the burned polygons
-#' that pass an explicit probability threshold. Use it as the final, inspectable
-#' threshold-and-write step of the supervised pipeline; it does only that step
-#' (no scoring, no model, no retraining).
+#' Select already-scored candidate polygons using an explicit score threshold
+#' and write the selected polygons to a GeoPackage.
 #'
-#' The keep rule is \code{is.finite(score) & score >= threshold}, followed by
-#' dropping Z/M dimensions, \code{\link[sf]{st_make_valid}}, and removal of empty
-#' geometries. CRS and all attribute columns (including the score column) are
-#' preserved.
+#' A candidate is retained when its score is finite and greater than or equal
+#' to `threshold`. Optional geometry cleaning removes Z/M dimensions, repairs
+#' invalid geometries, and removes empty geometries before export.
 #'
-#' @param scored A scored candidate set: either a path to a GeoPackage (the
-#'   \code{scored_all} layer is used when present, otherwise the first layer),
-#'   or an in-memory \code{sf}.
-#' @param out_dir Directory to write into (created if needed).
-#' @param threshold Numeric operating threshold on \code{score_col}. Default
-#'   \code{0.50}.
-#' @param score_col Name of the model-probability column. Default
-#'   \code{"p_burned_model"} (written by the supervised scorer).
-#' @param layer Output layer name. Default \code{"thresholded_burned"}.
-#' @param filename Output file name. Default \code{"thresholded_burned.gpkg"}.
-#' @param overwrite Logical. If \code{FALSE} (default) and the output file
-#'   already exists, the function stops; if \code{TRUE} the file (and any
-#'   \code{-wal}/\code{-shm} sidecars) is removed first.
-#' @param clean_geometry Logical (default \code{TRUE}). Drop Z/M dimensions,
-#'   make geometries valid, and drop empties before writing.
-#' @param verbose Logical (default \code{TRUE}). Emit a one-line summary message.
-#' @return Invisibly, a list with \code{path}, \code{layer}, \code{threshold},
-#'   \code{score_col}, \code{n_in}, \code{n_kept}, \code{n_nonfinite},
-#'   \code{n_dropped_empty}, \code{crs_epsg} and \code{overwrite}.
+#' Use this function after supervised scoring to create a thresholded
+#' burned-area product. It does not train a model, calculate predictions, or
+#' apply temporal filtering.
 #'
-#' @seealso
-#' \code{\link{score_supervised_burned_map}},
-#' \code{\link{train_final_burned_model}},
-#' \code{\link{run_oneyear_supervised_pipeline}}
+#' @param scored An `sf` object containing scored candidate polygons, or a
+#'   GeoPackage path. When a path is supplied, the function reads the
+#'   `scored_all` layer if present; otherwise, it reads the first layer.
+#' @param out_dir Character scalar. Output directory, created if needed.
+#' @param threshold Numeric scalar. Minimum score required to retain a
+#'   candidate. Values equal to the threshold are included. Default: `0.50`.
+#' @param score_col Character scalar. Name of the numeric score column used
+#'   for selection. Default: `"p_burned_model"`. Set this explicitly when the
+#'   input uses another score field, such as `"p_burned"`.
+#' @param layer Character scalar. Name of the output GeoPackage layer.
+#'   Default: `"thresholded_burned"`. This argument does not select the input
+#'   layer.
+#' @param filename Character scalar. Output filename within `out_dir`.
+#'   Default: `"thresholded_burned.gpkg"`.
+#' @param overwrite Logical scalar. When `FALSE`, an existing output file
+#'   causes an error. When `TRUE`, the entire output file and any associated
+#'   `-wal` and `-shm` sidecar files are removed before writing. Default:
+#'   `FALSE`.
+#' @param clean_geometry Logical scalar. Whether to remove Z/M dimensions,
+#'   repair invalid geometries with `sf::st_make_valid()`, and remove empty
+#'   geometries before writing. Default: `TRUE`.
+#' @param verbose Logical scalar. Whether to print a brief processing summary.
+#'   Default: `TRUE`.
+#'
+#' @section Threshold selection:
+#' The selection rule is `is.finite(score) & score >= threshold`, where
+#' `score` is the column identified by `score_col`.
+#'
+#' Missing and non-finite scores, including `NA`, `NaN`, `Inf`, and `-Inf`,
+#' are excluded.
+#'
+#' The default threshold of `0.50` is an operating value, not an
+#' automatically selected optimum. Model scores are not necessarily
+#' calibrated probabilities. Choose the threshold using the intended mapping
+#' objective and appropriate evaluation results.
+#'
+#' @section Input layers and score fields:
+#' GeoPackages may contain several scored layers with different candidate
+#' sets. When `scored` is a path, automatic selection uses `scored_all` if
+#' available and otherwise the first layer.
+#'
+#' To threshold a specific layer, read it with `sf::st_read()` and pass the
+#' resulting `sf` object.
+#'
+#' For outputs from [score_supervised_burned_map()]:
+#' * use `final_map` to threshold candidates retained after the current-year
+#'   temporal filter;
+#' * use `final_map_full` to threshold the complete scored candidate set;
+#' * specify the score column present in the selected layer.
+#'
+#' This function applies only the score threshold and optional geometry
+#' cleaning. It does not reproduce temporal exclusions when given the complete
+#' candidate set.
+#'
+#' @section Geometry cleaning:
+#' When `clean_geometry = TRUE`, selected candidates are processed in this
+#' order:
+#' 1. remove Z/M dimensions;
+#' 2. repair invalid geometries;
+#' 3. remove empty geometries.
+#'
+#' The CRS and attribute columns, including the selected score column, are
+#' retained. Geometry repair may alter geometry structure, and removing empty
+#' geometries may reduce the number of exported features.
+#'
+#' When `clean_geometry = FALSE`, these cleaning operations are skipped.
+#'
+#' @section Existing outputs:
+#' With `overwrite = TRUE`, replacement applies to the whole output
+#' GeoPackage, including any other layers it contains. Use a dedicated output
+#' filename for the thresholded product.
+#'
+#' @return An invisibly returned named list containing:
+#'
+#' | Field | Contents |
+#' |---|---|
+#' | `path` | Path to the output GeoPackage. |
+#' | `layer` | Output layer name. |
+#' | `threshold` | Applied score threshold. |
+#' | `score_col` | Score column used for selection. |
+#' | `n_in` | Number of input candidates. |
+#' | `n_kept` | Number of retained output features. |
+#' | `n_nonfinite` | Number of input candidates with missing or non-finite scores. |
+#' | `n_dropped_empty` | Number of empty geometries removed during cleaning. |
+#' | `crs_epsg` | EPSG identifier reported for the output CRS, when available. |
+#' | `overwrite` | Applied overwrite setting. |
+#'
+#' Assign the result to an object to inspect the summary and output path.
+#'
+#' @seealso [score_supervised_burned_map()], [train_final_burned_model()],
+#'   [run_oof_diagnostics()], [validate_fire_maps()],
+#'   [run_oneyear_supervised_pipeline()].
 #'
 #' @examples
 #' \dontrun{
-#' # Take a scored candidate set and write the thresholded burned polygons.
+#' # Threshold a scored_all layer containing p_burned_model
 #' res <- write_thresholded_burned(
-#'   ".../balanced/scored_all.gpkg",
-#'   out_dir   = ".../my_run/balanced",
+#'   scored = "results/scored_all.gpkg",
+#'   out_dir = "results/thresholded",
 #'   threshold = 0.50,
-#'   overwrite = TRUE)
-#' res$n_in; res$n_kept; res$path
+#'   score_col = "p_burned_model"
+#' )
+#'
+#' res$n_in
+#' res$n_kept
+#' res$path
+#'
+#' # Select a specific layer from a probabilistic refinement final-map GeoPackage
+#' public_map <- sf::st_read(
+#'   "path/to/final_map.gpkg",
+#'   layer = "final_map",
+#'   quiet = TRUE
+#' )
+#'
+#' # Threshold the public layer using its p_burned field
+#' res_public <- write_thresholded_burned(
+#'   scored = public_map,
+#'   out_dir = "results/thresholded",
+#'   threshold = 0.50,
+#'   score_col = "p_burned",
+#'   filename = "public_thresholded_burned.gpkg"
+#' )
+#'
+#' # Inspect the exported polygons
+#' burned <- sf::st_read(
+#'   res_public$path,
+#'   layer = res_public$layer,
+#'   quiet = TRUE
+#' )
+#'
+#' plot(sf::st_geometry(burned))
 #' }
+#'
 #' @export
 write_thresholded_burned <- function(scored,
                                      out_dir,

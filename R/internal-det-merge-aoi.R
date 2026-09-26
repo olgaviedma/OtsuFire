@@ -50,6 +50,7 @@
 #'   verbose = TRUE
 #' )
 #' }
+#' @keywords internal
 merge_aoi_shapefiles <- function(base_output_dir,
                                  pattern = NULL,
                                  out_path,

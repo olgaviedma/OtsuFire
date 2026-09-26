@@ -4,40 +4,80 @@
 \name{OtsuFire-package}
 \alias{OtsuFire-package}
 \alias{OtsuFire}
-\title{OtsuFire: Otsu-Based Burned-Area Mapping}
+\title{OtsuFire: a self-labelling framework for wall-to-wall burned-area mapping across sensors and decades}
 \description{
-Reproducible multi-year burned-area mapping from change-index rasters.
-Provides four layers that can be used together or independently:
-a mosaic stage, a deterministic Otsu/grow segmentation workflow, a
-supervised one-year probabilistic workflow, and a shared
-workflow-independent validation utility.
+\code{OtsuFire} is an open-source R package for long-term, wall-to-wall
+burned-area reconstruction. It implements a self-labelling, weakly
+supervised framework that generates training labels without requiring
+prior knowledge of fire locations or reliable target-year reference data.
+
+The framework separates \strong{supervision generation} from \strong{final
+classification}: Otsu-guided segmentation and physically interpretable
+rules provide the evidence used to construct training pools, which
+then train a probabilistic patch-level classifier.
+
+The package provides four composable stages:
+\enumerate{
+\item \strong{Mosaic preparation:} assemble image tiles into an annual
+change-index raster.
+\item \strong{Otsu-guided segmentation and rule-based filtering:} delineate
+candidate patches using Otsu thresholds and seed-and-grow
+segmentation, then apply spectral, spatial and contextual filters
+to assign \code{keep}, \code{review} or \code{drop} decisions.
+\item \strong{Probabilistic refinement:} construct burned and unburned training
+pools, train an XGBoost classifier, and estimate \code{p_burned} for
+candidate patches to produce the final burned-area map.
+\item \strong{Independent validation:} compare mapped burned areas with an
+external reference. This utility can also evaluate maps generated
+outside OtsuFire.
+}
+
+Wall-to-wall coverage describes the mapping domain: the whole study area
+is searched for candidate patches. Probabilistic scoring then operates on
+those candidate patches.
+
+\subsection{Package, workflow book and data}{
+The OtsuFire package and its source code are available on
+\href{https://github.com/olgaviedma/OtsuFire}{GitHub}.
+
+For step-by-step guidance on implementing and using OtsuFire, see the
+\href{https://github.com/nataliaquintero/OtsuFire-book}{OtsuFire workflow book}.
+The companion repository also includes the Google Earth Engine scripts
+used for image selection, masking and compositing.
+
+Burned-area maps for the full time series are available on
+Zenodo (\doi{10.5281/zenodo.22893763}).
+}
 }
 \section{Workflow entry points}{
 
-- [change_index_mosaic()] — annual mosaic of a change index.
-- [build_burned_mapping_config()] + [run_deterministic_pipeline()] —
-  deterministic workflow.
-- [build_supervised_burned_config()] +
-  [run_oneyear_supervised_pipeline()] — one-year supervised workflow.
-- [validate_fire_maps()] — shared workflow-independent validation
-  utility; usable inside the deterministic pipeline and directly on
-  any compatible burned-area prediction layer (including supervised
-  outputs after thresholding `p_burned`).
+\itemize{
+\item \code{\link[=change_index_mosaic]{change_index_mosaic()}} — annual mosaic of a change index.
+\item \code{\link[=build_burned_mapping_config]{build_burned_mapping_config()}} + \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}} —
+Otsu-guided segmentation workflow.
+\item \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}} +
+\code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}} — one-year probabilistic refinement workflow.
+\item \code{\link[=validate_fire_maps]{validate_fire_maps()}} — shared workflow-independent validation
+utility; usable inside the Otsu-guided segmentation pipeline and directly on
+any compatible burned-area prediction layer (including probabilistic refinement
+outputs after thresholding \code{p_burned}).
+}
 }
 
 \section{Modular utilities}{
 
-[detect_burned_patches()], [score_burned_patches()],
-[build_supervised_training_pools()], [make_spatial_folds()],
-[extract_supervised_features()], [run_oof_diagnostics()],
-[train_final_burned_model()], [score_supervised_burned_map()],
-[check_supervised_consistency()].
+\code{\link[=detect_burned_patches]{detect_burned_patches()}}, \code{\link[=score_burned_patches]{score_burned_patches()}},
+\code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}, \code{\link[=make_spatial_folds]{make_spatial_folds()}},
+\code{\link[=extract_supervised_features]{extract_supervised_features()}}, \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
+\code{\link[=train_final_burned_model]{train_final_burned_model()}}, \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
+\code{\link[=check_supervised_consistency]{check_supervised_consistency()}}.
 }
 
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/olgaviedma/OtsuFire}
+  \item \url{https://github.com/nataliaquintero/OtsuFire-book}
   \item Report bugs at \url{https://github.com/olgaviedma/OtsuFire/issues}
 }
 

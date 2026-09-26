@@ -257,8 +257,8 @@ feature_schema_fingerprint <- function(recipe_or_cols) {
   stop(sprintf(paste0(
     "Feature-schema parity guard ABORT (%s): the STRUCTURAL feature-space ",
     "contract DIVERGED.\n  expected fingerprint: %s\n  produced fingerprint: %s%s\n",
-    "This is the Gate 1D.8 `_isNA` class of defect (OOF / FINAL / scoring must ",
-    "share ONE feature space). The guard compares ONLY structure (names, order, ",
+    "The OOF models, the final model and scoring must share one feature ",
+    "space. The guard compares ONLY structure (names, order, ",
     "counts, encoding contract, weights policy, contract version) -- never ",
     "medians / level values / seeds -- so this mismatch is a real divergence."),
     where, hx, hp,

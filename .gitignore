@@ -52,3 +52,5 @@ _freeze/
 
 # Generated docs
 docs/
+# Workflow book: lives in its own repository (nataliaquintero/OtsuFire-book)
+tutorial/OtsuFire_book/

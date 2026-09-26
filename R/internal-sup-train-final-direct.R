@@ -88,9 +88,9 @@ train_final_model_direct <- function(
     stop(
       "`extra_drop_cols` / `additional_drop_cols` were removed in ",
       "OtsuFire 0.5.0. Use `feature_whitelist_override` instead. ",
-      "Pass a subset of `.supervised_feature_cols` (e.g., the ",
-      "current whitelist minus the columns you want to drop). ",
-      "See NEWS.md and the migration note in HANDOFF Section N+20.",
+      "Pass the subset of package features you want to keep ",
+      "(the current whitelist minus the columns to drop). ",
+      "See ?build_supervised_burned_config.",
       call. = FALSE
     )
   }

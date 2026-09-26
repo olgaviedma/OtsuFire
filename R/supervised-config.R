@@ -1,602 +1,515 @@
-#' @title Build a configuration object for the supervised burned-area workflow
+#' Configure the probabilistic refinement workflow
 #'
 #' @description
-#' Create, validate, and normalize the configuration used by the supervised
-#' OtsuFire workflow.
+#' Create a configuration object for the probabilistic refinement workflow. The
+#' function collects and validates the decision layer for Otsu-guided
+#' patches, raster inputs, training-pool settings, feature controls, model
+#' parameters, and output locations.
 #'
-#' Think of this as the setup step for the supervised (machine-learning)
-#' pipeline. It gathers:
-#' \itemize{
-#'   \item the spatial and labelled inputs (the deterministic decision layer,
-#'     change-index rasters, topography, land cover, optional hotspots and an
-#'     external reference),
-#'   \item the negative-pool and training/sampling controls,
-#'   \item the feature configuration (whitelist and per-feature weights),
-#'   \item the XGBoost hyper-parameters,
-#'   \item the output folder structure,
-#'   \item and the technical runtime options
-#' }
-#' into one validated object of class
-#' `otsufire_supervised_burned_config` that you then pass to the supervised
-#' stages:
-#' \code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}},
-#' \code{\link[=make_spatial_folds]{make_spatial_folds()}},
-#' \code{\link[=extract_supervised_features]{extract_supervised_features()}},
-#' \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}},
-#' \code{\link[=train_final_burned_model]{train_final_burned_model()}},
-#' \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}},
-#' or the single-call orchestrator
-#' \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}.
+#' Pass the resulting configuration to the individual probabilistic refinement workflow
+#' functions or to [run_oneyear_supervised_pipeline()].
 #'
-#' It does not build pools, train models or score polygons by itself. Its job
-#' is to prepare the workflow cleanly and fail early when required inputs or
-#' settings are inconsistent.
+#' This function prepares the configuration only. It does not build training
+#' pools, extract features, train a model, or generate predictions.
 #'
-#' The arguments are documented below in four conceptual groups, even though
-#' the function signature exposes each argument individually:
-#' \enumerate{
-#'   \item spatial and labelled inputs,
-#'   \item training and sampling controls,
-#'   \item feature and model controls,
-#'   \item runtime and advanced options.
-#' }
-#'
-#' \strong{Optional inputs and convention paths}
-#'
-#' Several raster and vector inputs are optional. When such an input is left
-#' `NULL` and the advanced option `data_base` (and, for the delayed change
-#' index, `composite_base`) is supplied, the builder fills in a default path
-#' by naming convention so that a complete run can be configured with a small
-#' set of arguments. When `data_base` is not available (for example an
-#' ahead-of-batch configuration or a unit test), the optional input simply
-#' stays `NULL` and is resolved later by the stage that needs it. See the
-#' per-argument notes for the exact `NULL` behaviour.
-#'
-#' @param run_label Character scalar. Free-text label that names the run and its
-#'   output sub-folders / file prefixes (consumed throughout the supervised
-#'   workflow for naming and routing only; it has NO methodological effect). Any
-#'   non-empty string. Default "balanced".
-#'
-#' @param internal_decisions sf POLYGON layer or a GPKG path. The deterministic
-#'   decision layer (the labelled output of the deterministic stage) produced
-#'   for the same year and scenario. \strong{Required.} Provides the positive
-#'   (keep-class) labels and seeds the labelled training pool. Consumed by
-#'   \code{build_supervised_training_pools()}.
-#'
-#' @param change_index SpatRaster or raster path. The main annual change-index
-#'   raster (band 1 = summer RBR, band 2 = post-fire day-of-year).
-#'   \strong{Required.} Consumed end-to-end from `cfg$inputs$change_index` by
-#'   the pool builder (Otsu residual negative severity raster) and the feature extractor
-#'   (the same-window RBR features). `immediate_change_index_path` is the
-#'   canonical alias for this argument (see below).
-#'
-#' @param delayed_change_index SpatRaster or raster path. Optional delayed
-#'   (autumn-winter) change-index raster used for persistence-style features.
-#'   When supplied it is consumed as the `rbr_aw` feature layer by
-#'   \code{extract_supervised_features()}. When `NULL` and `composite_base` is
-#'   available it defaults to the convention path
-#'   `<composite_base>/Autumn/mean_mean_<target_year>_mosaic.tif`; otherwise it
-#'   stays `NULL` and the all-window RBR features are skipped.
-#'   `delayed_change_index_path` is the canonical alias for this argument.
-#'
-#' @param immediate_change_index_path,delayed_change_index_path Canonical names
-#'   for the two change-index inputs. `immediate_change_index_path` is the
-#'   canonical name of the required immediate change index (deprecated-friendly
-#'   alias of `change_index`); `delayed_change_index_path` is the canonical name
-#'   of the optional delayed change index (alias of `delayed_change_index`).
-#'   Supply either the canonical name or its alias for a given input; supplying
-#'   both is allowed only if they are identical, otherwise the call errors with
-#'   a clear conflict message. Both resolve onto the single
-#'   `cfg$inputs$change_index` / `cfg$inputs$delayed_change_index` field.
-#'   Deprecated aliases retained for backward compatibility. Prefer
-#'   `change_index` / `delayed_change_index`.
-#'
-#' @param hotspots sf POINT layer or path. Optional hotspot (active-fire) layer
-#'   for the target year. When present it powers the hotspot feature block in
-#'   \code{extract_supervised_features()}; when `NULL` the hotspot features are
-#'   not built (see the no-hotspot profile in \strong{Details}). Optional;
-#'   stays `NULL` when not supplied.
-#'
-#' @param reference_burned_map sf POLYGON / raster / path. Optional external
-#'   burned-area reference (for example an EFFIS perimeter layer) used by
-#'   \code{\link[=validate_fire_maps]{validate_fire_maps()}} on the thresholded
-#'   supervised output. Not used during the run itself; optional; stays `NULL`
-#'   when not supplied.
-#'
-#' @param peninsula_shapefile sf / SpatVector / path. Optional study-area border
-#'   polygon (e.g. the Iberian peninsula). Used by the negative-pool builder only
-#'   under the `"corine"` Otsu mode to crop CORINE to the study area; the
-#'   canonical Otsu mode is the fixed internal default `"burnable_only"`, so this
-#'   input is typically unused. When `NULL` and `data_base` is available it
-#'   defaults to `<data_base>/Borders/Iberian_peninsula.shp`; otherwise it stays
-#'   `NULL`.
-#'
-#' @param topo SpatRaster / path. Optional two-band topography raster
-#'   (band 1 = DEM, band 2 = slope). Consumed by
-#'   \code{extract_supervised_features()} for the elevation and slope feature
-#'   blocks. When `NULL` and `data_base` is available it defaults to
-#'   `<data_base>/Topography/elevation_slope.tif`; otherwise it stays `NULL`.
-#'   The DEM and slope live in a single file by convention, so they are exposed
-#'   as one `topo` input rather than two separate paths.
-#'
-#' @param corine_raster SpatRaster / path. Optional CORINE land-cover raster for
-#'   the target year's CORINE epoch. Consumed by the feature extractor for the
-#'   land-cover feature block. When `NULL` and `data_base` is available it
-#'   defaults to `<data_base>/Corine_Masks/CLC_<corine_year>_peninsula.tif`
-#'   (the epoch is chosen automatically from `target_year`); otherwise it stays
-#'   `NULL`.
-#'
-#' @param burnable_mask SpatRaster / path. Optional binary burnable-area mask
-#'   for the target year's CORINE epoch. Consumed by the negative-pool builders
-#'   (random-background and Otsu buckets). When `NULL` and `data_base` is
-#'   available it defaults to
-#'   `<data_base>/Corine_Masks/burneable_mask_binary_corine_<corine_year>_ETRS89.tif`;
-#'   otherwise it stays `NULL`.
-#'
-#' @param target_year Integer scalar in `[1900, 2100]`. The target year, used
-#'   to name and route outputs, to filter temporal layers, and to resolve the
-#'   CORINE epoch of the convention paths. \strong{Required.}
-#'
-#' @param output_dir Character scalar. Root output directory. The builder
-#'   creates a `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`
-#'   layout. Defaults to `tempdir()`.
-#'
-#' @param run_name Character scalar. Stable identifier for the supervised run,
-#'   used to name output folders and files. Single non-empty string. Defaults
-#'   to `"supervised_burned_map"`.
-#'
-#' @param flat_output_routes Logical. When `FALSE` (default) the output routes
-#'   use the canonical nested layout
-#'   `<output_dir>/<year>/<run_name>/SUPERVISED/<scenario>/...`. When `TRUE`,
-#'   every product hangs DIRECTLY off `output_dir` (`<output_dir>/01_POOLS`,
-#'   `<output_dir>/03_FEATURES`, ...). Use `TRUE` when `output_dir` already IS
-#'   the per-run scenario folder, to avoid a duplicated nested path.
-#'
-#' @param min_burned_pool_n Integer `>= 0`. Sparse-year guard: the pipeline
-#'   aborts before training when fewer than this many keep-class (burned-label)
-#'   polygons remain after QA. Consumed by the pool builder / orchestrator.
-#'   Default `5L`.
-#'
-#' @param nrounds_max,early_stop Integer or `NULL`. XGBoost maximum number of
-#'   boosting rounds and early-stopping patience, used at both the OOF and FINAL
-#'   training stages. `NULL` uses the canonical defaults (`4000` / `80`). Stored
-#'   in `cfg$train_control`.
-#'
-#' @param oof_seed_base,final_sampling_seed,final_seed Integer or `NULL`. The
-#'   three distinct RNG seeds: out-of-fold block cross-validation; FINAL
-#'   negative-pool sampling; and FINAL train/validation split plus XGBoost
-#'   training. Keep them set for full reproducibility. `NULL` uses `42` for
-#'   each. Stored in `cfg$train_control$seeds`.
-#'
-#' @param val_frac Numeric in `(0, 1)` or `NULL`. Inner validation fraction used
-#'   by the inner train/validation split that selects the number of boosting
-#'   rounds (early stopping) before the full-data refit, at both the OOF and
-#'   FINAL stages. `NULL` uses `0.15`. Stored in `cfg$train_control`.
-#'
-#' @param group_col Character or `NULL`. Grouping column for the grouped
-#'   train/validation split (keeps spatially grouped observations together).
-#'   `NULL` uses `"block_id"`. Stored in `cfg$train_control`.
-#'
-#' @param impute_numeric,impute_factor_missing Character or `NULL`. The feature
-#'   recipe's numeric imputation rule (`"median"` or `"zero"`) and the sentinel
-#'   level used for missing factor values. `NULL` uses `"median"` / `"MISSING"`.
-#'   Stored in `cfg$train_control` and applied identically at OOF and FINAL.
-#'
-#' @param negative_pool_params Named typed list. The public negative-pool
-#'   methodological block and the \strong{single source of truth} for the two
-#'   negative-bucket caps. Recognized keys (unknown keys anywhere error):
-#'   \itemize{
-#'     \item `random = list(n_cells, rbr_quantile)` --- the random
-#'       burnable-background bucket size (`n_cells`, integer `> 0`) and the RBR
-#'       percentile used to select background cells (`rbr_quantile` in `[0, 1]`).
-#'       Defaults `1500L` / `0.50`.
-#'     \item `otsu = list(candidate_threshold, reference_threshold)` --- the two
-#'       Otsu-residual severity thresholds (numeric). Defaults `0` / `100`.
-#'     \item `caps = c(random, otsu)` --- a NAMED numeric over exactly
-#'       `\{random, otsu\}`, each `>= 0` (`Inf` disables the cap), expressed as a
-#'       multiple of the number of burned labels (`n_burned`). Defaults
-#'       `c(random = 1.0, otsu = 1.0)`. These caps are mirrored into
-#'       `cfg$train_control$caps` and consumed end-to-end by the pool builder,
-#'       OOF and FINAL.
-#'     \item `artifact_hard = list(...)` --- the OPTIONAL artifact_hard
-#'       hard-negative bucket. \strong{OFF by default} (`enabled =
-#'       FALSE`); when disabled this sub-block selects no rows and the resolved
-#'       config / training / model is byte-identical to the no-artifact_hard
-#'       baseline. Keys:
-#'       \itemize{
-#'         \item `enabled` (logical, default `FALSE`) --- master switch.
-#'         \item `total_weight_ratio` (numeric `>= 0`, default `0.10`) --- the
-#'           TOTAL effective weight of the artifact_hard pool divided by the
-#'           TOTAL weight of the burned (positive) pool, i.e.
-#'           `sum(w[artifact_hard]) = total_weight_ratio * sum(w[burned])`. This
-#'           is the POOL-LEVEL balance, \strong{not} the per-polygon weight (each
-#'           row gets `total_weight_ratio * sum_w_pos / n_artifact_hard`). The
-#'           `0.10` default is a conservative starting point, NOT a recommended
-#'           universal value (the weight is year-dependent). An explicit
-#'           `source_weights` pin overrides it.
-#'         \item eligibility knobs (all configurable): `rbr_med_reference`
-#'           (`"negative"` | `"positive"`, default `"negative"` --- the pool whose
-#'           `rbr_med` quantile sets the RBR floor), `rbr_med_min_q` (`[0,1]`,
-#'           default `0.90`), `persist_ratio_max` (default `0.35`),
-#'           `persist_delta_max` (default `-100`), `area_ha_min` (default `500`),
-#'           `doy_iqr_max` (default `1`), `reason_whitelist` (character, default
-#'           `character(0)`).
-#'       }
-#'   }
-#'   With `artifact_hard$enabled = TRUE` the eligible deterministic-DROP polygons
-#'   are promoted into training as `unburned` negatives (see
-#'   \code{\link[=promote_artifact_hard_negatives]{promote_artifact_hard_negatives()}}),
-#'   weighted per `total_weight_ratio`, and the run writes a consolidated
-#'   `supervised_training_pool.gpkg` layer (see the \strong{Consolidated
-#'   training-pool layer} section in \strong{Details}).
-#'   The former top-level `cap_random` / `cap_otsu` builder arguments
-#'   were removed; caps live ONLY in `negative_pool_params$caps`. Passing
-#'   `cap_random` / `cap_otsu` (or the older `cap_contextual` / `cap_spectral`)
-#'   now errors with an unused-argument error. The remaining negative-pool /
-#'   Otsu-residual engine knobs (random exclusion buffer + patch size; Otsu mode
-#'   `"burnable_only"`, min pixels, buffers, core threshold, boosts, distance
-#'   power, keep/drop confidence, exclusion buffer, min area, `use_drop`,
-#'   `drop_max_s_patch`, `allow_empty_otsu_pool`) are FIXED internal defaults,
-#'   not user-settable.
-#'
-#' @param runtime_options Named typed list of TECHNICAL runtime toggles:
-#'   `reuse_existing`, `write_outputs`, `verbose` (each a single
-#'   TRUE/FALSE; unknown keys error). Defaults all `TRUE`. These are technical
-#'   only and do NOT change WHICH negatives are selected, so they are EXCLUDED
-#'   from the methodological fingerprint. Stored in `cfg$negative_pool_runtime`.
-#'
-#' @param random_seed Integer or `NULL`. The negative-pool random-background RNG
-#'   seed (historically `options$unb_random_seed`). It changes WHICH negatives
-#'   are selected, so it is methodological + reproducibility-affecting and lives
-#'   in the canonical seeds block `cfg$train_control$seeds$random_seed` alongside
-#'   the three training seeds (and is folded into the methodological
-#'   fingerprint). `NULL` uses `42`.
-#'
-#' @param feature_whitelist_override,feature_weights Optional feature controls,
-#'   or `NULL`. `feature_whitelist_override` is a character subset of the
-#'   package feature set that restricts which features the model may use (for
-#'   example, dropping the hotspot block to define a no-hotspot profile).
-#'   `feature_weights` is a named numeric vector of per-feature weights. Both
-#'   are stored in `cfg$train_control` and consumed identically by the OOF and
-#'   FINAL stages. `NULL` uses the full feature set with equal weights.
-#'
-#' @param include_shape_features Logical. OPTIONAL shape/size feature block
-#'   (OtsuFire 0.12.0), OFF by default (`FALSE`). When `TRUE` it (a) makes
-#'   feature extraction COMPUTE six geometric columns (`area_ha`, `n_pix`,
-#'   `log_area`, `perim_m`, `compactness`, `elongation`) and (b) makes them
-#'   ELIGIBLE model features: the admissible feature universe becomes the
-#'   canonical 50-name whitelist plus those six names
-#'   (`.supervised_feature_universe(TRUE)`). The OOF and FINAL stages both read
-#'   this single `cfg$train_control$include_shape_features` field, so they
-#'   cannot diverge on the active feature set. With `FALSE` (default) the
-#'   resolved feature universe and every model / OOF / FINAL / extraction output
-#'   are byte-identical to 0.11.0. SAMPLING-BIAS CAVEAT: the random-background
-#'   negatives are tiny fixed cells (~0.81 ha squares), so shape/area is partly
-#'   a sampling artifact rather than a physical signal; this block is intended
-#'   for experimentation only and its effect should be judged with EFFIS, not
-#'   the OOF metrics.
+#' @param internal_decisions `sf` polygon layer or GeoPackage path. Required
+#'   decision layer for Otsu-guided patches from the target year and
+#'   scenario. Patches classified as `"keep"` provide the initial burned
+#'   labels.
+#' @param change_index `terra::SpatRaster` or raster path. Required annual
+#'   immediate change-index input. The expected layout is band 1: summer RBR;
+#'   band 2: post-fire day of year. Used for negative-pool construction and
+#'   immediate-response features.
+#' @param delayed_change_index `terra::SpatRaster`, raster path, or `NULL`.
+#'   Delayed autumn-winter change-index input used for delayed-response and
+#'   persistence features. If omitted, a conventional path may be resolved
+#'   from `options$composite_base`; otherwise it remains `NULL` and features
+#'   requiring this input are skipped.
+#' @param immediate_change_index_path Alternative argument name for
+#'   `change_index`. Supply one name for this input. Supplying both is
+#'   accepted only when their values are identical.
+#' @param delayed_change_index_path Alternative argument name for
+#'   `delayed_change_index`. Supply one name for this input. Supplying both is
+#'   accepted only when their values are identical.
+#' @param hotspots `sf` point layer, file path, or `NULL`. Optional
+#'   target-year active-fire observations used to build hotspot features. When
+#'   `NULL`, those features are not built.
+#' @param reference_burned_map `sf` polygon layer, raster, file path, or
+#'   `NULL`. Optional external burned-area reference for subsequent map
+#'   validation with [validate_fire_maps()]. It does not supply the supervised
+#'   training labels.
+#' @param peninsula_shapefile `sf` object, `terra::SpatVector`, file path, or
+#'   `NULL`. Optional study-area boundary. Used by the negative-pool builder
+#'   under the `"corine"` Otsu mode; typically unused with the fixed default
+#'   mode, `"burnable_only"`.
+#' @param topo `terra::SpatRaster`, raster path, or `NULL`. Two-band topography
+#'   raster containing elevation in band 1 and slope in band 2. Used for
+#'   topographic features.
+#' @param corine_raster `terra::SpatRaster`, raster path, or `NULL`. CORINE
+#'   land-cover raster used for land-cover features.
+#' @param burnable_mask `terra::SpatRaster`, raster path, or `NULL`. Binary
+#'   burnable-area mask used to construct background and Otsu-based negative
+#'   pools.
+#' @param run_label Non-empty character scalar used for output naming and
+#'   routing. Has no methodological effect. Default: `"balanced"`.
+#' @param target_year Integer scalar between `1900` and `2100`. Required. Used
+#'   for output naming, temporal filtering, and conventional CORINE-epoch
+#'   selection.
+#' @param output_dir Character scalar. Root output directory. Default:
+#'   `tempdir()`. Specify a persistent directory to retain results beyond the
+#'   temporary session.
+#' @param run_name Non-empty character scalar identifying the run. Default:
+#'   `"supervised_burned_map"`.
+#' @param flat_output_routes Logical scalar. Use the standard nested output
+#'   layout when `FALSE`, or place stage folders directly under `output_dir`
+#'   when `TRUE`. Default: `FALSE`.
+#' @param min_burned_pool_n Non-negative integer. Minimum number of
+#'   burned-label polygons required after quality checks. Training stops if
+#'   fewer remain. Default: `5L`.
+#' @param nrounds_max Maximum number of XGBoost boosting rounds. Default when
+#'   `NULL`: `4000`.
+#' @param early_stop Early-stopping patience, in boosting rounds. Default when
+#'   `NULL`: `80`.
+#' @param oof_seed_base Random seed for out-of-fold training. Default when
+#'   `NULL`: `42`.
+#' @param final_sampling_seed Random seed for final negative-pool sampling.
+#'   Default when `NULL`: `42`.
+#' @param final_seed Random seed for the final train/validation split and
+#'   model training. Default when `NULL`: `42`.
+#' @param random_seed Random seed for background-negative sampling. Affects
+#'   which background examples are selected. Default when `NULL`: `42`.
+#' @param val_frac Inner validation fraction used for early stopping. Must be
+#'   between `0` and `1`, excluding the endpoints. Default when `NULL`:
+#'   `0.15`.
+#' @param group_col Column used to keep grouped observations together in the
+#'   inner train/validation split. Default when `NULL`: `"block_id"`.
+#' @param impute_numeric Numeric imputation rule: `"median"` or `"zero"`.
+#'   Default when `NULL`: `"median"`.
+#' @param impute_factor_missing Category used to represent missing factor
+#'   values. Default when `NULL`: `"MISSING"`.
+#' @param negative_pool_params Named list controlling negative-pool sampling,
+#'   caps, and optional strongly burned-like negatives. See
+#'   \strong{Negative-pool settings}. Default: `list()`.
+#' @param runtime_options Named list containing `reuse_existing`,
+#'   `write_outputs`, and `verbose`, each a logical scalar. All resolve to
+#'   `TRUE` by default. Unknown names raise an error.
+#' @param feature_whitelist_override Character vector restricting the model to
+#'   a subset of the package feature set, or `NULL` to use the default
+#'   permitted set. Feature availability also depends on supplied inputs and
+#'   `include_shape_features`.
+#' @param feature_weights Named numeric vector of per-feature weights, or
+#'   `NULL` for equal weights. Applied consistently during out-of-fold and
+#'   final training.
+#' @param include_shape_features Logical scalar. Whether to compute and allow
+#'   the optional shape and size features. Default: `FALSE`. See
+#'   \strong{Shape and size features}.
+#' @param model_params Named list of partial XGBoost parameter overrides, or
+#'   `NULL` for package defaults. For example, `list(eta = 0.03)` changes only
+#'   `eta`. Setting `scale_pos_weight` here is rejected because it is
+#'   calculated during training.
+#' @param options Named list of advanced paths and settings. See
+#'   \strong{Advanced options}. Default: `list()`.
 #'
 #' @details
-#' OOF uses the same capped negative-sampling policy as the final model, applied
-#' independently within each training fold (inner early-stopping selection +
-#' full-data refit for both the OOF folds and the FINAL model).
+#' The two change-index argument pairs resolve to `config$inputs$change_index`
+#' and `config$inputs$delayed_change_index`, respectively. Examples below use
+#' `change_index` and `delayed_change_index`.
 #'
-#' Training eligibility is defined by EXPLICIT class, never by negation: only
-#' explicit burned rows (positives) and explicit unburned rows that resolve to a
-#' valid negative bucket (random, otsu) enter training;
-#' review / keep / `NA` / unknown rows never become negatives. OOF and FINAL
-#' share one internal eligibility resolver and one capping helper.
+#' An input that is optional when constructing the configuration may still be
+#' required by a downstream stage or feature block.
 #'
-#' @param model_params Named list or `NULL`. Optional \emph{partial} override of
-#'   the canonical XGBoost hyper-parameter block stored in `cfg$model_params`
-#'   (the canonical block without `scale_pos_weight`, which is computed at train
-#'   time from the actual training labels). Supplying it merges your fields onto
-#'   the canonical block field by field; for example `list(eta = 0.03)` changes
-#'   only `eta` and leaves `max_depth`, `subsample`, ... at their canonical
-#'   values. Setting `scale_pos_weight` here is rejected. Per-field provenance
-#'   is recorded on `cfg$resolved_params_provenance$model_params`. `NULL` uses
-#'   the canonical block unchanged.
+#' @section Workflow stages:
+#' The configuration is used by the following stages:
 #'
-#' @param options Named list of technical and advanced options (not the core
-#'   methodological controls, which have dedicated arguments above). All keys
-#'   are optional. See the \strong{Options} section in \strong{Details} for the
-#'   recognized keys, their defaults, and which ones affect reproducibility.
+#' | Stage | Function |
+#' |---|---|
+#' | Build labelled and scoring pools | [build_supervised_training_pools()] |
+#' | Assign spatial cross-validation folds | [make_spatial_folds()] |
+#' | Extract polygon features | [extract_supervised_features()] |
+#' | Generate out-of-fold diagnostics | [run_oof_diagnostics()] |
+#' | Train the final model | [train_final_burned_model()] |
+#' | Score candidate polygons | [score_supervised_burned_map()] |
+#' | Validate the resulting map against an external reference | [validate_fire_maps()] |
 #'
-#' @details
-#' \subsection{Workflow structure}{
-#'   The supervised workflow is organised as a sequence of stages, each driven
-#'   by the configuration object this builder produces:
-#'   \enumerate{
-#'     \item \strong{Training pools} --- build the labelled and scoring pools,
-#'       including the negative (unburned) pool;
-#'       \code{build_supervised_training_pools()}.
-#'     \item \strong{Spatial folds} --- assign spatial cross-validation folds;
-#'       \code{make_spatial_folds()}.
-#'     \item \strong{Feature extraction} --- compute the per-polygon feature
-#'       table for the labelled and scoring pools;
-#'       \code{extract_supervised_features()}.
-#'     \item \strong{OOF diagnostics} --- out-of-fold cross-validated
-#'       diagnostics of the model family; \code{run_oof_diagnostics()}.
-#'     \item \strong{Final model} --- final feature selection plus refit on all
-#'       labelled data; \code{train_final_burned_model()}.
-#'     \item \strong{Scoring} --- score the candidate polygons with the final
-#'       model; \code{score_supervised_burned_map()}.
-#'     \item \strong{External map validation} --- optionally compare the
-#'       thresholded map against an external reference;
-#'       \code{validate_fire_maps()}.
-#'   }
-#'   \code{run_oneyear_supervised_pipeline()} runs stages 1--6 in one call from
-#'   the same configuration object.
+#' [run_oneyear_supervised_pipeline()] runs the first six stages from one
+#' configuration.
+#'
+#' @section Training labels and pools:
+#' The positive pool consists of Otsu-guided patches classified as `"keep"`,
+#' represented as burned training labels. These are automatically derived
+#' labels and are not equivalent to independent ground truth.
+#'
+#' Negative labels come from up to three pools:
+#'
+#' | Pool | Internal name | Description |
+#' |---|---|---|
+#' | Burnable background | `random` | Cells with weak immediate change-index responses, sampled within the burnable domain and outside a 500 m exclusion zone around Otsu-guided candidate patches. |
+#' | Moderately burned-like | `otsu` | Otsu-guided patches rejected by the rule-based filters, with `S_PATCH_PA <= 0.15`. |
+#' | Strongly burned-like | `artifact_hard` | Selected Otsu-guided patches classified as `"drop"`, with strong burned-like responses and additional evidence of potential artefacts. Disabled by default. |
+#'
+#' Background selection uses values at or below the configured
+#' `rbr_quantile`, calculated within the sampling domain.
+#'
+#' Review-class candidates are withheld from training and retained for
+#' subsequent scoring. Training requires explicit burned or unburned labels.
+#' A candidate is not treated as unburned simply because it is absent from
+#' the burned pool.
+#'
+#' When visual validation is applied through [apply_visual_validation()],
+#' only confirmed candidates with `VISUAL = 1` are admitted through that
+#' visual-review step.
+#'
+#' @section Negative-pool settings:
+#' `negative_pool_params` accepts the following blocks. Unknown parameter
+#' names raise an error.
+#'
+#' \strong{Background and Otsu settings}
+#'
+#' | Setting | Description | Default |
+#' |---|---|---|
+#' | `random$n_cells` | Positive integer specifying the background sampling size. | `1500L` |
+#' | `random$rbr_quantile` | RBR quantile used to select background cells. Must be between `0` and `1`. | `0.50` |
+#' | `otsu$candidate_threshold` | Otsu-residual severity threshold for candidates. | `0` |
+#' | `otsu$reference_threshold` | Otsu-residual severity threshold for the reference. | `100` |
+#' | `caps` | Named numeric vector with exactly `random` and `otsu`. Each value specifies the maximum pool size as a multiple of the burned-label count. Values must be non-negative; `Inf` disables a cap. | `c(random = 1, otsu = 1)` |
+#'
+#' For example:
+#' \preformatted{
+#' negative_pool_params = list(
+#'   random = list(
+#'     n_cells = 1500L,
+#'     rbr_quantile = 0.50
+#'   ),
+#'   otsu = list(
+#'     candidate_threshold = 0,
+#'     reference_threshold = 100
+#'   ),
+#'   caps = c(
+#'     random = 1.0,
+#'     otsu = 1.0
+#'   )
+#' )
 #' }
 #'
-#' \subsection{Negative pools}{
-#'   The negative (unburned) training pool is assembled from two buckets
-#'   (a deterministic drop is not a training negative, so there is no
-#'   deterministic-drop "contextual" bucket):
-#'   \itemize{
-#'     \item \strong{random} --- random burnable-background cells;
-#'     \item \strong{otsu} --- current-year Otsu-derived unburned patches.
-#'   }
-#'   Each bucket is capped by `negative_pool_params$caps[["random"]]` /
-#'   `negative_pool_params$caps[["otsu"]]`, expressed as a multiple of the number
-#'   of burned labels; an `Inf` cap disables capping for that bucket. The general
-#'   package defaults are `1.0` / `1.0`. The caps are the single caps source and
-#'   are mirrored into `cfg$train_control$caps`.
+#' The same capping policy is used during out-of-fold and final training,
+#' applied to the relevant training subset.
+#'
+#' \strong{Strongly burned-like negatives}
+#'
+#' The optional `artifact_hard` block controls selection and weighting of
+#' additional hard negatives.
+#'
+#' | Setting | Description | Default |
+#' |---|---|---|
+#' | `enabled` | Enable promotion of eligible candidates to unburned training labels. | `FALSE` |
+#' | `total_weight_ratio` | Total hard-negative weight relative to total burned-pool weight. Must be non-negative. | `0.10` |
+#' | `rbr_med_reference` | Pool used to calculate the RBR quantile threshold: `"negative"` or `"positive"`. | `"negative"` |
+#' | `rbr_med_min_q` | Quantile used to establish the RBR floor. Must be between `0` and `1`. | `0.90` |
+#' | `persist_ratio_max` | Persistence-ratio threshold used in eligibility rules. | `0.35` |
+#' | `persist_delta_max` | Persistence-difference threshold used in eligibility rules. | `-100` |
+#' | `area_ha_min` | Area threshold, in hectares, used in eligibility rules. | `500` |
+#' | `doy_iqr_max` | Day-of-year interquartile-range threshold used in eligibility rules. | `1` |
+#' | `reason_whitelist` | Classification-reason values for Otsu-guided patches used by the reason-based eligibility branch. | `character(0)` |
+#'
+#' See [promote_artifact_hard_negatives()] for how the eligibility conditions
+#' are combined.
+#'
+#' All eligible hard negatives are retained under this policy; their
+#' contribution is controlled by weight rather than by the `random` and
+#' `otsu` caps.
+#'
+#' Under the pool-ratio weighting rule:
+#' \preformatted{
+#' total hard-negative weight =
+#'   total_weight_ratio x total burned-pool weight
 #' }
 #'
-#' \subsection{OOF and FINAL}{
-#'   OtsuFire uses a single supervised training procedure: the number of
-#'   boosting rounds is selected using an inner validation split and early
-#'   stopping, and the recipe and model are then refitted on all available
-#'   training observations before prediction. There is no protocol choice.
+#' The weight is distributed across the hard-negative examples. Thus,
+#' `total_weight_ratio = 0.10` does not assign a weight of `0.10` to each
+#' polygon.
 #'
-#'   In the out-of-fold (OOF) stage this procedure is applied per spatial fold:
-#'   each outer fold selects `best_iteration` on an inner validation split
-#'   drawn from the outer-train rows, then the recipe and model are refit on
-#'   ALL outer-train rows at that `best_iteration` before predicting the
-#'   held-out outer-test fold. The outer-test fold never enters imputation,
-#'   feature selection, factor levels, weights, round selection or the refit,
-#'   so the cross-validated diagnostics are leakage-free.
+#' The default is a starting value, not a universally suitable balance.
+#' Review the selected examples and evaluate the effect against independent
+#' reference data.
 #'
-#'   The FINAL stage applies the same procedure once to the whole labelled set:
-#'   it selects the feature set, picks `best_iteration` on an inner validation
-#'   split, and refits the recipe and model on all labelled observations. The
-#'   OOF and FINAL stages share the same feature contract and the same recipe,
-#'   so the diagnostics describe the same model family that is ultimately fit.
+#' When `enabled = FALSE`, eligible candidates may still appear in audit
+#' outputs, but they are not promoted to training through the hard-negative
+#' mechanism.
+#'
+#' @section Model fitting and evaluation:
+#' \strong{Out-of-fold and final training.} Both training stages use an inner
+#' validation split to select the number of boosting rounds through early
+#' stopping, followed by a refit on the available training set.
+#'
+#' For out-of-fold diagnostics, this procedure is repeated within each
+#' spatial training fold. The held-out outer fold is reserved for prediction
+#' and evaluation. Preprocessing, feature selection, and training must use
+#' the corresponding training partition.
+#'
+#' For final training, the same procedure is applied to the eligible labelled
+#' dataset, subject to sampling and caps.
+#'
+#' \strong{Feature preparation.} The feature recipe adds missingness
+#' indicators, imputes numeric and categorical values, and fixes the
+#' predictor-column order. The trained model and recipe are saved together so
+#' that scoring uses the same transformations.
+#'
+#' \strong{Hotspot features.} To omit hotspot features, leave
+#' `hotspots = NULL`. A feature whitelist can also explicitly exclude hotspot
+#' predictors.
+#'
+#' Supplying hotspots makes their feature block available. It does not
+#' require using those features if a whitelist excludes them.
+#'
+#' \strong{Shape and size features.} With `include_shape_features = TRUE`,
+#' the following features are computed and made eligible for model use:
+#' \preformatted{
+#' c(
+#'   "area_ha",
+#'   "n_pix",
+#'   "log_area",
+#'   "perim_m",
+#'   "compactness",
+#'   "elongation"
+#' )
 #' }
 #'
-#' \subsection{Feature recipe}{
-#'   The feature recipe builds the base features, adds `_isNA` missingness
-#'   indicators, imputes missing values (numeric rule from `impute_numeric`,
-#'   factor sentinel from `impute_factor_missing`), and enforces a fixed final
-#'   column order. Missing columns are handled gracefully so the same recipe
-#'   applies to both the labelled and scoring tables. The trained model and its
-#'   recipe are saved together so scoring reproduces the exact feature
-#'   construction.
-#' }
+#' These features can encode differences in how training examples were
+#' sampled. For example, small fixed background cells can be distinguished
+#' from burned polygons by size and shape alone.
 #'
-#' \subsection{Full and no-hotspot profiles}{
-#'   The "full" and "no-hotspot" profiles are not separate arguments. A
-#'   no-hotspot profile is defined by leaving `hotspots = NULL` (and disabling
-#'   the hotspot feature block at extraction time) and/or by restricting the
-#'   active features with `feature_whitelist_override`. A full profile simply
-#'   supplies hotspots and uses the complete feature set.
-#' }
+#' Treat this block as experimental. Evaluate its effect using independent
+#' map references as well as out-of-fold diagnostics.
 #'
-#' \subsection{Scores}{
-#'   The scoring stage attaches a per-polygon score `p_burned`. This is a model
-#'   score, not necessarily a calibrated probability; thresholds for producing a
-#'   binary map should be chosen with that in mind.
-#' }
+#' \strong{Scores and validation.} The scoring stage returns `p_burned`, a
+#' model score that is not necessarily a calibrated probability. Select a
+#' binary-map threshold with this distinction in mind.
 #'
-#' \subsection{Validation}{
-#'   Two distinct notions of validation apply. OOF diagnostics evaluate the
-#'   model against the internal labels (the deterministic decision layer).
-#'   \code{validate_fire_maps()} compares the thresholded supervised map against
-#'   an external reference such as EFFIS, supplied via `reference_burned_map`.
-#' }
+#' Out-of-fold diagnostics measure agreement with the internal training
+#' labels. External validation with [validate_fire_maps()] assesses the
+#' thresholded map against a separate reference, such as EFFIS.
 #'
-#' \subsection{Consolidated training-pool layer}{
-#'   In addition to the separate burned / unburned pool outputs, the run writes a
-#'   single consolidated layer `supervised_training_pool.gpkg`
-#'   (layer `supervised_training_pool`) with one row per available training
-#'   example. The artifact_hard CANDIDATES (rows that satisfy the selection rule)
-#'   are computed and shown ALWAYS --- even with `artifact_hard$enabled = FALSE`
-#'   --- so the rule can be inspected without running two pipelines, WITHOUT those
-#'   rows entering training. Three states are kept distinct:
-#'   `artifact_hard_eligible` (satisfies the rule), `artifact_hard_enabled` (the
-#'   resolved-config switch) and `artifact_hard_used` (effectively promoted);
-#'   `used_in_training` is separate again (the row entered the FINAL DMatrix after
-#'   caps/filters). Columns: `year`, `fire_uid`, `poly_id`, `training_label`
-#'   (effective label, NA for non-trained candidates), `original_pool_source`
-#'   (provenance before promotion), `pool_source` (effective provenance:
-#'   `high_confidence_keep` / `random` / `otsu` / `artifact_hard` /
-#'   `deterministic_drop`, never mixed with the deterministic classes),
-#'   `artifact_hard_eligible`, `artifact_hard_enabled`, `artifact_hard_used`,
-#'   `used_in_training`, `sample_weight` (effective weight; NA when the row does
-#'   not enter training), `source_total_weight`, `deterministic_class`,
-#'   `deterministic_reason`, `fold_id`, `has_oof_prediction`, `p_burned_oof`, the
-#'   descriptive features `rbr_med`, `rbr_aw_med`, `persist_ratio`,
-#'   `persist_delta`, `area_ha`, `doy_iqr`, and the artifact_hard provenance
-#'   `artifact_hard_branch` (`persist_delta` / `large_single_doy` /
-#'   `reason_whitelist` / `multiple`), `artifact_hard_rbr_threshold`,
-#'   `artifact_hard_weight_ratio` (the CONFIGURED `total_weight_ratio` that would
-#'   apply, recorded for every eligible candidate even when disabled). It also
-#'   carries three review aids: `review_priority` (0--100 deterministic score
-#'   over the candidates --- higher = more likely a REAL FIRE wrongly flagged,
-#'   i.e. bright + persistent + large --- verify first), `review_tier`
-#'   (`high`/`medium`/`low`), `label_confidence` (0--1 trust in the training
-#'   label: a high flat base for the trusted buckets, and `1 - review_priority/100`
-#'   for candidates), and a BLANK `VISUAL` column (NA) for the user to fill during
-#'   visual review (1 = label confirmed, 0 = not). `used_in_training`
-#'   marks the rows in the FINAL capped set; `sample_weight` is re-resolved with
-#'   the same helper the engine uses. Open and filter it like any GPKG, e.g.
-#'   \preformatted{
-#'   pool <- sf::st_read(".../01_POOLS/supervised_training_pool.gpkg",
-#'                       layer = "supervised_training_pool")
-#'   # what the rule WOULD select (even with artifact_hard disabled):
-#'   cand <- pool[pool$artifact_hard_eligible, ]
-#'   table(cand$artifact_hard_branch)
-#'   # the rows actually trained on, by provenance bucket:
-#'   table(pool$pool_source[pool$used_in_training])
-#'   }
-#' }
+#' @section Consolidated training-pool output:
+#' The workflow provides a consolidated GeoPackage named
+#' `supervised_training_pool.gpkg`, with layer name `supervised_training_pool`,
+#' for inspecting available examples, candidate hard negatives, and training
+#' participation.
 #'
-#' \subsection{Options}{
-#'   The `options` list carries technical and advanced settings. Keys fall into
-#'   three groups.
+#' Presence in this layer does not imply that a row was used for training.
 #'
-#'   \strong{Common advanced options} (typically needed to wire a real run):
-#'   \itemize{
-#'     \item `data_base`, `composite_base` --- roots used to build the
-#'       convention default paths for the optional inputs (see
-#'       \strong{Description}).
-#'     \item `result_name` --- run label used in convention paths.
-#'     \item `unburned_base_dir` --- optional shared, scenario-independent base
-#'       directory for the negative (unburned) pool. The negative pool only
-#'       depends on the year, so pinning it here lets several scenarios of the
-#'       same year reuse one set of negatives instead of regenerating identical
-#'       ones. When set, both the random/deterministic unburned GPKG
-#'       (`<unburned_base_dir>/UNBURNED/<year>_unburned.gpkg`) and the
-#'       Otsu-negative working root (`<unburned_base_dir>/_OTSU_NEGATIVE`) live
-#'       under it. When absent (default), the historical scenario-scoped paths
-#'       are used (byte-identical behaviour).
-#'     \item external tool paths (`python_exe`, `gdal_polygonize_script`,
-#'       `gdalwarp_path`, `ogr2ogr_exe`), or a nested `tool_paths` list with the
-#'       same names; surfaced on `cfg$tool_paths`.
-#'   }
+#' | Field or group | Meaning |
+#' |---|---|
+#' | `year`, `fire_uid`, `poly_id` | Year and example identifiers. |
+#' | `training_label` | Effective training label; may be `NA` for candidates not assigned a training label. |
+#' | `original_pool_source` | Provenance before hard-negative promotion. |
+#' | `pool_source` | Effective source: `high_confidence_keep`, `random`, `otsu`, `artifact_hard`, or `deterministic_drop`. |
+#' | `artifact_hard_eligible` | Whether the candidate satisfies the hard-negative selection rule. |
+#' | `artifact_hard_enabled` | Whether hard-negative promotion is enabled in the configuration. |
+#' | `artifact_hard_used` | Whether the candidate was effectively promoted through that mechanism. |
+#' | `used_in_training` | Whether the row entered the final training set after caps and filters. |
+#' | `sample_weight`, `source_total_weight` | Effective example weight and source-level weight information. |
+#' | `deterministic_class`, `deterministic_reason` | Original classification and decision reason for the Otsu-guided patch. |
+#' | `fold_id`, `has_oof_prediction`, `p_burned_oof` | Cross-validation assignment and prediction information. |
+#' | `rbr_med`, `rbr_aw_med`, `persist_ratio`, `persist_delta`, `area_ha`, `doy_iqr` | Descriptive features used to inspect candidates. |
+#' | `artifact_hard_branch` | Eligibility branch: `persist_delta`, `large_single_doy`, `reason_whitelist`, or `multiple`. |
+#' | `artifact_hard_rbr_threshold` | RBR threshold used in candidate selection. |
+#' | `artifact_hard_weight_ratio` | Configured pool-weight ratio, including for eligible candidates when promotion is disabled. |
+#' | `review_priority`, `review_tier` | Visual-review priority score from 0 to 100 and corresponding tier. Higher priority indicates a greater concern that a proposed negative may be a real fire. |
+#' | `label_confidence` | Heuristic label-confidence indicator. For hard-negative candidates, derived as `1 - review_priority / 100`. |
+#' | `VISUAL` | Initially blank review field: `1` means the proposed label is confirmed; `0` means it is not confirmed. |
 #'
-#'   The negative-pool knobs are no longer free-form
-#'   options. The user-settable subset lives in the typed `negative_pool_params`
-#'   block (random `n_cells` / `rbr_quantile`, Otsu `candidate_threshold` /
-#'   `reference_threshold`, `caps`), the random-background seed lives in
-#'   `random_seed`, and the technical toggles live in `runtime_options`. The
-#'   former free-form `options$unb_*` / `options$otsu_negative_*` keys are no
-#'   longer read; the remaining low-level knobs are FIXED internal defaults.
+#' `review_priority` and `label_confidence` are review aids, not calibrated
+#' probabilities. For an unburned candidate, `VISUAL = 1` confirms the
+#' proposed unburned label.
 #'
-#'   \strong{Reproducibility-sensitive options} (set them to make a run fully
-#'   reproducible from the configuration alone): the negative-pool random
-#'   background seed `random_seed` (default `42`, in
-#'   `cfg$train_control$seeds$random_seed`); and the current-year
-#'   temporal-adjustment thresholds `currentyear_preyear_overlap_thr` (`0.70`),
-#'   `currentyear_hotspot_density_thr` (`0.001`) and
-#'   `currentyear_temporal_penalty_floor` (`0.10`).
+#' Use the reported workflow outputs to locate the consolidated layer.
 #'
-#'   \strong{Deprecated / unsupported options}: the negative-pool policy is
-#'   fixed to `"all_sources"` and is no longer user-settable. Passing
-#'   `negative_pool_policy = "all_sources"` is accepted as a no-op; any other
-#'   value errors. The former `engine_root` / `supervised_engine_root` /
-#'   `scripts_root` keys are no longer used (the engine is in-package). See
-#'   \code{NEWS.md} for the full history.
-#' }
+#' @section Output locations and optional input paths:
+#' With `flat_output_routes = FALSE`, outputs use
+#' `<output_dir>/<target_year>/<run_name>/SUPERVISED/<run_label>/`.
+#'
+#' With `flat_output_routes = TRUE`, stage folders are placed directly under
+#' `output_dir`.
+#'
+#' Some omitted inputs are resolved using conventional paths when the
+#' corresponding base directory is supplied:
+#'
+#' | Input | Base option | Conventional relative path |
+#' |---|---|---|
+#' | `delayed_change_index` | `composite_base` | `Autumn/mean_mean_<target_year>_mosaic.tif` |
+#' | `peninsula_shapefile` | `data_base` | `Borders/Iberian_peninsula.shp` |
+#' | `topo` | `data_base` | `Topography/elevation_slope.tif` |
+#' | `corine_raster` | `data_base` | `Corine_Masks/CLC_<corine_year>_peninsula.tif` |
+#' | `burnable_mask` | `data_base` | `Corine_Masks/burneable_mask_binary_corine_<corine_year>_ETRS89.tif` |
+#'
+#' These names are package conventions. Supply explicit paths when your files
+#' use different names or cover another study area. The conventional mask
+#' filename retains the spelling `burneable`.
+#'
+#' The CORINE epoch is resolved from `target_year`. If the required base
+#' option is absent, the optional input remains `NULL`.
+#'
+#' @section Advanced options:
+#' Common entries in `options` include:
+#'
+#' | Option | Purpose |
+#' |---|---|
+#' | `data_base` | Root directory for conventional supporting-input paths. |
+#' | `composite_base` | Root directory for conventional delayed-index paths. |
+#' | `result_name` | Identifier used in convention-based paths. |
+#' | `unburned_base_dir` | Shared root for negative-pool products. |
+#' | `python_exe` | Path to the Python executable. |
+#' | `gdal_polygonize_script` | Path to the GDAL polygonisation script. |
+#' | `gdalwarp_path` | Path to `gdalwarp`. |
+#' | `ogr2ogr_exe` | Path to `ogr2ogr`. |
+#' | `tool_paths` | Nested list containing external-tool paths. |
+#' | `currentyear_preyear_overlap_thr` | Temporal-adjustment overlap threshold. Default: `0.70`. |
+#' | `currentyear_hotspot_density_thr` | Temporal-adjustment hotspot-density threshold. Default: `0.001`. |
+#' | `currentyear_temporal_penalty_floor` | Temporal-adjustment penalty floor. Default: `0.10`. |
+#'
+#' When `unburned_base_dir` is supplied, shared outputs include
+#' `<unburned_base_dir>/UNBURNED/<year>_unburned.gpkg` and
+#' `<unburned_base_dir>/_OTSU_NEGATIVE/`.
+#'
+#' Reuse negative pools only when their source inputs and selection settings
+#' are compatible. Matching the year alone does not establish compatibility.
+#'
+#' Use `negative_pool_params`, `random_seed`, and `runtime_options` for their
+#' documented controls. Other low-level negative-pool settings remain fixed
+#' internally.
+#'
+#' \strong{Compatibility notes}
+#' * Negative-pool caps must be supplied through `negative_pool_params$caps`.
+#'   Former top-level arguments such as `cap_random`, `cap_otsu`,
+#'   `cap_contextual`, and `cap_spectral` are not supported.
+#' * Legacy `options$unb_*` and `options$otsu_negative_*` settings are no
+#'   longer read.
+#' * The negative-pool policy is fixed to `"all_sources"`. The compatibility
+#'   setting `options$negative_pool_policy = "all_sources"` has no effect;
+#'   other values are rejected.
+#' * Former engine-location options `engine_root`, `supervised_engine_root`,
+#'   and `scripts_root` are no longer used.
 #'
 #' @return An S3 object of class `otsufire_supervised_burned_config`.
 #'
-#'   Stable public fields include:
-#'   \itemize{
-#'     \item `scenario`
-#'     \item `target_year`
-#'     \item `run_name`
-#'     \item `inputs`
-#'     \item `output_dir`
-#'     \item `output_routes`
-#'     \item `model_params`
-#'     \item `train_control` (caps, seeds incl. `random_seed`, rounds, ...)
-#'     \item `negative_pool_params` (typed PUBLIC negative-pool block + caps)
-#'     \item `negative_pool_runtime` (technical runtime toggles)
-#'     \item `negative_pool_internal` (FIXED internal defaults, not settable)
-#'     \item `options`
-#'     \item `tool_paths`
-#'     \item `resolved_params_provenance`
-#'     \item `negative_pool_policy` (informational constant, always
-#'       `"all_sources"`)
-#'     \item `min_burned_pool_n`
-#'   }
+#' | Field | Contents |
+#' |---|---|
+#' | `scenario`, `target_year`, `run_name` | Run identifiers. |
+#' | `inputs` | Resolved spatial and labelled inputs. |
+#' | `output_dir`, `output_routes` | Output root and stage locations. |
+#' | `model_params` | Resolved XGBoost parameters. |
+#' | `train_control` | Resolved training, sampling, seed, imputation, and feature settings. |
+#' | `negative_pool_params` | Public negative-pool settings and caps. |
+#' | `negative_pool_runtime` | Runtime controls for negative-pool processing. |
+#' | `negative_pool_internal` | Fixed internal negative-pool settings. |
+#' | `options`, `tool_paths` | Advanced settings and external-tool locations. |
+#' | `resolved_params_provenance` | Information on how parameter values were resolved. |
+#' | `negative_pool_policy` | Informational value, always `"all_sources"`. |
+#' | `min_burned_pool_n` | Minimum required burned-pool size. |
 #'
-#'   `cfg$model_params` (the XGBoost block, without `scale_pos_weight`) and
-#'   `cfg$train_control` (caps, seeds, rounds, validation fraction, grouping,
-#'   imputation rules, feature whitelist/weights) are the
-#'   resolved methodological parameters read by every downstream stage.
-#'   Internal implementation details beyond these stable public fields are not a
-#'   stable API and should not be relied upon by downstream user code.
+#' Use the constructor arguments to configure the workflow rather than
+#' editing internal fields directly.
+#'
+#' @seealso [build_supervised_training_pools()], [make_spatial_folds()],
+#'   [extract_supervised_features()], [run_oof_diagnostics()],
+#'   [train_final_burned_model()], [score_supervised_burned_map()],
+#'   [run_oneyear_supervised_pipeline()], [promote_artifact_hard_negatives()],
+#'   [apply_visual_validation()], [validate_supervised_execution()],
+#'   [validate_fire_maps()].
 #'
 #' @examples
 #' \dontrun{
-#' ## Full configuration: "balanced" run label, all inputs.
+#' # Configure a probabilistic refinement run with explicit input paths
 #' cfg <- build_supervised_burned_config(
-#'   run_label            = "balanced",
-#'   internal_decisions   = "2017/internal_decisions.gpkg",
-#'   change_index         = "MinMin_2017_mosaic_res90m.tif",
-#'   delayed_change_index = "Autumn/mean_mean_2017_mosaic.tif",
-#'   hotspots             = "hotspots_2017.gpkg",
-#'   topo                 = "Topography/elevation_slope.tif",
-#'   corine_raster        = "Corine_Masks/CLC_2012_peninsula.tif",
-#'   burnable_mask        = "Corine_Masks/burneable_mask_binary_corine_2012_ETRS89.tif",
-#'   reference_burned_map = "EFFIS_2017.gpkg",
-#'   target_year          = 2017,
-#'   output_dir           = "results/",
-#'   run_name             = "balanced_2017",
-#'   negative_pool_params = list(caps = c(random = 1.0, otsu = 1.0)),
-#'   runtime_options      = list(reuse_existing = TRUE, write_outputs = TRUE,
-#'                               verbose = TRUE)
+#'   run_label = "balanced",
+#'   internal_decisions = "data/internal_decisions_2022.gpkg",
+#'   change_index = "data/RBR_2022.tif",
+#'   delayed_change_index = "data/RBR_delayed_2022.tif",
+#'   hotspots = "data/hotspots_2022.gpkg",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_2022.tif",
+#'   burnable_mask = "data/burnable_mask_2022.tif",
+#'   reference_burned_map = "data/reference_burned_2022.gpkg",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022",
+#'   negative_pool_params = list(
+#'     caps = c(random = 1.0, otsu = 1.0)
+#'   ),
+#'   runtime_options = list(
+#'     reuse_existing = TRUE,
+#'     write_outputs = TRUE,
+#'     verbose = TRUE
+#'   )
 #' )
 #'
+#' # Inspect the resolved settings
+#' cfg$train_control
+#' cfg$negative_pool_params
+#' cfg$output_routes
+#'
+#' # Build the training pools
 #' pools <- build_supervised_training_pools(cfg)
 #'
-#' ## No-hotspot profile: omit hotspots and drop the hotspot feature block via
-#' ## a whitelist override (see inst/scripts/ for the canonical versioned
-#' ## examples).
-#' cfg_nohs <- build_supervised_burned_config(
-#'   run_label                  = "balanced",
-#'   internal_decisions         = "1994/internal_decisions.gpkg",
-#'   change_index               = "MinMin_1994_mosaic_res90m.tif",
-#'   hotspots                   = NULL,
-#'   target_year                = 1994,
-#'   output_dir                 = "results/",
-#'   run_name                   = "no_hotspot_1994",
-#'   feature_whitelist_override = c("rbr_med", "rbr_p90", "elev_med", "slope_med")
+#' # Configure a run without hotspot predictors
+#' cfg_no_hotspots <- build_supervised_burned_config(
+#'   internal_decisions = "data/internal_decisions_1994.gpkg",
+#'   change_index = "data/RBR_1994.tif",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_1994.tif",
+#'   burnable_mask = "data/burnable_mask_1994.tif",
+#'   hotspots = NULL,
+#'   target_year = 1994L,
+#'   output_dir = "results",
+#'   run_name = "RBR_1994_no_hotspots",
+#'   feature_whitelist_override = c(
+#'     "rbr_med", "rbr_p90", "elev_med", "slope_med"
+#'   )
 #' )
 #'
-#' ## artifact_hard hard-negative mining. OFF by default; enable it and
-#' ## set the pool-level weight explicitly (no universal weight is recommended).
-#' cfg_baseline <- build_supervised_burned_config(   # artifact_hard OFF (default)
-#'   run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
-#'   change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
-#'   output_dir = "results/")
-#'
-#' cfg_artifact_hard <- build_supervised_burned_config(
-#'   run_label = "balanced", internal_decisions = "1989/internal_decisions.gpkg",
-#'   change_index = "MinMin_1989_mosaic_res90m.tif", target_year = 1989,
-#'   output_dir = "results/",
+#' # Enable strongly burned-like negatives with an explicit pool weight
+#' cfg_hard_negatives <- build_supervised_burned_config(
+#'   internal_decisions = "data/internal_decisions_2022.gpkg",
+#'   change_index = "data/RBR_2022.tif",
+#'   delayed_change_index = "data/RBR_delayed_2022.tif",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_2022.tif",
+#'   burnable_mask = "data/burnable_mask_2022.tif",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022_hard_negatives",
 #'   negative_pool_params = list(
 #'     artifact_hard = list(
-#'       enabled            = TRUE,
-#'       total_weight_ratio = 0.10,   # artifact_hard total / burned total
-#'       rbr_med_reference  = "negative",
-#'       rbr_med_min_q      = 0.90,
-#'       persist_ratio_max  = 0.35
-#'     )))
+#'       enabled = TRUE,
+#'       total_weight_ratio = 0.10,
+#'       rbr_med_reference = "negative",
+#'       rbr_med_min_q = 0.90,
+#'       persist_ratio_max = 0.35
+#'     )
+#'   )
+#' )
 #'
-#' ## After run_oneyear_supervised_pipeline(cfg_artifact_hard), open + filter the
-#' ## consolidated training pool:
+#' # Run the probabilistic refinement workflow
+#' result <- run_oneyear_supervised_pipeline(cfg_hard_negatives)
+#'
+#' # Inspect the consolidated layer at its reported output location
 #' pool <- sf::st_read(
-#'   "results/1989/.../07_FINAL_MODEL_V2/supervised_training_pool.gpkg",
-#'   layer = "supervised_training_pool")
-#' table(pool$pool_source[pool$used_in_training])
-#' }
+#'   "path/to/supervised_training_pool.gpkg",
+#'   layer = "supervised_training_pool",
+#'   quiet = TRUE
+#' )
 #'
-#' @seealso
-#' Supervised workflow, in order:
-#' \itemize{
-#'   \item \code{\link[=build_supervised_training_pools]{build_supervised_training_pools()}}
-#'   \item \code{\link[=make_spatial_folds]{make_spatial_folds()}}
-#'   \item \code{\link[=extract_supervised_features]{extract_supervised_features()}}
-#'   \item \code{\link[=run_oof_diagnostics]{run_oof_diagnostics()}}
-#'   \item \code{\link[=train_final_burned_model]{train_final_burned_model()}}
-#'   \item \code{\link[=score_supervised_burned_map]{score_supervised_burned_map()}}
-#'   \item \code{\link[=run_oneyear_supervised_pipeline]{run_oneyear_supervised_pipeline()}}
-#'   \item \code{\link[=validate_supervised_execution]{validate_supervised_execution()}}
-#'   \item \code{\link[=validate_fire_maps]{validate_fire_maps()}}
+#' # Inspect eligible hard-negative candidates
+#' eligible <- pool[
+#'   which(pool$artifact_hard_eligible %in% TRUE),
+#' ]
+#' table(eligible$artifact_hard_branch, useNA = "ifany")
+#'
+#' # Inspect the examples used for final training
+#' trained <- pool[
+#'   which(pool$used_in_training %in% TRUE),
+#' ]
+#' table(trained$pool_source, useNA = "ifany")
 #' }
 #'
 #' @family workflow
@@ -1041,7 +954,7 @@ build_supervised_burned_config <- function(
 #' @export
 print.otsufire_supervised_burned_config <- function(x, ...) {
   cat("<otsufire_supervised_burned_config>\n")
-  cat("  scenario        :", x$scenario, "\n")
+  cat("  run_label       :", x$scenario, "\n")
   cat("  target_year     :", x$target_year, "\n")
   cat("  run_name        :", x$run_name, "\n")
   cat("  output_dir      :", x$output_dir, "\n")
@@ -1367,7 +1280,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' FIXED internal negative-pool defaults (GATE 6.7) -- NOT public, NOT settable.
 #'
 #' The lower-level negative-pool / Otsu-residual engine knobs that are pinned to
-#' validated operational constants (mirroring the deterministic engine's fixed
+#' validated operational constants (mirroring the Otsu-guided engine's fixed
 #' settings). They MAY enter the methodological fingerprint (they affect the
 #' pool) but are NOT user-settable and NOT part of the public block. The clean
 #' public names in `negative_pool_params` map onto the historical
@@ -1710,14 +1623,14 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
 #' Single shared accessor for the supervised-input subsystem: returns the
 #' normalized on-disk PATH of `config$inputs[[name]]` when that input is a
 #' `type = "path"` spec, else `NULL` (the input is absent, in-memory, or the
-#' config itself is NULL). Every supervised stage that needs an input's file
+#' config itself is NULL). Every probabilistic refinement stage that needs an input's file
 #' path (orchestrator, pool builder, feature extractor) consumes the input
 #' THROUGH this accessor, so `cfg$inputs` is the single source of truth and no
 #' stage reconstructs an input path by filename convention behind the cfg's
 #' back. A `NULL` return lets the caller apply its documented optional-input
 #' behaviour (skip / convention-fallback for the standalone-script path).
 #'
-#' @param config supervised config S3 object, or `NULL`.
+#' @param config probabilistic refinement config S3 object, or `NULL`.
 #' @param name character scalar input name (a key of `cfg$inputs`).
 #' @return character path or `NULL`.
 #'
@@ -1774,7 +1687,7 @@ print.otsufire_supervised_burned_config <- function(x, ...) {
                                                 flat = FALSE) {
   # `flat = TRUE` hangs every product DIRECTLY off output_dir (output_dir/01_POOLS,
   # output_dir/03_FEATURES, ...) instead of the canonical deep
-  # <output_dir>/<year>/<run_name>/SUPERVISED/<scenario> tree. Use it when
+  # <output_dir>/<year>/<run_name>/SUPERVISED/<run_label> tree. Use it when
   # output_dir already IS the per-run scenario folder, so the layout is not
   # duplicated. Default FALSE = the canonical nested layout (unchanged).
   base <- if (isTRUE(flat)) {

@@ -61,7 +61,9 @@ test_that("the legacy 5-class taxonomy is not shipped; the 7-class is canonical"
   expect_false(any(legacy %in% OF_LEVELS))
   exports <- getNamespaceExports("OtsuFire")
   expect_false(any(c("ERR_LEVELS", "ERR_COLORS") %in% exports))  # no legacy taxonomy exported
-  expect_true("of_classify" %in% exports)                       # the new classifier IS exported
+  # The taxonomy is an internal analysis helper: kept in the namespace, not exported.
+  expect_false("of_classify" %in% exports)
+  expect_true(exists("of_classify", envir = asNamespace("OtsuFire"), inherits = FALSE))
 })
 
 test_that("of_classify_commission returns the 4 physical classes", {

@@ -11,7 +11,7 @@
 #   different questions. Do not compare their numbers.
 #
 #     INTERNAL (out-of-fold, stage 3, 05_OOF)
-#       Question: does the model reproduce the DETERMINISTIC DECISIONS?
+#       Question: does the model reproduce the Otsu-guided segmentation DECISIONS?
 #       Reference: stage 2's keep/drop labels - which are rules, not truth.
 #       Use it to detect leakage and overfitting.
 #
@@ -145,16 +145,21 @@ cat(sprintf("%d patches kept, %.0f ha\n",
 #                    rock is not counted as a correct rejection.
 #   metrics_type     "all" gives both pixel-based and polygon-based metrics.
 #
-#   observability_raster + the two DOY columns: TEMPORAL observability. A
-#   reference fire whose date falls after the last observation in the imagery
-#   is removed from the reference BEFORE rasterisation, so it cannot count as
-#   an omission. You cannot miss a fire your imagery never saw. This is not a
-#   cloud mask: partially observed fires are kept whole.
+#   observability_raster + observability_mode + ref_obs_doy_col: TEMPORAL
+#   observability. You cannot miss a fire your imagery never saw. With
+#   "wholefire_fraction" a reference fire is evaluated only if at least 75 %
+#   of its burnable pixels carry a composite DOY at or after its
+#   obs_required_doy (the authoritative Reference V2 date; start_doy/end_doy
+#   are not consulted). A fire that fails is removed from the reference AND
+#   from the evaluation domain, so it counts neither as omission nor, through
+#   a correct detection over it, as commission. A fire with no usable date is
+#   reported as UNDETERMINED_OBS_DATE and still evaluated. The decision is per
+#   fire: nothing is trimmed at pixel level, and this is not a cloud mask.
 
 val <- validate_fire_maps(
   input_shapefile = thresholded_path,
   ref_shapefile   = REFERENCE_BURNED_MAP,
-  mask_shapefile  = STUDY_AREA_MASK,
+  mask_shapefile  = VALIDATION_MASK,
   burnable_raster = BURNABLE_MASK,
   year_target     = TARGET_YEAR,
   validation_dir  = VALIDATION_DIR,
@@ -166,9 +171,9 @@ val <- validate_fire_maps(
   strata_raster = STRATA_RASTER,
   strata_lut    = STRATA_LUT,
 
-  observability_raster = CHANGE_INDEX,
-  ref_start_doy_col    = "start_doy",
-  ref_end_doy_col      = "end_doy",
+  observability_raster = CHANGE_INDEX,          # its "doy" band is used
+  observability_mode   = "wholefire_fraction",  # >= 75 % of the fire observed
+  ref_obs_doy_col      = "obs_required_doy",    # Reference V2 authoritative date
 
   # TRUE forces the cached reference to be rebuilt. The cache is content-aware
   # and normally rebuilds itself when anything relevant changes.
@@ -201,7 +206,7 @@ write.csv(val$metrics,
 # -----------------------------------------------------------------------------
 # 6) Consistency between stages 2 and 3
 # -----------------------------------------------------------------------------
-# A different question again: do the deterministic and supervised outputs of
+# A different question again: do the Otsu-guided segmentation and probabilistic refinement outputs of
 # the same run agree with each other? Useful when a run looks odd and you need
 # to know which stage introduced the problem.
 

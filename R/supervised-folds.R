@@ -1,96 +1,208 @@
-#' Build spatial block cross-validation folds for the supervised pipeline
+#' Assign spatial cross-validation folds to training polygons
 #'
 #' @description
-#' Assigns spatially blocked cross-validation folds to the labelled training
-#' pool, so that out-of-fold diagnostics measure spatial transferability rather
-#' than memorisation of nearby polygons. This is the folds stage of the
-#' supervised pipeline; its `train_with_folds` output then feeds
-#' [extract_supervised_features()] and [run_oof_diagnostics()].
+#' Assign repeated spatial block cross-validation folds to the labelled
+#' training pool.
 #'
-#' Run it after the pools stage ([build_supervised_training_pools()]) and before
-#' feature extraction. Pass the labelled training pool and the configuration
-#' from [build_supervised_burned_config()]. Calling this function directly
-#' produces the same fold outputs as the equivalent stage of the full pipeline
-#' [run_oneyear_supervised_pipeline()].
+#' The function evaluates candidate block sizes and fold counts, selects a
+#' partition, and assigns folds while keeping observations from the same
+#' splitting unit together. These assignments support the evaluation of model
+#' performance on spatially held-out observations.
 #'
-#' @section What it does:
-#' \enumerate{
-#'   \item Builds candidate square block grids over the polygons, trying each
-#'     `block_sizes_m` from larger (stricter) to smaller (looser).
-#'   \item Auto-tunes the `(block_size, k)` combination against per-fold
-#'     acceptance gates (minimum burned units and positive blocks per fold).
-#'   \item Assigns repeated block-CV folds, keeping each `split_unit` (a whole
-#'     fire or a single polygon) together within one fold.
-#'   \item Propagates the unit-level folds back onto the polygon table.
-#'   \item Writes the `02_FOLDS` outputs and returns the in-memory objects.
-#' }
-#' When no candidate passes the acceptance gate, the best non-passing candidate
-#' is used, a `_FOLD_FALLBACK.txt` audit file is written, and a loud
-#' `warning()` is raised.
+#' Run this stage after [build_supervised_training_pools()] and before
+#' feature extraction and out-of-fold diagnostics.
 #'
-#' @section Outputs:
-#' Written under the `02_FOLDS` folder:
-#' \itemize{
-#'   \item `<year>_blocks_<bs>m.gpkg` — the selected block grid.
-#'   \item `<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv` — fold assignments.
-#'   \item `<year>_train_with_folds_<bs>m.gpkg` — polygons with `fold_rep*`
-#'     columns.
-#' }
+#' @param train_labelled `sf` polygon object or GeoPackage path containing the
+#'   labelled training pool. Must contain a `class` column with `"burned"` and
+#'   `"unburned"` labels. With `split_unit = "fire"`, a `fire_uid` column is
+#'   also required. When a path is supplied, the function reads the
+#'   `train_labeled` layer.
+#' @param config Required object of class `otsufire_supervised_burned_config`,
+#'   created with [build_supervised_burned_config()]. Supplies the target year
+#'   and default output location.
+#' @param split_unit Character scalar. Unit kept together within each
+#'   cross-validation repetition: `"fire"` groups polygons by `fire_uid`;
+#'   `"poly"` treats each polygon as a separate unit. Default: `"fire"`.
+#' @param block_sizes_m Numeric vector of candidate square-block sizes in
+#'   metres. Larger sizes are tried before smaller sizes. Default:
+#'   `c(5000, 3000, 2000)`.
+#' @param k_candidates Integer vector of candidate fold counts. Each value
+#'   must be at least 2. Default: `c(5L, 4L, 3L)`.
+#' @param out_dir Character scalar or `NULL`. Output directory. When `NULL`,
+#'   uses `config$output_routes$folds_dir`, normally the run's `02_FOLDS`
+#'   folder.
+#' @param write_outputs Logical scalar. Whether to write the block grid,
+#'   fold-assignment table, and training layer with folds. Default: `TRUE`.
+#' @param overwrite Logical scalar. Whether existing fold outputs may be
+#'   replaced. When `FALSE` and all three expected output files exist, they
+#'   are reused without recomputing the partition. Default: `FALSE`.
 #'
-#' @param train_labelled sf POLYGON layer OR a single GPKG path. The labelled
-#'   training pool produced by the pools stage (the `train_labeled` object /
-#'   the `train_labeled` layer of `01_POOLS/<year>_<scenario>_pools.gpkg`).
-#'   Must carry the `class` column (with `burned`/`unburned` labels) and, for
-#'   `split_unit = "fire"`, the `fire_uid` column. When a path is supplied the
-#'   `train_labeled` layer is read.
-#' @param config Required `otsufire_supervised_burned_config` (from
-#'   [build_supervised_burned_config()]). Used to derive `out_dir` (the
-#'   `02_FOLDS` folder under `config$output_routes$base`) and the
-#'   output-naming year (`config$target_year`).
-#' @param split_unit Character scalar. Unit kept together across folds:
-#'   `"fire"` (default, recommended for transferability) or `"poly"`.
-#' @param block_sizes_m Numeric vector. Candidate block sizes in meters, tried
-#'   from stricter (larger) to looser. Default `c(5000, 3000, 2000)`.
-#' @param k_candidates Integer vector. Candidate fold counts, each `>= 2`.
-#'   Default `c(5L, 4L, 3L)`.
-#' @param out_dir Character or `NULL`. Output folder. Defaults to
-#'   `config$output_routes$folds_dir` (the `02_FOLDS` folder).
-#' @param write_outputs Logical. Whether to write the blocks GPKG, folds CSV
-#'   and train-with-folds GPKG. Default `TRUE`.
-#' @param overwrite Logical. Whether to clobber existing fold outputs. Default
-#'   `FALSE`. When `FALSE` and all three canonical outputs already exist on
-#'   disk, the stage reuses them instead of recomputing (the recomputation is
-#'   skipped and the existing objects/paths are returned).
+#' @section Input labels and identifiers:
+#' The input is the labelled training set returned as `train_labeled` by
+#' [build_supervised_training_pools()] or stored in the `train_labeled` layer
+#' of its output GeoPackage.
 #'
-#' @return A named list with both the objects and the written paths:
-#'   \itemize{
-#'     \item `blocks` — sf grid of the selected block size.
-#'     \item `folds_table` — data.frame of polygon-level fold assignments
-#'       (the contents written to the folds CSV).
-#'     \item `train_with_folds` — sf polygons + `fold_rep*` columns.
-#'     \item `blocks_gpkg`, `folds_csv`, `train_with_folds_gpkg` — written
-#'       paths (or the canonical target paths when `write_outputs = FALSE`).
-#'     \item `selected` — the chosen `(block_size_m, k_folds, ok, ...)`.
-#'   }
+#' The argument name is `train_labelled`, while the pool object and
+#' GeoPackage layer use `train_labeled`.
 #'
-#' @seealso
-#' [build_supervised_burned_config()], [build_supervised_training_pools()],
-#' [extract_supervised_features()], [run_oof_diagnostics()],
-#' [validate_supervised_execution()], [run_oneyear_supervised_pipeline()]
+#' With `split_unit = "fire"`, polygons sharing a `fire_uid` are kept
+#' together within each repetition. Ensure that these identifiers represent
+#' the intended grouping units.
 #'
-#' @family workflow
-#' @export
+#' @section Partition selection:
+#' The function:
+#' 1. Builds candidate square-block grids over the training polygons.
+#' 2. Evaluates combinations of block size and fold count against acceptance
+#'    criteria, including minimum burned-unit and positive-block counts per
+#'    fold.
+#' 3. Selects a partition.
+#' 4. Assigns repeated spatial folds while preserving the selected splitting
+#'    units.
+#' 5. Transfers fold assignments back to the polygon table.
+#' 6. Writes outputs when requested.
+#'
+#' The selected settings and acceptance result are returned in `selected`.
+#'
+#' Larger blocks generally impose broader spatial grouping. Block size alone
+#' does not guarantee a minimum distance between every training and test
+#' polygon, particularly near block boundaries.
+#'
+#' @section Fire-level and polygon-level splitting:
+#' | Setting | Behaviour |
+#' |---|---|
+#' | `split_unit = "fire"` | Keep all polygons sharing a `fire_uid` in the same fold within a repetition. |
+#' | `split_unit = "poly"` | Use individual polygons as splitting units, without an additional shared-fire grouping constraint. |
+#'
+#' Use fire-level splitting when multiple polygons belong to the same event
+#' and should not be divided between training and evaluation sets.
+#'
+#' @section Repeated cross-validation:
+#' The returned training layer contains `fold_rep*` columns, with one
+#' fold-assignment column per repetition.
+#'
+#' Grouping constraints apply separately within each repetition. A unit may
+#' receive a different fold assignment in another repetition.
+#'
+#' @section Fallback partitions:
+#' If no candidate partition passes the acceptance criteria, the function
+#' selects the best available non-passing candidate, raises a warning, and
+#' records the fallback in a `_FOLD_FALLBACK.txt` audit file.
+#'
+#' A returned result therefore does not necessarily mean that an acceptable
+#' partition was found. Inspect `selected`, including its `ok` value, before
+#' continuing to out-of-fold evaluation.
+#'
+#' A fallback may indicate that the available burned examples are too sparse
+#' or spatially concentrated for the requested block sizes and fold counts.
+#'
+#' @section Reusing outputs:
+#' With `overwrite = FALSE`, the function reuses existing outputs when all
+#' three expected files are present.
+#'
+#' Before reusing them, ensure that they correspond to the current training
+#' polygons, labels, grouping identifiers, and fold settings. Use
+#' `overwrite = TRUE` to recompute assignments after changing those inputs.
+#'
+#' @section Output files:
+#' Outputs are written under `out_dir`, normally the run's `02_FOLDS` folder.
+#'
+#' | Filename | Contents |
+#' |---|---|
+#' | `<year>_blocks_<bs>m.gpkg` | Selected spatial block grid. |
+#' | `<year>_folds_<bs>m_k<k>_r<reps>_unit-<unit>.csv` | Polygon-level fold assignments. |
+#' | `<year>_train_with_folds_<bs>m.gpkg` | Training polygons with `fold_rep*` columns. |
+#'
+#' Here, `<bs>` is the selected block size, `<k>` is the fold count, `<reps>`
+#' is the number of repetitions, and `<unit>` is the splitting unit.
+#'
+#' @return A named list containing spatial objects, fold assignments,
+#'   selected settings, and output paths.
+#'
+#' | Field | Contents |
+#' |---|---|
+#' | `blocks` | Selected block grid as an `sf` object. |
+#' | `folds_table` | `data.frame` containing polygon-level fold assignments. |
+#' | `train_with_folds` | Training polygons as an `sf` object with `fold_rep*` columns. |
+#' | `blocks_gpkg` | Path to the block-grid GeoPackage. |
+#' | `folds_csv` | Path to the fold-assignment CSV. |
+#' | `train_with_folds_gpkg` | Path to the training GeoPackage with fold assignments. |
+#' | `selected` | Selected partition settings and diagnostics, including `block_size_m`, `k_folds`, and `ok`. |
+#'
+#' When `write_outputs = FALSE`, path fields contain the expected target
+#' locations. Their presence in the returned list does not mean that files
+#' were written.
+#'
+#' @seealso [build_supervised_burned_config()],
+#'   [build_supervised_training_pools()], [extract_supervised_features()],
+#'   [run_oof_diagnostics()], [validate_supervised_execution()],
+#'   [run_oneyear_supervised_pipeline()].
 #'
 #' @examples
 #' \dontrun{
-#' cfg <- build_supervised_burned_config(
-#'   run_label = "balanced", internal_decisions = "decisions.gpkg",
-#'   change_index = "rbr.tif", target_year = 2017L
+#' # Configure the probabilistic refinement workflow
+#' config <- build_supervised_burned_config(
+#'   internal_decisions = "data/internal_decisions_2022.gpkg",
+#'   change_index = "data/RBR_2022.tif",
+#'   delayed_change_index = "data/RBR_delayed_2022.tif",
+#'   topo = "data/elevation_slope.tif",
+#'   corine_raster = "data/land_cover_2022.tif",
+#'   burnable_mask = "data/burnable_mask_2022.tif",
+#'   target_year = 2022L,
+#'   output_dir = "results",
+#'   run_name = "RBR_2022"
 #' )
-#' pools <- build_supervised_training_pools(cfg)
-#' folds <- make_spatial_folds(pools$pools_gpkg, config = cfg)
-#' folds$train_with_folds_gpkg
+#'
+#' # Build the labelled training pool
+#' pools <- build_supervised_training_pools(
+#'   config = config,
+#'   write_outputs = TRUE
+#' )
+#'
+#' # Assign spatial folds from the written pool
+#' folds <- make_spatial_folds(
+#'   train_labelled = pools$pools_gpkg,
+#'   config = config,
+#'   split_unit = "fire",
+#'   block_sizes_m = c(5000, 3000, 2000),
+#'   k_candidates = c(5L, 4L, 3L)
+#' )
+#'
+#' # Inspect the selected partition and acceptance result
+#' folds$selected
+#'
+#' # Stop here if the selected partition failed the acceptance criteria
+#' if (!isTRUE(folds$selected$ok)) {
+#'   stop("Review the fallback partition before continuing.")
 #' }
+#'
+#' # Locate the training layer with fold assignments
+#' folds$train_with_folds_gpkg
+#'
+#' # Inspect the fold columns
+#' fold_columns <- grep(
+#'   "^fold_rep",
+#'   names(folds$train_with_folds),
+#'   value = TRUE
+#' )
+#'
+#' head(
+#'   sf::st_drop_geometry(folds$train_with_folds)[
+#'     , c("class", fold_columns), drop = FALSE
+#'   ]
+#' )
+#'
+#' # Alternatively, supply the in-memory labelled pool
+#' folds_in_memory <- make_spatial_folds(
+#'   train_labelled = pools$train_labeled,
+#'   config = config,
+#'   split_unit = "fire",
+#'   write_outputs = FALSE,
+#'   overwrite = TRUE
+#' )
+#' }
+#'
+#' @family workflow
+#' @export
 make_spatial_folds <- function(train_labelled,
                                config,
                                split_unit = "fire",

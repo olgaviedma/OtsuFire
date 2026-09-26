@@ -50,18 +50,18 @@
 #' Export a visually-validated training pool into review-ready layers
 #'
 #' @description
-#' A REVIEW EXPORTER (not a model step). It takes a supervised training pool,
-#' resolves the VISUAL decisions through \code{\link{apply_visual_validation}}
-#' and writes/returns the pool split by \code{review_bucket} so it is easy to
-#' inspect in QGIS. It NEVER trains a model, NEVER scores and NEVER rebuilds the
-#' pool; the input object is not modified.
+#' Prepares a supervised training pool for visual review. It resolves the
+#' VISUAL decisions through \code{\link{apply_visual_validation}} and
+#' writes/returns the pool split by \code{review_bucket} so it is easy to
+#' inspect in QGIS. It is a review step, not a model step: it does not train,
+#' score or rebuild the pool, and the input object is not modified.
 #'
 #' @details
 #' Typical loop: (1) export with this function, (2) open the GPKG in QGIS and
 #' edit the \code{VISUAL} column (\code{0}/\code{1}/blank) on the rows you
 #' review, (3) read the edited \code{all_tagged} layer back and pass it to
 #' \code{\link{apply_visual_validation}} to get the clean training set. The
-#' \code{all_tagged} layer is the canonical RE-ENTRY layer: it carries
+#' \code{all_tagged} layer is the one to edit and read back: it carries
 #' \code{VISUAL} and \code{artifact_hard_eligible}, so editing \code{VISUAL}
 #' there and re-reading preserves the full semantics. The per-bucket layers
 #' carry the same columns and the same semantics; they are a convenience for
@@ -110,14 +110,14 @@
 #' \dontrun{
 #' # 1) Export for review:
 #' ex <- export_visual_validation_pools(
-#'   "1985/.../supervised_training_pool.gpkg",
-#'   out_path = "C:/of_tmp/1985_pool_visual.gpkg", overwrite = TRUE)
+#'   "results/2020/SUPERVISED/balanced/01_POOLS/supervised_training_pool.gpkg",
+#'   out_path = "results/pool_visual_review.gpkg", overwrite = TRUE)
 #' ex$summary$by_bucket
 #'
 #' # 2) ...edit VISUAL in QGIS on the all_tagged layer...
 #'
 #' # 3) Re-feed the edited pool:
-#' edited <- sf::st_read("C:/of_tmp/1985_pool_visual.gpkg", layer = "all_tagged")
+#' edited <- sf::st_read("results/pool_visual_review.gpkg", layer = "all_tagged")
 #' vv <- apply_visual_validation(edited)
 #' vv$summary
 #' }

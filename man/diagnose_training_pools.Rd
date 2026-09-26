@@ -2,7 +2,6 @@
 % Please edit documentation in R/diagnose-training-pools.R
 \name{diagnose_training_pools}
 \alias{diagnose_training_pools}
-\alias{print.otsufire_pool_diagnostics}
 \title{Diagnose supervised training-pool separability (pre-fit)}
 \usage{
 diagnose_training_pools(
@@ -37,8 +36,6 @@ diagnose_training_pools(
   seed = 123,
   verbose = TRUE
 )
-
-\method{print}{otsufire_pool_diagnostics}(x, ...)
 }
 \arguments{
 \item{pools}{A \code{data.frame}, \code{data.table}, \code{tibble} or \code{sf}
@@ -99,28 +96,24 @@ back to base graphics; never hard-fails).}
 \item{seed}{RNG seed (set once at top, passed to stochastic parts).}
 
 \item{verbose}{Print progress messages.}
-
-\item{x}{An \code{otsufire_pool_diagnostics} object.}
-
-\item{...}{Ignored.}
 }
 \value{
 An object of class \code{otsufire_pool_diagnostics}: a list with
-  \code{summary}, \code{settings}, \code{feature_info}, \code{missingness},
-  \code{zero_variance}, \code{kruskal}, \code{pairwise}, \code{feature_ranking},
-  \code{correlation}, \code{zscore_fingerprint}, \code{pca}, \code{permanova},
-  \code{rs_separability}, \code{probe_classifier}, \code{plot_paths} and
-  \code{output_dir}. Modules that are skipped are \code{NULL}. The
-  \code{correlation} component (module H) is a list with \code{matrix},
-  \code{high_pairs}, \code{clusters}, \code{representative}, \code{reduced_set}
-  (the suggested non-redundant feature set) and \code{dropped}.
+\code{summary}, \code{settings}, \code{feature_info}, \code{missingness},
+\code{zero_variance}, \code{kruskal}, \code{pairwise}, \code{feature_ranking},
+\code{correlation}, \code{zscore_fingerprint}, \code{pca}, \code{permanova},
+\code{rs_separability}, \code{probe_classifier}, \code{plot_paths} and
+\code{output_dir}. Modules that are skipped are \code{NULL}. The
+\code{correlation} component (module H) is a list with \code{matrix},
+\code{high_pairs}, \code{clusters}, \code{representative}, \code{reduced_set}
+(the suggested non-redundant feature set) and \code{dropped}.
 }
 \description{
 Statistically assesses whether the categories of a supervised training pool
 (e.g. \code{pool_source} or \code{training_label}) are coherent and separable
 across the numeric features the supervised model will later use, \emph{before}
 any model is fit. It is a \strong{diagnostic only}: it never trains or calls
-the final supervised model (no \code{train_supervised_model} / \code{xgboost}).
+the final supervised model (no \code{xgboost}).
 The optional probe classifier (module G) is an explicitly-labelled separability
 probe (LDA), not the production model, and its predictions are never used
 downstream.
@@ -128,54 +121,49 @@ downstream.
 \details{
 Modules:
 \describe{
-  \item{A. Composition & quality}{counts per group; cross-tabs with label /
-    visual / used columns when supplied; per-feature missingness; zero-variance
-    report; optional high-correlation pairs.}
-  \item{B. Univariate separability}{per-feature Kruskal-Wallis across the group
-    column with BH-FDR. Effect sizes use \code{effectsize::rank_epsilon_squared}
-    (epsilon^2 = H/(n-1)) and \code{effectsize::rank_eta_squared}
-    (eta^2[H] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
-    quantities are computed manually and reported under the SAME column names
-    (\code{epsilon_squared}, \code{eta_squared}). Features ranked primarily by
-    epsilon^2. If \code{run_pairwise}, pairwise Wilcoxon between categories with
-    BH-FDR.}
-  \item{C. Z-score fingerprint}{global-scaled median z per group x feature
-    (+ feature family grouping), optional heatmap.}
-  \item{D. PCA (diagnostic only)}{scaled features with \strong{median
-    imputation} of missing values (documented choice); returns scores,
-    loadings, explained variance, top PC1/PC2 loadings, and centroid distances
-    between groups in PC1-PC2 and in the full scaled space. Never feeds the
-    final model.}
-  \item{E. PERMANOVA (optional)}{\code{vegan::adonis2} + dispersion via
-    \code{vegan::betadisper}; skipped gracefully if \pkg{vegan} absent.}
-  \item{F. RS separability (optional)}{pairwise Bhattacharyya, Jeffries-Matusita,
-    transformed divergence and Mahalanobis (Gaussian assumption); uses
-    \pkg{spatialEco}/\pkg{varSel} if present, otherwise a built-in computation.}
-  \item{G. Probe classifier (optional)}{lightweight LDA separability probe with
-    grouped (leave-fire/year-out) CV when a fire/year key is present; returns
-    balanced accuracy, macro-F1 and a confusion matrix. Explicitly NOT the
-    final model.}
-  \item{H. Correlation / redundancy (optional)}{a feature correlation matrix
-    (\code{corr_method}, default Spearman -- robust to the heavy-tailed
-    RBR/area distributions), the high-correlation pairs
-    (\eqn{|r| \ge} \code{corr_threshold}, family-tagged), greedy redundancy
-    clusters (connected components of the high-correlation graph), a
-    representative per cluster chosen as the feature with the HIGHEST
-    importance (epsilon^2 from module B; ties / missing importance fall back to
-    feature order), and a suggested NON-REDUNDANT \code{reduced_set} = all
-    cluster representatives plus all singletons. Dependency-light (base
-    \code{stats::cor}); never hard-fails. When \code{output_dir} is set it
-    writes \code{*_15_correlation_high_pairs.csv},
-    \code{*_16_correlation_clusters.csv} and
-    \code{*_17_correlation_reduced_set.csv}; an optional correlation heatmap
-    PNG is added when \code{make_plots} and \pkg{ggplot2} are available.}
+\item{A. Composition & quality}{counts per group; cross-tabs with label /
+visual / used columns when supplied; per-feature missingness; zero-variance
+report; optional high-correlation pairs.}
+\item{B. Univariate separability}{per-feature Kruskal-Wallis across the group
+column with BH-FDR. Effect sizes use \code{effectsize::rank_epsilon_squared}
+(epsilon^2 = H/(n-1)) and \code{effectsize::rank_eta_squared}
+(eta^2[H] = (H-k+1)/(n-k)); if \pkg{effectsize} is unavailable the same two
+quantities are computed manually and reported under the SAME column names
+(\code{epsilon_squared}, \code{eta_squared}). Features ranked primarily by
+epsilon^2. If \code{run_pairwise}, pairwise Wilcoxon between categories with
+BH-FDR.}
+\item{C. Z-score fingerprint}{global-scaled median z per group x feature
+(+ feature family grouping), optional heatmap.}
+\item{D. PCA (diagnostic only)}{scaled features with \strong{median
+imputation} of missing values; returns scores,
+loadings, explained variance, top PC1/PC2 loadings, and centroid distances
+between groups in PC1-PC2 and in the full scaled space. Never feeds the
+final model.}
+\item{E. PERMANOVA (optional)}{\code{vegan::adonis2} + dispersion via
+\code{vegan::betadisper}; skipped gracefully if \pkg{vegan} absent.}
+\item{F. RS separability (optional)}{pairwise Bhattacharyya, Jeffries-Matusita,
+transformed divergence and Mahalanobis (Gaussian assumption); uses
+\pkg{spatialEco}/\pkg{varSel} if present, otherwise a built-in computation.}
+\item{G. Probe classifier (optional)}{lightweight LDA separability probe with
+grouped (leave-fire/year-out) CV when a fire/year key is present; returns
+balanced accuracy, macro-F1 and a confusion matrix. Explicitly NOT the
+final model.}
+\item{H. Correlation / redundancy (optional)}{a feature correlation matrix
+(\code{corr_method}, default Spearman -- robust to the heavy-tailed
+RBR/area distributions), the high-correlation pairs
+(\eqn{|r| \ge} \code{corr_threshold}, family-tagged), greedy redundancy
+clusters (connected components of the high-correlation graph), a
+representative per cluster chosen as the feature with the HIGHEST
+importance (epsilon^2 from module B; ties / missing importance fall back to
+feature order), and a suggested NON-REDUNDANT \code{reduced_set} = all
+cluster representatives plus all singletons. Dependency-light (base
+\code{stats::cor}); never hard-fails. When \code{output_dir} is set it
+writes \code{*_15_correlation_high_pairs.csv},
+\code{*_16_correlation_clusters.csv} and
+\code{*_17_correlation_reduced_set.csv}; an optional correlation heatmap
+PNG is added when \code{make_plots} and \pkg{ggplot2} are available.}
 }
 }
-\section{Functions}{
-\itemize{
-\item \code{print(otsufire_pool_diagnostics)}: Print method for pool diagnostics.
-
-}}
 \examples{
 \donttest{
 set.seed(1)

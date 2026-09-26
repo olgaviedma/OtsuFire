@@ -460,6 +460,27 @@ test_that("check_supervised_consistency validates required inputs", {
   expect_true("consistency_summary_csv" %in% names(out))
 })
 
+test_that("check_supervised_consistency accepts run_label without a config", {
+  expect_error(
+    check_supervised_consistency(
+      deterministic_decisions = mk_tmp_gpkg_m(),
+      final_map = mk_tmp_gpkg_m(),
+      out_dir = tempdir(),
+      target_year = 2020L
+    ),
+    regexp = "run_label"
+  )
+  out <- check_supervised_consistency(
+    deterministic_decisions = mk_tmp_gpkg_m(),
+    final_map = mk_tmp_gpkg_m(),
+    out_dir = tempdir(),
+    target_year = 2020L,
+    run_label = "demo"
+  )
+  expect_identical(basename(out$consistency_summary_csv),
+                   "2020_demo_consistency_summary.csv")
+})
+
 test_that("run_oneyear_supervised_pipeline validates config and flags", {
   expect_error(run_oneyear_supervised_pipeline(config = list()),
                regexp = "build_supervised_burned_config")

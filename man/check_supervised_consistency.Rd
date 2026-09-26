@@ -10,7 +10,7 @@ check_supervised_consistency(
   out_dir = NULL,
   config = NULL,
   target_year = NULL,
-  scenario = NULL
+  run_label = NULL
 )
 }
 \arguments{
@@ -28,13 +28,14 @@ consistency-check products. When \code{NULL}, uses
 configuration is provided.}
 
 \item{config}{Optional \code{otsufire_supervised_burned_config} object created by
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies the target year, scenario,
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}. Supplies the target year, run label,
 and default output directory.}
 
 \item{target_year}{Optional integer scalar. Target year used when
 \code{config = NULL}. Ignored when \code{config} is supplied.}
 
-\item{scenario}{Optional character scalar. Scenario identifier used when
+\item{run_label}{Optional character scalar. Run label (as in
+\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}) used when
 \code{config = NULL}. Ignored when \code{config} is supplied.}
 }
 \value{
@@ -58,7 +59,7 @@ external reference fire perimeters, use \code{\link[=validate_fire_maps]{validat
 \section{Required input layers}{
 
 Supply the decision and probabilistic refinement output files corresponding to the same
-target year and scenario.\tabular{ll}{
+target year and run label.\tabular{ll}{
    Input \tab Required layers \cr
    \code{deterministic_decisions} \tab \code{internal_decisions} \cr
    \code{final_map} \tab \code{final_map_full}, \code{final_map} \cr
@@ -90,11 +91,11 @@ results is not a measure of accuracy against independent observations.
 
 \section{Run identifiers and output location}{
 
-When \code{config} is supplied, the function takes the target year and scenario
-from that object. Explicit \code{target_year} and \code{scenario} arguments are
+When \code{config} is supplied, the function takes the target year and run label
+from that object. Explicit \code{target_year} and \code{run_label} arguments are
 ignored.
 
-Without a configuration, supply \code{target_year}, \code{scenario}, and \code{out_dir}
+Without a configuration, supply \code{target_year}, \code{run_label}, and \code{out_dir}
 explicitly.
 }
 
@@ -113,7 +114,7 @@ check_supervised_consistency(
   final_map = "results/supervised_final_map_2022.gpkg",
   out_dir = "results/consistency_2022",
   target_year = 2022L,
-  scenario = "balanced"
+  run_label = "balanced"
 )
 }
 

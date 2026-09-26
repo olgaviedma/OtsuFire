@@ -22,16 +22,17 @@
 #'   `config$output_routes$consistency_dir`. Supply explicitly when no
 #'   configuration is provided.
 #' @param config Optional `otsufire_supervised_burned_config` object created by
-#'   [build_supervised_burned_config()]. Supplies the target year, scenario,
+#'   [build_supervised_burned_config()]. Supplies the target year, run label,
 #'   and default output directory.
 #' @param target_year Optional integer scalar. Target year used when
 #'   `config = NULL`. Ignored when `config` is supplied.
-#' @param scenario Optional character scalar. Scenario identifier used when
+#' @param run_label Optional character scalar. Run label (as in
+#'   [build_supervised_burned_config()]) used when
 #'   `config = NULL`. Ignored when `config` is supplied.
 #'
 #' @section Required input layers:
 #' Supply the decision and probabilistic refinement output files corresponding to the same
-#' target year and scenario.
+#' target year and run label.
 #'
 #' | Input | Required layers |
 #' |---|---|
@@ -57,11 +58,11 @@
 #' results is not a measure of accuracy against independent observations.
 #'
 #' @section Run identifiers and output location:
-#' When `config` is supplied, the function takes the target year and scenario
-#' from that object. Explicit `target_year` and `scenario` arguments are
+#' When `config` is supplied, the function takes the target year and run label
+#' from that object. Explicit `target_year` and `run_label` arguments are
 #' ignored.
 #'
-#' Without a configuration, supply `target_year`, `scenario`, and `out_dir`
+#' Without a configuration, supply `target_year`, `run_label`, and `out_dir`
 #' explicitly.
 #'
 #' @return A list with the paths of the written artefacts
@@ -89,7 +90,7 @@
 #'   final_map = "results/supervised_final_map_2022.gpkg",
 #'   out_dir = "results/consistency_2022",
 #'   target_year = 2022L,
-#'   scenario = "balanced"
+#'   run_label = "balanced"
 #' )
 #' }
 #'
@@ -98,7 +99,7 @@
 check_supervised_consistency <- function(deterministic_decisions, final_map,
                                          out_dir = NULL, config = NULL,
                                          target_year = NULL,
-                                         scenario = NULL) {
+                                         run_label = NULL) {
   if (missing(deterministic_decisions) || is.null(deterministic_decisions)) {
     stop("'deterministic_decisions' is required.", call. = FALSE)
   }
@@ -127,24 +128,24 @@ check_supervised_consistency <- function(deterministic_decisions, final_map,
   }
   if (!is.null(config)) {
     target_year <- config$target_year
-    scenario    <- config$scenario
+    run_label   <- config$scenario
   }
-  if (is.null(target_year) || is.null(scenario)) {
-    stop("'target_year' and 'scenario' must be supplied either directly ",
+  if (is.null(target_year) || is.null(run_label)) {
+    stop("'target_year' and 'run_label' must be supplied either directly ",
          "or via 'config'.", call. = FALSE)
   }
   ns <- asNamespace("OtsuFire")
   res <- tryCatch(
     ns$.of_run_consistency_check(
       target_year = as.integer(target_year),
-      scenario    = as.character(scenario),
+      scenario    = as.character(run_label),
       internal_decisions_gpkg = deterministic_decisions,
       final_map_gpkg = final_map,
       out_dir = out_dir
     ),
     error = function(e) NULL
   )
-  prefix <- sprintf("%d_%s", as.integer(target_year), as.character(scenario))
+  prefix <- sprintf("%d_%s", as.integer(target_year), as.character(run_label))
   c(
     list(
       consistency_issues       = NULL,

@@ -38,9 +38,10 @@
 #' [GitHub](https://github.com/olgaviedma/OtsuFire).
 #'
 #' For step-by-step guidance on implementing and using OtsuFire, see the
-#' [OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
-#' The companion repository also includes the Google Earth Engine scripts
-#' used for image selection, masking and compositing.
+#' [OtsuFire workflow book](https://nataliaquintero.github.io/OtsuFire-book/).
+#' The [companion repository](https://github.com/nataliaquintero/OtsuFire-book)
+#' also includes the Google Earth Engine scripts used for image selection,
+#' masking and compositing.
 #'
 #' Burned-area maps for the full time series are available on
 #' Zenodo (\doi{10.5281/zenodo.22893763}).

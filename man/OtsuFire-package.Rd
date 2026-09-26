@@ -41,9 +41,10 @@ The OtsuFire package and its source code are available on
 \href{https://github.com/olgaviedma/OtsuFire}{GitHub}.
 
 For step-by-step guidance on implementing and using OtsuFire, see the
-\href{https://github.com/nataliaquintero/OtsuFire-book}{OtsuFire workflow book}.
-The companion repository also includes the Google Earth Engine scripts
-used for image selection, masking and compositing.
+\href{https://nataliaquintero.github.io/OtsuFire-book/}{OtsuFire workflow book}.
+The \href{https://github.com/nataliaquintero/OtsuFire-book}{companion repository}
+also includes the Google Earth Engine scripts used for image selection,
+masking and compositing.
 
 Burned-area maps for the full time series are available on
 Zenodo (\doi{10.5281/zenodo.22893763}).
@@ -77,7 +78,7 @@ outputs after thresholding \code{p_burned}).
 Useful links:
 \itemize{
   \item \url{https://github.com/olgaviedma/OtsuFire}
-  \item \url{https://github.com/nataliaquintero/OtsuFire-book}
+  \item \url{https://nataliaquintero.github.io/OtsuFire-book/}
   \item Report bugs at \url{https://github.com/olgaviedma/OtsuFire/issues}
 }
 

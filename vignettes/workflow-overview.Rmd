@@ -44,8 +44,8 @@ The OtsuFire package and its source code are available on
 [GitHub](https://github.com/olgaviedma/OtsuFire).
 
 For step-by-step guidance on implementing and using OtsuFire, see the
-[OtsuFire workflow book](https://github.com/nataliaquintero/OtsuFire-book).
-The companion repository also includes the Google Earth Engine scripts
+[OtsuFire workflow book](https://nataliaquintero.github.io/OtsuFire-book/).
+The [companion repository](https://github.com/nataliaquintero/OtsuFire-book) also includes the Google Earth Engine scripts
 used for image selection, masking and compositing.
 
 Burned-area maps for the full time series are available on
@@ -245,7 +245,7 @@ functions to locate the products of each run.
 
 ## Continue with the step-by-step tutorial
 
-The [OtsuFire book](https://github.com/nataliaquintero/OtsuFire-book)
+The [OtsuFire book](https://nataliaquintero.github.io/OtsuFire-book/)
 provides the step-by-step workflow, from preparing inputs and selecting
 settings to inspecting and validating the final maps.
 

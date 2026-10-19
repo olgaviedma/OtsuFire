@@ -105,8 +105,11 @@
 #'   \strong{Shape and size features}.
 #' @param model_params Named list of partial XGBoost parameter overrides, or
 #'   `NULL` for package defaults. For example, `list(eta = 0.03)` changes only
-#'   `eta`. Setting `scale_pos_weight` here is rejected because it is
-#'   calculated during training.
+#'   `eta`. The resolved block is used by the final model and by every
+#'   out-of-fold fold, so OOF diagnostics and the final model are fitted with the
+#'   same parameters. Setting `scale_pos_weight` here is rejected because it is
+#'   calculated during training (separately for each fold and for the final
+#'   model).
 #' @param options Named list of advanced paths and settings. See
 #'   \strong{Advanced options}. Default: `list()`.
 #'
@@ -397,7 +400,7 @@
 #' | `scenario`, `target_year`, `run_name` | Run identifiers. |
 #' | `inputs` | Resolved spatial and labelled inputs. |
 #' | `output_dir`, `output_routes` | Output root and stage locations. |
-#' | `model_params` | Resolved XGBoost parameters. |
+#' | `model_params` | Resolved XGBoost parameters, shared by the final model and every OOF fold (without `scale_pos_weight`, which is computed per fit). |
 #' | `train_control` | Resolved training, sampling, seed, imputation, and feature settings. |
 #' | `negative_pool_params` | Public negative-pool settings and caps. |
 #' | `negative_pool_runtime` | Runtime controls for negative-pool processing. |

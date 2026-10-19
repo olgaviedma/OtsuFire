@@ -19,9 +19,11 @@
 #   ------------------------------|-------------------------------------------|------------------------------------------
 #   shared fit core               | run_oof_xgb -> .of_nested_refit_fit       | train_final_model_direct -> .of_nested_refit_fit
 #                                 |   internal-sup-oof-training.R:300         |   internal-sup-train-final-direct.R:501
-#   model_params (xgb block)      | params_fn = .of_canonical_xgb_params      | params_fn = .params_from_cfg (model_params_base = cfg$model_params)
-#                                 |   internal-sup-oof-training.R:307         |   internal-sup-train-final-direct.R:157,508
-#                                 |   both resolve to .of_canonical_xgb_block (internal-sup-xgb-params.R:55)
+#   model_params (xgb block)      | params_fn = .of_params_fn_from_block(params) | params_fn = .params_from_cfg = .of_params_fn_from_block(cfg$model_params)
+#                                 |   internal-sup-oof-training.R (oof_params_fn) |   internal-sup-train-final-direct.R (.params_from_cfg)
+#                                 |   SAME helper (internal-sup-xgb-params.R); run_oof_diagnostics() hands run_oof_xgb()
+#                                 |   cfg$model_params. Used to differ (OOF ignored `params`): fixed, see
+#                                 |   test-oof-model-params-override.R.
 #   nrounds_max / early_stop      | cfg$train_control (threaded)              | cfg$train_control (threaded)
 #                                 |   internal-sup-oof-training.R:311-312     |   internal-sup-train-final-direct.R:512-513
 #   val_frac / group_col          | cfg$train_control                        | cfg$train_control
@@ -295,7 +297,7 @@ run_capture_pair <- function() {
       labelled    = df,
       burned_like = df[df$class == "unburned", , drop = FALSE],
       labelled_df = df,
-      params      = NULL,
+      params      = g_sym(".of_canonical_model_params")(),
       result_dir  = result_dir,
       target_year = 2017L,
       nrounds_max = 12L, early_stop = 6L, seed_base = 42L, verbose = 0,
@@ -465,7 +467,7 @@ test_that("symmetry (L2): OOF per-fold effective bucket ratios match the configu
     labelled    = df,
     burned_like = df[df$class == "unburned", , drop = FALSE],
     labelled_df = df,
-    params      = NULL,
+    params      = g_sym(".of_canonical_model_params")(),
     result_dir  = result_dir,
     target_year = 2017L,
     nrounds_max = 10L, early_stop = 5L, seed_base = 42L, verbose = 0,

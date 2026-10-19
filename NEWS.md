@@ -55,6 +55,14 @@ reproduced from its resolved configuration.
   `add_pool_shape_features()` and `assemble_era_training_pool()` build and
   combine curated pools, including pools spanning several years.
 
+## Bug fixes
+
+* Out-of-fold diagnostics now fit every fold with the same XGBoost parameters
+  as the final model. Previously `run_oof_xgb()` ignored the `params` it was
+  given and always used the package defaults, so a `model_params` override
+  (`build_supervised_burned_config()`) changed only the final model. Runs with
+  the default `model_params` are unaffected and give identical results.
+
 ## Good to know
 
 * `p_burned` is a model score, not a calibrated probability. Choose the

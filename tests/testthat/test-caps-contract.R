@@ -211,7 +211,7 @@ test_that("PART A: dropping a required cap ERRORS on the OOF path (no silent 1.0
                                class = c("burned", "unburned"),
                                block_id = c(1L, 2L), fold_rep1 = c(1L, 2L)),
       fold_cols = "fold_rep1",
-      params = list(), nrounds_max = 4L, early_stop = 3L, seed_base = 42L,
+      params = get(".of_canonical_model_params", envir = ns)(), nrounds_max = 4L, early_stop = 3L, seed_base = 42L,
       group_col = "block_id", val_frac = 0.15, impute_numeric = "median",
       impute_factor_missing = "MISSING",
       prepared_labelled = data.frame(x = c(0, 1)), model_cols = "x",

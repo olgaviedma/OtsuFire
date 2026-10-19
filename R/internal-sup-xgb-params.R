@@ -14,11 +14,13 @@
 # FINAL model changes vs the historical baseline; it is first evaluated in
 # the 2017 run. See HANDOFF section "FRENTE 1 RESOLVED".
 #
-# Both inline-`params` sites call THIS builder when `params = NULL`, so the
-# two can never silently diverge again. `scale_pos_weight` is the ONLY
-# field that is NOT fixed here: each caller computes it from its OWN training
-# labels (OOF: per OOF training set; FINAL: per its train split) and passes
-# it in. Everything else is fixed.
+# The default block lives here, so the defaults of the two stages cannot
+# silently diverge. Overrides travel through cfg$model_params and reach BOTH
+# stages via `.of_params_fn_from_block()` (end of this file), which the OOF
+# folds (run_oof_xgb) and the FINAL fit (train_final_model_direct) share.
+# `scale_pos_weight` is the ONLY field that is NOT fixed here: each fit
+# computes it from its OWN training labels (every OOF fold; the FINAL train
+# split) and passes it in. Everything else is fixed.
 # =============================================================================
 
 #' Canonical XGBoost params for the supervised burned model (single source of truth).
@@ -176,4 +178,43 @@
     training_protocol = "nested_refit",
     oof_sampling      = "capped"
   )
+}
+
+# =============================================================================
+# Shared `params_fn` builder for the OOF and FINAL fits (OOF/FINAL symmetry).
+#
+# The shared fit core `.of_nested_refit_fit()` takes `params_fn`, a
+# function(scale_pos_weight) -> xgboost params list. Both stages must build it
+# from the SAME methodological block, so both call THIS helper:
+#   - FINAL: train_final_model_direct()  -> block = cfg$model_params
+#   - OOF:   run_oof_xgb()               -> block = the `params` it receives
+#            (run_oof_diagnostics() resolves them from cfg$model_params unless
+#            the caller supplies `params`).
+# Any `scale_pos_weight` already present in `block` is DROPPED: it is a
+# site-specific value that the core recomputes from each fit's own training
+# labels (every OOF fold, and the FINAL refit), so it must never be taken from
+# the block.
+# =============================================================================
+
+#' Build a `params_fn(scale_pos_weight)` from a methodological xgboost block.
+#'
+#' @param block Named list of xgboost parameters. A `scale_pos_weight` entry,
+#'   if present, is ignored.
+#' @return `function(scale_pos_weight)` returning `block` plus the
+#'   `scale_pos_weight` of the fit.
+#' @keywords internal
+#' @noRd
+.of_params_fn_from_block <- function(block) {
+  if (!is.list(block) || length(block) == 0L || is.null(names(block)) ||
+      any(!nzchar(names(block)))) {
+    stop(".of_params_fn_from_block(): 'block' must be a non-empty named list ",
+         "of xgboost parameters.", call. = FALSE)
+  }
+  block[["scale_pos_weight"]] <- NULL
+  force(block)
+  function(scale_pos_weight) {
+    p <- block
+    p[["scale_pos_weight"]] <- scale_pos_weight
+    p
+  }
 }

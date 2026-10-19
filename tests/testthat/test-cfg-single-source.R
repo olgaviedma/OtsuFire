@@ -484,7 +484,7 @@ test_that("Gate 1B: a multi-field partial override tags exactly the supplied fie
   }
 })
 
-test_that("Gate 1B: a PARTIAL model_params override (eta=0.03) reaches BOTH OOF and FINAL with the rest canonical", {
+test_that("Gate 1B: a PARTIAL model_params override (eta=0.03) is HANDED to both OOF and FINAL with the rest canonical (argument capture only; that the OOF folds USE it is tested in test-oof-model-params-override.R)", {
   skip_if_not_installed("sf")
   testthat::skip_if(!exists("local_mocked_bindings",
                             where = asNamespace("testthat")))

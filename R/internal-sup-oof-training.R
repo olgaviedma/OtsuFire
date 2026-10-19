@@ -11,9 +11,11 @@
 #     OtsuFire OOF ALWAYS uses the SAME capped negative-sampling policy as the
 #     FINAL model, applied independently within each training fold (there is no
 #     sampling-policy toggle);
-#   - calls the SHARED core .of_nested_refit_fit() on the capped outer_train ->
-#     refit model + refit medians (fit inner-train only; inner-val is the only
-#     early-stopping set; refit on all outer_train at best_iteration);
+#   - calls the SHARED core .of_nested_refit_fit() on the capped outer_train,
+#     with params_fn built from `params` (the SAME block the FINAL model uses,
+#     via .of_params_fn_from_block()) -> refit model + refit medians (fit on
+#     inner-train only; inner-val is the only early-stopping set; refit on all
+#     outer_train at best_iteration);
 #   - transforms the FULL outer_test with the REFIT medians and predicts it;
 #   - records a per-fold audit row.
 # The cap ratios are REQUIRED formals (no defaults) so a dropped argument
@@ -98,6 +100,17 @@ run_oof_xgb <- function(
            "' is missing (no methodological default).", call. = FALSE)
     }
   }
+
+  # OOF/FINAL symmetry: `params` is the methodological xgboost block every fold
+  # trains with (run_oof_diagnostics() resolves it from cfg$model_params).
+  # A scale_pos_weight inside it is ignored: each fold recomputes its own.
+  if (eval(call("missing", as.name("params"))) || !is.list(params) ||
+      length(params) == 0L || is.null(names(params))) {
+    stop("run_oof_xgb(): 'params' must be a non-empty named list of ",
+         "xgboost parameters (resolved from cfg$model_params by ",
+         "run_oof_diagnostics()).", call. = FALSE)
+  }
+  oof_params_fn <- .of_params_fn_from_block(params)
 
   stopifnot("fire_uid" %in% names(labelled_df), "class" %in% names(labelled_df))
 
@@ -275,7 +288,7 @@ run_oof_xgb <- function(
           group_col             = group_col,
           block_col             = if (has_block) group_col else NULL,
           val_frac              = val_frac,
-          params_fn             = .of_canonical_xgb_params,
+          params_fn             = oof_params_fn,
           sampling_seed         = fold_seed,
           fold_seed             = fold_seed,
           feature_weights       = feature_weights,

@@ -178,11 +178,7 @@ train_final_model_direct <- function(
   # this engine (legacy + nested_refit) sources the methodological block from
   # cfg, merging the site-specific scale_pos_weight. model_params_base never
   # contains scale_pos_weight.
-  .params_from_cfg <- function(scale_pos_weight) {
-    p <- model_params_base
-    p[["scale_pos_weight"]] <- scale_pos_weight
-    p
-  }
+  .params_from_cfg <- .of_params_fn_from_block(model_params_base)
 
   if (!file.exists(labelled_gpkg)) stop("labelled_gpkg does not exist: ", labelled_gpkg)
   L <- sf::read_sf(labelled_gpkg, layer = labelled_layer, quiet = TRUE)

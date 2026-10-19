@@ -28,10 +28,14 @@
 #' @param fold_cols Character vector naming the fold-assignment columns to
 #'   evaluate. Default: `c("fold_rep1", "fold_rep2")`. These columns must
 #'   exist in `train_features`.
-#' @param params Optional named list of XGBoost parameters. Leave as `NULL` to
-#'   use the shared configuration-based parameter resolution. For consistent
-#'   OOF and final training, set model parameters through `model_params` in
-#'   [build_supervised_burned_config()].
+#' @param params Optional named list of XGBoost parameters used by every OOF
+#'   fold. Leave as `NULL` (recommended) to use `config$model_params`, the same
+#'   block [train_final_burned_model()] uses, so OOF and final models are fitted
+#'   with the same parameters. `scale_pos_weight` is never taken from this list:
+#'   it is recomputed for each fold from that fold's training labels (and for the
+#'   final model from its own). A non-`NULL` `params` is applied to the OOF folds
+#'   only; the final model keeps using `config$model_params`, so to change both
+#'   set `model_params` in [build_supervised_burned_config()].
 #' @param feature_whitelist_override Character vector restricting the
 #'   permitted feature set, or `NULL` to use the configured setting.
 #'   Deprecated as a function-level control; configure it in the builder.
@@ -531,20 +535,16 @@ run_oof_diagnostics <- function(train_features, scoring_features,
   labelled_df <- labelled
 
   # ---------------------------------------------------------------------------
-  # 3) Build XGB params (faithful MOVE of orchestrator STEP C1). When params is
-  #    supplied use it verbatim; otherwise rebuild inline EXACTLY as today.
+  # 3) XGB params. When `params` is supplied it is used by every OOF fold;
+  #    otherwise they come from cfg$model_params (the single source of truth,
+  #    itself sourced from .of_canonical_model_params()).
   # ---------------------------------------------------------------------------
   if (is.null(params)) {
-    n_pos <- sum(labelled$class == "burned",   na.rm = TRUE)
-    n_neg <- sum(labelled$class == "unburned", na.rm = TRUE)
-    spw   <- if (n_pos > 0) n_neg / n_pos else 1
-
-    # Gate 1B (2026-06-07): build the xgb params from cfg$model_params (the
-    # SINGLE SOURCE OF TRUTH), then merge the site-specific scale_pos_weight
-    # (computed here from the OOF labels). cfg$model_params is itself sourced
-    # from .of_canonical_model_params(), so OOF and FINAL can never diverge.
+    # cfg$model_params carries NO scale_pos_weight: run_oof_xgb() recomputes it
+    # for every fold from that fold's own training labels, exactly as the FINAL
+    # fit does (both go through .of_params_fn_from_block()). A global spw used to
+    # be computed here over the whole labelled pool; it was never used.
     params <- config$model_params
-    params[["scale_pos_weight"]] <- spw
   }
 
   # ---------------------------------------------------------------------------

@@ -51,10 +51,14 @@ methodological settings, run identifiers, and default output locations.}
 evaluate. Default: \code{c("fold_rep1", "fold_rep2")}. These columns must
 exist in \code{train_features}.}
 
-\item{params}{Optional named list of XGBoost parameters. Leave as \code{NULL} to
-use the shared configuration-based parameter resolution. For consistent
-OOF and final training, set model parameters through \code{model_params} in
-\code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
+\item{params}{Optional named list of XGBoost parameters used by every OOF
+fold. Leave as \code{NULL} (recommended) to use \code{config$model_params}, the same
+block \code{\link[=train_final_burned_model]{train_final_burned_model()}} uses, so OOF and final models are fitted
+with the same parameters. \code{scale_pos_weight} is never taken from this list:
+it is recomputed for each fold from that fold's training labels (and for the
+final model from its own). A non-\code{NULL} \code{params} is applied to the OOF folds
+only; the final model keeps using \code{config$model_params}, so to change both
+set \code{model_params} in \code{\link[=build_supervised_burned_config]{build_supervised_burned_config()}}.}
 
 \item{feature_whitelist_override}{Character vector restricting the
 permitted feature set, or \code{NULL} to use the configured setting.

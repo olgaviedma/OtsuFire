@@ -167,8 +167,11 @@ the optional shape and size features. Default: \code{FALSE}. See
 
 \item{model_params}{Named list of partial XGBoost parameter overrides, or
 \code{NULL} for package defaults. For example, \code{list(eta = 0.03)} changes only
-\code{eta}. Setting \code{scale_pos_weight} here is rejected because it is
-calculated during training.}
+\code{eta}. The resolved block is used by the final model and by every
+out-of-fold fold, so OOF diagnostics and the final model are fitted with the
+same parameters. Setting \code{scale_pos_weight} here is rejected because it is
+calculated during training (separately for each fold and for the final
+model).}
 
 \item{options}{Named list of advanced paths and settings. See
 \strong{Advanced options}. Default: \code{list()}.}
@@ -179,7 +182,7 @@ An S3 object of class \code{otsufire_supervised_burned_config}.\tabular{ll}{
    \code{scenario}, \code{target_year}, \code{run_name} \tab Run identifiers. \cr
    \code{inputs} \tab Resolved spatial and labelled inputs. \cr
    \code{output_dir}, \code{output_routes} \tab Output root and stage locations. \cr
-   \code{model_params} \tab Resolved XGBoost parameters. \cr
+   \code{model_params} \tab Resolved XGBoost parameters, shared by the final model and every OOF fold (without \code{scale_pos_weight}, which is computed per fit). \cr
    \code{train_control} \tab Resolved training, sampling, seed, imputation, and feature settings. \cr
    \code{negative_pool_params} \tab Public negative-pool settings and caps. \cr
    \code{negative_pool_runtime} \tab Runtime controls for negative-pool processing. \cr

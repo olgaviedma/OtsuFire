@@ -125,7 +125,7 @@ api_groups <- list(
   "Otsu-guided segmentation and rule-based filtering (deterministic API)" = c(
     "build_burned_mapping_config", "run_deterministic_pipeline",
     "detect_burned_patches", "score_burned_patches",
-    "apply_chain_cleaning", "apply_chain",
+    "apply_chain_cleaning", "apply_chain", "split_patches_by_doy",
     "collect_keep_reference_samples", "build_keep_pool_from_samples"
   ),
   "Probabilistic refinement (supervised API)" = c(
@@ -133,7 +133,8 @@ api_groups <- list(
     "build_supervised_training_pools", "make_spatial_folds",
     "extract_supervised_features", "run_oof_diagnostics",
     "train_final_burned_model", "score_supervised_burned_map",
-    "write_thresholded_burned", "run_oneyear_supervised_pipeline"
+    "write_thresholded_burned", "run_oneyear_supervised_pipeline",
+    "run_split_rescore"
   ),
   "Training-pool curation" = c(
     "diagnose_training_pools", "export_visual_validation_pools",

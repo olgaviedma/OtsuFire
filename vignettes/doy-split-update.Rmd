@@ -1,0 +1,138 @@
+---
+title: "Updating years with the DOY split"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Updating years with the DOY split}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+# eval = FALSE silences knitting: the examples need full-scale data.
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>", eval = FALSE
+)
+```
+
+This vignette explains the date-aware split of candidate patches added in
+OtsuFire 2.1.0: the problem it solves, the rule, the recommended way to apply
+it to years that were already processed, and its main limitation.
+
+## The problem: patches that mix haze and fire
+
+The summer change-index composite is built pixel by pixel from the available
+post-event images. Band 2 of the mosaic, `DOY_post`, records the day of year of
+the image that supplied each pixel. In a year with persistent haze, smoke or
+cloud residue, pixels of a haze-affected date can touch pixels of a real fire
+observed weeks earlier or later. Otsu-guided growth then joins them into a
+**single candidate**, and the classifier scores the whole mixture as one
+object. If the mixture looks burned enough, the haze is accepted together with
+the fire and the commission error rises.
+
+## The rule
+
+`split_patches_by_doy()` reads the DOY of the pixels inside each candidate of
+at least 50 ha and groups them:
+
+1. Pixels with the same DOY form an initial group.
+2. Groups with fewer than `max(10, 5 %)` of the pixels are absorbed into the
+   group with the closest median DOY.
+3. The two groups with the closest **medians** are merged while their medians
+   differ by `doy_gap_days` or less. The default is **30 days**.
+4. A candidate with two or more remaining groups is *mixed*. It is replaced by
+   one sub-patch per connected component of each group (components below nine
+   pixels are dropped).
+
+Candidates with a single group are untouched, so a year without date mixtures
+changes very little.
+
+## Recommended use: update a year that is already processed
+
+The deterministic stage is slow and its results are already published, so the
+recommended flow does **not** repeat it. `run_split_rescore()` takes the scored
+candidates that already exist, splits the mixed ones, extracts the predictors of
+the sub-patches, scores them with the model and recipe you give it (no
+retraining) and writes the final map:
+
+```{r}
+library(OtsuFire)
+
+res <- run_split_rescore(
+  year                 = 2006L,
+  scored_candidates    = "Results/2006/SUPERVISED/FINAL_MAPS/POOL_GLOBAL_SUPPL/SCORE/2006_deterministic_scored.gpkg",
+  change_index         = "Imagery/Min_Min/MinMin_2006_mosaic_res90m.tif",
+  delayed_change_index = "Imagery/Autumn/mean_mean_2006_mosaic.tif",
+  topo                 = "Topography/elevation_slope.tif",
+  corine_raster        = "Corine_Masks/CLC_2006_peninsula.tif",
+  model                = "FINAL/final_model.rds",
+  recipe               = "FINAL/recipe.rds",
+  threshold            = 0.51,
+  out_dir              = "Results_v2.1/2006",
+  doy_gap_days         = 30
+)
+
+res$audit               # parents split, sub-patches, patches kept before/after
+res$thresholded_path    # binary map to validate with validate_fire_maps()
+```
+
+Next to the maps the run writes `RECIPE.yml` (package commit, every parameter,
+input paths, model training parameters) and `sessionInfo.txt`, so each year can
+be reproduced and compared with the original.
+
+Validate the new map with the same protocol as the original one, changing only
+the input map:
+
+```{r}
+validation <- validate_fire_maps(
+  input_shapefile = res$thresholded_path,
+  ref_shapefile   = "Fires/Validation_fires_burneable_verano_FINAL/Effis_CA_2006_maskKeep_summer.gpkg",
+  mask_shapefile  = "mask.gpkg",
+  burnable_raster = "Corine_Masks/burneable_mask_binary_corine06_wgs84.tif",
+  year_target     = 2006L,
+  validation_dir  = "Results_v2.1/2006/VALIDATION"
+)
+```
+
+## Another route, not validated
+
+`refine_params = list(split_by_doy = TRUE, doy_gap_days = 30)` in
+`build_burned_mapping_config()` runs the same split inside
+`run_deterministic_pipeline()`, between detection and scoring. Deterministic
+filters would then see the sub-patches and the result would not match maps
+already published. This route is off by default and has only been tested with
+synthetic data; use `run_split_rescore()` to update years.
+
+## What to expect
+
+Validation against the official perimeters, original map against G = 30:
+
+| Year | Reference | F1 original | F1 split |
+|---|---|---|---|
+| 2006 | EFFIS | 0.441 | 0.672 |
+| 1986 | Neves atlas + regional | 0.625 | 0.635 |
+| 1992 | Neves atlas + regional | 0.459 | 0.483 |
+| 2017 | EFFIS | 0.780 | 0.778 |
+
+2006 is the year with the most haze: commission falls from 0.70 to 0.43 while
+omission barely moves (0.17 to 0.18).
+
+## Limitation: years without haze
+
+In 2017, a year without a haze problem, the split is not free. Of 301 split
+parents in the original map, 215 improve but 77 get worse, and the F1 changes
+by -0.002 overall (-0.003 in Spain and in Portugal). The losses come from small
+sub-patches (about 100 pixels or less) at the edge of real fires: the fire was
+observed on dates more than 30 days apart, the split separates its edge, and the
+classifier scores the small piece below the threshold. Smaller gaps lose more:
+with `doy_gap_days = 15` the 2017 F1 fell by 0.007.
+
+Practical consequences:
+
+* A gap of 30 days is a compromise, not an optimum. Do not tune it per year
+  without an independent reference.
+* The scoring model was trained on whole patches. Sub-patches have different
+  area and dispersion, so the model is applied slightly outside its training
+  distribution.
+* Topography dispersion of very small sub-patches moves in the second
+  decimal of the score with the cropped window; this does not change the
+  conclusions.

@@ -30,7 +30,7 @@ Peninsula), not to a requirement of the package.
 ## ⚠️ Version 2.0.0 is a complete new release
 
 **2.0.0 is a complete new release, not an update of the 0.1.x line.** The
-package has been rebuilt from scratch: its public API is 31 exported functions,
+package has been rebuilt from scratch: its public API is 32 exported functions,
 and runs are driven by configuration objects rather than long argument lists.
 
 Code written against 0.1.x will not run unchanged. 0.1.4 is currently the
@@ -249,7 +249,8 @@ The Otsu-guided segmentation stage writes to the parallel `DETERMINISTIC/<run_na
 **Otsu-guided segmentation stage** — `build_burned_mapping_config()`,
 `run_deterministic_pipeline()`, `detect_burned_patches()`,
 `score_burned_patches()`, `apply_chain_cleaning()` (also exported under the
-short alias `apply_chain()`), `split_patches_by_doy()`
+short alias `apply_chain()`), `split_patches_by_doy()`,
+`run_split_rescore()`
 
 **Probabilistic refinement stage** — `build_supervised_burned_config()`,
 `run_oneyear_supervised_pipeline()`, `build_supervised_training_pools()`,

@@ -1,3 +1,42 @@
+# OtsuFire 2.1.0
+
+Update of 2.0.0. Nothing that worked in 2.0.0 changes by default: every new
+behaviour is opt-in, and runs that do not use it give identical results.
+
+## New
+
+* `run_split_rescore()` updates a year that has already been processed with
+  the date-aware split of mixed candidates. It reads the existing scored
+  candidates, splits those that mix post-event acquisition dates, extracts
+  the predictors of the sub-patches, scores them with a given model and
+  recipe (no retraining), applies the threshold and writes the final map, an
+  audit table and a reproducibility recipe. The deterministic stage is not
+  repeated. This is the recommended flow for updating existing years.
+* `split_patches_by_doy()` separates candidate patches whose pixels were
+  observed on dates more than `doy_gap_days` (default 30) apart, so that a
+  real fire joined to haze, cloud residue or another event is scored in
+  parts. Validated against official perimeters in 2006 (F1 0.44 to 0.67),
+  1986, 1992 and 2017 (a year without haze: unchanged within 0.003).
+  Sub-patches smaller than about 100 pixels at the edge of real fires can
+  lower recall; see the vignette "Updating years with the DOY split".
+* `refine_params = list(split_by_doy = TRUE, doy_gap_days = 30)` runs the
+  split inside `run_deterministic_pipeline()`, between detection and scoring.
+  It is off by default and has not been validated on real data; use
+  `run_split_rescore()` to update years.
+* Every `run_split_rescore()` run writes `RECIPE.yml` (package commit,
+  parameters including `split_by_doy`, `doy_gap_days` and the
+  `artifact_hard` weight when given, input paths, model training
+  parameters) and `sessionInfo.txt` next to its results.
+* The public API is now 32 exported functions.
+
+## Bug fixes
+
+* Out-of-fold diagnostics now fit every fold with the same XGBoost parameters
+  as the final model. Previously `run_oof_xgb()` ignored the `params` it was
+  given and always used the package defaults, so a `model_params` override
+  (`build_supervised_burned_config()`) changed only the final model. Runs with
+  the default `model_params` are unaffected and give identical results.
+
 # OtsuFire 2.0.0
 
 ## A complete new release
@@ -24,11 +63,7 @@ reproduced from its resolved configuration.
   `drop`. The stage can also be run step by step with
   `detect_burned_patches()` and `score_burned_patches()`, and the optional
   `apply_chain_cleaning()` (alias `apply_chain()`) separates candidates
-  joined by narrow connections. The optional `split_patches_by_doy()`
-  separates candidates whose pixels were observed on dates more than
-  `doy_gap_days` (default 30) apart, so that a fire joined to haze or to
-  another event is scored in parts; it is off by default and is switched on
-  with `refine_params = list(split_by_doy = TRUE)`.
+  joined by narrow connections.
   `collect_keep_reference_samples()` and
   `build_keep_pool_from_samples()` build spectral-support references from
   other years.
@@ -59,14 +94,6 @@ reproduced from its resolved configuration.
   `promote_artifact_hard_negatives()`, `subsample_random_background()`,
   `add_pool_shape_features()` and `assemble_era_training_pool()` build and
   combine curated pools, including pools spanning several years.
-
-## Bug fixes
-
-* Out-of-fold diagnostics now fit every fold with the same XGBoost parameters
-  as the final model. Previously `run_oof_xgb()` ignored the `params` it was
-  given and always used the package defaults, so a `model_params` override
-  (`build_supervised_burned_config()`) changed only the final model. Runs with
-  the default `model_params` are unaffected and give identical results.
 
 ## Good to know
 

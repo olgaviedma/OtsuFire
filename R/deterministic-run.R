@@ -53,6 +53,17 @@
 #'
 #' The scoring results retain the information used to reach these decisions.
 #'
+#' @section Optional DOY split:
+#' When the configuration sets `refine_params = list(split_by_doy = TRUE)`,
+#' [split_patches_by_doy()] runs between detection and scoring and the scoring
+#' stage receives the split candidate layer
+#' (`<run>/DOYSPLIT/dsplit_<G>d/BA_<year>_REFINE_MERGED_dsplit<G>d.gpkg`). The
+#' step is recorded in the timing log as `doy_split`, its audit tables are
+#' written next to the layer, and the returned object gains a `doy_split`
+#' element and the paths `doy_split_candidates` and `doy_split_audit` in
+#' `result_paths`. The option is off by default; when it is off, none of
+#' these additions exist and the candidates scored are those of detection.
+#'
 #' @section Spectral-support references:
 #' When `keep_pool = NULL`, scoring uses a local reference constructed
 #' automatically from high-confidence candidates for the target year.
@@ -242,6 +253,33 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
     )
   }
 
+  # --- optional DOY split (off by default) -----------------------------
+  # Between refinement and scoring: candidates whose pixels carry acquisition
+  # dates (DOY) more than doy_gap_days apart are replaced by one sub-patch per
+  # date group. With split_by_doy = FALSE nothing below runs and the
+  # candidates passed to scoring are exactly those of detection.
+  doy_split <- NULL
+  dsp <- config$doy_split_params
+  if (isTRUE(dsp$split_by_doy)) {
+    ci <- config$inputs$change_index
+    t0 <- Sys.time()
+    doy_split <- split_patches_by_doy(
+      refine_path     = if (isTRUE(write_outputs)) candidates_path else
+        sf::st_read(candidates_path, quiet = TRUE),
+      change_index    = if (identical(ci$type, "path")) ci$path else ci$value,
+      year            = config$target_year,
+      doy_gap_days    = dsp$gap_days,
+      min_group_share = dsp$min_group_share,
+      min_subpatch_px = dsp$min_subpatch_px,
+      min_area_ha     = dsp$min_area_ha,
+      out_dir         = if (isTRUE(write_outputs)) config$output_routes$base else NULL,
+      overwrite       = overwrite,
+      verbose         = FALSE
+    )
+    record_step("doy_split", t0)
+    candidates_path <- if (isTRUE(write_outputs)) doy_split$output_path else doy_split$patches
+  }
+
   # Thread detection output paths into the scoring call so stage 4 can
   # locate the stage-1 (grown) layer without rediscovery heuristics.
   config_scoring <- config
@@ -297,6 +335,10 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
       validation$workbook_path %||% NA_character_ else NA_character_,
     timing_csv          = timing_csv
   )
+  if (!is.null(doy_split)) {
+    result_paths$doy_split_candidates <- doy_split$output_path
+    result_paths$doy_split_audit      <- doy_split$audit_path
+  }
 
   out <- list(
     config       = config,
@@ -306,6 +348,7 @@ run_deterministic_pipeline <- function(config, write_outputs = TRUE,
     result_paths = result_paths,
     timing_log   = timing_df
   )
+  if (!is.null(doy_split)) out$doy_split <- doy_split
   class(out) <- c("otsufire_deterministic_run", "list")
   out
 }

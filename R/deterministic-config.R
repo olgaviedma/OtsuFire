@@ -136,11 +136,25 @@
 #' | `minimum_detected_area_m2` | 10 |
 #' | `merge_overlaps` | TRUE |
 #' | `merge_overlaps_buffer_m` | 0 |
+#' | `split_by_doy` | FALSE |
+#' | `doy_gap_days` | 30 |
+#' | `doy_min_group_share` | 0.05 |
+#' | `doy_min_subpatch_px` | 9 |
+#' | `doy_min_area_ha` | 50 |
 #'
 #' `aoi_buffer_m` sets the buffer around the area of interest used during
 #' refinement. `minimum_detected_area_m2` sets the minimum polygon area
 #' retained after segmentation. `merge_overlaps` controls whether overlapping
 #' polygons are merged.
+#'
+#' The `split_by_doy` group is an optional step, **off by default**. With
+#' `split_by_doy = TRUE`, [run_deterministic_pipeline()] calls
+#' [split_patches_by_doy()] between refinement and scoring, replacing
+#' candidates whose pixels have median acquisition dates (DOY) more than
+#' `doy_gap_days` apart with one sub-patch per date group. The resolved values
+#' are stored in `doy_split_params`, not in `refine_params`, so the engine
+#' settings do not change. With `split_by_doy = FALSE` the workflow is
+#' unchanged.
 #'
 #' Default settings:
 #' \preformatted{
@@ -238,8 +252,8 @@
 #'   validated inputs, resolved settings, and output locations.
 #'
 #'   Public fields include: `target_year`, `inputs`, `run_name`,
-#'   `output_routes`, `detect_params`, `refine_params`, `scoring_params`,
-#'   `rescue_params`, `options`, `engine_root`, `deterministic_seed`,
+#'   `output_routes`, `detect_params`, `refine_params`, `doy_split_params`,
+#'   `scoring_params`, `rescue_params`, `options`, `engine_root`, `deterministic_seed`,
 #'   `tool_paths`.
 #'
 #'   Pass this object to the Otsu-guided segmentation workflow functions. Use the
@@ -367,7 +381,12 @@ build_burned_mapping_config <- function(
 
   # ---- methodological parameter resolution --------------------------
   detect_resolved  <- .of_resolve_detect_params(detect_params)
-  refine_resolved  <- .of_resolve_refine_params(refine_params)
+  # The optional DOY split keys are given in refine_params but resolved
+  # apart, so cfg$refine_params (consumed by the engine) is unchanged whether
+  # or not the option is used.
+  doy_split_resolved <- .of_resolve_doy_split_params(refine_params)
+  refine_resolved  <- .of_resolve_refine_params(
+    refine_params[setdiff(names(refine_params), .of_doy_split_keys())])
   scoring_resolved <- .of_resolve_scoring_params(scoring_params)
   rescue_resolved  <- .of_derive_rescue_params(detect_resolved)
 
@@ -434,6 +453,7 @@ build_burned_mapping_config <- function(
     tool_paths = tool_paths,
     detect_params = detect_resolved,
     refine_params = refine_resolved,
+    doy_split_params = doy_split_resolved,
     scoring_params = scoring_resolved,
     rescue_params = rescue_resolved,
     options = options
@@ -668,6 +688,46 @@ print.otsufire_burned_mapping_config <- function(x, ...) {
                        "refine_params$minimum_detected_area_m2")
   .of_check_scalar_num(out$merge_overlaps_buffer_m,
                        "refine_params$merge_overlaps_buffer_m")
+  out
+}
+
+#' @keywords internal
+#' @noRd
+.of_doy_split_keys <- function() {
+  c("split_by_doy", "doy_gap_days", "doy_min_group_share",
+    "doy_min_subpatch_px", "doy_min_area_ha")
+}
+
+# Optional split of mixed-date candidates (see split_patches_by_doy()).
+# Off by default: with split_by_doy = FALSE the workflow is unchanged.
+#' @keywords internal
+#' @noRd
+.of_resolve_doy_split_params <- function(refine_params) {
+  .of_check_named_list(refine_params, "refine_params")
+  g <- function(key, default) {
+    if (is.null(refine_params[[key]])) default else refine_params[[key]]
+  }
+  split_by_doy <- g("split_by_doy", FALSE)
+  if (!is.logical(split_by_doy) || length(split_by_doy) != 1L ||
+      is.na(split_by_doy)) {
+    stop("refine_params$split_by_doy must be a single TRUE/FALSE value.",
+         call. = FALSE)
+  }
+  out <- list(
+    split_by_doy    = split_by_doy,
+    gap_days        = g("doy_gap_days", 30),
+    min_group_share = g("doy_min_group_share", 0.05),
+    min_subpatch_px = g("doy_min_subpatch_px", 9L),
+    min_area_ha     = g("doy_min_area_ha", 50)
+  )
+  tryCatch(
+    .of_check_doy_split_params(out$gap_days, out$min_group_share,
+                               out$min_subpatch_px, out$min_area_ha),
+    error = function(e) {
+      stop("refine_params: ", conditionMessage(e), call. = FALSE)
+    }
+  )
+  out$min_subpatch_px <- as.integer(out$min_subpatch_px)
   out
 }
 

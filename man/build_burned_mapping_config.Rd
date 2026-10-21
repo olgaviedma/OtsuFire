@@ -76,8 +76,8 @@ An S3 object of class \code{otsufire_burned_mapping_config}, containing
 validated inputs, resolved settings, and output locations.
 
 Public fields include: \code{target_year}, \code{inputs}, \code{run_name},
-\code{output_routes}, \code{detect_params}, \code{refine_params}, \code{scoring_params},
-\code{rescue_params}, \code{options}, \code{engine_root}, \code{deterministic_seed},
+\code{output_routes}, \code{detect_params}, \code{refine_params}, \code{doy_split_params},
+\code{scoring_params}, \code{rescue_params}, \code{options}, \code{engine_root}, \code{deterministic_seed},
 \code{tool_paths}.
 
 Pass this object to the Otsu-guided segmentation workflow functions. Use the
@@ -186,6 +186,11 @@ The following names are accepted in \code{refine_params}.\tabular{ll}{
    \code{minimum_detected_area_m2} \tab 10 \cr
    \code{merge_overlaps} \tab TRUE \cr
    \code{merge_overlaps_buffer_m} \tab 0 \cr
+   \code{split_by_doy} \tab FALSE \cr
+   \code{doy_gap_days} \tab 30 \cr
+   \code{doy_min_group_share} \tab 0.05 \cr
+   \code{doy_min_subpatch_px} \tab 9 \cr
+   \code{doy_min_area_ha} \tab 50 \cr
 }
 
 
@@ -193,6 +198,15 @@ The following names are accepted in \code{refine_params}.\tabular{ll}{
 refinement. \code{minimum_detected_area_m2} sets the minimum polygon area
 retained after segmentation. \code{merge_overlaps} controls whether overlapping
 polygons are merged.
+
+The \code{split_by_doy} group is an optional step, \strong{off by default}. With
+\code{split_by_doy = TRUE}, \code{\link[=run_deterministic_pipeline]{run_deterministic_pipeline()}} calls
+\code{\link[=split_patches_by_doy]{split_patches_by_doy()}} between refinement and scoring, replacing
+candidates whose pixels have median acquisition dates (DOY) more than
+\code{doy_gap_days} apart with one sub-patch per date group. The resolved values
+are stored in \code{doy_split_params}, not in \code{refine_params}, so the engine
+settings do not change. With \code{split_by_doy = FALSE} the workflow is
+unchanged.
 
 Default settings:
 \preformatted{

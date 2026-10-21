@@ -84,6 +84,19 @@ These assessments are combined into a final decision for each candidate:\tabular
 The scoring results retain the information used to reach these decisions.
 }
 
+\section{Optional DOY split}{
+
+When the configuration sets \code{refine_params = list(split_by_doy = TRUE)},
+\code{\link[=split_patches_by_doy]{split_patches_by_doy()}} runs between detection and scoring and the scoring
+stage receives the split candidate layer
+(\verb{<run>/DOYSPLIT/dsplit_<G>d/BA_<year>_REFINE_MERGED_dsplit<G>d.gpkg}). The
+step is recorded in the timing log as \code{doy_split}, its audit tables are
+written next to the layer, and the returned object gains a \code{doy_split}
+element and the paths \code{doy_split_candidates} and \code{doy_split_audit} in
+\code{result_paths}. The option is off by default; when it is off, none of
+these additions exist and the candidates scored are those of detection.
+}
+
 \section{Spectral-support references}{
 
 When \code{keep_pool = NULL}, scoring uses a local reference constructed

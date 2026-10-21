@@ -8,7 +8,7 @@ written for 0.1.x will not run unchanged. OtsuFire 0.1.4 remains available
 on CRAN.
 
 The package maps burned areas from annual change-index rasters (such as
-RBR or dNBR) through four stages. Its public API is 30 exported functions,
+RBR or dNBR) through four stages. Its public API is 31 exported functions,
 and each stage is driven by a configuration object, so a run can be
 reproduced from its resolved configuration.
 
@@ -24,7 +24,12 @@ reproduced from its resolved configuration.
   `drop`. The stage can also be run step by step with
   `detect_burned_patches()` and `score_burned_patches()`, and the optional
   `apply_chain_cleaning()` (alias `apply_chain()`) separates candidates
-  joined by narrow connections. `collect_keep_reference_samples()` and
+  joined by narrow connections. The optional `split_patches_by_doy()`
+  separates candidates whose pixels were observed on dates more than
+  `doy_gap_days` (default 30) apart, so that a fire joined to haze or to
+  another event is scored in parts; it is off by default and is switched on
+  with `refine_params = list(split_by_doy = TRUE)`.
+  `collect_keep_reference_samples()` and
   `build_keep_pool_from_samples()` build spectral-support references from
   other years.
 * **Probabilistic refinement.** `build_supervised_burned_config()` and

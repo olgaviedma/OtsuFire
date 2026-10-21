@@ -331,14 +331,18 @@ run_split_rescore <- function(year,
 .of_write_run_recipe <- function(out_dir, function_name, params, inputs, model_info = NULL,
                                  extra_config = NULL) {
   pkg_dir <- tryCatch(system.file(package = "OtsuFire"), error = function(e) "")
-  commit <- branch <- NA_character_
-  if (nzchar(pkg_dir) && dir.exists(file.path(pkg_dir, ".git"))) {
+  commit <- branch <- NA_character_; dirty <- NA
+  # Under pkgload::load_all() system.file() points into the source tree (".../inst"), so ask git
+  # from there; an installed copy is not a repository and falls back to the recorded RemoteSha.
+  if (nzchar(pkg_dir)) {
     gi <- function(a) tryCatch(suppressWarnings(system2("git", c("-C", shQuote(pkg_dir), a), stdout = TRUE, stderr = FALSE))[1],
                                error = function(e) NA_character_)
     commit <- gi(c("rev-parse", "HEAD")); branch <- gi(c("rev-parse", "--abbrev-ref", "HEAD"))
-    dirty <- tryCatch(length(suppressWarnings(system2("git", c("-C", shQuote(pkg_dir), "status", "--porcelain", "--untracked-files=no"), stdout = TRUE, stderr = FALSE))) > 0L,
-                      error = function(e) NA)
-  } else dirty <- NA
+    if (!is.na(commit)) dirty <- tryCatch(length(suppressWarnings(system2("git", c("-C", shQuote(pkg_dir), "status", "--porcelain", "--untracked-files=no"), stdout = TRUE, stderr = FALSE))) > 0L,
+                                          error = function(e) NA)
+  }
+  if (is.na(commit)) commit <- tryCatch(as.character(utils::packageDescription("OtsuFire")$RemoteSha %||% NA_character_),
+                                        error = function(e) NA_character_)
   rec <- list(
     function_name = function_name,
     written_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),

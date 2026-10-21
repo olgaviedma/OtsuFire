@@ -66,6 +66,10 @@ test_that("run_split_rescore splits, rescoring only the new sub-patches, and wri
   expect_true(any(grepl("split_by_doy: true", rec, ignore.case = TRUE)))
   expect_true(any(grepl("artifact_hard_weight_ratio: 0.5", rec, fixed = TRUE)))
   expect_true(any(grepl("git_commit", rec, fixed = TRUE)))
+  src <- dirname(system.file(package = "OtsuFire"))
+  if (dir.exists(file.path(src, ".git"))) {   # development checkout: the commit must be recorded
+    expect_true(any(grepl("git_commit: \"[0-9a-f]{40}\"", rec)))
+  }
   expect_true(file.exists(file.path(od, "sessionInfo.txt")))
 
   # no overwrite by default; allowed on request

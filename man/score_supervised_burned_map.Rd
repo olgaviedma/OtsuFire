@@ -319,6 +319,7 @@ Other workflow:
 \code{\link{run_deterministic_pipeline}()},
 \code{\link{run_oneyear_supervised_pipeline}()},
 \code{\link{run_oof_diagnostics}()},
+\code{\link{run_split_rescore}()},
 \code{\link{train_final_burned_model}()}
 }
 \concept{workflow}
